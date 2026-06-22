@@ -16,7 +16,16 @@ import {
   LogOut,
   Sparkles,
   Inbox,
-  UserRound
+  UserRound,
+  LayoutDashboard,
+  Users,
+  Library,
+  ClipboardCheck,
+  BarChart3,
+  FileBarChart,
+  SlidersHorizontal,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 // Import Types
@@ -58,6 +67,7 @@ import Leaderboard from './components/Leaderboard';
 import TeacherPortal from './components/TeacherPortal';
 import AdminCurriculum from './components/AdminCurriculum';
 import AdminEngine from './components/AdminEngine';
+import AdminDashboard from './components/AdminDashboard';
 import AuthPage from './components/AuthPage';
 import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
@@ -87,8 +97,9 @@ export default function App() {
   const [persona, setPersona] = useState<Persona>('public');
   const [studentTab, setStudentTab] = useState<StudentSubView>('dashboard');
   const [teacherTab, setTeacherTab] = useState<TeacherSubView>('dashboard');
-  const [adminTab, setAdminTab] = useState<AdminSubView>('curriculum');
+  const [adminTab, setAdminTab] = useState<AdminSubView>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Global theme state
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -501,6 +512,57 @@ export default function App() {
   };
 
   const isDark = theme === 'dark';
+  const adminNavItems: Array<{ id: AdminSubView; label: string; icon: React.ReactNode }> = [
+    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'users', label: 'User Management', icon: <Users className="w-4 h-4" /> },
+    { id: 'courses', label: 'Courses', icon: <BookOpen className="w-4 h-4" /> },
+    { id: 'library', label: 'Content Library', icon: <Library className="w-4 h-4" /> },
+    { id: 'assessments', label: 'Assessments', icon: <ClipboardCheck className="w-4 h-4" /> },
+    { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" /> },
+    { id: 'reports', label: 'Reports', icon: <FileBarChart className="w-4 h-4" /> },
+    { id: 'settings', label: 'Settings', icon: <SlidersHorizontal className="w-4 h-4" /> }
+  ];
+
+  const adminViewMeta: Record<AdminSubView, { title: string; description: string }> = {
+    dashboard: {
+      title: 'Admin Dashboard',
+      description: 'Monitor students, teachers, courses, mastery gaps, and platform health in one workspace.'
+    },
+    users: {
+      title: 'User Management',
+      description: 'Search, filter, and review student, teacher, and administrator account activity.'
+    },
+    courses: {
+      title: 'Courses',
+      description: 'Manage active course modules, publication status, and connected OOP lessons.'
+    },
+    library: {
+      title: 'Content Library',
+      description: 'Organize videos, labs, quizzes, and reusable OOP learning materials.'
+    },
+    assessments: {
+      title: 'Assessments',
+      description: 'Review adaptive assessment rules, remediation triggers, and challenge logic.'
+    },
+    analytics: {
+      title: 'Analytics',
+      description: 'Analyze learner engagement, course performance, and concept mastery trends.'
+    },
+    reports: {
+      title: 'Reports',
+      description: 'Track institutional summaries, weekly learning outcomes, and operational signals.'
+    },
+    settings: {
+      title: 'Settings',
+      description: 'Adjust recommendation rules, system automation, and platform preferences.'
+    },
+    profile: {
+      title: 'User Profile & Credentials',
+      description: 'Manage your personal details and administrative system access.'
+    }
+  };
+
+  const sidebarWidthClass = isSidebarCollapsed ? 'md:w-20' : 'md:w-64';
 
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-250 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`} id="master-app-canvas">
@@ -537,7 +599,7 @@ export default function App() {
             } else if (user.role === 'teacher') {
               setTeacherTab('dashboard');
             } else if (user.role === 'admin') {
-              setAdminTab('curriculum');
+              setAdminTab('dashboard');
             }
           }}
         />
@@ -568,15 +630,15 @@ export default function App() {
           <div className="flex-grow flex flex-col md:flex-row">
             
             {/* Universal Persona Sidebar Layout */}
-            <aside className="w-full md:w-64 bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col shrink-0" id="portal-sidebar-nav">
+            <aside className={`w-full ${sidebarWidthClass} bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col shrink-0 transition-all duration-200 ${persona === 'admin' ? 'hidden md:flex' : ''}`} id="portal-sidebar-nav">
             
             {/* Top Workspace Identity block */}
             <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/40">
-              <div className="flex items-center gap-2.5">
+              <div className={`flex items-center gap-2.5 ${isSidebarCollapsed ? 'md:justify-center md:w-full' : ''}`}>
                 <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-md shrink-0">
                   {persona === 'student' ? 'S' : persona === 'teacher' ? 'T' : 'A'}
                 </div>
-                <div>
+                <div className={isSidebarCollapsed ? 'md:hidden' : ''}>
                   <h2 className="text-xs font-bold uppercase tracking-widest text-white leading-tight font-mono">
                     {persona === 'student' ? 'Student Workspace' : persona === 'teacher' ? 'Instructor Portal' : 'Admin Console'}
                   </h2>
@@ -592,6 +654,14 @@ export default function App() {
                 className="md:hidden p-1 bg-slate-800 rounded text-slate-300 cursor-pointer"
               >
                 {isMobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed(prev => !prev)}
+                className="hidden md:flex h-8 w-8 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-slate-400 transition hover:border-emerald-500/40 hover:text-emerald-300"
+                aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
               </button>
             </div>
 
@@ -613,9 +683,11 @@ export default function App() {
                     setStudentTab(tab.id as StudentSubView);
                     setIsMobileMenuOpen(false);
                   }}
-                  className={`w-full py-2.5 px-3.5 rounded-xl font-bold text-xs text-left cursor-pointer transition-all flex items-center gap-2.5 ${studentTab === tab.id ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400'}`}
+                  title={isSidebarCollapsed ? tab.label : undefined}
+                  className={`w-full py-2.5 px-3.5 rounded-xl font-bold text-xs text-left cursor-pointer transition-all flex items-center gap-2.5 ${isSidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${studentTab === tab.id ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400'}`}
                 >
-                  {tab.icon} {tab.label}
+                  {tab.icon}
+                  <span className={isSidebarCollapsed ? 'md:hidden' : ''}>{tab.label}</span>
                 </button>
               ))}
 
@@ -630,17 +702,16 @@ export default function App() {
                     setTeacherTab(tab.id as TeacherSubView);
                     setIsMobileMenuOpen(false);
                   }}
-                  className={`w-full py-2.5 px-3.5 rounded-xl font-bold text-xs text-left cursor-pointer transition-all flex items-center gap-2.5 ${teacherTab === tab.id ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400'}`}
+                  title={isSidebarCollapsed ? tab.label : undefined}
+                  className={`w-full py-2.5 px-3.5 rounded-xl font-bold text-xs text-left cursor-pointer transition-all flex items-center gap-2.5 ${isSidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${teacherTab === tab.id ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400'}`}
                 >
-                  {tab.icon} {tab.label}
+                  {tab.icon}
+                  <span className={isSidebarCollapsed ? 'md:hidden' : ''}>{tab.label}</span>
                 </button>
               ))}
 
               {/* ADMIN TAB LINKS */}
-              {persona === 'admin' && [
-                { id: 'curriculum', label: '📋 Active Curriculum', icon: <Compass className="w-4 h-4" /> },
-                { id: 'engine', label: '⚡ Recommendation Rules', icon: <Settings className="w-4 h-4" /> },
-              ].map((tab) => (
+              {persona === 'admin' && adminNavItems.map((tab) => (
                 <button
                   key={tab.id}
                   id={`side-admin-btn-${tab.id}`}
@@ -648,9 +719,12 @@ export default function App() {
                     setAdminTab(tab.id as AdminSubView);
                     setIsMobileMenuOpen(false);
                   }}
-                  className={`w-full py-2.5 px-3.5 rounded-xl font-bold text-xs text-left cursor-pointer transition-all flex items-center gap-2.5 ${adminTab === tab.id ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400'}`}
+                  title={isSidebarCollapsed ? tab.label : undefined}
+                  className={`relative w-full py-2.5 px-3.5 rounded-xl font-bold text-xs text-left cursor-pointer transition-all flex items-center gap-2.5 ${isSidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${adminTab === tab.id ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400 hover:text-emerald-100'}`}
                 >
-                  {tab.icon} {tab.label}
+                  {adminTab === tab.id && !isSidebarCollapsed && <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-white/80" />}
+                  {tab.icon}
+                  <span className={isSidebarCollapsed ? 'md:hidden' : ''}>{tab.label}</span>
                 </button>
               ))}
 
@@ -658,25 +732,27 @@ export default function App() {
               <div className="pt-6 border-t border-slate-800/80 mt-6 space-y-2 block">
                 <button
                   onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
-                  className="w-full py-2 px-3 rounded-lg text-slate-500 hover:text-slate-205 text-[11px] font-bold text-left cursor-pointer transition flex items-center gap-1.5"
+                  className={`w-full py-2 px-3 rounded-lg text-slate-500 hover:text-slate-205 text-[11px] font-bold text-left cursor-pointer transition flex items-center gap-1.5 ${isSidebarCollapsed ? 'md:justify-center md:px-2' : ''}`}
                 >
-                  Theme: {theme === 'light' ? 'Light' : 'Dark'}
+                  <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Theme: {theme === 'light' ? 'Light' : 'Dark'}</span>
+                  <span className={`hidden ${isSidebarCollapsed ? 'md:inline' : ''}`}>{theme === 'light' ? 'L' : 'D'}</span>
                 </button>
                 <button
                   id="side-btn-exit"
                   onClick={() => {
                     setShowLogoutConfirm(true);
                   }}
-                  className="w-full py-2 px-3 rounded-lg text-slate-500 hover:text-slate-202 text-[11px] font-bold text-left cursor-pointer transition flex items-center gap-1.5"
+                  className={`w-full py-2 px-3 rounded-lg text-slate-500 hover:text-slate-202 text-[11px] font-bold text-left cursor-pointer transition flex items-center gap-1.5 ${isSidebarCollapsed ? 'md:justify-center md:px-2' : ''}`}
                 >
-                  <LogOut className="w-3.5 h-3.5" /> Logout
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className={isSidebarCollapsed ? 'md:hidden' : ''}>Logout</span>
                 </button>
               </div>
 
             </nav>
 
             {/* Sidebar quick status display */}
-            <div className="p-5 border-t border-slate-800 bg-slate-950/20 text-center font-mono text-[10px] text-slate-400 md:block hidden">
+            <div className={`p-5 border-t border-slate-800 bg-slate-950/20 text-center font-mono text-[10px] text-slate-400 md:block hidden ${isSidebarCollapsed ? 'md:hidden' : ''}`}>
               <div>Pedagogical Core: <span className="text-[#10b981] font-bold">ONLINE</span></div>
               <div className="text-[9px] mt-0.5 text-slate-500">Workspace hash: aq_25556</div>
             </div>
@@ -684,7 +760,7 @@ export default function App() {
           </aside>
 
           {/* Core Content canvas */}
-          <main className="flex-1 p-6 overflow-y-auto" id="portal-content-canvas">
+          <main className="flex-1 p-4 pb-24 sm:p-6 md:pb-6 overflow-y-auto" id="portal-content-canvas">
             
             {/* Header / Sub Header description */}
             <div className={`pb-5 mb-4 border-b flex justify-between items-center flex-wrap gap-4 ${isDark ? 'border-slate-800' : 'border-slate-200'}`} id="view-content-header">
@@ -696,11 +772,9 @@ export default function App() {
                   {persona === 'student' && studentTab === 'assessments' && 'Interactive MCQ Scenario Simulator'}
                   {persona === 'student' && studentTab === 'leaderboard' && 'Active CS Cohort Rankings'}
                   {persona === 'teacher' && teacherTab === 'dashboard' && 'Instructor Cohort Evaluation Dashboard'}
-                  {persona === 'admin' && adminTab === 'curriculum' && 'Curriculum & Catalog Layout panels'}
-                  {persona === 'admin' && adminTab === 'engine' && 'Adaptive Recommendation Engine configurations'}
+                  {persona === 'admin' && adminViewMeta[adminTab].title}
                   {((persona === 'student' && studentTab === 'profile') ||
-                    (persona === 'teacher' && teacherTab === 'profile') ||
-                    (persona === 'admin' && adminTab === 'profile')) && 'User Profile & Credentials'}
+                    (persona === 'teacher' && teacherTab === 'profile')) && 'User Profile & Credentials'}
                 </h1>
                 <p className={`text-xs font-medium mt-1 leading-normal ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   {persona === 'student' && studentTab === 'dashboard' && 'Track progress scores, active streaks, and watch specialized adaptive loop recommendations.'}
@@ -709,11 +783,9 @@ export default function App() {
                   {persona === 'student' && studentTab === 'assessments' && 'Diagnose Company Fleet dispatch hierarchies to earn high achievement points.'}
                   {persona === 'student' && studentTab === 'leaderboard' && 'Observe podium standings, select students profiles, and fast-track metrics.'}
                   {persona === 'teacher' && teacherTab === 'dashboard' && 'Review sandbox compiler drafts, enter academic feedbacks, and submit final grades.'}
-                  {persona === 'admin' && adminTab === 'curriculum' && 'Manage syllabus modules, connect catalog lectures, and import bulk records via CSV.'}
-                  {persona === 'admin' && adminTab === 'engine' && 'Adjust dynamic regulatory triggers, customize matching actions, and test challenge databases.'}
+                  {persona === 'admin' && adminViewMeta[adminTab].description}
                   {((persona === 'student' && studentTab === 'profile') ||
-                    (persona === 'teacher' && teacherTab === 'profile') ||
-                    (persona === 'admin' && adminTab === 'profile')) && 'Manage your personal details, academic enrolment cards, teacher qualifications, or administrative system access.'}
+                    (persona === 'teacher' && teacherTab === 'profile')) && 'Manage your personal details, academic enrolment cards, teacher qualifications, or administrative system access.'}
                 </p>
               </div>
 
@@ -806,7 +878,18 @@ export default function App() {
             )}
 
             {/* ADMIN CONSOLES */}
-            {persona === 'admin' && adminTab === 'curriculum' && (
+            {persona === 'admin' && ['dashboard', 'users', 'analytics', 'reports'].includes(adminTab) && (
+              <AdminDashboard
+                modules={curriculumModules}
+                lessons={lessonItems}
+                rules={adaptiveRules}
+                submissions={pendingSubmissions}
+                leaderboardUsers={leaderboardUsers}
+                activeView={adminTab}
+              />
+            )}
+
+            {persona === 'admin' && ['courses', 'library'].includes(adminTab) && (
               <AdminCurriculum 
                 modules={curriculumModules}
                 lessons={lessonItems}
@@ -816,7 +899,7 @@ export default function App() {
               />
             )}
 
-            {persona === 'admin' && adminTab === 'engine' && (
+            {persona === 'admin' && ['assessments', 'settings'].includes(adminTab) && (
               <AdminEngine 
                 rules={adaptiveRules}
                 onAddRule={handleAddAdaptiveRule}
@@ -840,6 +923,28 @@ export default function App() {
 
         </div>
       </div>
+      )}
+
+      {persona === 'admin' && !authMode && (
+        <nav className="fixed inset-x-3 bottom-3 z-[95] grid grid-cols-5 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-2xl shadow-slate-900/10 backdrop-blur md:hidden">
+          {adminNavItems
+            .filter(item => ['dashboard', 'users', 'courses', 'analytics', 'settings'].includes(item.id))
+            .map(item => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setAdminTab(item.id)}
+                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-md text-[10px] font-extrabold transition ${
+                  adminTab === item.id
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                {item.icon}
+                <span className="max-w-full truncate">{item.label.split(' ')[0]}</span>
+              </button>
+            ))}
+        </nav>
       )}
 
       {/* Logout Confirmation Modal Overlay */}

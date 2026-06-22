@@ -38,7 +38,16 @@ export interface AuthenticatedUser {
 
 export type StudentSubView = 'dashboard' | 'ide' | 'videos' | 'assessments' | 'leaderboard' | 'profile';
 export type TeacherSubView = 'dashboard' | 'students' | 'submission-review' | 'analytics' | 'profile';
-export type AdminSubView = 'curriculum' | 'engine' | 'profile';
+export type AdminSubView =
+  | 'dashboard'
+  | 'users'
+  | 'courses'
+  | 'library'
+  | 'assessments'
+  | 'analytics'
+  | 'reports'
+  | 'settings'
+  | 'profile';
 
 export interface CodeFile {
   name: string;
@@ -142,4 +151,3 @@ export interface MonitoringRequest {
   studentId: string;
   status: 'pending' | 'accepted' | 'rejected';
 }
-

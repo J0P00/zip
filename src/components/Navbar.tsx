@@ -21,7 +21,12 @@ import {
   CheckCircle,
   AlertCircle,
   FileText,
-  UserCheck
+  UserCheck,
+  Search,
+  MessageSquare,
+  SlidersHorizontal,
+  ClipboardList,
+  MonitorCog
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AuthenticatedUser, Persona } from '../types';
@@ -45,10 +50,13 @@ export default function Navbar({
 }: NavbarProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isMessagesOpen, setIsMessagesOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState('');
   const [activeModal, setActiveModal] = useState<string | null>(null);
   
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
 
   // Mock Notifications
   const [notifications, setNotifications] = useState([
@@ -56,6 +64,12 @@ export default function Navbar({
     { id: 2, title: 'New Adaptive Challenge', desc: 'Recommendation engine suggested Polymorphism Diagnostics Quiz based on compiler practice results.', read: false, time: '1h ago' },
     { id: 3, title: 'Streak Milestone!', desc: 'You reached a 12-day coding consistency streak! Keep up the momentum.', read: true, time: '1d ago' }
   ]);
+
+  const messages = [
+    { id: 1, name: 'Dr. Elena Vance', subject: 'Assessment rubric update', time: '5m ago' },
+    { id: 2, name: 'System Monitor', subject: 'Nightly course sync completed', time: '31m ago' },
+    { id: 3, name: 'Sofia Rodriguez', subject: 'Question about encapsulation lab', time: '2h ago' }
+  ];
 
   // Dynamic Profile Completion calculation
   const calculateCompletion = (u: AuthenticatedUser): number => {
@@ -88,6 +102,9 @@ export default function Navbar({
       }
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
         setIsNotifOpen(false);
+      }
+      if (messagesRef.current && !messagesRef.current.contains(event.target as Node)) {
+        setIsMessagesOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -253,6 +270,58 @@ export default function Navbar({
                 </div>
                 <button type="button" onClick={() => alert('Backup request received. An email copy has been prepared.')} className="px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-xs font-bold transition">Export</button>
               </div>
+            </div>
+          </div>
+        );
+        break;
+      case 'preferences':
+        title = 'System Preferences';
+        icon = <SlidersHorizontal className="w-6 h-6 text-emerald-600" />;
+        content = (
+          <div className="space-y-4 text-sm text-left">
+            <p className="text-slate-500 dark:text-slate-450">Tune dashboard density, alerts, and administrative workspace behavior.</p>
+            <div className="space-y-3">
+              {[
+                { label: 'Compact dashboard mode', desc: 'Use tighter rows for analytics-heavy review sessions.' },
+                { label: 'Show mastery alerts first', desc: 'Prioritize weak OOP concepts in dashboard modules.' },
+                { label: 'Weekly admin digest', desc: 'Send platform health, course progress, and audit summaries.' }
+              ].map((item) => (
+                <div key={item.label} className="flex justify-between items-center p-3 border border-slate-100 dark:border-slate-800 rounded-xl">
+                  <div>
+                    <div className="font-bold text-slate-850 dark:text-slate-200 text-xs">{item.label}</div>
+                    <div className="text-[11px] text-slate-400 leading-tight pr-4">{item.desc}</div>
+                  </div>
+                  <div className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" defaultChecked className="sr-only peer" />
+                    <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+        break;
+      case 'logs':
+        title = 'Activity Logs';
+        icon = <ClipboardList className="w-6 h-6 text-emerald-600" />;
+        content = (
+          <div className="space-y-4 text-sm text-left">
+            <p className="text-slate-500 dark:text-slate-450">Recent administrative events and system audit entries.</p>
+            <div className="space-y-3">
+              {[
+                { event: 'Admin dashboard opened', actor: user.name, time: 'Just now' },
+                { event: 'Recommendation rules synchronized', actor: 'System Monitor', time: '12 min ago' },
+                { event: 'Course content index refreshed', actor: 'Content Library', time: '38 min ago' },
+                { event: 'Suspicious login attempt flagged', actor: 'Security Layer', time: '1 hr ago' }
+              ].map((log) => (
+                <div key={`${log.event}-${log.time}`} className="flex items-start gap-3 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0 dark:border-slate-800">
+                  <MonitorCog className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-extrabold text-slate-850 dark:text-slate-200">{log.event}</p>
+                    <p className="text-[11px] text-slate-400">{log.actor} - {log.time}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         );
@@ -444,6 +513,27 @@ export default function Navbar({
             </div>
           </div>
 
+          {/* Center: Global Search */}
+          <label className={`hidden lg:flex h-10 w-full max-w-xl items-center gap-2 rounded-xl border px-3 transition ${isDark ? 'border-slate-800 bg-slate-900/70 text-slate-200 focus-within:border-emerald-500/50' : 'border-slate-200 bg-slate-50 text-slate-800 focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-100'}`}>
+            <Search className="h-4 w-4 shrink-0 text-slate-400" />
+            <input
+              value={globalSearch}
+              onChange={event => setGlobalSearch(event.target.value)}
+              placeholder="Search users, courses, assessments"
+              className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
+              aria-label="Global search users, courses, assessments"
+            />
+            {globalSearch && (
+              <button
+                type="button"
+                onClick={() => setGlobalSearch('')}
+                className="rounded-md px-2 py-1 text-[10px] font-extrabold text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                Clear
+              </button>
+            )}
+          </label>
+
           {/* Right: Notifications Bell & Profile Section */}
           <div className="flex items-center gap-4">
             
@@ -508,6 +598,56 @@ export default function Navbar({
                           </div>
                         ))
                       )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Messages Menu */}
+            <div className="relative" ref={messagesRef}>
+              <button
+                type="button"
+                onClick={() => setIsMessagesOpen(!isMessagesOpen)}
+                className={`relative p-2 rounded-xl border transition-all cursor-pointer ${isDark ? 'border-slate-800 text-slate-350 hover:bg-slate-909 hover:text-white' : 'border-slate-100 text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+                aria-label="Toggle messages menu"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-950" />
+              </button>
+
+              <AnimatePresence>
+                {isMessagesOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className={`absolute right-0 mt-2 w-80 rounded-2xl border shadow-2xl z-[100] overflow-hidden backdrop-blur-md ${isDark ? 'bg-slate-900/95 border-slate-800/80 shadow-black/40 text-slate-200' : 'bg-white/95 border-slate-200/80 shadow-slate-200/50 text-slate-800'}`}
+                  >
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20">
+                      <span className="font-extrabold text-xs uppercase tracking-wider text-slate-400">Messages</span>
+                    </div>
+                    <div className="divide-y divide-slate-100 dark:divide-slate-850">
+                      {messages.map(message => (
+                        <button
+                          type="button"
+                          key={message.id}
+                          onClick={() => setIsMessagesOpen(false)}
+                          className="flex w-full items-start gap-3 p-4 text-left transition hover:bg-emerald-50/40 dark:hover:bg-emerald-950/10"
+                        >
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-black text-emerald-700">
+                            {getInitials(message.name)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate text-xs font-extrabold text-slate-800 dark:text-slate-200">{message.name}</span>
+                              <span className="shrink-0 text-[9px] font-bold text-slate-400">{message.time}</span>
+                            </div>
+                            <p className="mt-1 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">{message.subject}</p>
+                          </div>
+                        </button>
+                      ))}
                     </div>
                   </motion.div>
                 )}
@@ -605,7 +745,7 @@ export default function Navbar({
                         className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-extrabold text-xs shadow-xs transition duration-200 cursor-pointer"
                         id="view-full-profile-btn"
                       >
-                        View Full Profile
+                        My Profile
                       </button>
                     </div>
 
@@ -631,23 +771,21 @@ export default function Navbar({
                       </div>
                     </div>
 
-                    {/* Quick Link Actions */}
+                    {/* Profile Dropdown Actions */}
                     <div className="p-2 border-b border-slate-100 text-left bg-white">
-                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block px-2 py-1">Quick Links</span>
-                      <div className="grid grid-cols-2 gap-0.5 pt-1 text-xs">
+                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block px-2 py-1">Account Menu</span>
+                      <div className="space-y-0.5 pt-1 text-xs">
                         {[
-                          { id: 'dashboard', label: 'Dashboard', icon: <UserCheck className="w-3.5 h-3.5 text-slate-400" />, action: () => { onNavigate('dashboard'); setIsDropdownOpen(false); } },
-                          { id: 'academic', label: 'Academic Info', icon: <BookOpen className="w-3.5 h-3.5 text-slate-400" />, action: () => { setIsDropdownOpen(false); setActiveModal('academic'); } },
+                          { id: 'profile', label: 'My Profile', icon: <UserCheck className="w-3.5 h-3.5 text-slate-400" />, action: () => { onNavigate('profile'); setIsDropdownOpen(false); } },
                           { id: 'account', label: 'Account Settings', icon: <Settings className="w-3.5 h-3.5 text-slate-400" />, action: () => { setIsDropdownOpen(false); setActiveModal('account'); } },
-                          { id: 'notifications', label: 'Notifications', icon: <Bell className="w-3.5 h-3.5 text-slate-400" />, action: () => { setIsDropdownOpen(false); setActiveModal('notifications'); } },
-                          { id: 'security', label: 'Security & Privacy', icon: <Lock className="w-3.5 h-3.5 text-slate-400" />, action: () => { setIsDropdownOpen(false); setActiveModal('security'); } },
-                          { id: 'password', label: 'Change Password', icon: <Lock className="w-3.5 h-3.5 text-slate-400" />, action: () => { setIsDropdownOpen(false); setActiveModal('password'); } }
+                          { id: 'preferences', label: 'System Preferences', icon: <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />, action: () => { setIsDropdownOpen(false); setActiveModal('preferences'); } },
+                          { id: 'logs', label: 'Activity Logs', icon: <ClipboardList className="w-3.5 h-3.5 text-slate-400" />, action: () => { setIsDropdownOpen(false); setActiveModal('logs'); } }
                         ].map((actionItem) => (
                           <button
                             key={actionItem.id}
                             type="button"
                             onClick={actionItem.action}
-                            className="flex items-center gap-1.5 px-2 py-2 hover:bg-slate-50 rounded-lg transition text-left text-slate-600 font-bold hover:text-emerald-600 cursor-pointer"
+                            className="flex w-full items-center gap-2 px-2 py-2.5 hover:bg-slate-50 rounded-lg transition text-left text-slate-600 font-bold hover:text-emerald-600 cursor-pointer"
                           >
                             {actionItem.icon}
                             <span>{actionItem.label}</span>
@@ -667,7 +805,7 @@ export default function Navbar({
                         className="w-full flex items-center justify-center gap-2 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl font-extrabold text-xs transition cursor-pointer border border-rose-100/50"
                         id="dropdown-logout-btn"
                       >
-                        <LogOut className="w-4 h-4" /> Sign Out
+                        <LogOut className="w-4 h-4" /> Logout
                       </button>
                     </div>
 
