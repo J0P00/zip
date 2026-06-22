@@ -1,0 +1,6 @@
+{
+  "name": "OOP Pedagogical Hub",
+  "description": "An interactive, adaptive object-oriented programming learning platform featuring a practice IDE, visual video lessons, scenario assessments, teacher dashboards, and curriculum controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
