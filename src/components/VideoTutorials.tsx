@@ -159,7 +159,8 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
     }
     setLearningSubTab('video');
     setIsPlaying(false);
-  }, [selectedCourse, courseData.lessons]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCourse]);
 
   // Load notes & watch progress for active lesson
   useEffect(() => {
