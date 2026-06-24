@@ -12,7 +12,8 @@ import {
   HelpCircle, 
   Settings2 
 } from 'lucide-react';
-import { CurriculumModule, LessonItem } from '../types';
+import { CurriculumModule, LessonItem, VideoLesson } from '../types';
+import AdminVideoManager from './AdminVideoManager';
 
 interface AdminCurriculumProps {
   modules: CurriculumModule[];
@@ -20,6 +21,12 @@ interface AdminCurriculumProps {
   onAddLesson: (lesson: LessonItem) => void;
   onDeleteLesson: (id: string) => void;
   onUpdateModule: (id: string, status: 'Published' | 'Draft' | 'Archived') => void;
+  videoLessons: VideoLesson[];
+  onAddVideo: (video: VideoLesson) => void;
+  onEditVideo: (video: VideoLesson) => void;
+  onArchiveVideo: (id: string) => void;
+  onDeleteVideo: (id: string) => void;
+  onUpdateVideoSequence: (id: string, newSeq: number) => void;
 }
 
 export default function AdminCurriculum({
@@ -27,9 +34,15 @@ export default function AdminCurriculum({
   lessons,
   onAddLesson,
   onDeleteLesson,
-  onUpdateModule
+  onUpdateModule,
+  videoLessons,
+  onAddVideo,
+  onEditVideo,
+  onArchiveVideo,
+  onDeleteVideo,
+  onUpdateVideoSequence
 }: AdminCurriculumProps) {
-  const [activeTab, setActiveTab] = useState<'modules' | 'lessons'>('modules');
+  const [activeTab, setActiveTab] = useState<'modules' | 'lessons' | 'videos'>('modules');
   const [csvText, setCsvText] = useState<string>('');
   const [showCsvImporter, setShowCsvImporter] = useState<boolean>(false);
   
@@ -111,6 +124,12 @@ li_csv_3,Abstract Virtual Tables,Polymorphism & Dynamic Binding,Quiz,Advanced`);
             className={`px-4 py-2 font-bold text-xs rounded-xl transition ${activeTab === 'lessons' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-650 hover:bg-slate-100 bg-transparent'}`}
           >
             📋 Master Lesson Library ({lessons.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('videos')}
+            className={`px-4 py-2 font-bold text-xs rounded-xl transition ${activeTab === 'videos' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-650 hover:bg-slate-100 bg-transparent'}`}
+          >
+            🎥 Video Tutorials ({videoLessons.length})
           </button>
         </div>
 
@@ -220,6 +239,15 @@ li_csv_3,Abstract Virtual Tables,Polymorphism & Dynamic Binding,Quiz,Advanced`);
           ))}
 
         </div>
+      ) : activeTab === 'videos' ? (
+        <AdminVideoManager
+          lessons={videoLessons}
+          onAddVideo={onAddVideo}
+          onEditVideo={onEditVideo}
+          onArchiveVideo={onArchiveVideo}
+          onDeleteVideo={onDeleteVideo}
+          onUpdateSequence={onUpdateVideoSequence}
+        />
       ) : (
         <div className="grid lg:grid-cols-12 gap-6" id="curriculum-lessons-list">
           

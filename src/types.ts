@@ -78,6 +78,30 @@ export interface VideoLesson {
   videoUrl: string;
   description: string;
   concepts: string[];
+  thumbnailUrl?: string;
+  topic?: string;
+  difficulty?: 'Beginner' | 'Intermediate' | 'Advanced';
+  language?: string;
+  module?: string;
+  category?: string;
+  courseId?: string;
+  isArchived?: boolean;
+  unlockedAssessmentId?: string;
+  views?: number;
+  avgWatchTime?: number;
+  completedStudents?: string[];
+  inProgressStudents?: string[];
+  notStartedStudents?: string[];
+  progressPercent?: number;
+}
+
+export interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  isRead: boolean;
+  type: 'upload' | 'update' | 'assign' | 'unlock';
 }
 
 export interface AssessmentQuestion {

@@ -42,7 +42,8 @@ import {
   CurriculumModule, 
   LessonItem, 
   AdaptiveRule,
-  MonitoringRequest
+  MonitoringRequest,
+  NotificationItem
 } from './types';
 
 // Import Mock Data
@@ -131,7 +132,37 @@ export default function App() {
   const [completedLessonsCount, setCompletedLessonsCount] = useState<number>(DEMO_STUDENT_PROGRESS.completedLessonsCount);
 
   // Dynamic shared database states
-  const [videoLessons, setVideoLessons] = useState<VideoLesson[]>(INITIAL_LESSONS);
+  const [videoLessons, setVideoLessons] = useState<VideoLesson[]>(() => {
+    try {
+      const saved = localStorage.getItem('oophub_video_lessons');
+      return saved ? JSON.parse(saved) : INITIAL_LESSONS;
+    } catch {
+      return INITIAL_LESSONS;
+    }
+  });
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('oophub_notifications');
+      return saved ? JSON.parse(saved) : [
+        {
+          id: 'n_welcome',
+          title: 'Welcome to OOP Pedagogical Hub! 🎓',
+          message: 'Explore courses, watch tutorials, and practice coding inside our Sandbox IDE.',
+          timestamp: 'Just Now',
+          isRead: false,
+          type: 'unlock'
+        }
+      ];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('oophub_notifications', JSON.stringify(notifications));
+  }, [notifications]);
+
   const [leaderboardUsers, setLeaderboardUsers] = useState<LeaderboardUser[]>(INITIAL_LEADERBOARD_USERS);
   const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>(INITIAL_SUBMISSIONS);
   const [curriculumModules, setCurriculumModules] = useState<CurriculumModule[]>(INITIAL_CURRICULUM_MODULES);
@@ -185,6 +216,146 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('oophub_monitoring_requests', JSON.stringify(monitoringRequests));
   }, [monitoringRequests]);
+
+  // Video Management & Progress Handlers
+  const addNotification = (title: string, message: string, type: 'upload' | 'update' | 'assign' | 'unlock') => {
+    const newNotif: NotificationItem = {
+      id: `notif_${Date.now()}`,
+      title,
+      message,
+      timestamp: 'Just Now',
+      isRead: false,
+      type
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+  };
+
+  const handleUploadVideo = (video: VideoLesson) => {
+    setVideoLessons(prev => {
+      const next = [...prev, video];
+      localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
+      return next;
+    });
+    addNotification(
+      `New Video: ${video.title} 🎥`,
+      `A new lesson has been added to "${video.module}" in the syllabus.`,
+      'upload'
+    );
+  };
+
+  const handleEditVideo = (updatedVideo: VideoLesson) => {
+    setVideoLessons(prev => {
+      const next = prev.map(l => l.id === updatedVideo.id ? updatedVideo : l);
+      localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
+      return next;
+    });
+    addNotification(
+      `Video updated: ${updatedVideo.title} 🔄`,
+      `The video contents and details for "${updatedVideo.title}" have been updated by administrators.`,
+      'update'
+    );
+  };
+
+  const handleArchiveVideo = (id: string) => {
+    setVideoLessons(prev => {
+      const next = prev.map(l => l.id === id ? { ...l, isArchived: !l.isArchived } : l);
+      localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleDeleteVideo = (id: string) => {
+    setVideoLessons(prev => {
+      const next = prev.filter(l => l.id !== id);
+      localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleUpdateVideoSequence = (id: string, newSeq: number) => {
+    setVideoLessons(prev => {
+      const next = prev.map(l => l.id === id ? { ...l, sequence: newSeq } : l);
+      localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleUpdateVideoProgress = (videoId: string, progress: number) => {
+    const userEmail = currentUser?.email || 'student@oophub.edu';
+    setVideoLessons(prev => {
+      const next = prev.map(video => {
+        if (video.id !== videoId) return video;
+        
+        const prevProgress = video.progressPercent || 0;
+        const nextProgress = Math.max(prevProgress, progress);
+        const isCompletedNow = nextProgress >= 90 && video.status !== 'completed';
+        
+        let completed = [...(video.completedStudents || [])];
+        let inProgress = [...(video.inProgressStudents || [])];
+        let notStarted = [...(video.notStartedStudents || [])];
+        
+        notStarted = notStarted.filter(s => s !== userEmail);
+        
+        if (nextProgress >= 90) {
+          if (!completed.includes(userEmail)) completed.push(userEmail);
+          inProgress = inProgress.filter(s => s !== userEmail);
+        } else if (nextProgress > 0) {
+          if (!inProgress.includes(userEmail)) inProgress.push(userEmail);
+          completed = completed.filter(s => s !== userEmail);
+        }
+        
+        const updatedVideo = {
+          ...video,
+          progressPercent: nextProgress,
+          status: (isCompletedNow ? 'completed' : video.status) as any,
+          completedStudents: completed,
+          inProgressStudents: inProgress,
+          notStartedStudents: notStarted,
+          views: isCompletedNow ? (video.views || 0) + 1 : (video.views || 0)
+        };
+
+        if (isCompletedNow) {
+          setPoints(p => p + 100);
+          setCompletedLessonsCount(c => Math.min(c + 1, 5));
+          
+          addNotification(
+            `Lesson Completed! 🎉`,
+            `You finished watching "${video.title}". +100 XP gained.`,
+            'unlock'
+          );
+          
+          if (video.unlockedAssessmentId) {
+            addNotification(
+              `Quiz Assessment Unlocked! 🔓`,
+              `You have unlocked the quiz assessment linked to "${video.title}".`,
+              'unlock'
+            );
+          }
+          
+          // Auto unlock next video in sequence
+          setTimeout(() => {
+            setVideoLessons(prevLessons => {
+              const list = [...prevLessons].sort((a, b) => a.sequence - b.sequence);
+              const index = list.findIndex(l => l.id === videoId);
+              if (index !== -1 && index < list.length - 1) {
+                const nextVideo = list[index + 1];
+                if (nextVideo.status === 'locked') {
+                  const updatedList = prevLessons.map(l => l.id === nextVideo.id ? { ...l, status: 'active' as any } : l);
+                  localStorage.setItem('oophub_video_lessons', JSON.stringify(updatedList));
+                  return updatedList;
+                }
+              }
+              return prevLessons;
+            });
+          }, 100);
+        }
+
+        return updatedVideo;
+      });
+      localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
+      return next;
+    });
+  };
 
   // Utility to lookup a student by email/ID
   const findStudentByEmailOrId = (query: string) => {
@@ -833,6 +1004,8 @@ export default function App() {
                 onAcceptRequest={handleAcceptMonitoringRequest}
                 onRejectRequest={handleRejectMonitoringRequest}
                 theme={theme}
+                notifications={notifications}
+                onMarkNotificationRead={(id) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n))}
               />
             )}
 
@@ -847,6 +1020,7 @@ export default function App() {
               <VideoTutorials 
                 lessons={videoLessons} 
                 onNavigateTo={handleDirectNavigation}
+                onUpdateVideoProgress={handleUpdateVideoProgress}
               />
             )}
 
@@ -854,6 +1028,7 @@ export default function App() {
               <Assessments 
                 onNavigateTo={(view) => setStudentTab(view as any)}
                 onCorrectAnswerAdded={handleCorrectAnswerAdded}
+                lessons={videoLessons}
               />
             )}
 
@@ -896,6 +1071,12 @@ export default function App() {
                 onAddLesson={handleAddLessonItem}
                 onDeleteLesson={handleDeleteLessonItem}
                 onUpdateModule={handleUpdateModuleStatus}
+                videoLessons={videoLessons}
+                onAddVideo={handleUploadVideo}
+                onEditVideo={handleEditVideo}
+                onArchiveVideo={handleArchiveVideo}
+                onDeleteVideo={handleDeleteVideo}
+                onUpdateVideoSequence={handleUpdateVideoSequence}
               />
             )}
 

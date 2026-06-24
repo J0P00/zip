@@ -12,11 +12,12 @@ import {
   Check,
   ChevronRight as ArrowIcon
 } from 'lucide-react';
-import { StudentSubView } from '../types';
+import { StudentSubView, VideoLesson } from '../types';
 
 interface AssessmentsProps {
   onCorrectAnswerAdded: (xp: number) => void;
   onNavigateTo?: (view: StudentSubView) => void;
+  lessons: VideoLesson[];
 }
 
 interface Option {
@@ -307,7 +308,7 @@ public class Main {
   }
 ];
 
-export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: AssessmentsProps) {
+export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, lessons }: AssessmentsProps) {
   const [view, setView] = useState<'dashboard' | 'active' | 'result' | 'review'>('dashboard');
   const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
   
@@ -431,43 +432,67 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: Asse
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {ASSESSMENTS.map(item => {
             const status = assessmentStatuses[item.id] || 'Not Started';
+            const lockingVideo = lessons.find(
+              l => l.unlockedAssessmentId === item.id && (!l.progressPercent || l.progressPercent < 90)
+            );
+            const isLocked = Boolean(lockingVideo);
+
             return (
               <div 
                 key={item.id} 
-                className="bg-white border border-slate-200 hover:border-slate-350 transition-all rounded-2xl p-6 shadow-sm flex flex-col justify-between space-y-5"
+                className={`bg-white border transition-all rounded-2xl p-6 shadow-sm flex flex-col justify-between space-y-5 ${
+                  isLocked ? 'opacity-85 border-slate-200 bg-slate-50/50' : 'border-slate-200 hover:border-slate-350'
+                }`}
               >
-                <div className="space-y-3">
+                <div className="space-y-3 text-left">
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-bold text-slate-400 uppercase font-mono">{item.topicName}</span>
                     <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full font-mono ${
+                      isLocked ? 'bg-slate-100 text-slate-400 border border-slate-200' :
                       status === 'Passed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
                       status === 'In Progress' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
                       'bg-slate-50 text-slate-500 border border-slate-100'
                     }`}>
-                      {status}
+                      {isLocked ? 'Locked' : status}
                     </span>
                   </div>
                   
-                  <h3 className="text-lg font-extrabold text-slate-900 leading-tight">{item.title} Assessment</h3>
+                  <h3 className="text-lg font-extrabold text-slate-900 leading-tight">
+                    {isLocked ? '🔒 ' : ''}{item.title} Assessment
+                  </h3>
                   
-                  <div className="flex items-center gap-4 text-xs text-slate-500 font-medium pt-1">
-                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {item.timeLimitMinutes} Mins</span>
-                    <span>•</span>
-                    <span>{item.questionsCount} Questions</span>
-                    <span>•</span>
-                    <span className="font-semibold text-emerald-600">{item.difficulty}</span>
-                  </div>
+                  {isLocked && lockingVideo ? (
+                    <div className="p-2.5 bg-rose-50/40 border border-rose-100 rounded-xl text-[10.5px] text-rose-900 leading-relaxed font-semibold">
+                      Complete at least 90% of the video <strong>"{lockingVideo.title}"</strong> to unlock this assessment.
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-4 text-xs text-slate-500 font-medium pt-1">
+                      <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {item.timeLimitMinutes} Mins</span>
+                      <span>•</span>
+                      <span>{item.questionsCount} Questions</span>
+                      <span>•</span>
+                      <span className="font-semibold text-emerald-600">{item.difficulty}</span>
+                    </div>
+                  )}
                 </div>
 
                 <button
-                  onClick={() => handleStartAssessment(item)}
+                  onClick={() => {
+                    if (isLocked && lockingVideo) {
+                      alert(`🔒 Locked: You must watch "${lockingVideo.title}" to at least 90% before starting this assessment.`);
+                      return;
+                    }
+                    handleStartAssessment(item);
+                  }}
                   className={`w-full py-3 rounded-xl font-bold text-xs cursor-pointer select-none transition-all active:scale-95 flex items-center justify-center gap-1.5 ${
-                    status === 'Passed'
-                      ? 'bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-200 text-emerald-700'
-                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-50'
+                    isLocked
+                      ? 'bg-slate-100 text-slate-405 border border-slate-200 cursor-not-allowed'
+                      : status === 'Passed'
+                        ? 'bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-200 text-emerald-700'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-50'
                   }`}
                 >
-                  {status === 'Passed' ? 'Retake Assessment' : 'Start Assessment'} <ArrowIcon className="w-3.5 h-3.5" />
+                  {isLocked ? 'Locked' : status === 'Passed' ? 'Retake Assessment' : 'Start Assessment'} <ArrowIcon className="w-3.5 h-3.5" />
                 </button>
               </div>
             );
