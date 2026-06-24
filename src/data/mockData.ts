@@ -243,3 +243,355 @@ export const INITIAL_ADAPTIVE_RULES: AdaptiveRule[] = [
   { id: 'r3', trigger: 'Perfect Daily Streak > 5 Days', condition: 'Alexander score > 1500 points', action: 'Unlock fast-track Advanced Memory and Virtual Tables preview', isActive: false },
   { id: 'r4', trigger: 'Submodule Idle Timeout', condition: 'Has not engaged in interactive sandbox for 4 days', action: 'Send active slack webhook alerting reinforcement sandbox challenge', isActive: true }
 ];
+
+export const INITIAL_ASSESSMENTS: any[] = [
+  {
+    id: 'a2',
+    title: 'Encapsulation & Access',
+    topicName: 'Encapsulation & Variables',
+    questionsCount: 5,
+    timeLimitMinutes: 5,
+    difficulty: 'Easy',
+    questions: [
+      {
+        id: 'eq1',
+        question: 'Which access modifier restricts member visibility strictly to the declaring class itself?',
+        options: [
+          { id: 'A', text: 'public', rationale: 'Incorrect. Public makes it accessible from any package.' },
+          { id: 'B', text: 'protected', rationale: 'Incorrect. Protected is accessible to package members and subclasses.' },
+          { id: 'C', text: 'private', rationale: 'Correct! The private modifier hides class variables and methods from outside access.' },
+          { id: 'D', text: 'default (package-private)', rationale: 'Incorrect. Default access allows visibility within the entire package.' }
+        ],
+        correctOptionId: 'C'
+      },
+      {
+        id: 'eq2',
+        question: 'What is the primary role of getter and setter methods in class design?',
+        options: [
+          { id: 'A', text: 'To bypass Java safety rules', rationale: 'Incorrect. Getters/setters reinforce design guidelines.' },
+          { id: 'B', text: 'To safely retrieve/modify fields and validate updates', rationale: 'Correct! They encapsulate data fields, preventing direct field mutation and permitting validation logic.' },
+          { id: 'C', text: 'To allow faster memory allocations', rationale: 'Incorrect. They are standard method calls and add no memory optimization.' },
+          { id: 'D', text: 'To automatically compile structures', rationale: 'Incorrect. Compilation is independent of design patterns.' }
+        ],
+        correctOptionId: 'B'
+      },
+      {
+        id: 'eq3',
+        question: 'Which modifier grants access to a class member from subclasses, even if they reside in different packages?',
+        options: [
+          { id: 'A', text: 'private', rationale: 'Incorrect. Private is restricted to the declaring class.' },
+          { id: 'B', text: 'protected', rationale: 'Correct! Protected fields can be accessed by subclasses in other packages.' },
+          { id: 'C', text: 'default (package-private)', rationale: 'Incorrect. Default allows access within the same package only.' },
+          { id: 'D', text: 'final', rationale: 'Incorrect. Final controls mutability, not access permissions.' }
+        ],
+        correctOptionId: 'B'
+      },
+      {
+        id: 'eq4',
+        question: 'What is the compilation outcome of accessing a private variable directly from another class?',
+        codeSnippet: `class BankAccount {
+    private double balance = 100.0;
+}
+public class Main {
+    public static void main(String[] args) {
+        BankAccount account = new BankAccount();
+        System.out.println(account.balance);
+    }
+}`,
+        options: [
+          { id: 'A', text: 'Prints "100.0"', rationale: 'Incorrect. Direct private access is blocked by compilers.' },
+          { id: 'B', text: 'Compilation Error: balance has private access in BankAccount', rationale: 'Correct! Compilers block references to private fields from outer classes.' },
+          { id: 'C', text: 'Compiles, but prints "0.0" at runtime', rationale: 'Incorrect. The code fails to compile.' },
+          { id: 'D', text: 'Throws NullPointerException', rationale: 'Incorrect. It is a compilation visibility error.' }
+        ],
+        correctOptionId: 'B'
+      },
+      {
+        id: 'eq5',
+        question: 'Which OOP concept emphasizes bundling data and methods inside a class and restricting direct data modifications?',
+        options: [
+          { id: 'A', text: 'Polymorphism', rationale: 'Incorrect. Polymorphism deals with multi-form behaviors.' },
+          { id: 'B', text: 'Inheritance', rationale: 'Incorrect. Inheritance deals with base class extensions.' },
+          { id: 'C', text: 'Encapsulation', rationale: 'Correct! Encapsulation bundles fields and methods together and hides raw internal state.' },
+          { id: 'D', text: 'Abstraction', rationale: 'Incorrect. Abstraction hides implementation detail complexity.' }
+        ],
+        correctOptionId: 'C'
+      }
+    ]
+  },
+  {
+    id: 'a1',
+    title: 'Inheritance & super',
+    topicName: 'Inheritance Hierarchy',
+    questionsCount: 10,
+    timeLimitMinutes: 7,
+    difficulty: 'Easy',
+    questions: [
+      {
+        id: 'q1',
+        question: 'Which of the following describes the relationship established by inheritance?',
+        options: [
+          { id: 'A', text: '"has-a" relationship', rationale: 'Incorrect. "has-a" describes composition or aggregation (e.g. Car has-a Engine).' },
+          { id: 'B', text: '"is-a" relationship', rationale: 'Correct! Inheritance models specialization, where a subclass is-a superclass (e.g. Dog is-a Animal).' },
+          { id: 'C', text: '"uses-a" relationship', rationale: 'Incorrect. "uses-a" describes dependency injection or association.' },
+          { id: 'D', text: '"implements-a" relationship', rationale: 'Incorrect. "implements-a" is not a standard OOP term, classes implement interfaces.' }
+        ],
+        correctOptionId: 'B'
+      },
+      {
+        id: 'q2',
+        question: 'Which keyword is used to call a parent class constructor in Java?',
+        options: [
+          { id: 'A', text: 'this', rationale: 'Incorrect. The "this" keyword invokes current class constructors or refers to the current object.' },
+          { id: 'B', text: 'parent', rationale: 'Incorrect. "parent" is used in PHP, but not in Java.' },
+          { id: 'C', text: 'super', rationale: 'Correct! The "super" keyword is used to invoke a parent class constructor or reference parent members.' },
+          { id: 'D', text: 'base', rationale: 'Incorrect. "base" is used in C#, but not in Java.' }
+        ],
+        correctOptionId: 'C'
+      },
+      {
+        id: 'q3',
+        question: 'What must be the first statement in a subclass constructor if you explicitly call a parent constructor?',
+        options: [
+          { id: 'A', text: 'The parent field initialization', rationale: 'Incorrect. Fields cannot be accessed before the constructor is run.' },
+          { id: 'B', text: 'A call to super() or super(...)', rationale: 'Correct! Subclass constructors must invoke parent constructors as the first statement in the body.' },
+          { id: 'C', text: 'A static method call', rationale: 'Incorrect. Non-static constructor statements cannot precede super().' },
+          { id: 'D', text: 'System.out.println()', rationale: 'Incorrect. Printing is an statement and cannot run before parent construction.' }
+        ],
+        correctOptionId: 'B'
+      },
+      {
+        id: 'q4',
+        question: 'What will be printed when compiling and running the following code?',
+        codeSnippet: `class Animal {
+    void sound() {
+        System.out.println("Animal");
+    }
+}
+class Dog extends Animal {
+    void sound() {
+        System.out.println("Dog");
+    }
+}
+public class Main {
+    public static void main(String[] args) {
+        Animal a = new Dog();
+        a.sound();
+    }
+}`,
+        options: [
+          { id: 'A', text: 'Animal', rationale: 'Incorrect. Java resolves virtual methods dynamically based on the object on the heap, not the reference type.' },
+          { id: 'B', text: 'Dog', rationale: 'Correct! At runtime, a refers to a Dog instance, so the overridden Dog.sound() method is called.' },
+          { id: 'C', text: 'Compilation Error', rationale: 'Incorrect. Upcasting is implicit and fully valid.' },
+          { id: 'D', text: 'Runtime Exception', rationale: 'Incorrect. The object on the heap matches the sound() signature.' }
+        ],
+        correctOptionId: 'B'
+      },
+      {
+        id: 'q5',
+        question: 'What will be printed by the following constructor cascading execution?',
+        codeSnippet: `class Parent {
+    Parent() {
+        System.out.print("Parent ");
+    }
+}
+class Child extends Parent {
+    Child() {
+        System.out.print("Child ");
+    }
+}
+public class Main {
+    public static void main(String[] args) {
+        Child c = new Child();
+    }
+}`,
+        options: [
+          { id: 'A', text: 'Child Parent', rationale: 'Incorrect. Parent constructors execute before Child constructors.' },
+          { id: 'B', text: 'Parent Child', rationale: 'Correct! When constructing Child, the compiler implicitly inserts a call to super() at the start, printing "Parent " then "Child ".' },
+          { id: 'C', text: 'Child', rationale: 'Incorrect. Parent constructor is automatically triggered.' },
+          { id: 'D', text: 'Parent', rationale: 'Incorrect. Both constructors are executed sequentially.' }
+        ],
+        correctOptionId: 'B'
+      },
+      {
+        id: 'q6',
+        question: 'What is the compilation outcome of overriding a public parent class method with a private access modifier in the child class?',
+        codeSnippet: `class Parent {
+    public void display() {
+        System.out.println("Parent");
+    }
+}
+class Child extends Parent {
+    private void display() { // Attempting override
+        System.out.println("Child");
+    }
+}`,
+        options: [
+          { id: 'A', text: 'Compiles and runs normally', rationale: 'Incorrect. Subclasses cannot restrict access permissions.' },
+          { id: 'B', text: 'Compilation Error: Cannot reduce the visibility of the inherited method', rationale: 'Correct! Overriding methods cannot have a more restrictive access modifier than the parent method.' },
+          { id: 'C', text: 'Compiles but throws IllegalAccessError at runtime', rationale: 'Incorrect. This issue is caught during compilation.' },
+          { id: 'D', text: 'Runs successfully, but suppresses child output', rationale: 'Incorrect. It fails compilation completely.' }
+        ],
+        correctOptionId: 'B'
+      },
+      {
+        id: 'q7',
+        question: 'Which of the following is true about method overriding in Java?',
+        options: [
+          { id: 'A', text: 'Method name and parameter types must match exactly', rationale: 'Correct! Method signature (name + parameters) must match the parent signature to override.' },
+          { id: 'B', text: 'Return types can be completely arbitrary', rationale: 'Incorrect. The return type must match or be a covariant subtype.' },
+          { id: 'C', text: 'Static methods can be overridden by subclasses', rationale: 'Incorrect. Static methods are hidden (shadowed), not dynamically overridden.' },
+          { id: 'D', text: 'Overriding methods must throw more general checked exceptions', rationale: 'Incorrect. Overriding methods can only throw narrower checked exceptions.' }
+        ],
+        correctOptionId: 'A'
+      },
+      {
+        id: 'q8',
+        question: 'What is the printed output of this dynamic method invocation?',
+        codeSnippet: `class Printer {
+    void print() { System.out.print("P "); }
+}
+class LaserPrinter extends Printer {
+    void print() { System.out.print("L "); }
+}
+public class Main {
+    public static void main(String[] args) {
+        Printer p1 = new Printer();
+        Printer p2 = new LaserPrinter();
+        p1.print();
+        p2.print();
+    }
+}`,
+        options: [
+          { id: 'A', text: 'P P', rationale: 'Incorrect. p2 references a LaserPrinter, which overrides the print method.' },
+          { id: 'B', text: 'L L', rationale: 'Incorrect. p1 is a plain Printer class.' },
+          { id: 'C', text: 'P L', rationale: 'Correct! p1 prints "P " and p2 uses late binding to invoke LaserPrinter.print() printing "L ".' },
+          { id: 'D', text: 'L P', rationale: 'Incorrect. The order is Printer first, then LaserPrinter.' }
+        ],
+        correctOptionId: 'C'
+      },
+      {
+        id: 'q9',
+        question: 'If a class does not explicitly extend any class, what class is its direct superclass in Java?',
+        options: [
+          { id: 'A', text: 'java.lang.Object', rationale: 'Correct! java.lang.Object is the root of the Java class hierarchy.' },
+          { id: 'B', text: 'java.lang.Class', rationale: 'Incorrect. java.lang.Class represents runtime class structures, it is not inherited by default.' },
+          { id: 'C', text: 'java.lang.System', rationale: 'Incorrect. System is a helper utility class.' },
+          { id: 'D', text: 'None', rationale: 'Incorrect. Object is always the implicit ancestor.' }
+        ],
+        correctOptionId: 'A'
+      },
+      {
+        id: 'q10',
+        question: 'What is the compilation outcome of attempting to override a method declared as final?',
+        codeSnippet: `class Base {
+    final void show() {
+        System.out.println("Base");
+    }
+}
+class Derived extends Base {
+    void show() { // Attempting override
+        System.out.println("Derived");
+    }
+}`,
+        options: [
+          { id: 'A', text: 'Compiles successfully', rationale: 'Incorrect. final prevents overriding.' },
+          { id: 'B', text: 'Compilation Error: Cannot override the final method from Base', rationale: 'Correct! In Java, "final" prevents subclasses from overriding base class method definitions.' },
+          { id: 'C', text: 'Compiles, but calls default Base method at runtime', rationale: 'Incorrect. Overriding validation fails at compilation.' },
+          { id: 'D', text: 'Throws FinalOverrideException at runtime', rationale: 'Incorrect. This validation is done by the javac compiler.' }
+        ],
+        correctOptionId: 'B'
+      }
+    ]
+  },
+  {
+    id: 'a3',
+    title: 'Polymorphism & late binding',
+    topicName: 'Polymorphism & Dynamic Dispatch',
+    questionsCount: 2,
+    timeLimitMinutes: 5,
+    difficulty: 'Intermediate',
+    questions: [
+      {
+        id: 'pq1',
+        question: 'Which reference type can be used to hold a subclass object in Java?',
+        options: [
+          { id: 'A', text: 'Only the exact subclass reference type', rationale: 'Incorrect. Java supports upcasting to parent types.' },
+          { id: 'B', text: 'Any ancestor class or implemented interface type (upcasting)', rationale: 'Correct! Upcasting allows a superclass variable to reference a subclass instance.' },
+          { id: 'C', text: 'Only java.lang.Class', rationale: 'Incorrect. Object variables can be declared as the superclass type.' }
+        ],
+        correctOptionId: 'B'
+      },
+      {
+        id: 'pq2',
+        question: 'What resolves overridden method calls at runtime in the JVM?',
+        options: [
+          { id: 'A', text: 'The reference type of the variable (static binding)', rationale: 'Incorrect. Static binding applies to overloaded, static, private, or final methods.' },
+          { id: 'B', text: 'The actual object type stored on the Heap (late binding)', rationale: 'Correct! Method overriding uses late binding to resolve the method based on the runtime type on the heap.' },
+          { id: 'C', text: 'The compiler class imports list', rationale: 'Incorrect. Compilation imports resolve namespace lookups, not runtime calls.' }
+        ],
+        correctOptionId: 'B'
+      }
+    ]
+  },
+  {
+    id: 'a4',
+    title: 'Abstraction & Interfaces',
+    topicName: 'Abstract Definitions & Strategy Patterns',
+    questionsCount: 2,
+    timeLimitMinutes: 5,
+    difficulty: 'Intermediate',
+    questions: [
+      {
+        id: 'abq1',
+        question: 'Which of the following is true about abstract classes in Java?',
+        options: [
+          { id: 'A', text: 'They can be instantiated using the new keyword', rationale: 'Incorrect. Abstract classes cannot be directly instantiated.' },
+          { id: 'B', text: 'They are designed to act as blueprints and cannot be directly instantiated', rationale: 'Correct! Abstract classes provide base contracts and concrete methods, but cannot be instantiated directly.' },
+          { id: 'C', text: 'They cannot contain concrete methods', rationale: 'Incorrect. They can contain fully implemented concrete methods alongside abstract methods.' }
+        ],
+        correctOptionId: 'B'
+      },
+      {
+        id: 'abq2',
+        question: 'Can a Java class implement multiple interfaces?',
+        options: [
+          { id: 'A', text: 'Yes, a class can implement any number of interfaces', rationale: 'Correct! Java allows multiple inheritance of type through interfaces.' },
+          { id: 'B', text: 'No, a class can only implement one interface', rationale: 'Incorrect. Java allows multiple interface implementation, although only extending one class.' },
+          { id: 'C', text: 'Only if interfaces have identical method signatures', rationale: 'Incorrect. Method signatures should ideally not conflict, but classes can implement multiple distinct interfaces.' }
+        ],
+        correctOptionId: 'A'
+      }
+    ]
+  },
+  {
+    id: 'a5',
+    title: 'V-Tables & Memory Offsets',
+    topicName: 'Advanced Memory & Virtual Tables',
+    questionsCount: 2,
+    timeLimitMinutes: 5,
+    difficulty: 'Hard',
+    questions: [
+      {
+        id: 'vtq1',
+        question: 'What does the abbreviation "V-Table" stand for in dynamic dispatch implementations?',
+        options: [
+          { id: 'A', text: 'Variable Table', rationale: 'Incorrect. V-Table represents virtual method bindings.' },
+          { id: 'B', text: 'Virtual Method Table', rationale: 'Correct! The Virtual Method Table maps method signatures to their runtime memory offsets.' },
+          { id: 'C', text: 'Vector Table', rationale: 'Incorrect. Vector tables are used in interrupt handling, not dynamic dispatch.' }
+        ],
+        correctOptionId: 'B'
+      },
+      {
+        id: 'vtq2',
+        question: 'Where are objects and their class reference blocks stored in JVM memory?',
+        options: [
+          { id: 'A', text: 'In the Stack segment', rationale: 'Incorrect. The Stack holds local variable values and method activation frames.' },
+          { id: 'B', text: 'In the Heap segment', rationale: 'Correct! All objects and instance variables are allocated on the JVM dynamic Heap.' },
+          { id: 'C', text: 'In CPU Cache memory directly', rationale: 'Incorrect. JVM abstracts memory into Stack, Heap, and Method Area.' }
+        ],
+        correctOptionId: 'B'
+      }
+    ]
+  }
+];

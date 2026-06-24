@@ -151,3 +151,27 @@ export interface MonitoringRequest {
   studentId: string;
   status: 'pending' | 'accepted' | 'rejected';
 }
+
+export interface AssessmentQuestionOption {
+  id: string;
+  text: string;
+  rationale: string;
+}
+
+export interface AssessmentQuestionItem {
+  id: string;
+  question: string;
+  codeSnippet?: string;
+  options: AssessmentQuestionOption[];
+  correctOptionId: string;
+}
+
+export interface Assessment {
+  id: string;
+  title: string;
+  topicName: string;
+  questionsCount: number;
+  timeLimitMinutes: number;
+  difficulty: 'Easy' | 'Intermediate' | 'Hard';
+  questions: AssessmentQuestionItem[];
+}
