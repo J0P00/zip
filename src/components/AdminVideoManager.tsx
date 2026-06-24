@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { 
   Play, 
   Plus, 
@@ -19,7 +19,12 @@ import {
   ArrowRight, 
   Lock, 
   Unlock,
-  AlertCircle
+  AlertCircle,
+  UploadCloud,
+  Check,
+  FileVideo,
+  Settings,
+  HelpCircle
 } from 'lucide-react';
 import { VideoLesson } from '../types';
 
@@ -30,6 +35,21 @@ interface AdminVideoManagerProps {
   onArchiveVideo: (id: string) => void;
   onDeleteVideo: (id: string) => void;
   onUpdateSequence: (id: string, newSeq: number) => void;
+}
+
+// SHA-256 signature generator using Web Crypto API
+async function generateSignature(paramsToSign: Record<string, any>, apiSecret: string): Promise<string> {
+  const sortedKeys = Object.keys(paramsToSign).sort();
+  const signatureString = sortedKeys
+    .map(key => `${key}=${paramsToSign[key]}`)
+    .join('&') + apiSecret;
+  
+  const encoder = new TextEncoder();
+  const data = encoder.encode(signatureString);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
 }
 
 export default function AdminVideoManager({
@@ -52,6 +72,25 @@ export default function AdminVideoManager({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingVideo, setEditingVideo] = useState<VideoLesson | null>(null);
 
+  // Cloudinary credentials & options (persisted locally)
+  const [cloudinaryConfig, setCloudinaryConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem('oophub_cloudinary_config');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    
+    // Fall back to environment variables or defaults
+    return {
+      cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || import.meta.env.CLOUDINARY_CLOUD_NAME || '',
+      apiKey: import.meta.env.VITE_CLOUDINARY_API_KEY || import.meta.env.CLOUDINARY_API_KEY || '',
+      apiSecret: import.meta.env.VITE_CLOUDINARY_API_SECRET || import.meta.env.CLOUDINARY_API_SECRET || '',
+      maxFileSize: 100 // Default 100 MB
+    };
+  });
+
+  const [showConfig, setShowConfig] = useState(false);
+  const [configSuccessMsg, setConfigSuccessMsg] = useState<string | null>(null);
+
   // Form Fields
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -66,6 +105,16 @@ export default function AdminVideoManager({
   const [formCategory, setFormCategory] = useState('Basics');
   const [formConcepts, setFormConcepts] = useState('');
   const [formUnlockedAssessmentId, setFormUnlockedAssessmentId] = useState('');
+  const [formYearLevel, setFormYearLevel] = useState('1st Year');
+  const [formCloudinaryPublicID, setFormCloudinaryPublicID] = useState('');
+
+  // Drag-and-drop & upload progress states
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(-1); // -1 = idle
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Course Options
   const courseOptions = [
@@ -84,17 +133,25 @@ export default function AdminVideoManager({
     setEditingVideo(null);
     setFormTitle('');
     setFormDescription('');
-    setFormVideoUrl('https://www.w3schools.com/html/mov_bbb.mp4');
+    setFormVideoUrl('');
     setFormDuration('10:00');
     setFormTopic('');
     setFormDifficulty('Beginner');
-    setFormThumbnail('https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=300&q=80');
+    setFormThumbnail('');
     setFormCourseId('oop');
     setFormLanguage('Java');
     setFormModule('Intro to Java & Classes');
     setFormCategory('Basics');
     setFormConcepts('State and Behavior, Class blueprints');
     setFormUnlockedAssessmentId('');
+    setFormYearLevel('1st Year');
+    setFormCloudinaryPublicID('');
+    
+    // Reset file states
+    setSelectedFile(null);
+    setUploadProgress(-1);
+    setUploadStatus('idle');
+    setUploadError(null);
     setIsFormOpen(true);
   };
 
@@ -113,13 +170,198 @@ export default function AdminVideoManager({
     setFormCategory(video.category || 'Basics');
     setFormConcepts(video.concepts.join(', '));
     setFormUnlockedAssessmentId(video.unlockedAssessmentId || '');
+    setFormYearLevel(video.yearLevel || '1st Year');
+    setFormCloudinaryPublicID(video.cloudinaryPublicID || '');
+    
+    // Reset file states
+    setSelectedFile(null);
+    setUploadProgress(-1);
+    setUploadStatus('idle');
+    setUploadError(null);
     setIsFormOpen(true);
+  };
+
+  const handleConfigSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem('oophub_cloudinary_config', JSON.stringify(cloudinaryConfig));
+    setConfigSuccessMsg('Cloudinary credentials updated successfully!');
+    setTimeout(() => setConfigSuccessMsg(null), 3000);
+  };
+
+  // Drag and drop events
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      validateAndSelectFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      validateAndSelectFile(e.target.files[0]);
+    }
+  };
+
+  const validateAndSelectFile = (file: File) => {
+    const validExtensions = ['.mp4', '.mov', '.avi', '.webm'];
+    const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    
+    if (!validExtensions.includes(fileExt)) {
+      setUploadError(`Unsupported file format. Supported: MP4, MOV, AVI, WebM`);
+      return;
+    }
+
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > cloudinaryConfig.maxFileSize) {
+      setUploadError(`File is too large (${fileSizeMB.toFixed(1)}MB). Limit is ${cloudinaryConfig.maxFileSize}MB.`);
+      return;
+    }
+
+    setSelectedFile(file);
+    setUploadError(null);
+    setUploadStatus('idle');
+    
+    // Autofill title if empty
+    if (!formTitle) {
+      const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+      setFormTitle(cleanName.charAt(0).toUpperCase() + cleanName.slice(1));
+    }
+  };
+
+  // Upload to Cloudinary action
+  const performUpload = async () => {
+    if (!selectedFile) return;
+
+    setUploadStatus('uploading');
+    setUploadProgress(0);
+    setUploadError(null);
+
+    const isCloudNameValid = cloudinaryConfig.cloudName && cloudinaryConfig.cloudName.trim().length > 0;
+    const isApiKeyValid = cloudinaryConfig.apiKey && cloudinaryConfig.apiKey.trim().length > 0;
+    const isApiSecretValid = cloudinaryConfig.apiSecret && cloudinaryConfig.apiSecret.trim().length > 0;
+
+    const useRealCloudinary = isCloudNameValid && isApiKeyValid && isApiSecretValid;
+
+    if (!useRealCloudinary) {
+      // Credentials not set - Execute simulation mode
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += Math.floor(Math.random() * 15) + 5;
+        if (progress >= 100) {
+          progress = 100;
+          clearInterval(interval);
+          
+          // Generate mock Cloudinary response details
+          const mockPublicId = `mock_tutorial_${Date.now()}`;
+          const mockUrl = `https://res.cloudinary.com/demo/video/upload/tutorial-videos/${mockPublicId}.mp4`;
+          const mockThumbnailUrl = `https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=300&q=80`;
+          
+          setFormVideoUrl(mockUrl);
+          setFormCloudinaryPublicID(mockPublicId);
+          setFormThumbnail(mockThumbnailUrl);
+          setFormDuration('12:45'); // Simulated duration
+          setUploadStatus('success');
+          setUploadProgress(100);
+        } else {
+          setUploadProgress(progress);
+        }
+      }, 300);
+      return;
+    }
+
+    // Real signed upload to Cloudinary using XMLHttpRequest
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/video/upload`, true);
+      
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          setUploadProgress(percent);
+        }
+      };
+      
+      xhr.onload = () => {
+        if (xhr.status === 200) {
+          try {
+            const response = JSON.parse(xhr.responseText);
+            const durationSecs = response.duration || 0;
+            const mins = Math.floor(durationSecs / 60);
+            const secs = Math.round(durationSecs % 60);
+            const durationStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            
+            const secureUrl = response.secure_url;
+            const publicId = response.public_id;
+            
+            // Build visual thumbnail URL from Cloudinary (image delivery of video)
+            const thumbnailUrl = `https://res.cloudinary.com/${cloudinaryConfig.cloudName}/video/upload/w_300,h_200,c_fill/${publicId}.jpg`;
+            
+            setFormVideoUrl(secureUrl);
+            setFormCloudinaryPublicID(publicId);
+            setFormThumbnail(thumbnailUrl);
+            setFormDuration(durationStr);
+            setUploadStatus('success');
+          } catch (err) {
+            setUploadStatus('error');
+            setUploadError('Failed to parse Cloudinary response data.');
+          }
+        } else {
+          try {
+            const errResponse = JSON.parse(xhr.responseText);
+            setUploadStatus('error');
+            setUploadError(errResponse.error?.message || `Upload failed with status ${xhr.status}`);
+          } catch {
+            setUploadStatus('error');
+            setUploadError(`Cloudinary upload failed: HTTP Status ${xhr.status}`);
+          }
+        }
+      };
+      
+      xhr.onerror = () => {
+        setUploadStatus('error');
+        setUploadError('Network error connecting to Cloudinary. Check network status.');
+      };
+      
+      const timestamp = Math.round(Date.now() / 1000).toString();
+      const paramsToSign = {
+        folder: 'tutorial-videos',
+        timestamp: timestamp
+      };
+      
+      const signature = await generateSignature(paramsToSign, cloudinaryConfig.apiSecret);
+      
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('api_key', cloudinaryConfig.apiKey);
+      formData.append('timestamp', timestamp);
+      formData.append('folder', 'tutorial-videos');
+      formData.append('signature', signature);
+      
+      xhr.send(formData);
+    } catch (err: any) {
+      setUploadStatus('error');
+      setUploadError(err.message || 'An unexpected error occurred during signed signature generation.');
+    }
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTitle.trim()) {
       alert('Please provide a title');
+      return;
+    }
+    if (!formVideoUrl) {
+      alert('Please select and upload a video file first, or provide a URL.');
       return;
     }
 
@@ -132,7 +374,7 @@ export default function AdminVideoManager({
       videoUrl: formVideoUrl,
       duration: formDuration,
       sequence: editingVideo ? editingVideo.sequence : (lessons.length + 1),
-      status: editingVideo ? editingVideo.status : 'active',
+      status: editingVideo ? editingVideo.status : (lessons.length === 0 ? 'active' : 'locked'),
       concepts: conceptsArray,
       thumbnailUrl: formThumbnail || 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=300&q=80',
       topic: formTopic,
@@ -148,7 +390,13 @@ export default function AdminVideoManager({
       completedStudents: editingVideo ? editingVideo.completedStudents : [],
       inProgressStudents: editingVideo ? editingVideo.inProgressStudents : [],
       notStartedStudents: editingVideo ? editingVideo.notStartedStudents : ['rodriguez@oophub.edu', 'volkov@oophub.edu', 'chen@oophub.edu', 'hughes@oophub.edu'],
-      progressPercent: editingVideo ? editingVideo.progressPercent : 0
+      progressPercent: editingVideo ? editingVideo.progressPercent : 0,
+      
+      // Cloudinary metadata
+      cloudinaryPublicID: formCloudinaryPublicID,
+      yearLevel: formYearLevel,
+      createdAt: editingVideo ? editingVideo.createdAt : new Date().toISOString(),
+      createdBy: editingVideo ? editingVideo.createdBy : 'Administrator'
     };
 
     if (editingVideo) {
@@ -208,7 +456,7 @@ export default function AdminVideoManager({
     // Completion rates calculations
     const withCompletionRates = activeLessons.map(l => {
       const totalStuds = (l.completedStudents?.length || 0) + (l.inProgressStudents?.length || 0) + (l.notStartedStudents?.length || 0) || 1;
-      const rate = Math.round(((l.completedStudents?.length || 0) / totalStuds) * 100);
+      const rate = Math.round(((l.completedStudents?.length || 0) / totalStuds) * 105);
       return { title: l.title, rate, views: l.views || 0 };
     });
 
@@ -233,9 +481,97 @@ export default function AdminVideoManager({
 
   const trackingVideo = lessons.find(l => l.id === trackingVideoId);
 
+  // Cloudinary credentials configuration state checks
+  const isCloudinaryConfigured = cloudinaryConfig.cloudName && cloudinaryConfig.apiKey && cloudinaryConfig.apiSecret;
+
   return (
     <div className="space-y-6 text-slate-800" id="video-tutorial-management-workspace">
       
+      {/* Cloudinary Integration Configuration Collapsible widget */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-left">
+        <button
+          onClick={() => setShowConfig(!showConfig)}
+          className="w-full px-5 py-4 flex items-center justify-between font-bold text-xs uppercase tracking-wider text-slate-700 bg-slate-50 hover:bg-slate-100 transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <Settings className={`w-4.5 h-4.5 text-indigo-650 ${showConfig ? 'animate-spin-slow' : ''}`} />
+            Cloudinary Video Storage Configuration Setup
+          </span>
+          <span className="flex items-center gap-2">
+            <span className={`text-[10px] px-2 py-0.5 rounded-full border ${isCloudinaryConfigured ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>
+              ● {isCloudinaryConfigured ? 'Production Storage Mode' : 'Simulation Mode'}
+            </span>
+            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showConfig ? 'rotate-180' : ''}`} />
+          </span>
+        </button>
+
+        {showConfig && (
+          <form onSubmit={handleConfigSave} className="p-5 border-t border-slate-200 space-y-4 animate-fade-in">
+            <div className="p-3 bg-indigo-50/40 border border-indigo-100 rounded-xl text-xs text-indigo-900 leading-relaxed font-semibold">
+              <span className="flex items-center gap-1.5"><HelpCircle className="w-4 h-4 shrink-0 text-indigo-605" /> Storage Notes:</span>
+              <p className="mt-1">By default, if you don't input API credentials, video uploads will run in <strong>Simulation Mode</strong> (generating mock Cloudinary links for instantaneous testing). To sync with real storage, fill details below and credentials will save to your local browser storage.</p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-slate-400 font-bold uppercase block tracking-wider">Cloud Name</label>
+                <input 
+                  type="text" 
+                  value={cloudinaryConfig.cloudName}
+                  onChange={e => setCloudinaryConfig({...cloudinaryConfig, cloudName: e.target.value})}
+                  placeholder="e.g. oophub-storage"
+                  className="w-full bg-slate-50 border border-slate-205 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-slate-400 font-bold uppercase block tracking-wider">API Key</label>
+                <input 
+                  type="text" 
+                  value={cloudinaryConfig.apiKey}
+                  onChange={e => setCloudinaryConfig({...cloudinaryConfig, apiKey: e.target.value})}
+                  placeholder="Cloudinary API Key"
+                  className="w-full bg-slate-50 border border-slate-205 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-slate-400 font-bold uppercase block tracking-wider">API Secret</label>
+                <input 
+                  type="password" 
+                  value={cloudinaryConfig.apiSecret}
+                  onChange={e => setCloudinaryConfig({...cloudinaryConfig, apiSecret: e.target.value})}
+                  placeholder="••••••••••••••••"
+                  className="w-full bg-slate-50 border border-slate-205 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition"
+                />
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-slate-400 font-bold uppercase block tracking-wider">Max Video File Size Limit (MB)</label>
+                <input 
+                  type="number" 
+                  value={cloudinaryConfig.maxFileSize}
+                  onChange={e => setCloudinaryConfig({...cloudinaryConfig, maxFileSize: Number(e.target.value)})}
+                  placeholder="100"
+                  className="w-full bg-slate-50 border border-slate-205 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition"
+                />
+              </div>
+              <div className="flex items-end justify-between">
+                {configSuccessMsg ? (
+                  <span className="text-xs text-emerald-650 font-bold flex items-center gap-1"><Check className="w-4 h-4" /> {configSuccessMsg}</span>
+                ) : <span />}
+                <button
+                  type="submit"
+                  className="bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow cursor-pointer active:scale-95 transition-all select-none"
+                >
+                  Save Connection Details
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+      </div>
+
       {/* 1. Analytics Dashboard Header Panel */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 animate-fade-in" id="video-analytics-cards">
         {[
@@ -355,7 +691,7 @@ export default function AdminVideoManager({
                         <button 
                           onClick={() => moveVideo(video, 'up')}
                           disabled={index === 0}
-                          className={`p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 disabled:opacity-20`}
+                          className={`p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-605 disabled:opacity-20`}
                         >
                           <ChevronUp className="w-3.5 h-3.5" />
                         </button>
@@ -363,7 +699,7 @@ export default function AdminVideoManager({
                         <button 
                           onClick={() => moveVideo(video, 'down')}
                           disabled={index === filteredVideos.length - 1}
-                          className={`p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 disabled:opacity-20`}
+                          className={`p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-605 disabled:opacity-20`}
                         >
                           <ChevronDown className="w-3.5 h-3.5" />
                         </button>
@@ -395,9 +731,9 @@ export default function AdminVideoManager({
                           <p className="text-[10px] text-slate-400 truncate mt-0.5 font-medium">
                             {video.description}
                           </p>
-                          <div className="flex items-center gap-1.5 mt-1">
+                          <div className="flex items-center gap-1.5 mt-1.5">
                             <span className="text-[8px] font-mono font-bold bg-slate-100 text-slate-500 border rounded px-1">
-                              {video.videoUrl.includes('youtube.com') || video.videoUrl.includes('youtu.be') ? 'YouTube' : 'Direct File'}
+                              {video.cloudinaryPublicID ? 'Cloudinary' : 'External Link'}
                             </span>
                             {video.isArchived && (
                               <span className="text-[8px] font-mono font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded px-1">
@@ -429,7 +765,7 @@ export default function AdminVideoManager({
                         {video.difficulty}
                       </span>
                       <span className="text-[10px] text-slate-500 block mt-1.5 font-bold font-sans">
-                        Topic: {video.topic || 'General'}
+                        Topic: {video.topic || 'General'} | {video.yearLevel || '1st Year'}
                       </span>
                     </td>
 
@@ -468,7 +804,7 @@ export default function AdminVideoManager({
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => setTrackingVideoId(video.id)}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition"
+                          className="p-1.5 text-slate-400 hover:text-indigo-650 hover:bg-slate-100 rounded-lg transition"
                           title="Track Student Progress"
                         >
                           <Users className="w-4 h-4" />
@@ -476,7 +812,7 @@ export default function AdminVideoManager({
                         
                         <button
                           onClick={() => handleOpenEditForm(video)}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition"
+                          className="p-1.5 text-slate-400 hover:text-indigo-650 hover:bg-slate-100 rounded-lg transition"
                           title="Edit Video"
                         >
                           <Edit className="w-4 h-4" />
@@ -500,7 +836,7 @@ export default function AdminVideoManager({
                               onDeleteVideo(video.id);
                             }
                           }}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                          className="p-1.5 text-slate-400 hover:text-rose-605 hover:bg-rose-50 rounded-lg transition"
                           title="Delete Video"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -527,7 +863,7 @@ export default function AdminVideoManager({
       {isFormOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 max-w-xl w-full mx-4 space-y-4 max-h-[85vh] overflow-y-auto animate-scale-in text-slate-850">
-            <div className="flex justify-between items-center border-b pb-3 border-slate-100">
+            <div className="flex justify-between items-center border-b pb-3 border-slate-100 text-left">
               <div>
                 <span className="text-[10px] font-mono bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold px-2 py-0.5 rounded uppercase">
                   {editingVideo ? 'Edit tutorial' : 'New upload'}
@@ -538,13 +874,88 @@ export default function AdminVideoManager({
               </div>
               <button 
                 onClick={() => setIsFormOpen(false)}
-                className="p-1.5 text-slate-405 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition"
+                className="p-1.5 text-slate-405 hover:text-slate-605 hover:bg-slate-50 rounded-lg transition"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleFormSubmit} className="space-y-4 text-left">
+              
+              {/* Drag and Drop Zone or Status indicator */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Video File Upload</label>
+                
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition ${
+                    dragOver ? 'border-indigo-505 bg-indigo-50/10' : 'border-slate-200 bg-slate-50 hover:bg-slate-100/50'
+                  }`}
+                >
+                  <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    accept="video/mp4,video/quicktime,video/x-msvideo,video/webm"
+                    className="hidden"
+                  />
+                  <UploadCloud className="w-8 h-8 text-slate-400" />
+                  <div className="text-center">
+                    <p className="text-xs font-bold text-slate-700">
+                      {selectedFile ? `Selected: ${selectedFile.name}` : 'Drag & drop video file here, or click to browse'}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      {selectedFile ? `Size: ${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB` : 'Supported: MP4, MOV, AVI, WebM'}
+                    </p>
+                  </div>
+                </div>
+
+                {uploadError && (
+                  <p className="text-[10px] text-rose-600 font-semibold mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-500" /> {uploadError}
+                  </p>
+                )}
+
+                {/* File Upload Actions & Progress Bar */}
+                {selectedFile && (
+                  <div className="p-3 border rounded-xl bg-slate-50 border-slate-200 flex flex-col gap-2 mt-2">
+                    <div className="flex justify-between items-center text-[10.5px]">
+                      <span className="font-bold text-slate-700">Cloudinary Upload Status</span>
+                      <span className={`font-mono font-black ${uploadStatus === 'success' ? 'text-emerald-650' : uploadStatus === 'error' ? 'text-rose-600' : 'text-indigo-650'}`}>
+                        {uploadStatus === 'idle' && 'Ready to upload'}
+                        {uploadStatus === 'uploading' && `Uploading (${uploadProgress}%)`}
+                        {uploadStatus === 'success' && 'Upload Successful!'}
+                        {uploadStatus === 'error' && 'Upload Failed'}
+                      </span>
+                    </div>
+
+                    {uploadProgress >= 0 && (
+                      <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-indigo-600 rounded-full transition-all duration-200" style={{ width: `${uploadProgress}%` }}></div>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2 justify-end mt-1">
+                      {uploadStatus !== 'uploading' && uploadStatus !== 'success' && (
+                        <button
+                          type="button"
+                          onClick={performUpload}
+                          className="bg-indigo-600 hover:bg-indigo-705 text-white font-bold text-[10px] px-3.5 py-1.5 rounded-lg active:scale-95 transition cursor-pointer"
+                        >
+                          {isCloudinaryConfigured ? 'Start Cloudinary Upload' : 'Start Simulated Upload'}
+                        </button>
+                      )}
+                      {uploadStatus === 'success' && (
+                        <span className="text-[10px] text-emerald-655 font-bold flex items-center gap-0.5"><Check className="w-3.5 h-3.5" /> Ready to Save</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-1">
                 <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Video Title</label>
                 <input 
@@ -552,7 +963,7 @@ export default function AdminVideoManager({
                   value={formTitle}
                   onChange={e => setFormTitle(e.target.value)}
                   placeholder="e.g. Mastering Upcasting and Downcasting"
-                  className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition"
+                  className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-505 transition"
                   required
                 />
               </div>
@@ -563,43 +974,43 @@ export default function AdminVideoManager({
                   value={formDescription}
                   onChange={e => setFormDescription(e.target.value)}
                   placeholder="Provide a detailed outline of v-tables address pointer allocations..."
-                  className="w-full h-16 bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition resize-none"
+                  className="w-full h-16 bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-505 transition resize-none font-sans"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Video Link (MP4 / YouTube)</label>
+                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Video URL (Autofilled on Upload)</label>
                   <input 
                     type="text" 
                     value={formVideoUrl}
                     onChange={e => setFormVideoUrl(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition"
+                    placeholder="https://res.cloudinary.com/..."
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-505 transition"
                     required
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Duration (MM:SS)</label>
+                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Duration (Autofilled)</label>
                   <input 
                     type="text" 
                     value={formDuration}
                     onChange={e => setFormDuration(e.target.value)}
                     placeholder="e.g. 14:50"
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition"
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-505 transition"
                     required
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Difficulty</label>
                   <select
                     value={formDifficulty}
                     onChange={e => setFormDifficulty(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-750 text-xs focus:bg-white focus:border-indigo-500 transition cursor-pointer"
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-750 text-xs focus:bg-white focus:border-indigo-505 transition cursor-pointer"
                   >
                     <option value="Beginner">Beginner</option>
                     <option value="Intermediate">Intermediate</option>
@@ -607,21 +1018,34 @@ export default function AdminVideoManager({
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Programming Language</label>
+                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Year Level</label>
+                  <select
+                    value={formYearLevel}
+                    onChange={e => setFormYearLevel(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-750 text-xs focus:bg-white focus:border-indigo-505 transition cursor-pointer"
+                  >
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Language</label>
                   <input 
                     type="text" 
                     value={formLanguage}
                     onChange={e => setFormLanguage(e.target.value)}
-                    placeholder="e.g. Java"
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition"
+                    placeholder="Java"
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-505 transition"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Course Assignment</label>
+                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Course</label>
                   <select
                     value={formCourseId}
                     onChange={e => setFormCourseId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-750 text-xs focus:bg-white focus:border-indigo-500 transition cursor-pointer"
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-750 text-xs focus:bg-white focus:border-indigo-505 transition cursor-pointer"
                   >
                     {courseOptions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
@@ -636,7 +1060,7 @@ export default function AdminVideoManager({
                     value={formModule}
                     onChange={e => setFormModule(e.target.value)}
                     placeholder="e.g. Inheritance vs Composition"
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition"
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-505 transition"
                   />
                 </div>
                 <div className="space-y-1">
@@ -646,20 +1070,20 @@ export default function AdminVideoManager({
                     value={formTopic}
                     onChange={e => setFormTopic(e.target.value)}
                     placeholder="e.g. Polymorphic Overrides"
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition"
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-505 transition"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Thumbnail Image Link</label>
+                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Thumbnail URL (Autofilled)</label>
                   <input 
                     type="text" 
                     value={formThumbnail}
                     onChange={e => setFormThumbnail(e.target.value)}
                     placeholder="https://images.unsplash.com/photo-..."
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition"
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-505 transition"
                   />
                 </div>
                 <div className="space-y-1">
@@ -667,7 +1091,7 @@ export default function AdminVideoManager({
                   <select
                     value={formUnlockedAssessmentId}
                     onChange={e => setFormUnlockedAssessmentId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-750 text-xs focus:bg-white focus:border-indigo-500 transition cursor-pointer"
+                    className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-750 text-xs focus:bg-white focus:border-indigo-505 transition cursor-pointer"
                   >
                     <option value="">No Associated Assessment Lock</option>
                     {assessmentOptions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -682,7 +1106,7 @@ export default function AdminVideoManager({
                   value={formConcepts}
                   onChange={e => setFormConcepts(e.target.value)}
                   placeholder="e.g. Upcasting, Late Binding, Address Resolution"
-                  className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-500 transition"
+                  className="w-full bg-slate-50 border border-slate-200 outline-none p-2.5 rounded-xl text-slate-700 text-xs focus:bg-white focus:border-indigo-505 transition"
                 />
               </div>
 
@@ -696,7 +1120,7 @@ export default function AdminVideoManager({
                 </button>
                 <button
                   type="submit"
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl active:scale-95 transition cursor-pointer shadow-md shadow-indigo-150"
+                  className="bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl active:scale-95 transition cursor-pointer shadow-md shadow-indigo-150"
                 >
                   {editingVideo ? 'Save Changes' : 'Upload Tutorial'}
                 </button>
@@ -710,8 +1134,8 @@ export default function AdminVideoManager({
       {trackingVideo && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 backdrop-blur-sm animate-fade-in" id="student-tracking-modal">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 max-w-lg w-full mx-4 space-y-5 animate-scale-in text-slate-800">
-            <div className="flex justify-between items-center border-b pb-3 border-slate-100">
-              <div className="text-left">
+            <div className="flex justify-between items-center border-b pb-3 border-slate-100 text-left">
+              <div>
                 <span className="text-[9px] font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold px-2 py-0.5 rounded uppercase">Progress tracker</span>
                 <h3 className="text-sm font-extrabold text-slate-900 mt-1">
                   Learners progress: {trackingVideo.title}
@@ -719,7 +1143,7 @@ export default function AdminVideoManager({
               </div>
               <button 
                 onClick={() => setTrackingVideoId(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-650 hover:bg-slate-50 rounded-lg transition"
+                className="p-1.5 text-slate-400 hover:text-slate-655 hover:bg-slate-50 rounded-lg transition"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -748,14 +1172,14 @@ export default function AdminVideoManager({
               {/* In Progress list */}
               <div className="space-y-2">
                 <h4 className="text-[10px] font-mono text-amber-700 font-bold uppercase tracking-wider flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-amber-500" /> In Progress Students ({trackingVideo.inProgressStudents?.length || 0})
+                  <Clock className="w-3.5 h-3.5 text-amber-505" /> In Progress Students ({trackingVideo.inProgressStudents?.length || 0})
                 </h4>
                 <div className="bg-slate-55 p-2.5 rounded-xl border border-slate-100 space-y-1.5 max-h-24 overflow-y-auto">
                   {trackingVideo.inProgressStudents && trackingVideo.inProgressStudents.length > 0 ? (
                     trackingVideo.inProgressStudents.map(s => (
                       <div key={s} className="flex justify-between text-xs font-semibold py-0.5">
                         <span className="text-slate-700">{s}</span>
-                        <span className="text-amber-600 font-mono font-bold">In Progress</span>
+                        <span className="text-amber-605 font-mono font-bold">In Progress</span>
                       </div>
                     ))
                   ) : (
@@ -772,7 +1196,7 @@ export default function AdminVideoManager({
                 <div className="bg-slate-55 p-2.5 rounded-xl border border-slate-100 space-y-1 max-h-28 overflow-y-auto">
                   {trackingVideo.notStartedStudents && trackingVideo.notStartedStudents.length > 0 ? (
                     trackingVideo.notStartedStudents.map(s => (
-                      <div key={s} className="text-xs font-semibold py-0.5 text-slate-600">
+                      <div key={s} className="text-xs font-semibold py-0.5 text-slate-605">
                         {s}
                       </div>
                     ))

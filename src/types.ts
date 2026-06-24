@@ -47,7 +47,8 @@ export type AdminSubView =
   | 'analytics'
   | 'reports'
   | 'settings'
-  | 'profile';
+  | 'profile'
+  | 'videos';
 
 export interface CodeFile {
   name: string;
@@ -93,6 +94,12 @@ export interface VideoLesson {
   inProgressStudents?: string[];
   notStartedStudents?: string[];
   progressPercent?: number;
+  
+  // Cloudinary & metadata extensions
+  cloudinaryPublicID?: string;
+  yearLevel?: string;
+  createdAt?: string;
+  createdBy?: string;
 }
 
 export interface NotificationItem {
@@ -198,4 +205,21 @@ export interface Assessment {
   timeLimitMinutes: number;
   difficulty: 'Easy' | 'Intermediate' | 'Hard';
   questions: AssessmentQuestionItem[];
+}
+
+export interface StudentVideoProgress {
+  progressId: string;
+  studentId: string;
+  videoId: string;
+  lastPosition: number; // in seconds
+  completionPercentage: number;
+  completed: boolean;
+  dateCompleted?: string;
+}
+
+export interface StudentIDEProgress {
+  submissionsCount: number;
+  successfulExecutions: number;
+  completed: boolean;
+  code?: string;
 }

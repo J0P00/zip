@@ -25,7 +25,8 @@ import {
   FileBarChart,
   SlidersHorizontal,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Film
 } from 'lucide-react';
 
 // Import Types
@@ -72,6 +73,7 @@ import AdminDashboard from './components/AdminDashboard';
 import AuthPage from './components/AuthPage';
 import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
+import AdminVideoManager from './components/AdminVideoManager';
 
 const DEMO_STUDENT_PROGRESS = {
   streak: 12,
@@ -526,6 +528,12 @@ export default function App() {
       feedback: `Correct diagnosis! You parsed the JVM late binding dynamic dispatch table layout perfectly. Option B was correct. Keep up this momentum${currentUser ? `, ${currentUser.name.split(/\s+/)[0]}` : ''}!`,
       challenge: "Scenario 04: The Fleet Manager"
     });
+
+    addNotification(
+      `Coding Exercises Unlocked! 🔓`,
+      `You passed the assessment. Sandbox IDE exercises are now unlocked.`,
+      'unlock'
+    );
   };
 
   // 3. When teacher drafts score reviews inside Instructor grading panels
@@ -688,6 +696,7 @@ export default function App() {
     { id: 'users', label: 'User Management', icon: <Users className="w-4 h-4" /> },
     { id: 'courses', label: 'Courses', icon: <BookOpen className="w-4 h-4" /> },
     { id: 'library', label: 'Content Library', icon: <Library className="w-4 h-4" /> },
+    { id: 'videos', label: 'Video Tutorials', icon: <Film className="w-4 h-4" /> },
     { id: 'assessments', label: 'Assessments', icon: <ClipboardCheck className="w-4 h-4" /> },
     { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" /> },
     { id: 'reports', label: 'Reports', icon: <FileBarChart className="w-4 h-4" /> },
@@ -710,6 +719,10 @@ export default function App() {
     library: {
       title: 'Content Library',
       description: 'Organize videos, labs, quizzes, and reusable OOP learning materials.'
+    },
+    videos: {
+      title: 'Video Tutorials Management',
+      description: 'Upload, edit, organize, and manage tutorial videos and sync with Cloudinary storage.'
     },
     assessments: {
       title: 'Assessments',
@@ -1089,6 +1102,17 @@ export default function App() {
               />
             )}
 
+            {persona === 'admin' && adminTab === 'videos' && (
+              <AdminVideoManager
+                lessons={videoLessons}
+                onAddVideo={handleUploadVideo}
+                onEditVideo={handleEditVideo}
+                onArchiveVideo={handleArchiveVideo}
+                onDeleteVideo={handleDeleteVideo}
+                onUpdateSequence={handleUpdateVideoSequence}
+              />
+            )}
+
             {/* UNIVERSAL USER PROFILE PAGE */}
             {((persona === 'student' && studentTab === 'profile') ||
               (persona === 'teacher' && teacherTab === 'profile') ||
@@ -1125,7 +1149,7 @@ export default function App() {
               onClick={() => setStudentTab(item.id as StudentSubView)}
               className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-md text-[10px] font-extrabold transition cursor-pointer ${
                 studentTab === item.id
-                  ? 'bg-emerald-50/50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'
+                  ? 'bg-emerald-50/50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-450'
                   : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'
               }`}
             >
@@ -1143,7 +1167,7 @@ export default function App() {
             : 'bg-white/95 border-slate-200 shadow-slate-200/50 text-slate-500'
         }`}>
           {adminNavItems
-            .filter(item => ['dashboard', 'users', 'courses', 'analytics', 'settings'].includes(item.id))
+            .filter(item => ['dashboard', 'users', 'courses', 'videos', 'settings'].includes(item.id))
             .map(item => (
               <button
                 key={item.id}
@@ -1151,7 +1175,7 @@ export default function App() {
                 onClick={() => setAdminTab(item.id)}
                 className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-md text-[10px] font-extrabold transition cursor-pointer ${
                   adminTab === item.id
-                    ? 'bg-emerald-50/50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'
+                    ? 'bg-emerald-50/50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-450'
                     : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'
                 }`}
               >
