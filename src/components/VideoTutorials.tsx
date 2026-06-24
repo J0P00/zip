@@ -231,18 +231,16 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
       if (isPlaying) {
         videoRef.current.play().catch(err => {
           console.warn("Playback failed unmuted, trying muted:", err);
-          // If unmuted play is blocked by the browser, try to mute the video element and play again
-          if (!isMuted) {
-            setIsMuted(true);
-            // Manually force muted attribute to bypass browser autoplay rules immediately
-            if (videoRef.current) {
-              videoRef.current.muted = true;
-              videoRef.current.play().catch(muteErr => {
-                console.error("Muted playback also failed:", muteErr);
-                setVideoError("Your browser blocked video playback. Please click directly on the player to enable audio or check browser permission settings.");
-                setIsPlaying(false);
-              });
-            }
+          // If unmuted play is blocked by the browser, try to mute the video element and play again.
+          // Note: Check the direct DOM element property as state changes are async.
+          if (videoRef.current && !videoRef.current.muted) {
+            videoRef.current.muted = true;
+            setIsMuted(true); // Sync React state for UI icons
+            videoRef.current.play().catch(muteErr => {
+              console.error("Muted playback also failed:", muteErr);
+              setVideoError("Your browser blocked video playback. Please click directly on the player to enable audio or check browser permission settings.");
+              setIsPlaying(false);
+            });
           } else {
             setVideoError("The video file failed to load. Please verify the URL or check your network connection.");
             setIsPlaying(false);
@@ -252,7 +250,7 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
         videoRef.current.pause();
       }
     }
-  }, [isPlaying, activeLesson.videoUrl, isMuted]);
+  }, [isPlaying, activeLesson.videoUrl]);
 
   // Seek skipping backward/forward
   const handleSkip = (seconds: number) => {
