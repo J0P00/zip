@@ -495,7 +495,13 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: Asse
               <span className="text-[10px] font-mono tracking-widest text-slate-400 font-bold uppercase">{selectedAssessment.title} Assessment</span>
               <h2 className="text-xl font-extrabold text-slate-900 mt-1">Question {currentQuestionIdx + 1} of {selectedAssessment.questions.length}</h2>
             </div>
-            <span className="text-xs px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 font-mono font-bold">Difficulty: {selectedAssessment.difficulty}</span>
+            <div className="flex flex-col items-end gap-1.5 shrink-0">
+              <span className="text-xs px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 font-mono font-bold">Difficulty: {selectedAssessment.difficulty}</span>
+              <span className="text-xs font-mono font-black text-rose-650 lg:hidden flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                {formatTimer(timeRemaining)}
+              </span>
+            </div>
           </div>
 
           {/* Question Text */}

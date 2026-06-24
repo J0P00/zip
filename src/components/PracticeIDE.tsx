@@ -29,6 +29,9 @@ export default function PracticeIDE({ initialFiles, onSubmitCompleted }: Practic
   const [testSuccess, setTestSuccess] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   
+  // Custom state for mobile tabbed view
+  const [activeMobileTab, setActiveMobileTab] = useState<'instructions' | 'code' | 'console'>('instructions');
+
   // Custom directory state
   const [isFolderOpen, setIsFolderOpen] = useState({
     src: true,
@@ -164,16 +167,34 @@ export default function PracticeIDE({ initialFiles, onSubmitCompleted }: Practic
   const linesCount = editorText.split('\n').length;
 
   return (
-    <div className="grid lg:grid-cols-12 gap-5 h-[calc(100vh-140px)] min-h-[600px] text-slate-800" id="ide-workspace">
+    <div className="flex flex-col lg:grid lg:grid-cols-12 gap-5 h-[calc(100vh-180px)] lg:h-[calc(100vh-140px)] min-h-[500px] lg:min-h-[600px] text-slate-800" id="ide-workspace">
       
+      {/* Mobile view tab buttons */}
+      <div className="flex border border-slate-200/80 rounded-xl bg-slate-50 p-1 lg:hidden w-full select-none shrink-0 mb-1">
+        {[
+          { id: 'instructions', label: 'Instructions' },
+          { id: 'code', label: 'Code Editor' },
+          { id: 'console', label: 'Console' }
+        ].map(t => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setActiveMobileTab(t.id as any)}
+            className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeMobileTab === t.id ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {/* File Tree Panel & Center editor */}
-      <div className="lg:col-span-8 flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm h-full">
+      <div className={`lg:col-span-8 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm h-full ${activeMobileTab === 'instructions' ? 'hidden lg:flex flex-col' : 'flex flex-col'}`}>
         
         {/* Workspace core navigation layout */}
         <div className="flex flex-1 overflow-hidden">
           
           {/* File explorer panel */}
-          <div className="w-56 bg-slate-50 border-r border-slate-200 p-4 font-mono select-none overflow-y-auto flex-shrink-0" id="ide-explorer">
+          <div className="hidden md:block w-56 bg-slate-50 border-r border-slate-200 p-4 font-mono select-none overflow-y-auto flex-shrink-0" id="ide-explorer">
             <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider font-sans block mb-3">Project Explorer</span>
             
             {/* Folder rows */}
@@ -234,12 +255,20 @@ export default function PracticeIDE({ initialFiles, onSubmitCompleted }: Practic
             </div>
           </div>
 
-          {/* Central text code editor */}
-          <div className="flex-1 flex flex-col bg-[#1e293b] text-slate-100 overflow-hidden" id="ide-editor-container">
+          <div className={`flex-grow bg-[#1e293b] text-slate-100 overflow-hidden ${activeMobileTab === 'console' ? 'hidden lg:flex flex-col' : 'flex flex-col'}`} id="ide-editor-container">
             <div className="bg-[#0f172a] px-4 py-2 flex items-center justify-between border-b border-[#0f172a]/50 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <FileCode className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs font-mono font-bold text-slate-300">{activeFile.split('/').pop()}</span>
+                <span className="text-xs font-mono font-bold text-slate-300 hidden md:inline">{activeFile.split('/').pop()}</span>
+                <select
+                  value={activeFile}
+                  onChange={(e) => setActiveFile(e.target.value)}
+                  className="md:hidden bg-[#1e293b] text-xs font-mono font-bold text-slate-300 border border-[#334155] rounded px-2 py-0.5 outline-none focus:border-indigo-400 cursor-pointer"
+                >
+                  <option value="src/main/java/Vehicle.java">Vehicle.java</option>
+                  <option value="src/main/java/Car.java">Car.java</option>
+                  <option value="src/main/java/Main.java">Main.java</option>
+                </select>
                 <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded uppercase tracking-wider">Java Sandbox</span>
               </div>
               <div className="flex items-center gap-3">
@@ -276,7 +305,7 @@ export default function PracticeIDE({ initialFiles, onSubmitCompleted }: Practic
         </div>
 
         {/* Compiling Terminal console */}
-        <div className="h-44 bg-[#090d16] text-[#94a3b8] font-mono text-xs flex flex-col border-t border-[#1e293b] flex-shrink-0" id="ide-console">
+        <div className={`bg-[#090d16] text-[#94a3b8] font-mono text-xs border-t border-[#1e293b] flex-shrink-0 ${activeMobileTab === 'code' ? 'hidden lg:flex flex-col h-44' : activeMobileTab === 'console' ? 'flex flex-col flex-grow lg:flex-grow-0 lg:h-44' : 'flex flex-col h-44'}`} id="ide-console">
           <div className="bg-[#0f172a] px-4 py-1.5 flex items-center justify-between border-b border-[#1e293b]/50 flex-shrink-0">
             <span className="text-[10px] uppercase font-bold tracking-widest text-[#64748b] flex items-center gap-1.5"><Terminal className="w-3.5 h-3.5" /> Output Console</span>
             <span className="text-[9px] text-[#475569]">JDK v21.0.2 compiler</span>
@@ -296,7 +325,7 @@ export default function PracticeIDE({ initialFiles, onSubmitCompleted }: Practic
       </div>
 
       {/* Challenge Instruction Panel */}
-      <div className="lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-between overflow-y-auto h-full" id="ide-challenge-sidebar">
+      <div className={`lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 overflow-y-auto h-full ${activeMobileTab !== 'instructions' ? 'hidden lg:flex flex-col lg:justify-between' : 'flex flex-col justify-between'}`} id="ide-challenge-sidebar">
         
         <div className="space-y-5">
           <div className="border-b border-slate-100 pb-3">

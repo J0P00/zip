@@ -560,7 +560,7 @@ export default function Navbar({
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     transition={{ duration: 0.15 }}
-                    className={`absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border shadow-2xl z-[100] overflow-hidden backdrop-blur-md ${isDark ? 'bg-slate-900/95 border-slate-800/80 shadow-black/40 text-slate-200' : 'bg-white/95 border-slate-200/80 shadow-slate-200/50 text-slate-800'}`}
+                    className={`absolute right-0 mt-2 w-80 sm:w-96 max-sm:fixed max-sm:inset-x-4 max-sm:mx-auto max-sm:w-auto max-sm:max-w-md max-sm:top-18 rounded-2xl border shadow-2xl z-[100] overflow-hidden backdrop-blur-md ${isDark ? 'bg-slate-900/95 border-slate-800/80 shadow-black/40 text-slate-200' : 'bg-white/95 border-slate-200/80 shadow-slate-200/50 text-slate-800'}`}
                   >
                     <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/20">
                       <span className="font-extrabold text-xs uppercase tracking-wider text-slate-400">Activity Broadcaster</span>
@@ -623,7 +623,7 @@ export default function Navbar({
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     transition={{ duration: 0.15 }}
-                    className={`absolute right-0 mt-2 w-80 rounded-2xl border shadow-2xl z-[100] overflow-hidden backdrop-blur-md ${isDark ? 'bg-slate-900/95 border-slate-800/80 shadow-black/40 text-slate-200' : 'bg-white/95 border-slate-200/80 shadow-slate-200/50 text-slate-800'}`}
+                    className={`absolute right-0 mt-2 w-80 max-sm:fixed max-sm:inset-x-4 max-sm:mx-auto max-sm:w-auto max-sm:max-w-md max-sm:top-18 rounded-2xl border shadow-2xl z-[100] overflow-hidden backdrop-blur-md ${isDark ? 'bg-slate-900/95 border-slate-800/80 shadow-black/40 text-slate-200' : 'bg-white/95 border-slate-200/80 shadow-slate-200/50 text-slate-800'}`}
                   >
                     <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20">
                       <span className="font-extrabold text-xs uppercase tracking-wider text-slate-400">Messages</span>

@@ -630,7 +630,7 @@ export default function App() {
           <div className="flex-grow flex flex-col md:flex-row">
             
             {/* Universal Persona Sidebar Layout */}
-            <aside className={`w-full ${sidebarWidthClass} bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col shrink-0 transition-all duration-200 ${persona === 'admin' ? 'hidden md:flex' : ''}`} id="portal-sidebar-nav">
+            <aside className={`hidden md:flex ${sidebarWidthClass} bg-slate-900 text-slate-300 border-r border-slate-800 flex-col shrink-0 transition-all duration-200`} id="portal-sidebar-nav">
             
             {/* Top Workspace Identity block */}
             <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/40">
@@ -925,8 +925,42 @@ export default function App() {
       </div>
       )}
 
+      {persona === 'student' && !authMode && (
+        <nav className={`fixed inset-x-3 bottom-3 z-[95] grid grid-cols-5 rounded-lg border p-1 shadow-2xl backdrop-blur md:hidden transition-colors ${
+          isDark 
+            ? 'bg-slate-900/95 border-slate-800 shadow-black/40 text-slate-355' 
+            : 'bg-white/95 border-slate-200 shadow-slate-200/50 text-slate-500'
+        }`}>
+          {[
+            { id: 'dashboard', label: 'Overview', icon: <Compass className="w-4 h-4" /> },
+            { id: 'ide', label: 'Sandbox', icon: <Code2 className="w-4 h-4" /> },
+            { id: 'videos', label: 'Syllabus', icon: <BookOpen className="w-4 h-4" /> },
+            { id: 'assessments', label: 'Quiz', icon: <TrendingUp className="w-4 h-4" /> },
+            { id: 'leaderboard', label: 'Rankings', icon: <Award className="w-4 h-4" /> },
+          ].map(item => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setStudentTab(item.id as StudentSubView)}
+              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-md text-[10px] font-extrabold transition cursor-pointer ${
+                studentTab === item.id
+                  ? 'bg-emerald-50/50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'
+                  : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'
+              }`}
+            >
+              {item.icon}
+              <span className="max-w-full truncate">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
+
       {persona === 'admin' && !authMode && (
-        <nav className="fixed inset-x-3 bottom-3 z-[95] grid grid-cols-5 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-2xl shadow-slate-900/10 backdrop-blur md:hidden">
+        <nav className={`fixed inset-x-3 bottom-3 z-[95] grid grid-cols-5 rounded-lg border p-1 shadow-2xl backdrop-blur md:hidden transition-colors ${
+          isDark 
+            ? 'bg-slate-900/95 border-slate-800 shadow-black/40 text-slate-355' 
+            : 'bg-white/95 border-slate-200 shadow-slate-200/50 text-slate-500'
+        }`}>
           {adminNavItems
             .filter(item => ['dashboard', 'users', 'courses', 'analytics', 'settings'].includes(item.id))
             .map(item => (
@@ -934,10 +968,10 @@ export default function App() {
                 key={item.id}
                 type="button"
                 onClick={() => setAdminTab(item.id)}
-                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-md text-[10px] font-extrabold transition ${
+                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-md text-[10px] font-extrabold transition cursor-pointer ${
                   adminTab === item.id
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                    ? 'bg-emerald-50/50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'
+                    : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'
                 }`}
               >
                 {item.icon}

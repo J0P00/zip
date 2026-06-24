@@ -261,7 +261,7 @@ export default function TeacherPortal({
     <div className={`space-y-6 ${isDark ? 'text-slate-100' : 'text-slate-800'}`} id="teacher-portal-root">
       
       {/* Dynamic Tab Navigation Segment */}
-      <div className={`border-b ${isDark ? 'border-slate-800' : 'border-slate-200'} pb-2 flex flex-wrap gap-4 text-xs font-bold uppercase tracking-wider`}>
+      <div className={`border-b ${isDark ? 'border-slate-800' : 'border-slate-200'} pb-2 flex overflow-x-auto whitespace-nowrap scrollbar-none flex-nowrap gap-4 text-xs font-bold uppercase tracking-wider -mx-4 px-4 sm:mx-0 sm:px-0`}>
         {[
           { id: 'home', label: '📊 Dashboard Overview', icon: <Users className="w-3.5 h-3.5" /> },
           { id: 'students', label: '👨‍🎓 Student Management', icon: <GraduationCap className="w-3.5 h-3.5" /> },

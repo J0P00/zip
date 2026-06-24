@@ -37,8 +37,9 @@ export default function LandingPage({ onStartLearning, onSelectPersona, onAuthTr
       >
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-lg font-bold tracking-tight text-emerald-600">
-              OOP Pedagogical Hub
+            <span className="font-mono text-base sm:text-lg font-bold tracking-tight text-emerald-600">
+              <span className="sm:inline hidden">OOP Pedagogical Hub</span>
+              <span className="sm:hidden">OOP Hub</span>
             </span>
           </div>
 
@@ -72,14 +73,15 @@ export default function LandingPage({ onStartLearning, onSelectPersona, onAuthTr
           <div className="flex items-center gap-4">
             <button
               onClick={toggleTheme}
-              className={`text-xs font-mono px-3 py-1.5 border rounded-md transition-colors ${
+              className={`text-xs font-mono px-2 py-1.5 sm:px-3 border rounded-md transition-colors flex items-center justify-center ${
                 isDark
                   ? 'border-slate-800 text-slate-450 hover:bg-slate-900 hover:text-white'
                   : 'border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900'
               }`}
               aria-label="Toggle Theme"
             >
-              {isDark ? 'LIGHT MODE' : 'DARK MODE'}
+              <span className="sm:inline hidden">{isDark ? 'LIGHT MODE' : 'DARK MODE'}</span>
+              <span className="sm:hidden">{isDark ? '☀' : '☾'}</span>
             </button>
             <button
               onClick={() => onAuthTrigger?.('login')}
