@@ -7,8 +7,10 @@ import {
   BookOpen, 
   Code2, 
   Volume2, 
+  VolumeX,
   Maximize2,
   RotateCcw,
+  RotateCw,
   Check,
   X,
   FileText,
@@ -126,6 +128,7 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
   );
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
   const [notes, setNotes] = useState<string>('');
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [learningSubTab, setLearningSubTab] = useState<'video' | 'reading' | 'exercise'>('video');
@@ -216,6 +219,72 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
       }
     };
   }, [isPlaying, activeLesson]);
+
+  // HTML5 Video Play/Pause sync
+  useEffect(() => {
+    const isYouTube = activeLesson.videoUrl.includes('youtube.com') || activeLesson.videoUrl.includes('youtu.be');
+    if (!isYouTube && videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.play().catch(err => {
+          console.error("Playback failed or interrupted:", err);
+          setIsPlaying(false);
+        });
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  }, [isPlaying, activeLesson.videoUrl]);
+
+  // Seek skipping backward/forward
+  const handleSkip = (seconds: number) => {
+    const isYouTube = activeLesson.videoUrl.includes('youtube.com') || activeLesson.videoUrl.includes('youtu.be');
+    if (isYouTube) {
+      // YouTube simulated skipping
+      let totalSeconds = 600; // default 10 minutes (600s)
+      if (activeLesson.duration) {
+        const parts = activeLesson.duration.split(':').map(Number);
+        if (parts.length === 2) {
+          totalSeconds = parts[0] * 60 + parts[1];
+        } else if (parts.length === 3) {
+          totalSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+      }
+      const percentChange = (seconds / totalSeconds) * 100;
+      setWatchProgress(prev => {
+        const next = Math.max(0, Math.min(100, prev + percentChange));
+        onUpdateVideoProgress(activeLesson.id, next);
+        return next;
+      });
+    } else if (videoRef.current && videoRef.current.duration) {
+      let newTime = videoRef.current.currentTime + seconds;
+      if (newTime < 0) newTime = 0;
+      if (newTime > videoRef.current.duration) newTime = videoRef.current.duration;
+      videoRef.current.currentTime = newTime;
+      const percent = Math.round((newTime / videoRef.current.duration) * 100);
+      setWatchProgress(percent);
+      onUpdateVideoProgress(activeLesson.id, percent);
+    }
+  };
+
+  // Keyboard event shortcuts
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Prevent interfering with text entry fields
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'INPUT')) {
+      return;
+    }
+
+    if (e.key === ' ') {
+      e.preventDefault();
+      setIsPlaying(prev => !prev);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      handleSkip(-10);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      handleSkip(10);
+    }
+  };
 
   // HTML5 Video progress tracker
   const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
@@ -518,7 +587,19 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
                   {renderQuizContent()}
                 </div>
               ) : (
-                <div className="aspect-video w-full bg-slate-950 flex items-center justify-center relative group">
+                <div 
+                  className="aspect-video w-full bg-slate-950 flex items-center justify-center relative group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  tabIndex={0}
+                  onKeyDown={handleKeyDown}
+                  onClick={(e) => {
+                    // Avoid toggling play/pause if the click is on control overlay or specific buttons
+                    if ((e.target as HTMLElement).closest('#video-controls-overlay')) {
+                      return;
+                    }
+                    e.currentTarget.focus();
+                    setIsPlaying(prev => !prev);
+                  }}
+                >
                   
                   {isYouTube ? (
                     // YouTube Simulated Player layout
@@ -545,7 +626,7 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
                       className="w-full h-full object-cover opacity-85"
                       src={activeLesson.videoUrl}
                       autoPlay={isPlaying}
-                      muted
+                      muted={isMuted}
                       onTimeUpdate={handleTimeUpdate}
                       onEnded={handleVideoEnded}
                       controls={false}
@@ -553,7 +634,10 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
                   )}
 
                   {/* Scrub controls overlay */}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4 flex flex-col justify-end h-24 opacity-90 transition-opacity">
+                  <div 
+                    id="video-controls-overlay"
+                    className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4 flex flex-col justify-end h-24 opacity-90 transition-opacity"
+                  >
                     <div 
                       className="w-full h-1 bg-slate-600/60 rounded-full mb-3 cursor-pointer overflow-hidden relative"
                       onClick={handleScrubClick}
@@ -563,17 +647,46 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
                     </div>
 
                     <div className="flex items-center justify-between text-white">
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        {/* Skip 10s Back */}
+                        <button
+                          onClick={() => handleSkip(-10)}
+                          className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition cursor-pointer text-slate-250 hover:text-white"
+                          title="Rewind 10 seconds (Left Arrow)"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+
+                        {/* Play / Pause */}
                         <button 
                           onClick={() => setIsPlaying(!isPlaying)}
                           className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition cursor-pointer"
+                          title="Play/Pause (Spacebar)"
                         >
                           {isPlaying ? <Pause className="w-4 h-4 fill-white text-white" /> : <Play className="w-4 h-4 fill-white text-white" />}
                         </button>
-                        <span className="text-[11px] font-mono font-bold">
+
+                        {/* Skip 10s Forward */}
+                        <button
+                          onClick={() => handleSkip(10)}
+                          className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition cursor-pointer text-slate-250 hover:text-white"
+                          title="Forward 10 seconds (Right Arrow)"
+                        >
+                          <RotateCw className="w-4 h-4" />
+                        </button>
+
+                        <span className="text-[11px] font-mono font-bold ml-2">
                           {Math.round(watchProgress)}% / {activeLesson.duration}
                         </span>
-                        <Volume2 className="w-4 h-4 text-slate-400" />
+
+                        {/* Mute/Unmute */}
+                        <button
+                          onClick={() => setIsMuted(!isMuted)}
+                          className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition cursor-pointer text-slate-250 hover:text-white ml-2"
+                          title={isMuted ? "Unmute" : "Mute"}
+                        >
+                          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                        </button>
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-[8px] tracking-wider bg-emerald-600 px-2 py-0.5 rounded font-bold font-mono uppercase">1080P HD</span>
