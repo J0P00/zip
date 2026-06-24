@@ -14,7 +14,8 @@ import {
   Check,
   X,
   FileText,
-  HelpCircle
+  HelpCircle,
+  AlertCircle
 } from 'lucide-react';
 import { VideoLesson, StudentSubView } from '../types';
 
@@ -136,6 +137,8 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
   // Video watch states
   const [watchProgress, setWatchProgress] = useState<number>(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
   
   // Simulated playback for YouTube/embed links
   const playbackTimer = useRef<number | null>(null);
@@ -175,6 +178,7 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
     setKScore(0);
     setShowKResults(false);
     setIsPlaying(false);
+    setVideoError(null);
 
     return () => {
       if (playbackTimer.current) {
@@ -220,20 +224,35 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
     };
   }, [isPlaying, activeLesson]);
 
-  // HTML5 Video Play/Pause sync
+  // HTML5 Video Play/Pause sync with fallback for unmuted playback restriction
   useEffect(() => {
     const isYouTube = activeLesson.videoUrl.includes('youtube.com') || activeLesson.videoUrl.includes('youtu.be');
     if (!isYouTube && videoRef.current) {
       if (isPlaying) {
         videoRef.current.play().catch(err => {
-          console.error("Playback failed or interrupted:", err);
-          setIsPlaying(false);
+          console.warn("Playback failed unmuted, trying muted:", err);
+          // If unmuted play is blocked by the browser, try to mute the video element and play again
+          if (!isMuted) {
+            setIsMuted(true);
+            // Manually force muted attribute to bypass browser autoplay rules immediately
+            if (videoRef.current) {
+              videoRef.current.muted = true;
+              videoRef.current.play().catch(muteErr => {
+                console.error("Muted playback also failed:", muteErr);
+                setVideoError("Your browser blocked video playback. Please click directly on the player to enable audio or check browser permission settings.");
+                setIsPlaying(false);
+              });
+            }
+          } else {
+            setVideoError("The video file failed to load. Please verify the URL or check your network connection.");
+            setIsPlaying(false);
+          }
         });
       } else {
         videoRef.current.pause();
       }
     }
-  }, [isPlaying, activeLesson.videoUrl]);
+  }, [isPlaying, activeLesson.videoUrl, isMuted]);
 
   // Seek skipping backward/forward
   const handleSkip = (seconds: number) => {
@@ -586,8 +605,8 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
                 <div className="p-6 min-h-[380px]" id="knowledge-check-quiz">
                   {renderQuizContent()}
                 </div>
-              ) : (
-                <div 
+                    <div 
+                  ref={containerRef}
                   className="aspect-video w-full bg-slate-950 flex items-center justify-center relative group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   tabIndex={0}
                   onKeyDown={handleKeyDown}
@@ -601,7 +620,44 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
                   }}
                 >
                   
-                  {isYouTube ? (
+                  {videoError ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 text-white p-6 text-center z-10">
+                      <div className="w-12 h-12 bg-red-950 border border-red-500/30 text-red-500 rounded-full flex items-center justify-center mb-4">
+                        <AlertCircle className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-extrabold text-sm text-red-400">Playback Blocked or Error</h4>
+                      <p className="text-[11px] text-slate-400 mt-2 max-w-xs leading-normal">
+                        {videoError}
+                      </p>
+                      <div className="flex gap-2.5 mt-4">
+                        <button
+                          onClick={() => {
+                            setVideoError(null);
+                            setIsMuted(true);
+                            setIsPlaying(true);
+                            if (videoRef.current) {
+                              videoRef.current.muted = true;
+                              videoRef.current.load();
+                            }
+                          }}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-xs font-bold rounded-lg transition cursor-pointer"
+                        >
+                          Play Muted
+                        </button>
+                        <button
+                          onClick={() => {
+                            setVideoError(null);
+                            if (videoRef.current) {
+                              videoRef.current.load();
+                            }
+                          }}
+                          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-lg transition cursor-pointer"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    </div>
+                  ) : isYouTube ? (
                     // YouTube Simulated Player layout
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 text-white p-4 text-center">
                       <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center shadow-lg border border-red-500 mb-4 animate-pulse">
@@ -625,10 +681,15 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
                       ref={videoRef}
                       className="w-full h-full object-cover opacity-85"
                       src={activeLesson.videoUrl}
-                      autoPlay={isPlaying}
                       muted={isMuted}
+                      playsInline
                       onTimeUpdate={handleTimeUpdate}
                       onEnded={handleVideoEnded}
+                      onError={(e) => {
+                        console.error("Video error callback:", e);
+                        setVideoError("The video file could not be loaded or played. Check your connection or format compatibility.");
+                        setIsPlaying(false);
+                      }}
                       controls={false}
                     />
                   )}
@@ -650,7 +711,10 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
                       <div className="flex items-center gap-2">
                         {/* Skip 10s Back */}
                         <button
-                          onClick={() => handleSkip(-10)}
+                          onClick={() => {
+                            handleSkip(-10);
+                            containerRef.current?.focus();
+                          }}
                           className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition cursor-pointer text-slate-250 hover:text-white"
                           title="Rewind 10 seconds (Left Arrow)"
                         >
@@ -659,7 +723,10 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
 
                         {/* Play / Pause */}
                         <button 
-                          onClick={() => setIsPlaying(!isPlaying)}
+                          onClick={() => {
+                            setIsPlaying(!isPlaying);
+                            containerRef.current?.focus();
+                          }}
                           className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition cursor-pointer"
                           title="Play/Pause (Spacebar)"
                         >
@@ -668,7 +735,10 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
 
                         {/* Skip 10s Forward */}
                         <button
-                          onClick={() => handleSkip(10)}
+                          onClick={() => {
+                            handleSkip(10);
+                            containerRef.current?.focus();
+                          }}
                           className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition cursor-pointer text-slate-250 hover:text-white"
                           title="Forward 10 seconds (Right Arrow)"
                         >
