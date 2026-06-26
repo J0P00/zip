@@ -604,7 +604,8 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
                 <div className="p-6 min-h-[380px]" id="knowledge-check-quiz">
                   {renderQuizContent()}
                 </div>
-                    <div 
+              ) : (
+                <div 
                   ref={containerRef}
                   className="aspect-video w-full bg-slate-950 flex items-center justify-center relative group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   tabIndex={0}

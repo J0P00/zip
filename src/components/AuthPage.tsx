@@ -6,8 +6,10 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   Code2,
+  ExternalLink,
   Eye,
   EyeOff,
+  FileText,
   Loader2,
   Lock,
   Mail,
@@ -16,7 +18,13 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { AccountSource, AuthenticatedUser, Persona } from '../types';
+import { AccountSource, AuthenticatedUser, Persona, UserTermsAgreement } from '../types';
+import {
+  getPublishedPolicy,
+  recordTermsAcceptance,
+  requiresTermsAcceptance
+} from '../data/termsStore';
+import TermsAgreementModal from './TermsAgreementModal';
 
 interface AuthPageProps {
   initialMode: 'login' | 'register';
@@ -59,6 +67,11 @@ type StoredUser = {
   // Status & Avatar
   onlineStatus?: 'online' | 'busy' | 'away' | 'offline';
   avatar?: string;
+
+  // Terms and Agreement consent
+  termsAgreementAccepted?: boolean;
+  termsAcceptedAt?: string;
+  termsVersion?: string;
 };
 
 const demoAccounts: StoredUser[] = [
@@ -139,12 +152,41 @@ const readStoredUsers = (): StoredUser[] => {
   }
 };
 
+const updateStoredUserTermsMetadata = (user: StoredUser, acceptance: UserTermsAgreement) => {
+  try {
+    const usersList = readStoredUsers();
+    const nextUsers = usersList.map(stored => {
+      const sameUser =
+        (stored.userId && user.userId && stored.userId === user.userId) ||
+        stored.email.toLowerCase() === user.email.toLowerCase();
+
+      return sameUser
+        ? {
+            ...stored,
+            termsAgreementAccepted: acceptance.accepted,
+            termsAcceptedAt: acceptance.accepted_at,
+            termsVersion: acceptance.version
+          }
+        : stored;
+    });
+
+    localStorage.setItem('oophub_users', JSON.stringify(nextUsers));
+  } catch {
+    // Consent audit still lives in the agreement table if profile metadata cannot be mirrored.
+  }
+};
+
 export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthPageProps) {
   const rememberedEmail = localStorage.getItem('oophub_remembered_email') || '';
   const [isLogin, setIsLogin] = useState(initialMode === 'login');
   const [notification, setNotification] = useState<Notice>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [publishedPolicy, setPublishedPolicy] = useState(() => getPublishedPolicy());
+  const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
+  const [termsModalMode, setTermsModalMode] = useState<'registration' | 'reauth' | 'view'>('registration');
+  const [termsInitialTab, setTermsInitialTab] = useState<'terms' | 'privacy'>('terms');
+  const [pendingLogin, setPendingLogin] = useState<{ user: StoredUser; accountSource: AccountSource } | null>(null);
 
   // Login Form States
   const [loginEmail, setLoginEmail] = useState(rememberedEmail);
@@ -166,6 +208,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
 
   // Teacher specific fields
   const [regTeacherId, setRegTeacherId] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   // Touched state for validation trigger
   const [registerTouched, setRegisterTouched] = useState({
@@ -174,7 +217,8 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     password: false,
     section: false,
     studentNumber: false,
-    teacherId: false
+    teacherId: false,
+    terms: false
   });
 
   // Success screen redirection countdown
@@ -245,22 +289,33 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     regRole === 'teacher' && registerTouched.teacherId && !isRegTeacherIdValid
       ? 'Teacher ID is required.'
       : '';
+  const registerTermsError =
+    registerTouched.terms && !termsAccepted
+      ? 'You must accept the Terms and Agreement before creating an account.'
+      : '';
 
-  const canRegister =
+  const canRegisterDetails =
     isRegUsernameValid &&
     isRegEmailValid &&
     isRegPasswordValid &&
-    !isSubmitting &&
     (regRole === 'student'
       ? isRegSectionValid && isRegStudentNumberValid
       : isRegTeacherIdValid);
+  const canRegister = canRegisterDetails && termsAccepted && !isSubmitting;
 
   const showNotice = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
     window.setTimeout(() => setNotification(null), 4000);
   };
 
-  const completeLogin = (user: StoredUser, accountSource: AccountSource) => {
+  const openTermsModal = (initialTab: 'terms' | 'privacy' = 'terms', mode: 'registration' | 'reauth' | 'view' = 'registration') => {
+    setPublishedPolicy(getPublishedPolicy());
+    setTermsInitialTab(initialTab);
+    setTermsModalMode(mode);
+    setIsTermsModalOpen(true);
+  };
+
+  const startAuthenticatedSession = (user: StoredUser, accountSource: AccountSource) => {
     if (rememberMe) {
       localStorage.setItem('oophub_remembered_email', user.email);
     } else {
@@ -301,9 +356,78 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
 
         // Status & Avatar
         onlineStatus: user.onlineStatus ?? 'online',
-        avatar: user.avatar ?? ''
+        avatar: user.avatar ?? '',
+        termsAgreementAccepted: user.termsAgreementAccepted ?? false,
+        termsAcceptedAt: user.termsAcceptedAt ?? '',
+        termsVersion: user.termsVersion ?? ''
       });
     }, 800);
+  };
+
+  const completeLogin = (user: StoredUser, accountSource: AccountSource) => {
+    const activePolicy = getPublishedPolicy();
+    const userId = user.userId ?? buildUserId(user.email, user.role);
+    const mustAcceptTerms =
+      (user.role === 'student' || user.role === 'teacher') &&
+      requiresTermsAcceptance(userId, activePolicy);
+
+    setPublishedPolicy(activePolicy);
+
+    if (mustAcceptTerms) {
+      setPendingLogin({ user, accountSource });
+      setTermsModalMode('reauth');
+      setTermsInitialTab('terms');
+      setIsTermsModalOpen(true);
+      setIsSubmitting(false);
+      showNotice('error', `Please review and accept Terms version ${activePolicy.version} before continuing.`);
+      return;
+    }
+
+    startAuthenticatedSession(user, accountSource);
+  };
+
+  const handleTermsModalClose = () => {
+    setIsTermsModalOpen(false);
+
+    if (pendingLogin) {
+      setPendingLogin(null);
+      showNotice('error', 'You must accept the Terms and Agreement before signing in.');
+    }
+  };
+
+  const handleTermsModalAccept = () => {
+    if (pendingLogin) {
+      const activePolicy = getPublishedPolicy();
+      const userId = pendingLogin.user.userId ?? buildUserId(pendingLogin.user.email, pendingLogin.user.role);
+
+      try {
+        const acceptance = recordTermsAcceptance({
+          userId,
+          role: pendingLogin.user.role,
+          version: activePolicy.version
+        });
+        const updatedUser: StoredUser = {
+          ...pendingLogin.user,
+          userId,
+          termsAgreementAccepted: acceptance.accepted,
+          termsAcceptedAt: acceptance.accepted_at,
+          termsVersion: acceptance.version
+        };
+
+        updateStoredUserTermsMetadata(updatedUser, acceptance);
+        setPendingLogin(null);
+        setIsTermsModalOpen(false);
+        startAuthenticatedSession(updatedUser, pendingLogin.accountSource);
+      } catch {
+        showNotice('error', 'Unable to record terms acceptance. Please try again.');
+      }
+      return;
+    }
+
+    setTermsAccepted(true);
+    setRegisterTouched(prev => ({ ...prev, terms: true }));
+    setIsTermsModalOpen(false);
+    showNotice('success', `Terms version ${publishedPolicy.version} accepted for registration.`);
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -348,10 +472,16 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       password: true,
       studentNumber: true,
       section: true,
-      teacherId: true
+      teacherId: true,
+      terms: true
     });
 
-    if (!canRegister) {
+    if (!termsAccepted) {
+      showNotice('error', 'You must accept the Terms and Agreement before creating an account.');
+      return;
+    }
+
+    if (!canRegisterDetails) {
       showNotice('error', 'Complete the required account details.');
       return;
     }
@@ -372,13 +502,29 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
 
       const displayCourse = regCourse === 'CS' ? 'CS (Computer Science)' : 'IT (Information Technology)';
       const computedSection = regRole === 'student' ? regSection.trim().toUpperCase() : undefined;
+      const activePolicy = getPublishedPolicy();
+      const newUserId = buildUserId(regEmail, regRole);
+      let acceptance: UserTermsAgreement;
+
+      try {
+        acceptance = recordTermsAcceptance({
+          userId: newUserId,
+          role: regRole,
+          version: activePolicy.version
+        });
+        setPublishedPolicy(activePolicy);
+      } catch {
+        setIsSubmitting(false);
+        showNotice('error', 'Unable to record terms acceptance. Please try again.');
+        return;
+      }
 
       const newUser: StoredUser = {
         name: regUsername.trim(),
         email: regEmail.trim(),
         password: regPassword,
         role: regRole,
-        userId: buildUserId(regEmail, regRole),
+        userId: newUserId,
         registrationDate: new Date().toISOString(),
         contactNumber: '',
         address: '',
@@ -400,13 +546,17 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
 
         // Global defaults
         onlineStatus: 'online',
-        avatar: ''
+        avatar: '',
+        termsAgreementAccepted: acceptance.accepted,
+        termsAcceptedAt: acceptance.accepted_at,
+        termsVersion: acceptance.version
       };
 
       usersList.push(newUser);
       localStorage.setItem('oophub_users', JSON.stringify(usersList));
       setLoginEmail(newUser.email);
       setLoginPassword('');
+      setTermsAccepted(false);
       setIsSubmitting(false);
       setIsRegSuccess(true);
     }, 700);
@@ -422,6 +572,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
   const inputError = 'border-rose-350 focus:border-rose-500 focus:ring-rose-100/50';
 
   return (
+    <>
     <main
       className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[linear-gradient(135deg,#f8fafc_0%,#ffffff_48%,#eef7f0_100%)] px-4 py-16 text-slate-950 sm:px-6 lg:px-8 font-sans"
       id="auth-screen-container"
@@ -984,6 +1135,80 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                   </motion.div>
                 </AnimatePresence>
 
+                <section
+                  className={`rounded-xl border p-4 text-left shadow-sm transition ${
+                    registerTermsError
+                      ? 'border-rose-200 bg-rose-50/40'
+                      : termsAccepted
+                        ? 'border-[#dfe8c5] bg-[#f6f8ee]'
+                        : 'border-slate-200 bg-white'
+                  }`}
+                  aria-label="Terms and Agreement"
+                >
+                  <div className="flex items-start gap-3">
+                    <input
+                      id="reg-terms-agreement"
+                      type="checkbox"
+                      checked={termsAccepted}
+                      onChange={event => {
+                        setRegisterTouched(prev => ({ ...prev, terms: true }));
+                        if (event.target.checked) {
+                          openTermsModal('terms', 'registration');
+                          return;
+                        }
+                        setTermsAccepted(false);
+                      }}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-[#6b7f2a] focus:ring-[#6b7f2a]"
+                      aria-describedby={registerTermsError ? 'reg-terms-error' : 'reg-terms-version'}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p id="reg-terms-label" className="text-xs font-bold leading-5 text-slate-700">
+                        I have read, understood, and agree to the{' '}
+                        <button
+                          type="button"
+                          onClick={() => openTermsModal('terms', 'registration')}
+                          className="font-extrabold text-[#5f6f24] underline decoration-[#6b7f2a]/30 underline-offset-2 hover:text-[#435018] focus:outline-none"
+                        >
+                          Terms and Conditions
+                        </button>{' '}
+                        and{' '}
+                        <button
+                          type="button"
+                          onClick={() => openTermsModal('privacy', 'registration')}
+                          className="font-extrabold text-[#5f6f24] underline decoration-[#6b7f2a]/30 underline-offset-2 hover:text-[#435018] focus:outline-none"
+                        >
+                          Privacy Policy
+                        </button>
+                        .
+                      </p>
+                      <p id="reg-terms-version" className="mt-1 text-[11px] font-semibold text-slate-500">
+                        Active policy version: {publishedPolicy.version}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openTermsModal('terms', 'registration')}
+                      className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#dfe8c5] bg-white px-3 text-[11px] font-extrabold text-[#5f6f24] transition hover:bg-[#f6f8ee] focus:outline-none focus:ring-4 focus:ring-[#dfe8c5]"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      View Terms
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  {registerTermsError && (
+                    <p id="reg-terms-error" className="mt-3 flex items-center gap-1 text-xs font-semibold text-rose-600">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      {registerTermsError}
+                    </p>
+                  )}
+                  {termsAccepted && (
+                    <p className="mt-3 flex items-center gap-1 text-xs font-extrabold text-[#5f6f24]">
+                      <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                      Agreement accepted for this registration.
+                    </p>
+                  )}
+                </section>
+
                 {/* Submit Action button with lift + glow */}
                 <button
                   type="submit"
@@ -1023,5 +1248,14 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
         </motion.section>
       </div>
     </main>
+    <TermsAgreementModal
+      isOpen={isTermsModalOpen}
+      policy={publishedPolicy}
+      mode={termsModalMode}
+      initialTab={termsInitialTab}
+      onClose={handleTermsModalClose}
+      onAccept={termsModalMode === 'view' ? undefined : handleTermsModalAccept}
+    />
+    </>
   );
 }

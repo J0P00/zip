@@ -1,5 +1,6 @@
 export type Persona = 'public' | 'student' | 'teacher' | 'admin';
 export type AccountSource = 'demo' | 'custom';
+export type PolicyStatus = 'Draft' | 'Published' | 'Archived';
 
 export interface AuthenticatedUser {
   name: string;
@@ -34,6 +35,11 @@ export interface AuthenticatedUser {
   // Global user preference & status fields
   onlineStatus?: 'online' | 'busy' | 'away' | 'offline';
   avatar?: string;
+
+  // Terms and Agreement consent metadata
+  termsAgreementAccepted?: boolean;
+  termsAcceptedAt?: string;
+  termsVersion?: string;
 }
 
 export type StudentSubView = 'dashboard' | 'ide' | 'videos' | 'assessments' | 'leaderboard' | 'profile';
@@ -47,8 +53,33 @@ export type AdminSubView =
   | 'analytics'
   | 'reports'
   | 'settings'
+  | 'terms'
   | 'profile'
   | 'videos';
+
+export interface TermsPolicyVersion {
+  id: string;
+  version: string;
+  title: string;
+  termsContent: string;
+  privacyContent: string;
+  status: PolicyStatus;
+  forceReacceptance: boolean;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+  publishedBy?: string;
+}
+
+export interface UserTermsAgreement {
+  agreement_id: string;
+  user_id: string;
+  accepted: boolean;
+  accepted_at: string;
+  ip_address?: string;
+  version: string;
+  user_role: Persona;
+}
 
 export interface CodeFile {
   name: string;

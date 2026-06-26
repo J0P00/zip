@@ -23,6 +23,7 @@ import {
   ClipboardCheck,
   BarChart3,
   FileBarChart,
+  FileText,
   SlidersHorizontal,
   ChevronLeft,
   ChevronRight,
@@ -74,6 +75,7 @@ import AuthPage from './components/AuthPage';
 import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
 import AdminVideoManager from './components/AdminVideoManager';
+import AdminTermsManager from './components/AdminTermsManager';
 
 const DEMO_STUDENT_PROGRESS = {
   streak: 12,
@@ -700,6 +702,7 @@ export default function App() {
     { id: 'assessments', label: 'Assessments', icon: <ClipboardCheck className="w-4 h-4" /> },
     { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" /> },
     { id: 'reports', label: 'Reports', icon: <FileBarChart className="w-4 h-4" /> },
+    { id: 'terms', label: 'Terms & Policies', icon: <FileText className="w-4 h-4" /> },
     { id: 'settings', label: 'Settings', icon: <SlidersHorizontal className="w-4 h-4" /> }
   ];
 
@@ -735,6 +738,10 @@ export default function App() {
     reports: {
       title: 'Reports',
       description: 'Track institutional summaries, weekly learning outcomes, and operational signals.'
+    },
+    terms: {
+      title: 'Terms & Policies',
+      description: 'Publish platform agreements, manage privacy policy content, and review consent audit records.'
     },
     settings: {
       title: 'Settings',
@@ -1113,6 +1120,10 @@ export default function App() {
               />
             )}
 
+            {persona === 'admin' && adminTab === 'terms' && (
+              <AdminTermsManager />
+            )}
+
             {/* UNIVERSAL USER PROFILE PAGE */}
             {((persona === 'student' && studentTab === 'profile') ||
               (persona === 'teacher' && teacherTab === 'profile') ||
@@ -1167,7 +1178,7 @@ export default function App() {
             : 'bg-white/95 border-slate-200 shadow-slate-200/50 text-slate-500'
         }`}>
           {adminNavItems
-            .filter(item => ['dashboard', 'users', 'courses', 'videos', 'settings'].includes(item.id))
+            .filter(item => ['dashboard', 'users', 'courses', 'terms', 'settings'].includes(item.id))
             .map(item => (
               <button
                 key={item.id}
