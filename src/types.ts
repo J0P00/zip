@@ -131,6 +131,16 @@ export interface VideoLesson {
   yearLevel?: string;
   createdAt?: string;
   createdBy?: string;
+
+  // Video citation database fields
+  video_title?: string;
+  creator_name?: string;
+  publisher_name?: string;
+  source_url?: string;
+  publication_date?: string;
+  accessed_date?: string;
+  license_type?: string;
+  citation_created_at?: string;
 }
 
 export interface NotificationItem {

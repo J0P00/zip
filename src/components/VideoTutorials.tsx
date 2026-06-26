@@ -15,7 +15,13 @@ import {
   X,
   FileText,
   HelpCircle,
-  AlertCircle
+  AlertCircle,
+  UserRound,
+  Building2,
+  Link2,
+  CalendarDays,
+  Copyright,
+  ExternalLink
 } from 'lucide-react';
 import { VideoLesson, StudentSubView } from '../types';
 
@@ -91,6 +97,33 @@ const EXERCISES_DB: Record<string, string> = {
   l3: 'Override the displayInfo() method inside "Car" to output specific car details instead of generic vehicle details.',
   l4: 'Define an abstract "Deployable" interface with a getDeployStatus() signature and implement it inside "ElectricSedan".',
   l5: 'Debug and compile a Java v-table override lookup structure using heap pointer references.'
+};
+
+const formatCitationDate = (value?: string) => {
+  if (!value) return 'Not specified';
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+
+  return new Intl.DateTimeFormat('en', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  }).format(parsed);
+};
+
+const getVideoCitation = (lesson: VideoLesson) => {
+  const fallbackAccessedDate = lesson.createdAt || new Date().toISOString();
+
+  return {
+    title: lesson.video_title || lesson.title,
+    author: lesson.creator_name || 'OOP Pedagogical Hub Academic Team',
+    publisher: lesson.publisher_name || 'OOP Pedagogical Hub',
+    source: lesson.source_url || lesson.videoUrl,
+    published: formatCitationDate(lesson.publication_date),
+    accessed: formatCitationDate(lesson.accessed_date || fallbackAccessedDate),
+    license: lesson.license_type || 'Educational Use'
+  };
 };
 
 export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoProgress }: VideoTutorialsProps) {
@@ -539,6 +572,7 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
   };
 
   const isYouTube = activeLesson.videoUrl.includes('youtube.com') || activeLesson.videoUrl.includes('youtu.be');
+  const citation = getVideoCitation(activeLesson);
 
   return (
     <div className="space-y-6" id="videos-tab-workspace">
@@ -823,6 +857,58 @@ export default function VideoTutorials({ lessons, onNavigateTo, onUpdateVideoPro
                 <p className="text-xs text-slate-500 mt-3 leading-relaxed font-semibold">
                   {activeLesson.description}
                 </p>
+                <section className="mt-5 rounded-2xl border border-[#dfe8c5] bg-[#f8faf2] p-4 shadow-sm">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2 text-[#5f6f24]">
+                      <FileText className="w-4 h-4" />
+                      <h4 className="text-xs font-extrabold uppercase tracking-widest">Video Citation</h4>
+                    </div>
+                    <span className="rounded-md border border-[#dfe8c5] bg-white px-2 py-1 text-[10px] font-black uppercase tracking-wide text-[#5f6f24]">
+                      Academic Attribution
+                    </span>
+                  </div>
+
+                  <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {[
+                      { label: 'Title', value: citation.title, icon: <FileText className="w-3.5 h-3.5" /> },
+                      { label: 'Author', value: citation.author, icon: <UserRound className="w-3.5 h-3.5" /> },
+                      { label: 'Publisher', value: citation.publisher, icon: <Building2 className="w-3.5 h-3.5" /> },
+                      { label: 'Published', value: citation.published, icon: <CalendarDays className="w-3.5 h-3.5" /> },
+                      { label: 'Accessed', value: citation.accessed, icon: <CalendarDays className="w-3.5 h-3.5" /> },
+                      { label: 'License', value: citation.license, icon: <Copyright className="w-3.5 h-3.5" /> }
+                    ].map(item => (
+                      <div key={item.label} className="rounded-xl border border-[#edf2dc] bg-white px-3 py-2.5">
+                        <dt className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wide text-[#6b7f2a]">
+                          {item.icon}
+                          {item.label}
+                        </dt>
+                        <dd className="mt-1 text-xs font-bold leading-5 text-slate-700">{item.value}</dd>
+                      </div>
+                    ))}
+
+                    <div className="rounded-xl border border-[#edf2dc] bg-white px-3 py-2.5 sm:col-span-2">
+                      <dt className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wide text-[#6b7f2a]">
+                        <Link2 className="w-3.5 h-3.5" />
+                        Source
+                      </dt>
+                      <dd className="mt-1 text-xs font-bold leading-5">
+                        {citation.source ? (
+                          <a
+                            href={citation.source}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex max-w-full items-center gap-1.5 break-all text-[#5f6f24] underline decoration-[#6b7f2a]/30 underline-offset-2 hover:text-[#435018]"
+                          >
+                            {citation.source}
+                            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                          </a>
+                        ) : (
+                          <span className="text-slate-500">Not provided</span>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                </section>
                 <div className="mt-5 border-t border-slate-100 dark:border-slate-900 pt-5">
                   <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-3">Key Concepts covered</h4>
                   <div className="grid sm:grid-cols-2 gap-2.5">

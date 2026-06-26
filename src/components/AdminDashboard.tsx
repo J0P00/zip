@@ -140,6 +140,7 @@ function MetricCard({
   trend: string;
   trendTone: TrendTone;
   icon: React.ReactNode;
+  key?: React.Key;
 }) {
   const isPositive = trendTone === 'up';
   const isNegative = trendTone === 'down';
@@ -322,8 +323,16 @@ export default function AdminDashboard({
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        {metrics.map(metric => (
-          <MetricCard key={metric.title} {...metric} />
+        {metrics.map(({ title, value, helper, trend, trendTone, icon }) => (
+          <MetricCard
+            key={title}
+            title={title}
+            value={value}
+            helper={helper}
+            trend={trend}
+            trendTone={trendTone}
+            icon={icon}
+          />
         ))}
       </section>
 

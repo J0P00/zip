@@ -64,7 +64,7 @@ public class Main {
 }`
 };
 
-export const INITIAL_LESSONS: VideoLesson[] = [
+const INITIAL_LESSONS_BASE: VideoLesson[] = [
   {
     id: 'l1',
     sequence: 1,
@@ -260,6 +260,26 @@ export const INITIAL_LESSONS: VideoLesson[] = [
     progressPercent: 0
   }
 ];
+
+const buildSeedCitation = (lesson: VideoLesson) => {
+  const isW3C = lesson.videoUrl.includes('media.w3.org');
+  const isW3Schools = lesson.videoUrl.includes('w3schools.com');
+
+  return {
+    video_title: lesson.title,
+    creator_name: isW3C ? 'Blender Foundation' : isW3Schools ? 'W3Schools Demo Media' : 'OOP Pedagogical Hub Academic Team',
+    publisher_name: isW3C ? 'W3C Media Repository' : isW3Schools ? 'W3Schools' : 'OOP Pedagogical Hub',
+    source_url: lesson.videoUrl,
+    accessed_date: '2026-06-26T00:00:00.000Z',
+    license_type: 'Educational Use',
+    citation_created_at: '2026-06-26T00:00:00.000Z'
+  };
+};
+
+export const INITIAL_LESSONS: VideoLesson[] = INITIAL_LESSONS_BASE.map(lesson => ({
+  ...lesson,
+  ...buildSeedCitation(lesson)
+}));
 
 export const INITIAL_QUESTIONS: AssessmentQuestion[] = [
   {

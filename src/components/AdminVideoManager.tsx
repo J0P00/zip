@@ -22,9 +22,15 @@ import {
   AlertCircle,
   UploadCloud,
   Check,
+  FileText,
   FileVideo,
   Settings,
-  HelpCircle
+  HelpCircle,
+  UserRound,
+  Building2,
+  Link2,
+  CalendarDays,
+  Copyright
 } from 'lucide-react';
 import { VideoLesson } from '../types';
 
@@ -107,6 +113,11 @@ export default function AdminVideoManager({
   const [formUnlockedAssessmentId, setFormUnlockedAssessmentId] = useState('');
   const [formYearLevel, setFormYearLevel] = useState('1st Year');
   const [formCloudinaryPublicID, setFormCloudinaryPublicID] = useState('');
+  const [formCreatorName, setFormCreatorName] = useState('');
+  const [formPublisherName, setFormPublisherName] = useState('');
+  const [formSourceUrl, setFormSourceUrl] = useState('');
+  const [formPublicationDate, setFormPublicationDate] = useState('');
+  const [formLicenseType, setFormLicenseType] = useState('');
 
   // Drag-and-drop & upload progress states
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -129,6 +140,13 @@ export default function AdminVideoManager({
     { id: 'a1', name: 'Inheritance & super Quiz' }
   ];
 
+  const isExternalEmbeddedVideo = (videoUrl: string, publicId: string) => {
+    const normalizedUrl = videoUrl.trim().toLowerCase();
+    const hasCloudinaryAsset = publicId.trim().length > 0 || normalizedUrl.includes('res.cloudinary.com/');
+
+    return normalizedUrl.startsWith('http') && !hasCloudinaryAsset;
+  };
+
   const handleOpenAddForm = () => {
     setEditingVideo(null);
     setFormTitle('');
@@ -146,6 +164,11 @@ export default function AdminVideoManager({
     setFormUnlockedAssessmentId('');
     setFormYearLevel('1st Year');
     setFormCloudinaryPublicID('');
+    setFormCreatorName('');
+    setFormPublisherName('');
+    setFormSourceUrl('');
+    setFormPublicationDate('');
+    setFormLicenseType('Educational Use');
     
     // Reset file states
     setSelectedFile(null);
@@ -172,6 +195,11 @@ export default function AdminVideoManager({
     setFormUnlockedAssessmentId(video.unlockedAssessmentId || '');
     setFormYearLevel(video.yearLevel || '1st Year');
     setFormCloudinaryPublicID(video.cloudinaryPublicID || '');
+    setFormCreatorName(video.creator_name || '');
+    setFormPublisherName(video.publisher_name || '');
+    setFormSourceUrl(video.source_url || video.videoUrl || '');
+    setFormPublicationDate(video.publication_date || '');
+    setFormLicenseType(video.license_type || 'Educational Use');
     
     // Reset file states
     setSelectedFile(null);
@@ -360,12 +388,31 @@ export default function AdminVideoManager({
       alert('Please provide a title');
       return;
     }
+    if (!formCreatorName.trim()) {
+      alert('Please provide the video creator or author for citation.');
+      return;
+    }
     if (!formVideoUrl) {
       alert('Please select and upload a video file first, or provide a URL.');
       return;
     }
+    const requiresSourceUrl = isExternalEmbeddedVideo(formVideoUrl, formCloudinaryPublicID);
+    if (requiresSourceUrl && !formSourceUrl.trim()) {
+      alert('Original Source URL is required for embedded external videos.');
+      return;
+    }
+    if (formSourceUrl.trim()) {
+      try {
+        new URL(formSourceUrl.trim());
+      } catch {
+        alert('Please enter a valid Original Source URL.');
+        return;
+      }
+    }
 
     const conceptsArray = formConcepts.split(',').map(c => c.trim()).filter(Boolean);
+    const citationTimestamp = new Date().toISOString();
+    const resolvedSourceUrl = formSourceUrl.trim() || formVideoUrl.trim();
 
     const videoData: VideoLesson = {
       id: editingVideo ? editingVideo.id : `vl_${Date.now()}`,
@@ -396,7 +443,17 @@ export default function AdminVideoManager({
       cloudinaryPublicID: formCloudinaryPublicID,
       yearLevel: formYearLevel,
       createdAt: editingVideo ? editingVideo.createdAt : new Date().toISOString(),
-      createdBy: editingVideo ? editingVideo.createdBy : 'Administrator'
+      createdBy: editingVideo ? editingVideo.createdBy : 'Administrator',
+
+      // Citation metadata
+      video_title: formTitle.trim(),
+      creator_name: formCreatorName.trim(),
+      publisher_name: formPublisherName.trim() || 'OOP Pedagogical Hub',
+      source_url: resolvedSourceUrl,
+      publication_date: formPublicationDate || undefined,
+      accessed_date: editingVideo?.accessed_date || citationTimestamp,
+      license_type: formLicenseType.trim() || undefined,
+      citation_created_at: editingVideo?.citation_created_at || citationTimestamp
     };
 
     if (editingVideo) {
@@ -483,6 +540,7 @@ export default function AdminVideoManager({
 
   // Cloudinary credentials configuration state checks
   const isCloudinaryConfigured = cloudinaryConfig.cloudName && cloudinaryConfig.apiKey && cloudinaryConfig.apiSecret;
+  const isCitationSourceRequired = isExternalEmbeddedVideo(formVideoUrl, formCloudinaryPublicID);
 
   return (
     <div className="space-y-6 text-slate-800" id="video-tutorial-management-workspace">
@@ -1002,6 +1060,102 @@ export default function AdminVideoManager({
                     required
                   />
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-[#dfe8c5] bg-[#f8faf2] p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3 border-b border-[#dfe8c5] pb-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-[#5f6f24]">
+                      <FileText className="w-4 h-4" />
+                      <h3 className="text-xs font-extrabold uppercase tracking-wider">Video Citation & Copyright</h3>
+                    </div>
+                    <p className="mt-1 text-[11px] font-semibold leading-5 text-slate-500">
+                      Required attribution details are saved with the video record and shown to students.
+                    </p>
+                  </div>
+                  <span className="rounded-md border border-[#dfe8c5] bg-white px-2 py-1 text-[10px] font-black uppercase tracking-wide text-[#5f6f24]">
+                    Required
+                  </span>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      <UserRound className="w-3.5 h-3.5 text-[#6b7f2a]" />
+                      Author / Creator
+                    </label>
+                    <input
+                      type="text"
+                      value={formCreatorName}
+                      onChange={e => setFormCreatorName(e.target.value)}
+                      placeholder="e.g. John Smith"
+                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      <Building2 className="w-3.5 h-3.5 text-[#6b7f2a]" />
+                      Publisher / Channel
+                    </label>
+                    <input
+                      type="text"
+                      value={formPublisherName}
+                      onChange={e => setFormPublisherName(e.target.value)}
+                      placeholder="e.g. Programming Academy"
+                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    <Link2 className="w-3.5 h-3.5 text-[#6b7f2a]" />
+                    Original Source URL {isCitationSourceRequired ? '(Required for external embed)' : '(Optional for original upload)'}
+                  </label>
+                  <input
+                    type="url"
+                    value={formSourceUrl}
+                    onChange={e => setFormSourceUrl(e.target.value)}
+                    placeholder="https://example.com/video"
+                    className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                    required={isCitationSourceRequired}
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      <CalendarDays className="w-3.5 h-3.5 text-[#6b7f2a]" />
+                      Publication Date
+                    </label>
+                    <input
+                      type="date"
+                      value={formPublicationDate}
+                      onChange={e => setFormPublicationDate(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      <Copyright className="w-3.5 h-3.5 text-[#6b7f2a]" />
+                      Copyright / License
+                    </label>
+                    <input
+                      type="text"
+                      value={formLicenseType}
+                      onChange={e => setFormLicenseType(e.target.value)}
+                      placeholder="e.g. Creative Commons, Educational Use"
+                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[10.5px] font-semibold leading-5 text-slate-500">
+                  Accessed date is generated automatically when the citation is saved.
+                </p>
               </div>
 
               <div className="grid grid-cols-4 gap-4">
