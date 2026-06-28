@@ -175,45 +175,6 @@ export default function App() {
   const [lessonItems, setLessonItems] = useState<LessonItem[]>(INITIAL_LESSON_ITEMS);
   const [adaptiveRules, setAdaptiveRules] = useState<AdaptiveRule[]>(INITIAL_ADAPTIVE_RULES);
 
-  // Monitoring Connection System State
-  const [monitoringRequests, setMonitoringRequests] = useState<MonitoringRequest[]>(() => {
-    try {
-      const saved = localStorage.getItem('oophub_monitoring_requests');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    
-    // Seed initial accepted connections for Elena Vance (demo teacher)
-    return [
-      {
-        id: 'req_1',
-        teacherEmail: 'elena@oophub.edu',
-        teacherName: 'Dr. Elena Vance',
-        studentEmail: 'dmitry@oophub.edu',
-        studentName: 'Dmitry Vance (Alex Mercer)',
-        studentId: 'STU-0001',
-        status: 'accepted'
-      },
-      {
-        id: 'req_2',
-        teacherEmail: 'elena@oophub.edu',
-        teacherName: 'Dr. Elena Vance',
-        studentEmail: 'rodriguez@oophub.edu',
-        studentName: 'S. Rodriguez',
-        studentId: 'STU-0002',
-        status: 'accepted'
-      },
-      {
-        id: 'req_3',
-        teacherEmail: 'elena@oophub.edu',
-        teacherName: 'Dr. Elena Vance',
-        studentEmail: 'volkov@oophub.edu',
-        studentName: 'Dmitry Volkov',
-        studentId: 'STU-0003',
-        status: 'accepted'
-      }
-    ];
-  });
-
   useEffect(() => {
     let isCancelled = false;
 
@@ -283,6 +244,45 @@ export default function App() {
   const [recentStudentGrade, setRecentStudentGrade] = useState<{ grade: number; feedback: string; challenge: string } | null>(
     DEMO_STUDENT_GRADE
   );
+
+  // Monitoring Connection System State
+  const [monitoringRequests, setMonitoringRequests] = useState<MonitoringRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('oophub_monitoring_requests');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    
+    // Seed initial accepted connections for Elena Vance (demo teacher)
+    return [
+      {
+        id: 'req_1',
+        teacherEmail: 'elena@oophub.edu',
+        teacherName: 'Dr. Elena Vance',
+        studentEmail: 'dmitry@oophub.edu',
+        studentName: 'Dmitry Vance (Alex Mercer)',
+        studentId: 'STU-0001',
+        status: 'accepted'
+      },
+      {
+        id: 'req_2',
+        teacherEmail: 'elena@oophub.edu',
+        teacherName: 'Dr. Elena Vance',
+        studentEmail: 'rodriguez@oophub.edu',
+        studentName: 'S. Rodriguez',
+        studentId: 'STU-0002',
+        status: 'accepted'
+      },
+      {
+        id: 'req_3',
+        teacherEmail: 'elena@oophub.edu',
+        teacherName: 'Dr. Elena Vance',
+        studentEmail: 'volkov@oophub.edu',
+        studentName: 'Dmitry Volkov',
+        studentId: 'STU-0003',
+        status: 'accepted'
+      }
+    ];
+  });
 
   useEffect(() => {
     localStorage.setItem('oophub_monitoring_requests', JSON.stringify(monitoringRequests));
