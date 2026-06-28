@@ -11,9 +11,3 @@ services:
         value: production
       - key: CORS_ORIGIN
         value: https://zip-pi-gules.vercel.app
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_ANON_KEY
-        sync: false
-      - key: SUPABASE_SERVICE_KEY
-        sync: false

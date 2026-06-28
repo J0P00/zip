@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase, isSupabaseConfigured } from '../database';
 import { mockVerifySessionToken } from '../mock-db';
 import { SessionData } from '../types';
 
@@ -12,9 +11,25 @@ declare global {
   }
 }
 
-/**
- * Middleware to verify session token and attach user data to request
- */
+async function resolveSession(sessionToken: string) {
+  const result = await mockVerifySessionToken(sessionToken);
+  if (result.error || !result.data) {
+    return null;
+  }
+
+  const { user, session } = result.data;
+  if (!user || new Date(session.expires_at) < new Date()) {
+    return null;
+  }
+
+  return {
+    user_id: user.id,
+    email: user.email,
+    role: user.role,
+    timestamp: Date.now()
+  } as SessionData;
+}
+
 export async function verifySessionToken(req: Request, res: Response, next: NextFunction) {
   try {
     const authHeader = req.headers.authorization;
@@ -25,98 +40,18 @@ export async function verifySessionToken(req: Request, res: Response, next: Next
       });
     }
 
-    const sessionToken = authHeader.substring(7); // Remove 'Bearer ' prefix
+    const sessionToken = authHeader.substring(7);
     req.sessionToken = sessionToken;
 
-    let sessionData: any = null;
-    let sessionError: any = null;
-    let user: any = null;
-
-    if (isSupabaseConfigured) {
-      // Query Supabase
-      const result = await supabase
-        .from('user_sessions')
-        .select('user_id, expires_at')
-        .eq('session_token', sessionToken)
-        .single();
-
-      sessionData = result.data;
-      sessionError = result.error;
-
-      if (!sessionError && sessionData) {
-        // Get user data from Supabase
-        const userResult = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', sessionData.user_id)
-          .single();
-        user = userResult.data;
-      }
-    } else {
-      // Use mock database
-      const result = await mockVerifySessionToken(sessionToken);
-      if (!result.error && result.data) {
-        user = result.data.user;
-        sessionData = result.data.session;
-      } else {
-        sessionError = result.error;
-      }
-    }
-
-    if (sessionError || !sessionData) {
+    const user = await resolveSession(sessionToken);
+    if (!user) {
       return res.status(401).json({
         success: false,
         message: 'Invalid or expired session token'
       });
     }
 
-    // Check if session has expired
-    if (new Date(sessionData.expires_at) < new Date()) {
-      return res.status(401).json({
-        success: false,
-        message: 'Session has expired'
-      });
-    }
-
-    // Fetch user data
-    let userData = user;
-    if (isSupabaseConfigured) {
-      const { data: dbUser, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', sessionData.user_id)
-        .single();
-
-      if (userError || !dbUser) {
-        return res.status(401).json({
-          success: false,
-          message: 'User not found'
-        });
-      }
-      userData = dbUser;
-
-      // Update last activity
-      await supabase
-        .from('user_sessions')
-        .update({ last_activity: new Date().toISOString() })
-        .eq('session_token', sessionToken);
-    } else {
-      if (!userData) {
-        return res.status(401).json({
-          success: false,
-          message: 'User not found'
-        });
-      }
-    }
-
-    // Attach user data to request
-    req.user = {
-      user_id: userData.id,
-      email: userData.email,
-      role: userData.role,
-      timestamp: Date.now()
-    };
-
+    req.user = user;
     next();
   } catch (error) {
     console.error('Error in verifySessionToken middleware:', error);
@@ -127,9 +62,6 @@ export async function verifySessionToken(req: Request, res: Response, next: Next
   }
 }
 
-/**
- * Optional middleware - doesn't fail if no session, just populates req.user if present
- */
 export async function optionalSession(req: Request, res: Response, next: NextFunction) {
   try {
     const authHeader = req.headers.authorization;
@@ -139,51 +71,7 @@ export async function optionalSession(req: Request, res: Response, next: NextFun
 
     const sessionToken = authHeader.substring(7);
     req.sessionToken = sessionToken;
-
-    if (isSupabaseConfigured) {
-      const { data: sessionData, error: sessionError } = await supabase
-        .from('user_sessions')
-        .select('user_id, expires_at')
-        .eq('session_token', sessionToken)
-        .single();
-
-      if (!sessionError && sessionData && new Date(sessionData.expires_at) > new Date()) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', sessionData.user_id)
-          .single();
-
-        if (userData) {
-          req.user = {
-            user_id: userData.id,
-            email: userData.email,
-            role: userData.role,
-            timestamp: Date.now()
-          };
-
-          await supabase
-            .from('user_sessions')
-            .update({ last_activity: new Date().toISOString() })
-            .eq('session_token', sessionToken);
-        }
-      }
-    } else {
-      // Use mock database
-      const result = await mockVerifySessionToken(sessionToken);
-      if (!result.error && result.data) {
-        const { user: userData, session: sessionData } = result.data;
-        if (userData && new Date(sessionData.expires_at) > new Date()) {
-          req.user = {
-            user_id: userData.id,
-            email: userData.email,
-            role: userData.role,
-            timestamp: Date.now()
-          };
-        }
-      }
-    }
-
+    req.user = await resolveSession(sessionToken) || undefined;
     next();
   } catch (error) {
     console.error('Error in optionalSession middleware:', error);
@@ -191,9 +79,6 @@ export async function optionalSession(req: Request, res: Response, next: NextFun
   }
 }
 
-/**
- * Check if user has specific role
- */
 export function requireRole(roles: string | string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {

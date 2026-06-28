@@ -1,41 +1,26 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { supabase, isSupabaseConfigured, logAudit } from '../database';
+import { logAudit } from '../database';
 import { verifySessionToken, optionalSession } from '../middleware/auth';
 import { AuthPayload, RegisterPayload, AuthResponse, StoredUser } from '../types';
 import {
-  initializeMockData,
   mockFindUserByEmail,
-  mockVerifyPassword,
   mockCreateUser,
   mockCreateSession,
-  mockVerifySessionToken,
   mockInvalidateSession,
   mockGetUserById
 } from '../mock-db';
 
 const router = Router();
 
-// Initialize mock data on first load (for development mode)
-let mockDataInitialized = false;
-
-/**
- * Helper: Hash password (in production, use bcrypt)
- */
 function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password).digest('hex');
 }
 
-/**
- * Helper: Generate session token
- */
 function generateSessionToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
-/**
- * Helper: Build user ID from email and role
- */
 function buildUserId(email: string, role: string): string {
   const seed = email
     .trim()
@@ -45,9 +30,6 @@ function buildUserId(email: string, role: string): string {
   return `${role.slice(0, 3).toUpperCase()}-${String(seed).padStart(4, '0')}`;
 }
 
-/**
- * Format user data for frontend
- */
 function formatUserResponse(user: any): StoredUser {
   return {
     id: user.id,
@@ -82,21 +64,10 @@ function formatUserResponse(user: any): StoredUser {
   };
 }
 
-/**
- * POST /api/auth/login
- * Login user with email and password
- */
 router.post('/login', optionalSession, async (req: Request, res: Response) => {
   try {
-    // Initialize mock data if needed
-    if (!isSupabaseConfigured && !mockDataInitialized) {
-      initializeMockData();
-      mockDataInitialized = true;
-    }
-
     const { email, password } = req.body as AuthPayload;
 
-    // Validate input
     if (!email || !password) {
       return res.status(400).json({
         success: false,
@@ -105,100 +76,39 @@ router.post('/login', optionalSession, async (req: Request, res: Response) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const { data: user, error } = await mockFindUserByEmail(normalizedEmail);
 
-    // Use appropriate backend
-    let user: any = null;
-    let queryError: any = null;
-
-    if (isSupabaseConfigured) {
-      // Query Supabase
-      const result = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', normalizedEmail);
-
-      if (result.error) {
-        queryError = result.error;
-      } else {
-        user = result.data && result.data.length > 0 ? result.data[0] : null;
-      }
-    } else {
-      // Use mock database
-      const result = await mockFindUserByEmail(normalizedEmail);
-      if (result.error) {
-        queryError = result.error;
-      } else {
-        user = result.data;
-      }
-    }
-
-    if (queryError) {
-      console.error('Database query error:', queryError);
+    if (error) {
+      console.error('Database query error:', error);
       return res.status(500).json({
         success: false,
         message: 'Database error during login'
       });
     }
 
-    if (!user) {
-      // Log failed login attempt
-      if (isSupabaseConfigured) {
-        await logAudit(null, 'LOGIN_FAILED', 'user', normalizedEmail, { reason: 'user_not_found' });
-      }
-      
+    if (!user || user.password_hash !== hashPassword(password)) {
+      await logAudit(user?.id || null, 'LOGIN_FAILED', 'user', normalizedEmail, {
+        reason: user ? 'invalid_password' : 'user_not_found'
+      });
+
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
       });
     }
 
-    // Verify password
-    const passwordHash = hashPassword(password);
-    if (user.password_hash !== passwordHash) {
-      // Log failed login attempt
-      if (isSupabaseConfigured) {
-        await logAudit(user.id, 'LOGIN_FAILED', 'user', user.id, { reason: 'invalid_password' });
-      }
-      
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password'
-      });
-    }
-
-    // Generate session token
     const sessionToken = generateSessionToken();
-    const sessionExpiry = new Date();
-    sessionExpiry.setDate(sessionExpiry.getDate() + 7); // 7 days
+    const session = await mockCreateSession(user.id, sessionToken);
 
-    // Create session record
-    if (isSupabaseConfigured) {
-      const { error: sessionError } = await supabase
-        .from('user_sessions')
-        .insert({
-          user_id: user.id,
-          session_token: sessionToken,
-          user_agent: req.headers['user-agent'],
-          ip_address: req.ip,
-          expires_at: sessionExpiry.toISOString()
-        });
-
-      if (sessionError) {
-        console.error('Session creation error:', sessionError);
-        return res.status(500).json({
-          success: false,
-          message: 'Failed to create session'
-        });
-      }
-    } else {
-      // Use mock session
-      await mockCreateSession(user.id, sessionToken);
+    if (session.error) {
+      console.error('Session creation error:', session.error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create session'
+      });
     }
 
-    // Log successful login
-    if (isSupabaseConfigured) {
-      await logAudit(user.id, 'LOGIN_SUCCESS', 'user', user.id);
-    }
+    await logAudit(user.id, 'LOGIN_SUCCESS', 'user', user.id);
 
     return res.json({
       success: true,
@@ -206,7 +116,6 @@ router.post('/login', optionalSession, async (req: Request, res: Response) => {
       session_token: sessionToken,
       user: formatUserResponse(user)
     });
-
   } catch (error) {
     console.error('Login error:', error);
     return res.status(500).json({
@@ -216,16 +125,11 @@ router.post('/login', optionalSession, async (req: Request, res: Response) => {
   }
 });
 
-/**
- * POST /api/auth/register
- * Register new user account
- */
 router.post('/register', async (req: Request, res: Response) => {
   try {
     const payload = req.body as RegisterPayload;
     const { email, password, name, role, student_number, course, year_level, section, employee_id, department } = payload;
 
-    // Validate required fields
     if (!email || !password || !name || !role) {
       return res.status(400).json({
         success: false,
@@ -234,53 +138,26 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const existing = await mockFindUserByEmail(normalizedEmail);
 
-    // Check if user already exists
-    let existingUser: any = null;
-    let queryError: any = null;
-
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', normalizedEmail);
-      queryError = error;
-      existingUser = data && data.length > 0 ? data[0] : null;
-    } else {
-      // Mock data initialized automatically if needed
-      if (!mockDataInitialized) {
-        initializeMockData();
-        mockDataInitialized = true;
-      }
-      const result = await mockFindUserByEmail(normalizedEmail);
-      queryError = result.error;
-      existingUser = result.data;
-    }
-
-    if (queryError) {
+    if (existing.error) {
       return res.status(500).json({
         success: false,
         message: 'Database error during registration'
       });
     }
 
-    if (existingUser) {
+    if (existing.data) {
       return res.status(409).json({
         success: false,
         message: 'Email already registered'
       });
     }
 
-    // Create user ID
     const userId = buildUserId(normalizedEmail, role);
-
-    // Hash password
-    const passwordHash = hashPassword(password);
-
-    // Prepare user data based on role
     const userData: any = {
       email: normalizedEmail,
-      password_hash: passwordHash,
+      password_hash: hashPassword(password),
       name: name.trim(),
       role,
       user_id: userId,
@@ -289,7 +166,6 @@ router.post('/register', async (req: Request, res: Response) => {
       online_status: 'offline'
     };
 
-    // Add role-specific fields
     if (role === 'student') {
       userData.student_number = student_number || '';
       userData.course = course || '';
@@ -306,23 +182,7 @@ router.post('/register', async (req: Request, res: Response) => {
       userData.access_level = 'Level 5 - Full Access';
     }
 
-    // Insert user
-    let createdUser: any = null;
-    let insertError: any = null;
-
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('users')
-        .insert(userData)
-        .select();
-      insertError = error;
-      createdUser = data && data.length > 0 ? data[0] : null;
-    } else {
-      const result = await mockCreateUser(userData);
-      insertError = result.error;
-      createdUser = result.data;
-    }
-
+    const { data: createdUser, error: insertError } = await mockCreateUser(userData);
     if (insertError || !createdUser) {
       console.error('User insertion error:', insertError);
       return res.status(500).json({
@@ -331,33 +191,9 @@ router.post('/register', async (req: Request, res: Response) => {
       });
     }
 
-    // Log successful registration
-    if (isSupabaseConfigured) {
-      await logAudit(createdUser.id, 'REGISTER', 'user', userId, {});
-    }
-
-    // Generate session for immediate login
     const sessionToken = generateSessionToken();
-    const sessionExpiry = new Date();
-    sessionExpiry.setDate(sessionExpiry.getDate() + 7);
-
-    if (isSupabaseConfigured) {
-      const { error: sessionError } = await supabase
-        .from('user_sessions')
-        .insert({
-          user_id: createdUser.id,
-          session_token: sessionToken,
-          user_agent: req.headers['user-agent'],
-          ip_address: req.ip,
-          expires_at: sessionExpiry.toISOString()
-        });
-
-      if (sessionError) {
-        console.error('Session creation error:', sessionError);
-      }
-    } else {
-      await mockCreateSession(createdUser.id, sessionToken);
-    }
+    await mockCreateSession(createdUser.id, sessionToken);
+    await logAudit(createdUser.id, 'REGISTER', 'user', userId, {});
 
     return res.status(201).json({
       success: true,
@@ -365,7 +201,6 @@ router.post('/register', async (req: Request, res: Response) => {
       user: formatUserResponse(createdUser),
       session_token: sessionToken
     } as AuthResponse);
-
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({
@@ -375,10 +210,6 @@ router.post('/register', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/auth/me
- * Get current user info from session
- */
 router.get('/me', verifySessionToken, async (req: Request, res: Response) => {
   try {
     if (!req.user) {
@@ -388,25 +219,8 @@ router.get('/me', verifySessionToken, async (req: Request, res: Response) => {
       });
     }
 
-    // Fetch user data
-    let user: any = null;
-    let queryError: any = null;
-
-    if (isSupabaseConfigured) {
-      const result = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', req.user.user_id)
-        .single();
-      user = result.data;
-      queryError = result.error;
-    } else {
-      const result = await mockGetUserById(req.user.user_id);
-      user = result.data;
-      queryError = result.error;
-    }
-
-    if (queryError || !user) {
+    const { data: user, error } = await mockGetUserById(req.user.user_id);
+    if (error || !user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
@@ -416,9 +230,9 @@ router.get('/me', verifySessionToken, async (req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
       message: 'User retrieved successfully',
+      data: formatUserResponse(user),
       user: formatUserResponse(user)
     });
-
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({
@@ -428,10 +242,6 @@ router.get('/me', verifySessionToken, async (req: Request, res: Response) => {
   }
 });
 
-/**
- * POST /api/auth/logout
- * Logout user by invalidating session
- */
 router.post('/logout', verifySessionToken, async (req: Request, res: Response) => {
   try {
     if (!req.sessionToken) {
@@ -441,30 +251,16 @@ router.post('/logout', verifySessionToken, async (req: Request, res: Response) =
       });
     }
 
-    if (isSupabaseConfigured) {
-      // Delete session
-      const { error } = await supabase
-        .from('user_sessions')
-        .delete()
-        .eq('session_token', req.sessionToken);
+    await mockInvalidateSession(req.sessionToken);
 
-      if (error) {
-        console.error('Session deletion error:', error);
-      }
-
-      // Log logout
-      if (req.user) {
-        await logAudit(req.user.user_id, 'LOGOUT', 'user', req.user.user_id, {});
-      }
-    } else {
-      await mockInvalidateSession(req.sessionToken);
+    if (req.user) {
+      await logAudit(req.user.user_id, 'LOGOUT', 'user', req.user.user_id, {});
     }
 
     return res.status(200).json({
       success: true,
       message: 'Logout successful'
     });
-
   } catch (error) {
     console.error('Logout error:', error);
     res.status(500).json({
@@ -474,10 +270,6 @@ router.post('/logout', verifySessionToken, async (req: Request, res: Response) =
   }
 });
 
-/**
- * POST /api/auth/refresh
- * Refresh session token
- */
 router.post('/refresh', verifySessionToken, async (req: Request, res: Response) => {
   try {
     if (!req.user || !req.sessionToken) {
@@ -487,45 +279,15 @@ router.post('/refresh', verifySessionToken, async (req: Request, res: Response) 
       });
     }
 
-    // Generate new session token
     const newSessionToken = generateSessionToken();
-    const sessionExpiry = new Date();
-    sessionExpiry.setDate(sessionExpiry.getDate() + 7);
-
-    if (isSupabaseConfigured) {
-      // Delete old session and create new one
-      await supabase
-        .from('user_sessions')
-        .delete()
-        .eq('session_token', req.sessionToken);
-
-      const { error: insertError } = await supabase
-        .from('user_sessions')
-        .insert({
-          user_id: req.user.user_id,
-          session_token: newSessionToken,
-          user_agent: req.headers['user-agent'],
-          ip_address: req.ip,
-          expires_at: sessionExpiry.toISOString()
-        });
-
-      if (insertError) {
-        return res.status(500).json({
-          success: false,
-          message: 'Failed to refresh session'
-        });
-      }
-    } else {
-      await mockInvalidateSession(req.sessionToken);
-      await mockCreateSession(req.user.user_id, newSessionToken);
-    }
+    await mockInvalidateSession(req.sessionToken);
+    await mockCreateSession(req.user.user_id, newSessionToken);
 
     return res.status(200).json({
       success: true,
       message: 'Session refreshed',
       session_token: newSessionToken
     });
-
   } catch (error) {
     console.error('Refresh error:', error);
     res.status(500).json({

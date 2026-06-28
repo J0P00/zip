@@ -1,5 +1,5 @@
 export type Persona = 'student' | 'teacher' | 'admin';
-export type AccountSource = 'supabase' | 'local';
+export type AccountSource = 'express' | 'local';
 
 export interface StoredUser {
   id: string;

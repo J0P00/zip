@@ -1,7 +1,6 @@
 /**
- * Development Mock Database
- * Provides in-memory data storage for development and testing
- * Without requiring a Supabase account
+ * Express backend data store
+ * Provides in-memory data storage for development and deployment demos.
  */
 
 import crypto from 'crypto';
@@ -10,9 +9,16 @@ import crypto from 'crypto';
 const mockUsers: any[] = [];
 const mockSessions: any[] = [];
 const mockVideos: any[] = [];
+let isInitialized = false;
 
 // Initialize with sample data
 export function initializeMockData() {
+  if (isInitialized) {
+    return;
+  }
+
+  isInitialized = true;
+
   // Add sample admin user
   const adminId = generateId();
   mockUsers.push({
