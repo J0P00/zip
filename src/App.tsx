@@ -59,6 +59,7 @@ import {
   INITIAL_LESSON_ITEMS, 
   INITIAL_ADAPTIVE_RULES 
 } from './data/mockData';
+import apiClient from './data/apiClient';
 
 // Import Sub Components
 import LandingPage from './components/LandingPage';
@@ -129,6 +130,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [hasLoadedRemoteState, setHasLoadedRemoteState] = useState(false);
 
   // Student Statistics State
   const [streak, setStreak] = useState<number>(DEMO_STUDENT_PROGRESS.streak);
@@ -172,6 +174,71 @@ export default function App() {
   const [curriculumModules, setCurriculumModules] = useState<CurriculumModule[]>(INITIAL_CURRICULUM_MODULES);
   const [lessonItems, setLessonItems] = useState<LessonItem[]>(INITIAL_LESSON_ITEMS);
   const [adaptiveRules, setAdaptiveRules] = useState<AdaptiveRule[]>(INITIAL_ADAPTIVE_RULES);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadRemoteState = async () => {
+      try {
+        const result = await apiClient.getAppState();
+        if (isCancelled || !result.success || !result.data) {
+          setHasLoadedRemoteState(true);
+          return;
+        }
+
+        const state = result.data as Record<string, any>;
+        if (Array.isArray(state.videoLessons)) setVideoLessons(state.videoLessons);
+        if (Array.isArray(state.notifications)) setNotifications(state.notifications);
+        if (Array.isArray(state.monitoringRequests)) setMonitoringRequests(state.monitoringRequests);
+        if (Array.isArray(state.leaderboardUsers)) setLeaderboardUsers(state.leaderboardUsers);
+        if (Array.isArray(state.pendingSubmissions)) setPendingSubmissions(state.pendingSubmissions);
+        if (Array.isArray(state.curriculumModules)) setCurriculumModules(state.curriculumModules);
+        if (Array.isArray(state.lessonItems)) setLessonItems(state.lessonItems);
+        if (Array.isArray(state.adaptiveRules)) setAdaptiveRules(state.adaptiveRules);
+      } catch {
+        // Keep local seed data available if the API is offline during development.
+      } finally {
+        if (!isCancelled) setHasLoadedRemoteState(true);
+      }
+    };
+
+    loadRemoteState();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedRemoteState || !apiClient.token) return;
+
+    const timeout = window.setTimeout(() => {
+      apiClient.saveAppState({
+        videoLessons,
+        notifications,
+        monitoringRequests,
+        leaderboardUsers,
+        pendingSubmissions,
+        curriculumModules,
+        lessonItems,
+        adaptiveRules
+      }).catch(error => {
+        console.error('Failed to synchronize app state:', error);
+      });
+    }, 500);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    hasLoadedRemoteState,
+    videoLessons,
+    notifications,
+    monitoringRequests,
+    leaderboardUsers,
+    pendingSubmissions,
+    curriculumModules,
+    lessonItems,
+    adaptiveRules
+  ]);
 
   // Live reviews returned from Dr. Elena Vance
   const [recentStudentGrade, setRecentStudentGrade] = useState<{ grade: number; feedback: string; challenge: string } | null>(
@@ -286,6 +353,15 @@ export default function App() {
 
   const handleUpdateVideoProgress = (videoId: string, progress: number) => {
     const userEmail = currentUser?.email || 'student@oophub.edu';
+    if (currentUser?.id) {
+      apiClient.updateProgress(currentUser.id, {
+        videoId,
+        completionPercentage: progress,
+        completed: progress >= 90
+      }).catch(error => {
+        console.error('Failed to synchronize video progress:', error);
+      });
+    }
     setVideoLessons(prev => {
       const next = prev.map(video => {
         if (video.id !== videoId) return video;
@@ -672,6 +748,12 @@ export default function App() {
       if (!prev) return prev;
 
       const updated = { ...prev, ...updates };
+
+      if (prev.id) {
+        apiClient.updateUser(prev.id, updates).catch(error => {
+          console.error('Failed to synchronize profile update:', error);
+        });
+      }
 
       if (prev.accountSource === 'custom') {
         try {
@@ -1221,6 +1303,9 @@ export default function App() {
                 id="logout-confirm-yes"
                 onClick={() => {
                   setShowLogoutConfirm(false);
+                  apiClient.logout().catch(error => {
+                    console.error('Logout error:', error);
+                  });
                   setPersona('public');
                   setCurrentUser(null);
                   setAuthMode(null);

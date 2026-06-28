@@ -24,6 +24,7 @@ import {
   recordTermsAcceptance,
   requiresTermsAcceptance
 } from '../data/termsStore';
+import apiClient from '../data/apiClient';
 import TermsAgreementModal from './TermsAgreementModal';
 
 interface AuthPageProps {
@@ -315,7 +316,10 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     setIsTermsModalOpen(true);
   };
 
-  const startAuthenticatedSession = (user: StoredUser, accountSource: AccountSource) => {
+  const startAuthenticatedSession = (
+    user: StoredUser | AuthenticatedUser,
+    accountSource: AccountSource = 'accountSource' in user ? user.accountSource : 'custom'
+  ) => {
     if (rememberMe) {
       localStorage.setItem('oophub_remembered_email', user.email);
     } else {
@@ -430,7 +434,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     showNotice('success', `Terms version ${publishedPolicy.version} accepted for registration.`);
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginTouched({ email: true, password: true });
 
@@ -440,31 +444,23 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     }
 
     setIsSubmitting(true);
-    window.setTimeout(() => {
-      const normalizedEmail = loginEmail.trim().toLowerCase();
-      const matchedDefault = demoAccounts.find(
-        user => user.email.toLowerCase() === normalizedEmail && user.password === loginPassword
-      );
-      const matchedCustom = readStoredUsers().find(
-        user => user.email.toLowerCase() === normalizedEmail && user.password === loginPassword
-      );
+    try {
+      const result = await apiClient.login(loginEmail.trim().toLowerCase(), loginPassword);
 
-      if (matchedDefault) {
-        completeLogin(matchedDefault, 'demo');
+      if (!result.success || !result.user) {
+        showNotice('error', result.message || 'Invalid email or password. Please verify credentials or create an account.');
         return;
       }
 
-      if (matchedCustom) {
-        completeLogin(matchedCustom, 'custom');
-        return;
-      }
-
+      startAuthenticatedSession(result.user, result.user.accountSource ?? 'custom');
+    } catch {
+      showNotice('error', 'Unable to connect to the authentication server. Please try again.');
+    } finally {
       setIsSubmitting(false);
-      showNotice('error', 'Invalid email or password. Please verify credentials or create an account.');
-    }, 700);
+    }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterTouched({
       username: true,
@@ -487,79 +483,42 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     }
 
     setIsSubmitting(true);
-    window.setTimeout(() => {
-      const usersList = readStoredUsers();
-      const normalizedEmail = regEmail.trim().toLowerCase();
-      const alreadyExists = [...demoAccounts, ...usersList].some(
-        user => user.email.toLowerCase() === normalizedEmail
-      );
-
-      if (alreadyExists) {
-        setIsSubmitting(false);
-        showNotice('error', 'An account is already registered with this email address.');
-        return;
-      }
-
+    try {
       const displayCourse = regCourse === 'CS' ? 'CS (Computer Science)' : 'IT (Information Technology)';
       const computedSection = regRole === 'student' ? regSection.trim().toUpperCase() : undefined;
       const activePolicy = getPublishedPolicy();
-      const newUserId = buildUserId(regEmail, regRole);
-      let acceptance: UserTermsAgreement;
-
-      try {
-        acceptance = recordTermsAcceptance({
-          userId: newUserId,
-          role: regRole,
-          version: activePolicy.version
-        });
-        setPublishedPolicy(activePolicy);
-      } catch {
-        setIsSubmitting(false);
-        showNotice('error', 'Unable to record terms acceptance. Please try again.');
-        return;
-      }
-
-      const newUser: StoredUser = {
+      const result = await apiClient.register({
         name: regUsername.trim(),
         email: regEmail.trim(),
         password: regPassword,
         role: regRole,
-        userId: newUserId,
-        registrationDate: new Date().toISOString(),
-        contactNumber: '',
-        address: '',
-        dateOfBirth: '',
-        accountStatus: 'Active',
-        
-        // Student-specific fields
         studentNumber: regRole === 'student' ? regStudentNumber.trim() : undefined,
         course: regRole === 'student' ? displayCourse : undefined,
         yearLevel: regRole === 'student' ? regYearLevel : undefined,
         section: computedSection,
-        programStatus: regRole === 'student' ? 'Regular' : undefined,
-
-        // Teacher-specific fields
         employeeId: regRole === 'teacher' ? regTeacherId.trim() : undefined,
         department: regRole === 'teacher' ? 'College of Computer Studies' : undefined,
         specialization: regRole === 'teacher' ? 'Object-Oriented Programming' : undefined,
         assignedCourses: regRole === 'teacher' ? 'OOP 101, Advanced Java' : undefined,
+        termsVersion: activePolicy.version
+      });
 
-        // Global defaults
-        onlineStatus: 'online',
-        avatar: '',
-        termsAgreementAccepted: acceptance.accepted,
-        termsAcceptedAt: acceptance.accepted_at,
-        termsVersion: acceptance.version
-      };
+      if (!result.success) {
+        showNotice('error', result.message || 'Unable to create account.');
+        return;
+      }
 
-      usersList.push(newUser);
-      localStorage.setItem('oophub_users', JSON.stringify(usersList));
-      setLoginEmail(newUser.email);
+      setPublishedPolicy(activePolicy);
+      apiClient.clearSession();
+      setLoginEmail(regEmail.trim());
       setLoginPassword('');
       setTermsAccepted(false);
-      setIsSubmitting(false);
       setIsRegSuccess(true);
-    }, 700);
+    } catch {
+      showNotice('error', 'Unable to connect to the registration server. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const socialNotice = (provider: string) => {
