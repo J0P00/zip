@@ -10,16 +10,23 @@ const getApiBaseUrl = (): string => {
     const hostname = window.location.hostname;
     const protocol = window.location.protocol;
     
-    // If the page is loaded from a non-localhost domain (like a local network IP address or custom domain)
-    // but the API base URL is configured to point to localhost/127.0.0.1, we dynamically update the API
-    // host to match the actual page hostname so that requests succeed.
-    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    // Check if the current page hostname is a local network address (not localhost/127.0.0.1)
+    const isLocalNetworkHost = 
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.lan') ||
+      /^192\.168\.\d+\.\d+$/.test(hostname) ||
+      /^10\.\d+\.\d+\.\d+$/.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(hostname);
+      
+    // Only dynamically adjust the host if we are on a local network IP address/host
+    // and the target API URL is configured to localhost/127.0.0.1.
+    if (isLocalNetworkHost) {
       if (envUrl) {
         try {
           const url = new URL(envUrl);
           if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
             url.hostname = hostname;
-            // Match the protocol of the current page to avoid mixed-content blocks
+            // Match the protocol of the current page
             if (protocol === 'https:') {
               url.protocol = 'https:';
             }
