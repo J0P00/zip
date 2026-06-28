@@ -1,5 +1,4 @@
 import pg from 'pg';
-import type { QueryResultRow } from 'pg';
 import { DATABASE_URL, PGDATABASE, PGHOST, PGPASSWORD, PGPORT, PGUSER } from '../env';
 
 const { Pool } = pg;
@@ -18,4 +17,5 @@ export const pool = new Pool(
       }
 );
 
-export const query = <T extends QueryResultRow = any>(text: string, params: any[] = []) => pool.query<T>(text, params);
+export const query = <T = any>(text: string, params: any[] = []) => pool.query<T>(text, params);
+
