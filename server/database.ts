@@ -72,6 +72,10 @@ export async function initializeDatabase() {
  * Log audit trail for important actions
  */
 export async function logAudit(userId: string | null, action: string, resourceType: string, resourceId: string, details?: any) {
+  if (!isSupabaseConfigured) {
+    console.log(`📝 [Audit Log (Mock)] User: ${userId || 'anonymous'}, Action: ${action}, Resource: ${resourceType}/${resourceId}`);
+    return;
+  }
   try {
     await supabase.from('audit_logs').insert({
       user_id: userId,

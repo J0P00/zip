@@ -79,24 +79,35 @@ export async function verifySessionToken(req: Request, res: Response, next: Next
     }
 
     // Fetch user data
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', sessionData.user_id)
-      .single();
+    let userData = user;
+    if (isSupabaseConfigured) {
+      const { data: dbUser, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', sessionData.user_id)
+        .single();
 
-    if (userError || !userData) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not found'
-      });
+      if (userError || !dbUser) {
+        return res.status(401).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      userData = dbUser;
+
+      // Update last activity
+      await supabase
+        .from('user_sessions')
+        .update({ last_activity: new Date().toISOString() })
+        .eq('session_token', sessionToken);
+    } else {
+      if (!userData) {
+        return res.status(401).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
     }
-
-    // Update last activity
-    await supabase
-      .from('user_sessions')
-      .update({ last_activity: new Date().toISOString() })
-      .eq('session_token', sessionToken);
 
     // Attach user data to request
     req.user = {
@@ -129,31 +140,47 @@ export async function optionalSession(req: Request, res: Response, next: NextFun
     const sessionToken = authHeader.substring(7);
     req.sessionToken = sessionToken;
 
-    const { data: sessionData, error: sessionError } = await supabase
-      .from('user_sessions')
-      .select('user_id, expires_at')
-      .eq('session_token', sessionToken)
-      .single();
-
-    if (!sessionError && sessionData && new Date(sessionData.expires_at) > new Date()) {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', sessionData.user_id)
+    if (isSupabaseConfigured) {
+      const { data: sessionData, error: sessionError } = await supabase
+        .from('user_sessions')
+        .select('user_id, expires_at')
+        .eq('session_token', sessionToken)
         .single();
 
-      if (userData) {
-        req.user = {
-          user_id: userData.id,
-          email: userData.email,
-          role: userData.role,
-          timestamp: Date.now()
-        };
+      if (!sessionError && sessionData && new Date(sessionData.expires_at) > new Date()) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', sessionData.user_id)
+          .single();
 
-        await supabase
-          .from('user_sessions')
-          .update({ last_activity: new Date().toISOString() })
-          .eq('session_token', sessionToken);
+        if (userData) {
+          req.user = {
+            user_id: userData.id,
+            email: userData.email,
+            role: userData.role,
+            timestamp: Date.now()
+          };
+
+          await supabase
+            .from('user_sessions')
+            .update({ last_activity: new Date().toISOString() })
+            .eq('session_token', sessionToken);
+        }
+      }
+    } else {
+      // Use mock database
+      const result = await mockVerifySessionToken(sessionToken);
+      if (!result.error && result.data) {
+        const { user: userData, session: sessionData } = result.data;
+        if (userData && new Date(sessionData.expires_at) > new Date()) {
+          req.user = {
+            user_id: userData.id,
+            email: userData.email,
+            role: userData.role,
+            timestamp: Date.now()
+          };
+        }
       }
     }
 

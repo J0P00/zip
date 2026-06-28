@@ -3,7 +3,42 @@
  * Handles all communication with the backend API
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const getApiBaseUrl = (): string => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+    
+    // If the page is loaded from a non-localhost domain (like a local network IP address or custom domain)
+    // but the API base URL is configured to point to localhost/127.0.0.1, we dynamically update the API
+    // host to match the actual page hostname so that requests succeed.
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      if (envUrl) {
+        try {
+          const url = new URL(envUrl);
+          if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+            url.hostname = hostname;
+            // Match the protocol of the current page to avoid mixed-content blocks
+            if (protocol === 'https:') {
+              url.protocol = 'https:';
+            }
+            return url.origin;
+          }
+        } catch (e) {
+          // Fallback if envUrl is not a valid absolute URL
+        }
+      }
+      
+      // Default fallback when envUrl is not defined: use current hostname and backend port 5000
+      return `${protocol}//${hostname}:5000`;
+    }
+  }
+  
+  return envUrl || 'http://localhost:5000';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 const SESSION_TOKEN_KEY = 'oophub_session_token';
 const USER_DATA_KEY = 'oophub_user_data';
 
@@ -164,9 +199,24 @@ class APIClient {
 
     } catch (error) {
       console.error('Request error:', error);
+      
+      let errorMessage = 'An unexpected error occurred.';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Enhance generic browser fetch network failures
+        if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+          if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            errorMessage = 'Network connection offline. Please check your internet connection.';
+          } else {
+            errorMessage = `Unable to connect to the server at ${this.baseUrl}. Please check your network connection and verify the backend is running.`;
+          }
+        }
+      }
+      
       return {
         data: null as any,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: errorMessage
       };
     }
   }

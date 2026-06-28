@@ -153,7 +153,7 @@ export async function mockCreateUser(userData: any) {
   const newUser = {
     id: generateId(),
     ...userData,
-    password_hash: hashPassword(userData.password),
+    password_hash: userData.password ? hashPassword(userData.password) : (userData.password_hash || ''),
     registration_date: new Date(),
     account_status: 'Active',
     created_at: new Date(),

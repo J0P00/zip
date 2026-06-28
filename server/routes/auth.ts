@@ -236,10 +236,26 @@ router.post('/register', async (req: Request, res: Response) => {
     const normalizedEmail = email.trim().toLowerCase();
 
     // Check if user already exists
-    const { data: existingUsers, error: queryError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', normalizedEmail);
+    let existingUser: any = null;
+    let queryError: any = null;
+
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', normalizedEmail);
+      queryError = error;
+      existingUser = data && data.length > 0 ? data[0] : null;
+    } else {
+      // Mock data initialized automatically if needed
+      if (!mockDataInitialized) {
+        initializeMockData();
+        mockDataInitialized = true;
+      }
+      const result = await mockFindUserByEmail(normalizedEmail);
+      queryError = result.error;
+      existingUser = result.data;
+    }
 
     if (queryError) {
       return res.status(500).json({
@@ -248,7 +264,7 @@ router.post('/register', async (req: Request, res: Response) => {
       });
     }
 
-    if (existingUsers && existingUsers.length > 0) {
+    if (existingUser) {
       return res.status(409).json({
         success: false,
         message: 'Email already registered'
@@ -291,12 +307,23 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     // Insert user
-    const { data: newUser, error: insertError } = await supabase
-      .from('users')
-      .insert(userData)
-      .select();
+    let createdUser: any = null;
+    let insertError: any = null;
 
-    if (insertError) {
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('users')
+        .insert(userData)
+        .select();
+      insertError = error;
+      createdUser = data && data.length > 0 ? data[0] : null;
+    } else {
+      const result = await mockCreateUser(userData);
+      insertError = result.error;
+      createdUser = result.data;
+    }
+
+    if (insertError || !createdUser) {
       console.error('User insertion error:', insertError);
       return res.status(500).json({
         success: false,
@@ -305,31 +332,37 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     // Log successful registration
-    await logAudit(newUser && newUser[0] ? newUser[0].id : null, 'REGISTER', 'user', userId, {});
+    if (isSupabaseConfigured) {
+      await logAudit(createdUser.id, 'REGISTER', 'user', userId, {});
+    }
 
     // Generate session for immediate login
     const sessionToken = generateSessionToken();
     const sessionExpiry = new Date();
     sessionExpiry.setDate(sessionExpiry.getDate() + 7);
 
-    const { error: sessionError } = await supabase
-      .from('user_sessions')
-      .insert({
-        user_id: newUser![0].id,
-        session_token: sessionToken,
-        user_agent: req.headers['user-agent'],
-        ip_address: req.ip,
-        expires_at: sessionExpiry.toISOString()
-      });
+    if (isSupabaseConfigured) {
+      const { error: sessionError } = await supabase
+        .from('user_sessions')
+        .insert({
+          user_id: createdUser.id,
+          session_token: sessionToken,
+          user_agent: req.headers['user-agent'],
+          ip_address: req.ip,
+          expires_at: sessionExpiry.toISOString()
+        });
 
-    if (sessionError) {
-      console.error('Session creation error:', sessionError);
+      if (sessionError) {
+        console.error('Session creation error:', sessionError);
+      }
+    } else {
+      await mockCreateSession(createdUser.id, sessionToken);
     }
 
     return res.status(201).json({
       success: true,
       message: 'Registration successful',
-      user: formatUserResponse(newUser![0]),
+      user: formatUserResponse(createdUser),
       session_token: sessionToken
     } as AuthResponse);
 
@@ -356,13 +389,24 @@ router.get('/me', verifySessionToken, async (req: Request, res: Response) => {
     }
 
     // Fetch user data
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', req.user.user_id)
-      .single();
+    let user: any = null;
+    let queryError: any = null;
 
-    if (error || !user) {
+    if (isSupabaseConfigured) {
+      const result = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', req.user.user_id)
+        .single();
+      user = result.data;
+      queryError = result.error;
+    } else {
+      const result = await mockGetUserById(req.user.user_id);
+      user = result.data;
+      queryError = result.error;
+    }
+
+    if (queryError || !user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
@@ -397,19 +441,23 @@ router.post('/logout', verifySessionToken, async (req: Request, res: Response) =
       });
     }
 
-    // Delete session
-    const { error } = await supabase
-      .from('user_sessions')
-      .delete()
-      .eq('session_token', req.sessionToken);
+    if (isSupabaseConfigured) {
+      // Delete session
+      const { error } = await supabase
+        .from('user_sessions')
+        .delete()
+        .eq('session_token', req.sessionToken);
 
-    if (error) {
-      console.error('Session deletion error:', error);
-    }
+      if (error) {
+        console.error('Session deletion error:', error);
+      }
 
-    // Log logout
-    if (req.user) {
-      await logAudit(req.user.user_id, 'LOGOUT', 'user', req.user.user_id, {});
+      // Log logout
+      if (req.user) {
+        await logAudit(req.user.user_id, 'LOGOUT', 'user', req.user.user_id, {});
+      }
+    } else {
+      await mockInvalidateSession(req.sessionToken);
     }
 
     return res.status(200).json({
@@ -444,27 +492,32 @@ router.post('/refresh', verifySessionToken, async (req: Request, res: Response) 
     const sessionExpiry = new Date();
     sessionExpiry.setDate(sessionExpiry.getDate() + 7);
 
-    // Delete old session and create new one
-    await supabase
-      .from('user_sessions')
-      .delete()
-      .eq('session_token', req.sessionToken);
+    if (isSupabaseConfigured) {
+      // Delete old session and create new one
+      await supabase
+        .from('user_sessions')
+        .delete()
+        .eq('session_token', req.sessionToken);
 
-    const { error: insertError } = await supabase
-      .from('user_sessions')
-      .insert({
-        user_id: req.user.user_id,
-        session_token: newSessionToken,
-        user_agent: req.headers['user-agent'],
-        ip_address: req.ip,
-        expires_at: sessionExpiry.toISOString()
-      });
+      const { error: insertError } = await supabase
+        .from('user_sessions')
+        .insert({
+          user_id: req.user.user_id,
+          session_token: newSessionToken,
+          user_agent: req.headers['user-agent'],
+          ip_address: req.ip,
+          expires_at: sessionExpiry.toISOString()
+        });
 
-    if (insertError) {
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to refresh session'
-      });
+      if (insertError) {
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to refresh session'
+        });
+      }
+    } else {
+      await mockInvalidateSession(req.sessionToken);
+      await mockCreateSession(req.user.user_id, newSessionToken);
     }
 
     return res.status(200).json({

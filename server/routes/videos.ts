@@ -99,14 +99,31 @@ router.get('/:id', optionalSession, async (req: Request, res: Response) => {
     const { id } = req.params;
 
     // Query video by ID
-    const { data: videos, error } = await supabase
-      .from('video_lessons')
-      .select('*')
-      .eq('id', id)
-      .single();
+    let video: any = null;
+    let error: any = null;
+
+    if (isSupabaseConfigured) {
+      const result = await supabase
+        .from('video_lessons')
+        .select('*')
+        .eq('id', id)
+        .single();
+      video = result.data;
+      error = result.error;
+    } else {
+      const result = await mockGetVideoById(id);
+      video = result.data;
+      error = result.error;
+    }
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (isSupabaseConfigured && error.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          message: 'Video not found'
+        });
+      }
+      if (!isSupabaseConfigured && error === 'Video not found') {
         return res.status(404).json({
           success: false,
           message: 'Video not found'
@@ -116,11 +133,11 @@ router.get('/:id', optionalSession, async (req: Request, res: Response) => {
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch video',
-        error: error.message
+        error: typeof error === 'string' ? error : error.message
       });
     }
 
-    if (!videos || !videos.is_available) {
+    if (!video || !video.is_available) {
       return res.status(404).json({
         success: false,
         message: 'Video not available'
@@ -128,14 +145,14 @@ router.get('/:id', optionalSession, async (req: Request, res: Response) => {
     }
 
     // Log video access
-    if (req.user) {
+    if (req.user && isSupabaseConfigured) {
       await logAudit(req.user.user_id, 'VIDEO_ACCESS', 'video', id, {});
     }
 
     return res.status(200).json({
       success: true,
       message: 'Video retrieved successfully',
-      data: formatVideoResponse(videos)
+      data: formatVideoResponse(video)
     });
 
   } catch (error) {
@@ -180,9 +197,29 @@ router.post('/', verifySessionToken, requireRole('admin'), async (req: Request, 
     }
 
     // Insert video
-    const { data: newVideo, error } = await supabase
-      .from('video_lessons')
-      .insert({
+    let newVideo: any = null;
+    let error: any = null;
+
+    if (isSupabaseConfigured) {
+      const result = await supabase
+        .from('video_lessons')
+        .insert({
+          title,
+          description,
+          instructor,
+          duration,
+          video_url,
+          thumbnail_url,
+          lesson_number,
+          curriculum_id,
+          created_by: req.user.user_id,
+          is_available: true
+        })
+        .select();
+      newVideo = result.data && result.data[0];
+      error = result.error;
+    } else {
+      const result = await mockCreateVideo({
         title,
         description,
         instructor,
@@ -193,27 +230,31 @@ router.post('/', verifySessionToken, requireRole('admin'), async (req: Request, 
         curriculum_id,
         created_by: req.user.user_id,
         is_available: true
-      })
-      .select();
+      });
+      newVideo = result.data;
+      error = result.error;
+    }
 
-    if (error) {
+    if (error || !newVideo) {
       console.error('Error creating video:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to create video',
-        error: error.message
+        error: error ? (typeof error === 'string' ? error : error.message) : 'Unknown error'
       });
     }
 
     // Log video creation
-    await logAudit(req.user.user_id, 'VIDEO_CREATE', 'video', newVideo![0].id, {
-      title
-    });
+    if (isSupabaseConfigured) {
+      await logAudit(req.user.user_id, 'VIDEO_CREATE', 'video', newVideo.id, {
+        title
+      });
+    }
 
     return res.status(201).json({
       success: true,
       message: 'Video created successfully',
-      data: formatVideoResponse(newVideo![0])
+      data: formatVideoResponse(newVideo)
     });
 
   } catch (error) {
@@ -246,18 +287,35 @@ router.put('/:id', verifySessionToken, requireRole('admin'), async (req: Request
     delete updates.created_at;
 
     // Update video
-    const { data: updatedVideo, error } = await supabase
-      .from('video_lessons')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
+    let updatedVideo: any = null;
+    let error: any = null;
+
+    if (isSupabaseConfigured) {
+      const result = await supabase
+        .from('video_lessons')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      updatedVideo = result.data;
+      error = result.error;
+    } else {
+      const result = await mockUpdateVideo(id, updates);
+      updatedVideo = result.data;
+      error = result.error;
+    }
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (isSupabaseConfigured && error.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          message: 'Video not found'
+        });
+      }
+      if (!isSupabaseConfigured && error === 'Video not found') {
         return res.status(404).json({
           success: false,
           message: 'Video not found'
@@ -267,14 +325,16 @@ router.put('/:id', verifySessionToken, requireRole('admin'), async (req: Request
       return res.status(500).json({
         success: false,
         message: 'Failed to update video',
-        error: error.message
+        error: typeof error === 'string' ? error : error.message
       });
     }
 
     // Log video update
-    await logAudit(req.user.user_id, 'VIDEO_UPDATE', 'video', id, {
-      updates
-    });
+    if (isSupabaseConfigured) {
+      await logAudit(req.user.user_id, 'VIDEO_UPDATE', 'video', id, {
+        updates
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -307,16 +367,27 @@ router.delete('/:id', verifySessionToken, requireRole('admin'), async (req: Requ
     const { id } = req.params;
 
     // Mark as unavailable instead of deleting
-    const { error } = await supabase
-      .from('video_lessons')
-      .update({
-        is_available: false,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id);
+    let success = false;
+    let error: any = null;
+
+    if (isSupabaseConfigured) {
+      const result = await supabase
+        .from('video_lessons')
+        .update({
+          is_available: false,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+      
+      success = !result.error;
+      error = result.error;
+    } else {
+      const result = await mockDeleteVideo(id);
+      success = result.success;
+    }
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (isSupabaseConfigured && error.code === 'PGRST116') {
         return res.status(404).json({
           success: false,
           message: 'Video not found'
@@ -330,8 +401,17 @@ router.delete('/:id', verifySessionToken, requireRole('admin'), async (req: Requ
       });
     }
 
+    if (!success) {
+      return res.status(404).json({
+        success: false,
+        message: 'Video not found'
+      });
+    }
+
     // Log video deletion
-    await logAudit(req.user.user_id, 'VIDEO_DELETE', 'video', id, {});
+    if (isSupabaseConfigured) {
+      await logAudit(req.user.user_id, 'VIDEO_DELETE', 'video', id, {});
+    }
 
     return res.status(200).json({
       success: true,
