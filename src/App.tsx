@@ -60,9 +60,6 @@ import {
   INITIAL_ADAPTIVE_RULES 
 } from './data/mockData';
 
-// Import API Client
-import { apiClient } from './data/apiClient';
-
 // Import Sub Components
 import LandingPage from './components/LandingPage';
 import StudentDashboard from './components/StudentDashboard';
@@ -224,53 +221,6 @@ export default function App() {
     localStorage.setItem('oophub_monitoring_requests', JSON.stringify(monitoringRequests));
   }, [monitoringRequests]);
 
-  // Restore user session on app load (cross-device support)
-  useEffect(() => {
-    const restoreSession = async () => {
-      try {
-        // Check if we have a valid session token
-        if (apiClient.isAuthenticated()) {
-          const { user, error } = await apiClient.getCurrentUser();
-          if (user && !error) {
-            // Session restored successfully
-            setCurrentUser(user);
-            setPersona(user.role);
-          } else {
-            // Session invalid or expired
-            apiClient.logout();
-          }
-        }
-      } catch (error) {
-        console.error('Error restoring session:', error);
-      }
-    };
-
-    restoreSession();
-  }, []);
-
-  // Fetch videos from API instead of localStorage
-  useEffect(() => {
-    const fetchVideos = async () => {
-      try {
-        const { videos, error } = await apiClient.getVideos();
-        if (videos && !error) {
-          // Merge API videos with initial lessons for backward compatibility
-          const mergedVideos = videos.length > 0 ? videos : INITIAL_LESSONS;
-          setVideoLessons(mergedVideos);
-        } else {
-          // Fall back to initial lessons if API fails
-          setVideoLessons(INITIAL_LESSONS);
-        }
-      } catch (error) {
-        console.error('Error fetching videos from API:', error);
-        // Use initial lessons as fallback
-        setVideoLessons(INITIAL_LESSONS);
-      }
-    };
-
-    fetchVideos();
-  }, []);
-
   // Video Management & Progress Handlers
   const addNotification = (title: string, message: string, type: 'upload' | 'update' | 'assign' | 'unlock') => {
     const newNotif: NotificationItem = {
@@ -284,38 +234,12 @@ export default function App() {
     setNotifications(prev => [newNotif, ...prev]);
   };
 
-  const handleUploadVideo = async (video: VideoLesson) => {
-    try {
-      // Call API to create video
-      const { video: createdVideo, error } = await apiClient.createVideo({
-        title: video.title,
-        description: video.description,
-        instructor: video.instructor,
-        duration: video.duration,
-        video_url: video.videoUrl,
-        thumbnail_url: video.thumbnail,
-        lesson_number: video.sequence,
-        curriculum_id: video.module
-      });
-
-      if (!error && createdVideo) {
-        // Update local state with API response
-        setVideoLessons(prev => {
-          const next = [...prev, createdVideo];
-          localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
-          return next;
-        });
-      }
-    } catch (error) {
-      console.error('Error uploading video:', error);
-      // Fall back to local storage update
-      setVideoLessons(prev => {
-        const next = [...prev, video];
-        localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
-        return next;
-      });
-    }
-
+  const handleUploadVideo = (video: VideoLesson) => {
+    setVideoLessons(prev => {
+      const next = [...prev, video];
+      localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
+      return next;
+    });
     addNotification(
       `New Video: ${video.title} 🎥`,
       `A new lesson has been added to "${video.module}" in the syllabus.`,
@@ -323,38 +247,12 @@ export default function App() {
     );
   };
 
-  const handleEditVideo = async (updatedVideo: VideoLesson) => {
-    try {
-      // Call API to update video
-      const { video: apiVideo, error } = await apiClient.updateVideo(updatedVideo.id, {
-        title: updatedVideo.title,
-        description: updatedVideo.description,
-        instructor: updatedVideo.instructor,
-        duration: updatedVideo.duration,
-        video_url: updatedVideo.videoUrl,
-        thumbnail_url: updatedVideo.thumbnail,
-        lesson_number: updatedVideo.sequence,
-        curriculum_id: updatedVideo.module
-      });
-
-      if (!error && apiVideo) {
-        // Update local state with API response
-        setVideoLessons(prev => {
-          const next = prev.map(l => l.id === updatedVideo.id ? apiVideo : l);
-          localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
-          return next;
-        });
-      }
-    } catch (error) {
-      console.error('Error updating video:', error);
-      // Fall back to local state update
-      setVideoLessons(prev => {
-        const next = prev.map(l => l.id === updatedVideo.id ? updatedVideo : l);
-        localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
-        return next;
-      });
-    }
-
+  const handleEditVideo = (updatedVideo: VideoLesson) => {
+    setVideoLessons(prev => {
+      const next = prev.map(l => l.id === updatedVideo.id ? updatedVideo : l);
+      localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
+      return next;
+    });
     addNotification(
       `Video updated: ${updatedVideo.title} 🔄`,
       `The video contents and details for "${updatedVideo.title}" have been updated by administrators.`,
@@ -370,28 +268,12 @@ export default function App() {
     });
   };
 
-  const handleDeleteVideo = async (id: string) => {
-    try {
-      // Call API to delete video
-      const { success, error } = await apiClient.deleteVideo(id);
-
-      if (success && !error) {
-        // Update local state
-        setVideoLessons(prev => {
-          const next = prev.filter(l => l.id !== id);
-          localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
-          return next;
-        });
-      }
-    } catch (error) {
-      console.error('Error deleting video:', error);
-      // Fall back to local state update
-      setVideoLessons(prev => {
-        const next = prev.filter(l => l.id !== id);
-        localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
-        return next;
-      });
-    }
+  const handleDeleteVideo = (id: string) => {
+    setVideoLessons(prev => {
+      const next = prev.filter(l => l.id !== id);
+      localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
+      return next;
+    });
   };
 
   const handleUpdateVideoSequence = (id: string, newSeq: number) => {
@@ -1337,17 +1219,8 @@ export default function App() {
               </button>
               <button
                 id="logout-confirm-yes"
-                onClick={async () => {
+                onClick={() => {
                   setShowLogoutConfirm(false);
-                  
-                  // Call API logout
-                  try {
-                    await apiClient.logout();
-                  } catch (error) {
-                    console.error('Logout error:', error);
-                  }
-                  
-                  // Clear local state
                   setPersona('public');
                   setCurrentUser(null);
                   setAuthMode(null);
