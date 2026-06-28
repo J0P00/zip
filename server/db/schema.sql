@@ -26,6 +26,117 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DO $$ BEGIN
+  -- Normalize the legacy users table created by the earlier migration.
+  -- That table used user_id UUID as the primary key, while the backend now
+  -- expects id UUID plus a separate user_id public identifier.
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'users'
+      AND column_name = 'user_id'
+      AND data_type = 'uuid'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'users'
+      AND column_name = 'id'
+  ) THEN
+    ALTER TABLE users RENAME COLUMN user_id TO id;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'users'
+      AND column_name = 'full_name'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'users'
+      AND column_name = 'name'
+  ) THEN
+    ALTER TABLE users RENAME COLUMN full_name TO name;
+  END IF;
+
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+  UPDATE users SET id = gen_random_uuid() WHERE id IS NULL;
+  ALTER TABLE users ALTER COLUMN id SET NOT NULL;
+  ALTER TABLE users ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS user_id TEXT;
+  UPDATE users
+  SET user_id = UPPER(LEFT(role::TEXT, 3)) || '-' || SUBSTRING(MD5(email), 1, 8)
+  WHERE user_id IS NULL OR user_id = '';
+  ALTER TABLE users ALTER COLUMN user_id SET NOT NULL;
+
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;
+  UPDATE users SET name = email WHERE name IS NULL OR name = '';
+  ALTER TABLE users ALTER COLUMN name SET NOT NULL;
+
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+  UPDATE users SET password_hash = '' WHERE password_hash IS NULL;
+  ALTER TABLE users ALTER COLUMN password_hash SET NOT NULL;
+
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status TEXT DEFAULT 'Active';
+  UPDATE users SET account_status = 'Active' WHERE account_status IS NULL;
+  ALTER TABLE users ALTER COLUMN account_status SET NOT NULL;
+  ALTER TABLE users ALTER COLUMN account_status SET DEFAULT 'Active';
+
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_number TEXT DEFAULT '';
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT DEFAULT '';
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth TEXT DEFAULT '';
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS online_status TEXT DEFAULT 'online';
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT DEFAULT '';
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_agreement_accepted BOOLEAN DEFAULT FALSE;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version TEXT DEFAULT '';
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+  UPDATE users
+  SET
+    contact_number = COALESCE(contact_number, ''),
+    address = COALESCE(address, ''),
+    date_of_birth = COALESCE(date_of_birth, ''),
+    online_status = COALESCE(online_status, 'online'),
+    avatar = COALESCE(avatar, ''),
+    terms_agreement_accepted = COALESCE(terms_agreement_accepted, FALSE),
+    terms_version = COALESCE(terms_version, ''),
+    created_at = COALESCE(created_at, NOW()),
+    updated_at = COALESCE(updated_at, NOW());
+
+  ALTER TABLE users ALTER COLUMN email SET NOT NULL;
+  ALTER TABLE users ALTER COLUMN role SET NOT NULL;
+  ALTER TABLE users ALTER COLUMN terms_agreement_accepted SET NOT NULL;
+  ALTER TABLE users ALTER COLUMN created_at SET NOT NULL;
+  ALTER TABLE users ALTER COLUMN updated_at SET NOT NULL;
+
+  ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'users'::regclass
+      AND contype = 'p'
+  ) THEN
+    ALTER TABLE users ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'users'::regclass
+      AND conname = 'users_user_id_key'
+  ) THEN
+    ALTER TABLE users ADD CONSTRAINT users_user_id_key UNIQUE (user_id);
+  END IF;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_lower_email ON users (LOWER(email));
 CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
 
