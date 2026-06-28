@@ -3,49 +3,11 @@
  * Handles all communication with the backend API
  */
 
-const getApiBaseUrl = (): string => {
-  const envUrl = import.meta.env.VITE_API_BASE_URL;
-  
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    const protocol = window.location.protocol;
-    
-    // Check if the current page hostname is a local network address (not localhost/127.0.0.1)
-    const isLocalNetworkHost = 
-      hostname.endsWith('.local') ||
-      hostname.endsWith('.lan') ||
-      /^192\.168\.\d+\.\d+$/.test(hostname) ||
-      /^10\.\d+\.\d+\.\d+$/.test(hostname) ||
-      /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(hostname);
-      
-    // Only dynamically adjust the host if we are on a local network IP address/host
-    // and the target API URL is configured to localhost/127.0.0.1.
-    if (isLocalNetworkHost) {
-      if (envUrl) {
-        try {
-          const url = new URL(envUrl);
-          if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-            url.hostname = hostname;
-            // Match the protocol of the current page
-            if (protocol === 'https:') {
-              url.protocol = 'https:';
-            }
-            return url.origin;
-          }
-        } catch (e) {
-          // Fallback if envUrl is not a valid absolute URL
-        }
-      }
-      
-      // Default fallback when envUrl is not defined: use current hostname and backend port 5000
-      return `${protocol}//${hostname}:5000`;
-    }
-  }
-  
-  return envUrl || 'http://localhost:5000';
-};
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
-const API_BASE_URL = getApiBaseUrl();
+if (!API_BASE_URL) {
+  throw new Error('VITE_API_URL is required. Configure it to the deployed backend URL.');
+}
 const SESSION_TOKEN_KEY = 'oophub_session_token';
 const USER_DATA_KEY = 'oophub_user_data';
 
@@ -173,7 +135,7 @@ class APIClient {
     options: RequestInit = {}
   ): Promise<{ data: T; error: string | null }> {
     try {
-      const url = `${this.baseUrl}${endpoint}`;
+      const url = new URL(endpoint, this.baseUrl).toString();
       const response = await fetch(url, {
         ...options,
         headers: this.getHeaders(options.headers ? undefined : 'application/json'),
