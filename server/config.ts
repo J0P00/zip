@@ -12,8 +12,9 @@ dotenv.config();
 // ============================================================================
 
 export const NODE_ENV = process.env.NODE_ENV || 'development';
-export const API_PORT = parseInt(process.env.PORT || process.env.API_PORT || '5000', 10);
-export const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000,https://zip-pi-gules.vercel.app';
+export const API_PORT = parseInt(process.env.API_PORT || '5000', 10);
+export const API_BASE_URL = process.env.API_BASE_URL || `http://localhost:${API_PORT}`;
+export const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
 
 // Supabase configuration
 export const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -104,6 +105,7 @@ export function logConfig(): void {
   console.log('='.repeat(70));
   console.log(`📍 Environment: ${NODE_ENV}`);
   console.log(`🔌 API Port: ${API_PORT}`);
+  console.log(`🌐 API Base URL: ${API_BASE_URL}`);
   console.log(`🔐 CORS Origin: ${CORS_ORIGIN}`);
   
   if (process.env.SKIP_SUPABASE === 'true') {

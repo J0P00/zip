@@ -16,7 +16,7 @@ import authRoutes from './routes/auth';
 import videoRoutes from './routes/videos';
 
 const app: Express = express();
-const PORT = process.env.PORT || API_PORT || 5000;
+const PORT = API_PORT;
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
@@ -139,8 +139,8 @@ async function start() {
 
     // Start server
     app.listen(PORT, () => {
-      console.log(`\n✅ Server listening on port ${PORT}`);
-      console.log('📚 API Documentation: /\n');
+      console.log(`\n✅ Server running on http://localhost:${PORT}`);
+      console.log(`📚 API Documentation: http://localhost:${PORT}\n`);
     });
 
   } catch (error) {
