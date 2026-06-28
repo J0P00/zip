@@ -25,6 +25,7 @@ import {
   requiresTermsAcceptance
 } from '../data/termsStore';
 import TermsAgreementModal from './TermsAgreementModal';
+import { apiClient } from '../data/apiClient';
 
 interface AuthPageProps {
   initialMode: 'login' | 'register';
@@ -329,44 +330,44 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
         email: user.email,
         role: user.role,
         accountSource,
-        userId: user.userId ?? buildUserId(user.email, user.role),
-        registrationDate: user.registrationDate ?? new Date().toISOString(),
-        contactNumber: user.contactNumber ?? '',
-        address: user.address ?? '',
-        dateOfBirth: user.dateOfBirth ?? '',
-        accountStatus: user.accountStatus ?? 'Active',
+        userId: user.id || user.userId || user.user_id || buildUserId(user.email, user.role),
+        registrationDate: user.registration_date || user.registrationDate || new Date().toISOString(),
+        contactNumber: user.contact_number || user.contactNumber || '',
+        address: user.address || '',
+        dateOfBirth: user.date_of_birth || user.dateOfBirth || '',
+        accountStatus: user.account_status || user.accountStatus || 'Active',
         
         // Student details
-        studentNumber: user.studentNumber ?? '',
-        course: user.course ?? '',
-        yearLevel: user.yearLevel ?? '',
-        section: user.section ?? '',
-        programStatus: user.programStatus ?? 'Regular',
+        studentNumber: user.student_number || user.studentNumber || '',
+        course: user.course || '',
+        yearLevel: user.year_level || user.yearLevel || '',
+        section: user.section || '',
+        programStatus: user.program_status || user.programStatus || 'Regular',
 
         // Teacher details
-        employeeId: user.employeeId ?? '',
-        department: user.department ?? '',
-        specialization: user.specialization ?? '',
-        assignedCourses: user.assignedCourses ?? '',
+        employeeId: user.employee_id || user.employeeId || '',
+        department: user.department || '',
+        specialization: user.specialization || '',
+        assignedCourses: user.assigned_courses || user.assignedCourses || '',
 
         // Admin details
-        adminId: user.adminId ?? '',
-        systemRole: user.systemRole ?? '',
-        accessLevel: user.accessLevel ?? '',
+        adminId: user.admin_id || user.adminId || '',
+        systemRole: user.system_role || user.systemRole || '',
+        accessLevel: user.access_level || user.accessLevel || '',
 
         // Status & Avatar
-        onlineStatus: user.onlineStatus ?? 'online',
-        avatar: user.avatar ?? '',
-        termsAgreementAccepted: user.termsAgreementAccepted ?? false,
-        termsAcceptedAt: user.termsAcceptedAt ?? '',
-        termsVersion: user.termsVersion ?? ''
+        onlineStatus: user.online_status || user.onlineStatus || 'online',
+        avatar: user.avatar || '',
+        termsAgreementAccepted: user.terms_agreement_accepted || user.termsAgreementAccepted || false,
+        termsAcceptedAt: user.terms_accepted_at || user.termsAcceptedAt || '',
+        termsVersion: user.terms_version || user.termsVersion || ''
       });
     }, 800);
   };
 
   const completeLogin = (user: StoredUser, accountSource: AccountSource) => {
     const activePolicy = getPublishedPolicy();
-    const userId = user.userId ?? buildUserId(user.email, user.role);
+    const userId = user.id || user.userId || user.user_id || buildUserId(user.email, user.role);
     const mustAcceptTerms =
       (user.role === 'student' || user.role === 'teacher') &&
       requiresTermsAcceptance(userId, activePolicy);
@@ -430,7 +431,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     showNotice('success', `Terms version ${publishedPolicy.version} accepted for registration.`);
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginTouched({ email: true, password: true });
 
@@ -440,31 +441,47 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     }
 
     setIsSubmitting(true);
-    window.setTimeout(() => {
-      const normalizedEmail = loginEmail.trim().toLowerCase();
-      const matchedDefault = demoAccounts.find(
-        user => user.email.toLowerCase() === normalizedEmail && user.password === loginPassword
-      );
-      const matchedCustom = readStoredUsers().find(
-        user => user.email.toLowerCase() === normalizedEmail && user.password === loginPassword
-      );
 
-      if (matchedDefault) {
-        completeLogin(matchedDefault, 'demo');
+    try {
+      // Call API to login
+      const result = await apiClient.login({
+        email: loginEmail.trim().toLowerCase(),
+        password: loginPassword
+      });
+
+      if (!result.success) {
+        setIsSubmitting(false);
+        showNotice('error', result.message || 'Login failed. Please try again.');
         return;
       }
 
-      if (matchedCustom) {
-        completeLogin(matchedCustom, 'custom');
+      // Check if terms acceptance is needed
+      const activePolicy = getPublishedPolicy();
+      const userId = result.user?.id || result.user?.user_id || buildUserId(result.user?.email, result.user?.role);
+      
+      const mustAcceptTerms =
+        (result.user?.role === 'student' || result.user?.role === 'teacher') &&
+        requiresTermsAcceptance(userId, activePolicy);
+
+      if (mustAcceptTerms) {
+        setPendingLogin({ user: result.user, accountSource: 'supabase' });
+        setIsTermsModalOpen(true);
+        setTermsModalMode('reauth');
+        setIsSubmitting(false);
         return;
       }
 
+      // Complete login
+      completeLogin(result.user, 'supabase');
+
+    } catch (error) {
       setIsSubmitting(false);
-      showNotice('error', 'Invalid email or password. Please verify credentials or create an account.');
-    }, 700);
+      showNotice('error', 'An unexpected error occurred. Please try again.');
+      console.error('Login error:', error);
+    }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterTouched({
       username: true,
@@ -487,79 +504,66 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     }
 
     setIsSubmitting(true);
-    window.setTimeout(() => {
-      const usersList = readStoredUsers();
-      const normalizedEmail = regEmail.trim().toLowerCase();
-      const alreadyExists = [...demoAccounts, ...usersList].some(
-        user => user.email.toLowerCase() === normalizedEmail
-      );
 
-      if (alreadyExists) {
+    try {
+      const displayCourse = regCourse === 'CS' ? 'BS Computer Science' : 'BS Information Technology';
+      const computedSection = regRole === 'student' ? regSection.trim().toUpperCase() : undefined;
+
+      // Prepare registration payload
+      const payload: any = {
+        name: regUsername.trim(),
+        email: regEmail.trim().toLowerCase(),
+        password: regPassword,
+        role: regRole
+      };
+
+      if (regRole === 'student') {
+        payload.student_number = regStudentNumber.trim();
+        payload.course = displayCourse;
+        payload.year_level = regYearLevel;
+        payload.section = computedSection;
+      } else if (regRole === 'teacher') {
+        payload.employee_id = regTeacherId.trim();
+        payload.department = 'College of Computer Studies';
+      }
+
+      // Call API to register
+      const result = await apiClient.register(payload);
+
+      if (!result.success) {
         setIsSubmitting(false);
-        showNotice('error', 'An account is already registered with this email address.');
+        showNotice('error', result.message || 'Registration failed. Please try again.');
         return;
       }
 
-      const displayCourse = regCourse === 'CS' ? 'CS (Computer Science)' : 'IT (Information Technology)';
-      const computedSection = regRole === 'student' ? regSection.trim().toUpperCase() : undefined;
+      // Record terms acceptance
       const activePolicy = getPublishedPolicy();
-      const newUserId = buildUserId(regEmail, regRole);
-      let acceptance: UserTermsAgreement;
-
+      const newUserId = result.user?.id || result.user?.user_id || buildUserId(result.user?.email, result.user?.role);
+      
       try {
-        acceptance = recordTermsAcceptance({
+        recordTermsAcceptance({
           userId: newUserId,
           role: regRole,
           version: activePolicy.version
         });
         setPublishedPolicy(activePolicy);
       } catch {
-        setIsSubmitting(false);
-        showNotice('error', 'Unable to record terms acceptance. Please try again.');
-        return;
+        console.warn('Failed to record terms acceptance:', Error);
       }
 
-      const newUser: StoredUser = {
-        name: regUsername.trim(),
-        email: regEmail.trim(),
-        password: regPassword,
-        role: regRole,
-        userId: newUserId,
-        registrationDate: new Date().toISOString(),
-        contactNumber: '',
-        address: '',
-        dateOfBirth: '',
-        accountStatus: 'Active',
-        
-        // Student-specific fields
-        studentNumber: regRole === 'student' ? regStudentNumber.trim() : undefined,
-        course: regRole === 'student' ? displayCourse : undefined,
-        yearLevel: regRole === 'student' ? regYearLevel : undefined,
-        section: computedSection,
-        programStatus: regRole === 'student' ? 'Regular' : undefined,
-
-        // Teacher-specific fields
-        employeeId: regRole === 'teacher' ? regTeacherId.trim() : undefined,
-        department: regRole === 'teacher' ? 'College of Computer Studies' : undefined,
-        specialization: regRole === 'teacher' ? 'Object-Oriented Programming' : undefined,
-        assignedCourses: regRole === 'teacher' ? 'OOP 101, Advanced Java' : undefined,
-
-        // Global defaults
-        onlineStatus: 'online',
-        avatar: '',
-        termsAgreementAccepted: acceptance.accepted,
-        termsAcceptedAt: acceptance.accepted_at,
-        termsVersion: acceptance.version
-      };
-
-      usersList.push(newUser);
-      localStorage.setItem('oophub_users', JSON.stringify(usersList));
-      setLoginEmail(newUser.email);
+      // Set fields and show success
+      setLoginEmail(result.user?.email || regEmail);
       setLoginPassword('');
       setTermsAccepted(false);
       setIsSubmitting(false);
       setIsRegSuccess(true);
-    }, 700);
+      showNotice('success', 'Account created successfully! Redirecting to dashboard...');
+
+    } catch (error) {
+      setIsSubmitting(false);
+      showNotice('error', 'An unexpected error occurred. Please try again.');
+      console.error('Registration error:', error);
+    }
   };
 
   const socialNotice = (provider: string) => {
