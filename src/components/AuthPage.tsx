@@ -464,7 +464,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
         requiresTermsAcceptance(userId, activePolicy);
 
       if (mustAcceptTerms) {
-        setPendingLogin({ user: result.user, accountSource: 'express' });
+        setPendingLogin({ user: result.user, accountSource: 'supabase' });
         setIsTermsModalOpen(true);
         setTermsModalMode('reauth');
         setIsSubmitting(false);
@@ -472,7 +472,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       }
 
       // Complete login
-      completeLogin(result.user, 'express');
+      completeLogin(result.user, 'supabase');
 
     } catch (error) {
       setIsSubmitting(false);
