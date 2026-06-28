@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../database';
+import { supabase, isSupabaseConfigured } from '../database';
+import { mockVerifySessionToken } from '../mock-db';
 import { SessionData } from '../types';
 
 declare global {
@@ -27,12 +28,40 @@ export async function verifySessionToken(req: Request, res: Response, next: Next
     const sessionToken = authHeader.substring(7); // Remove 'Bearer ' prefix
     req.sessionToken = sessionToken;
 
-    // Query the session from database
-    const { data: sessionData, error: sessionError } = await supabase
-      .from('user_sessions')
-      .select('user_id, expires_at')
-      .eq('session_token', sessionToken)
-      .single();
+    let sessionData: any = null;
+    let sessionError: any = null;
+    let user: any = null;
+
+    if (isSupabaseConfigured) {
+      // Query Supabase
+      const result = await supabase
+        .from('user_sessions')
+        .select('user_id, expires_at')
+        .eq('session_token', sessionToken)
+        .single();
+
+      sessionData = result.data;
+      sessionError = result.error;
+
+      if (!sessionError && sessionData) {
+        // Get user data from Supabase
+        const userResult = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', sessionData.user_id)
+          .single();
+        user = userResult.data;
+      }
+    } else {
+      // Use mock database
+      const result = await mockVerifySessionToken(sessionToken);
+      if (!result.error && result.data) {
+        user = result.data.user;
+        sessionData = result.data.session;
+      } else {
+        sessionError = result.error;
+      }
+    }
 
     if (sessionError || !sessionData) {
       return res.status(401).json({
