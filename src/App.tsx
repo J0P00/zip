@@ -61,7 +61,7 @@ import {
 } from './data/mockData';
 
 // Import API Client
-import { apiClient } from './data/apiClient';
+import { apiClient, apiConfiguration } from './data/apiClient';
 
 // Import Sub Components
 import LandingPage from './components/LandingPage';
@@ -100,7 +100,56 @@ const DEMO_STUDENT_GRADE = {
 
 const DEMO_STUDENT_BADGES = INITIAL_LEADERBOARD_USERS.find(user => user.isCurrentUser)?.badges ?? [];
 
+function ConfigurationErrorPage() {
+  useEffect(() => {
+    console.error('API configuration error:', apiConfiguration);
+  }, []);
+
+  const isDevelopment = import.meta.env.DEV;
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
+      <div className="w-full max-w-2xl rounded-lg border border-amber-400/30 bg-slate-900 shadow-2xl p-6 sm:p-8">
+        <div className="flex items-start gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-amber-400/10 text-amber-300">
+            <ShieldAlert className="h-6 w-6" />
+          </div>
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-300">Configuration Required</p>
+              <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Backend URL is not configured</h1>
+            </div>
+            <p className="text-sm leading-6 text-slate-300">
+              This app needs a public Express backend URL before login, registration, and video features can connect.
+              Configure <span className="font-mono text-emerald-300">VITE_API_URL</span> and redeploy the frontend.
+            </p>
+            <div className="rounded-md border border-slate-700 bg-slate-950 p-4 text-sm text-slate-300">
+              <div className="font-mono text-emerald-300">VITE_API_URL=https://YOUR_BACKEND_DOMAIN</div>
+            </div>
+            <p className="text-xs leading-5 text-slate-400">
+              Production values must be HTTPS and publicly reachable from Vercel. A local Express server such as
+              <span className="font-mono"> localhost:5000</span> cannot be reached by deployed browsers.
+            </p>
+            {isDevelopment && (
+              <div className="rounded-md border border-slate-700 bg-slate-950 p-4 text-xs text-slate-400">
+                <div className="font-bold text-slate-200">Debug details</div>
+                <div className="mt-2 font-mono">Mode: {apiConfiguration.details.mode}</div>
+                <div className="font-mono">Value present: {String(apiConfiguration.details.valuePresent)}</div>
+                <div className="font-mono">Reason: {apiConfiguration.details.reason || apiConfiguration.error}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  if (!apiConfiguration.isConfigured) {
+    return <ConfigurationErrorPage />;
+  }
+
   // Core Persona and Navigation state
   const [persona, setPersona] = useState<Persona>('public');
   const [studentTab, setStudentTab] = useState<StudentSubView>('dashboard');

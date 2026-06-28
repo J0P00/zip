@@ -3,11 +3,96 @@
  * Handles all communication with the backend API
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL;
-
-if (!API_BASE_URL) {
-  throw new Error('VITE_API_URL is required. Configure it to the deployed backend URL.');
+export interface ApiConfiguration {
+  isConfigured: boolean;
+  baseUrl: string;
+  error: string | null;
+  details: {
+    mode: string;
+    isProduction: boolean;
+    valuePresent: boolean;
+    reason?: string;
+  };
 }
+
+const getApiConfiguration = (): ApiConfiguration => {
+  const rawUrl = import.meta.env.VITE_API_URL?.trim() ?? '';
+  const isProduction = import.meta.env.PROD;
+  const mode = import.meta.env.MODE;
+
+  if (!rawUrl) {
+    return {
+      isConfigured: false,
+      baseUrl: '',
+      error: 'Backend URL is not configured.',
+      details: {
+        mode,
+        isProduction,
+        valuePresent: false,
+        reason: 'VITE_API_URL is missing or empty.'
+      }
+    };
+  }
+
+  try {
+    const url = new URL(rawUrl);
+    const isLocalBackend = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    const isHttps = url.protocol === 'https:';
+
+    if (isProduction && isLocalBackend) {
+      return {
+        isConfigured: false,
+        baseUrl: rawUrl,
+        error: 'Production backend URL cannot point to a local server.',
+        details: {
+          mode,
+          isProduction,
+          valuePresent: true,
+          reason: 'VITE_API_URL points to localhost or 127.0.0.1 in a production build.'
+        }
+      };
+    }
+
+    if (isProduction && !isHttps) {
+      return {
+        isConfigured: false,
+        baseUrl: rawUrl,
+        error: 'Production backend URL must use HTTPS.',
+        details: {
+          mode,
+          isProduction,
+          valuePresent: true,
+          reason: 'VITE_API_URL does not use the https: protocol in a production build.'
+        }
+      };
+    }
+
+    return {
+      isConfigured: true,
+      baseUrl: url.origin,
+      error: null,
+      details: {
+        mode,
+        isProduction,
+        valuePresent: true
+      }
+    };
+  } catch {
+    return {
+      isConfigured: false,
+      baseUrl: rawUrl,
+      error: 'Backend URL is invalid.',
+      details: {
+        mode,
+        isProduction,
+        valuePresent: true,
+        reason: 'VITE_API_URL must be an absolute URL, such as https://api.example.com.'
+      }
+    };
+  }
+};
+
+export const apiConfiguration = getApiConfiguration();
 const SESSION_TOKEN_KEY = 'oophub_session_token';
 const USER_DATA_KEY = 'oophub_user_data';
 
@@ -49,7 +134,7 @@ class APIClient {
   private sessionToken: string | null = null;
 
   constructor() {
-    this.baseUrl = API_BASE_URL;
+    this.baseUrl = apiConfiguration.baseUrl;
     this.sessionToken = this.getStoredSessionToken();
   }
 
@@ -134,6 +219,17 @@ class APIClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<{ data: T; error: string | null }> {
+    if (!apiConfiguration.isConfigured) {
+      if (import.meta.env.DEV) {
+        console.error('API configuration error:', apiConfiguration);
+      }
+
+      return {
+        data: null as any,
+        error: apiConfiguration.error || 'Backend URL is not configured.'
+      };
+    }
+
     try {
       const url = new URL(endpoint, this.baseUrl).toString();
       const response = await fetch(url, {
