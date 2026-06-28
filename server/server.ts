@@ -1,17 +1,22 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import { initializeDatabase, logAudit } from './database';
+import { 
+  initializeDatabase, 
+  logAudit,
+  isSupabaseConfigured 
+} from './database';
+import { 
+  NODE_ENV, 
+  API_PORT, 
+  CORS_ORIGIN, 
+  validateAllConfig, 
+  logConfig 
+} from './config';
 import authRoutes from './routes/auth';
 import videoRoutes from './routes/videos';
 
-// Load environment variables
-dotenv.config();
-
 const app: Express = express();
-const PORT = process.env.API_PORT || 5000;
-const NODE_ENV = process.env.NODE_ENV || 'development';
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
+const PORT = API_PORT;
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
@@ -84,22 +89,47 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 // Initialize and start server
 async function start() {
   try {
-    console.log('🚀 Initializing OOP Pedagogical Hub Backend...');
-    console.log(`📍 Environment: ${NODE_ENV}`);
-    console.log(`🌐 CORS Origin: ${CORS_ORIGIN}`);
-
-    // Initialize database schema
-    console.log('📊 Initializing database schema...');
-    await initializeDatabase();
+    console.log('\n');
+    console.log('🚀 OOP Pedagogical Hub Backend Starting...\n');
+    
+    // Log configuration
+    logConfig();
+    
+    // Validate configuration
+    const configValidation = validateAllConfig();
+    if (!configValidation.valid) {
+      console.log('\n⚠️  Configuration Issues:');
+      configValidation.errors.forEach(error => {
+        console.log(`   ❌ ${error.split('\n')[0]}`);
+      });
+      console.log('\n' + '='.repeat(70));
+      
+      if (NODE_ENV === 'production') {
+        console.error('❌ Cannot start in production mode with invalid configuration');
+        process.exit(1);
+      }
+      
+      console.log('💡 Tip: For development, you can set SKIP_SUPABASE=true in .env');
+      console.log('   to use mock data without Supabase configuration\n');
+    }
+    
+    // Initialize database
+    if (isSupabaseConfigured) {
+      console.log('📊 Initializing database connection...');
+      await initializeDatabase();
+    } else {
+      console.log('📊 Running in development mode without Supabase');
+      console.log('⚠️  Note: User authentication may not work. Configure Supabase or set SKIP_SUPABASE=true');
+    }
 
     // Start server
     app.listen(PORT, () => {
-      console.log(`✅ Server running on http://localhost:${PORT}`);
-      console.log(`📚 API Documentation: http://localhost:${PORT}`);
+      console.log(`\n✅ Server running on http://localhost:${PORT}`);
+      console.log(`📚 API Documentation: http://localhost:${PORT}\n`);
     });
 
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    console.error('\n❌ Failed to start server:', error);
     process.exit(1);
   }
 }

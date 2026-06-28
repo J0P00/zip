@@ -1,10 +1,23 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { supabase, logAudit } from '../database';
+import { supabase, isSupabaseConfigured, logAudit } from '../database';
 import { verifySessionToken, optionalSession } from '../middleware/auth';
 import { AuthPayload, RegisterPayload, AuthResponse, StoredUser } from '../types';
+import {
+  initializeMockData,
+  mockFindUserByEmail,
+  mockVerifyPassword,
+  mockCreateUser,
+  mockCreateSession,
+  mockVerifySessionToken,
+  mockInvalidateSession,
+  mockGetUserById
+} from '../mock-db';
 
 const router = Router();
+
+// Initialize mock data on first load (for development mode)
+let mockDataInitialized = false;
 
 /**
  * Helper: Hash password (in production, use bcrypt)
@@ -75,6 +88,12 @@ function formatUserResponse(user: any): StoredUser {
  */
 router.post('/login', optionalSession, async (req: Request, res: Response) => {
   try {
+    // Initialize mock data if needed
+    if (!isSupabaseConfigured && !mockDataInitialized) {
+      initializeMockData();
+      mockDataInitialized = true;
+    }
+
     const { email, password } = req.body as AuthPayload;
 
     // Validate input
@@ -87,11 +106,31 @@ router.post('/login', optionalSession, async (req: Request, res: Response) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Query user by email
-    const { data: users, error: queryError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', normalizedEmail);
+    // Use appropriate backend
+    let user: any = null;
+    let queryError: any = null;
+
+    if (isSupabaseConfigured) {
+      // Query Supabase
+      const result = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', normalizedEmail);
+
+      if (result.error) {
+        queryError = result.error;
+      } else {
+        user = result.data && result.data.length > 0 ? result.data[0] : null;
+      }
+    } else {
+      // Use mock database
+      const result = await mockFindUserByEmail(normalizedEmail);
+      if (result.error) {
+        queryError = result.error;
+      } else {
+        user = result.data;
+      }
+    }
 
     if (queryError) {
       console.error('Database query error:', queryError);
@@ -101,11 +140,11 @@ router.post('/login', optionalSession, async (req: Request, res: Response) => {
       });
     }
 
-    const user = users && users.length > 0 ? users[0] : null;
-
     if (!user) {
       // Log failed login attempt
-      await logAudit(null, 'LOGIN_FAILED', 'user', normalizedEmail, { reason: 'user_not_found' });
+      if (isSupabaseConfigured) {
+        await logAudit(null, 'LOGIN_FAILED', 'user', normalizedEmail, { reason: 'user_not_found' });
+      }
       
       return res.status(401).json({
         success: false,
@@ -117,7 +156,9 @@ router.post('/login', optionalSession, async (req: Request, res: Response) => {
     const passwordHash = hashPassword(password);
     if (user.password_hash !== passwordHash) {
       // Log failed login attempt
-      await logAudit(user.id, 'LOGIN_FAILED', 'user', user.id, { reason: 'invalid_password' });
+      if (isSupabaseConfigured) {
+        await logAudit(user.id, 'LOGIN_FAILED', 'user', user.id, { reason: 'invalid_password' });
+      }
       
       return res.status(401).json({
         success: false,
@@ -131,39 +172,46 @@ router.post('/login', optionalSession, async (req: Request, res: Response) => {
     sessionExpiry.setDate(sessionExpiry.getDate() + 7); // 7 days
 
     // Create session record
-    const { error: sessionError } = await supabase
-      .from('user_sessions')
-      .insert({
-        user_id: user.id,
-        session_token: sessionToken,
-        user_agent: req.headers['user-agent'],
-        ip_address: req.ip,
-        expires_at: sessionExpiry.toISOString()
-      });
+    if (isSupabaseConfigured) {
+      const { error: sessionError } = await supabase
+        .from('user_sessions')
+        .insert({
+          user_id: user.id,
+          session_token: sessionToken,
+          user_agent: req.headers['user-agent'],
+          ip_address: req.ip,
+          expires_at: sessionExpiry.toISOString()
+        });
 
-    if (sessionError) {
-      console.error('Session creation error:', sessionError);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to create session'
-      });
+      if (sessionError) {
+        console.error('Session creation error:', sessionError);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to create session'
+        });
+      }
+    } else {
+      // Use mock session
+      await mockCreateSession(user.id, sessionToken);
     }
 
     // Log successful login
-    await logAudit(user.id, 'LOGIN_SUCCESS', 'user', user.id, {});
+    if (isSupabaseConfigured) {
+      await logAudit(user.id, 'LOGIN_SUCCESS', 'user', user.id);
+    }
 
-    return res.status(200).json({
+    return res.json({
       success: true,
       message: 'Login successful',
-      user: formatUserResponse(user),
-      session_token: sessionToken
-    } as AuthResponse);
+      session_token: sessionToken,
+      user: formatUserResponse(user)
+    });
 
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: 'Internal server error during login'
+      message: 'An error occurred during login'
     });
   }
 });

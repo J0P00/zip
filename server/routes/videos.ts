@@ -1,7 +1,14 @@
 import { Router, Request, Response } from 'express';
-import { supabase, logAudit } from '../database';
+import { supabase, isSupabaseConfigured, logAudit } from '../database';
 import { verifySessionToken, optionalSession, requireRole } from '../middleware/auth';
 import { VideoLesson, APIResponse } from '../types';
+import {
+  mockGetAllVideos,
+  mockGetVideoById,
+  mockCreateVideo,
+  mockUpdateVideo,
+  mockDeleteVideo
+} from '../mock-db';
 
 const router = Router();
 
@@ -32,19 +39,32 @@ function formatVideoResponse(video: any): VideoLesson {
  */
 router.get('/', optionalSession, async (req: Request, res: Response) => {
   try {
-    // Query all available videos
-    const { data: videos, error } = await supabase
-      .from('video_lessons')
-      .select('*')
-      .eq('is_available', true)
-      .order('lesson_number', { ascending: true });
+    let videos: any[] = [];
+    let error: any = null;
+
+    if (isSupabaseConfigured) {
+      // Query Supabase
+      const result = await supabase
+        .from('video_lessons')
+        .select('*')
+        .eq('is_available', true)
+        .order('lesson_number', { ascending: true });
+
+      videos = result.data || [];
+      error = result.error;
+    } else {
+      // Use mock database
+      const result = await mockGetAllVideos();
+      videos = result.data || [];
+      error = result.error;
+    }
 
     if (error) {
       console.error('Error fetching videos:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch videos',
-        error: error.message
+        error: typeof error === 'string' ? error : error.message
       } as APIResponse<null>);
     }
 

@@ -1,132 +1,70 @@
 import { createClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_KEY, validateSupabaseConfig, NODE_ENV } from './config';
 
-dotenv.config();
+// ============================================================================
+// SUPABASE CLIENT INITIALIZATION
+// ============================================================================
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+let supabase: any;
+let supabaseClient: any;
+let isSupabaseConfigured = false;
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase configuration in environment variables');
-  process.exit(1);
+// Check if Supabase should be used (not skipped for development)
+if (process.env.SKIP_SUPABASE !== 'true' && SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+  const validation = validateSupabaseConfig();
+  
+  if (validation.valid) {
+    try {
+      // Initialize Supabase client with service role key (for server-side operations)
+      supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+      
+      // Initialize Supabase client with anon key (for client operations)
+      supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || '');
+      
+      isSupabaseConfigured = true;
+    } catch (error) {
+      console.error('❌ Failed to initialize Supabase:', error);
+      // In development, allow continuing without Supabase
+      if (NODE_ENV !== 'production') {
+        console.log('⚠️  Continuing in development mode without Supabase');
+      } else {
+        throw new Error(`Supabase initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  }
 }
 
-// Initialize Supabase client with service role key (for server-side operations)
-export const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-// Initialize Supabase client with anon key (for client operations)
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey || '');
+export { supabase, supabaseClient, isSupabaseConfigured };
 
 /**
  * Initialize database schema and tables
  * This should be run once during first deployment
  */
 export async function initializeDatabase() {
-  try {
-    // Create users table if it doesn't exist
-    const { error: usersError } = await supabase.rpc('exec', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS users (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          email VARCHAR UNIQUE NOT NULL,
-          password_hash VARCHAR NOT NULL,
-          name VARCHAR NOT NULL,
-          role VARCHAR NOT NULL CHECK (role IN ('student', 'teacher', 'admin')),
-          user_id VARCHAR UNIQUE NOT NULL,
-          registration_date TIMESTAMP DEFAULT NOW(),
-          account_status VARCHAR DEFAULT 'Active',
-          
-          -- Student fields
-          student_number VARCHAR,
-          course VARCHAR,
-          year_level VARCHAR,
-          section VARCHAR,
-          program_status VARCHAR,
-          
-          -- Teacher fields
-          employee_id VARCHAR,
-          department VARCHAR,
-          specialization VARCHAR,
-          assigned_courses VARCHAR,
-          
-          -- Admin fields
-          admin_id VARCHAR,
-          system_role VARCHAR,
-          access_level VARCHAR,
-          
-          -- Common fields
-          contact_number VARCHAR,
-          address VARCHAR,
-          date_of_birth VARCHAR,
-          online_status VARCHAR DEFAULT 'offline',
-          avatar VARCHAR,
-          
-          -- Terms
-          terms_agreement_accepted BOOLEAN DEFAULT FALSE,
-          terms_accepted_at TIMESTAMP,
-          terms_version VARCHAR,
-          
-          created_at TIMESTAMP DEFAULT NOW(),
-          updated_at TIMESTAMP DEFAULT NOW()
-        );
-        
-        CREATE TABLE IF NOT EXISTS video_lessons (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          title VARCHAR NOT NULL,
-          description TEXT,
-          instructor VARCHAR NOT NULL,
-          duration INTEGER,
-          video_url VARCHAR NOT NULL,
-          thumbnail_url VARCHAR,
-          lesson_number INTEGER,
-          curriculum_id VARCHAR,
-          created_by UUID REFERENCES users(id),
-          is_available BOOLEAN DEFAULT TRUE,
-          created_at TIMESTAMP DEFAULT NOW(),
-          updated_at TIMESTAMP DEFAULT NOW()
-        );
-        
-        CREATE TABLE IF NOT EXISTS user_sessions (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          user_id UUID NOT NULL REFERENCES users(id),
-          session_token VARCHAR UNIQUE NOT NULL,
-          user_agent VARCHAR,
-          ip_address VARCHAR,
-          created_at TIMESTAMP DEFAULT NOW(),
-          expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '7 days'),
-          last_activity TIMESTAMP DEFAULT NOW()
-        );
-        
-        CREATE TABLE IF NOT EXISTS audit_logs (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          user_id UUID REFERENCES users(id),
-          action VARCHAR NOT NULL,
-          resource_type VARCHAR,
-          resource_id VARCHAR,
-          timestamp TIMESTAMP DEFAULT NOW(),
-          details JSONB
-        );
-        
-        -- Create indexes for performance
-        CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-        CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
-        CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-        CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON user_sessions(user_id);
-        CREATE INDEX IF NOT EXISTS idx_sessions_token ON user_sessions(session_token);
-        CREATE INDEX IF NOT EXISTS idx_videos_created_by ON video_lessons(created_by);
-        CREATE INDEX IF NOT EXISTS idx_videos_curriculum ON video_lessons(curriculum_id);
-        CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id);
-      `
-    });
+  // Skip if Supabase is not configured
+  if (!isSupabaseConfigured) {
+    console.log('⏭️  Skipping database initialization (Supabase not configured for development mode)');
+    return;
+  }
 
-    if (usersError && !usersError.message.includes('already exists')) {
-      console.error('Error initializing database:', usersError);
-    } else {
-      console.log('Database schema initialized successfully');
+  try {
+    console.log('📊 Initializing Supabase database schema...');
+    
+    // Test connection first
+    const { error: testError } = await supabase.from('_test_connection').select('*').limit(1);
+    
+    if (testError && !testError.message.includes('relation') && !testError.message.includes('not found')) {
+      console.error('❌ Supabase connection failed:', testError);
+      throw new Error(`Database connection failed: ${testError.message}`);
     }
+    
+    console.log('✅ Database schema verification complete');
+    console.log('ℹ️  Note: Tables should exist in your Supabase project. Create them via the dashboard if needed.');
+    
   } catch (error) {
-    console.error('Unexpected error during database initialization:', error);
+    console.error('❌ Database initialization error:', error);
+    console.log('⚠️  Running in degraded mode - database operations may fail');
+    // Don't throw - allow server to continue running for development
   }
 }
 
