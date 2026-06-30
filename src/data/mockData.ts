@@ -71,7 +71,7 @@ const INITIAL_LESSONS_BASE: VideoLesson[] = [
     title: 'Intro to Objects & Classes',
     duration: '11:24',
     status: 'completed',
-    videoUrl: '/videos/Classes&Objects.mp4',
+    videoUrl: "/lesson1.mp4",
     description: 'Learn the fundamentals of class definitions, instance instantiation, object lifetimes, and pointer/reference structures in modern object-oriented languages.',
     concepts: ['Classes vs Objects', 'State and Behavior', 'Instantiating Variables', 'Memory Allocation'],
     thumbnailUrl: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=300&q=80',
