@@ -68,7 +68,7 @@ const INITIAL_LESSONS_BASE: VideoLesson[] = [
   {
     id: 'l1',
     sequence: 1,
-    title: 'Intro to Objects & Classes',
+    title: 'test',
     duration: '13:50',
     status: 'completed',
     videoUrl: 'http://localhost:3000/videos/lesson1.mp4',
