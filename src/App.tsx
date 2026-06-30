@@ -138,12 +138,24 @@ export default function App() {
   // Dynamic shared database states
   const [videoLessons, setVideoLessons] = useState<VideoLesson[]>(() => {
     try {
-      const saved = localStorage.getItem('oophub_video_lessons');
-      return saved ? JSON.parse(saved) : INITIAL_LESSONS;
+      const [videoLessons, setVideoLessons] = useState<VideoLesson[]>(() => {
+    try {
+        const APP_VERSION = "1.0.2";
+
+        const version = localStorage.getItem("app_version");
+
+        if (version !== APP_VERSION) {
+            localStorage.removeItem("oophub_video_lessons");
+            localStorage.setItem("app_version", APP_VERSION);
+        }
+
+        const saved = localStorage.getItem("oophub_video_lessons");
+
+        return saved ? JSON.parse(saved) : INITIAL_LESSONS;
     } catch {
-      return INITIAL_LESSONS;
+        return INITIAL_LESSONS;
     }
-  });
+});
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     try {
