@@ -96,7 +96,7 @@ const INITIAL_LESSONS_BASE: VideoLesson[] = [
     title: 'Core Pillar: Inheritance Hierarchy',
     duration: '14:50',
     status: 'completed',
-    videoUrl: 'https://www.w3schools.com/html/movie.mp4',
+    videoUrl: "/videos/lesson2.mp4",
     description: 'Deconstruct parent-child relationship semantics. Understand how parameters flow from subclasses into super-constructors to construct unified compound entities.',
     concepts: ['Subclassing Syntax', 'The "super" Keyword', 'Variable Masking', 'Constructor Cascading'],
     thumbnailUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=300&q=80',
