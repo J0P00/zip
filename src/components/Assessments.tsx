@@ -1,18 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Clock, 
-  ChevronLeft, 
-  ChevronRight, 
-  CheckCircle, 
-  AlertCircle, 
-  Award, 
-  Code2, 
-  ArrowRight, 
-  RotateCcw,
-  Check,
-  ChevronRight as ArrowIcon
-} from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { AlertCircle, Award, Check, CheckCircle, ChevronLeft, ChevronRight, Lock, RotateCcw, X } from 'lucide-react';
 import { StudentSubView, VideoLesson } from '../types';
+import { CourseQuestion, getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson, shuffleArray } from '../data/oopCourse';
 
 interface AssessmentsProps {
   onCorrectAnswerAdded: (xp: number) => void;
@@ -20,888 +9,348 @@ interface AssessmentsProps {
   lessons: VideoLesson[];
 }
 
-interface Option {
-  id: string;
-  text: string;
-  rationale: string;
+interface WatchRecord {
+  lessonId: string;
+  lastPosition: number;
+  completionPercentage: number;
+  completed: boolean;
+  dateCompleted?: string;
 }
 
-interface Question {
-  id: string;
-  question: string;
-  codeSnippet?: string;
-  options: Option[];
-  correctOptionId: string;
+interface QuizAttempt {
+  assessmentId: string;
+  lessonId: string;
+  score: number;
+  total: number;
+  percentage: number;
+  correctAnswers: number;
+  incorrectAnswers: number;
+  passed: boolean;
+  attemptNumber: number;
+  answers: Record<string, string>;
+  dateCompleted: string;
 }
 
-interface Assessment {
-  id: string;
-  title: string;
-  topicName: string;
-  questionsCount: number;
-  timeLimitMinutes: number;
-  difficulty: 'Easy' | 'Intermediate' | 'Hard';
-  questions: Question[];
-}
+type WatchDb = Record<string, WatchRecord>;
+type QuizDb = Record<string, QuizAttempt>;
 
-const ASSESSMENTS: Assessment[] = [
-  {
-    id: 'a1',
-    title: 'Inheritance & super',
-    topicName: 'Inheritance Hierarchy',
-    questionsCount: 10,
-    timeLimitMinutes: 7,
-    difficulty: 'Easy',
-    questions: [
-      {
-        id: 'q1',
-        question: 'Which of the following describes the relationship established by inheritance?',
-        options: [
-          { id: 'A', text: '"has-a" relationship', rationale: 'Incorrect. "has-a" describes composition or aggregation (e.g. Car has-a Engine).' },
-          { id: 'B', text: '"is-a" relationship', rationale: 'Correct! Inheritance models specialization, where a subclass is-a superclass (e.g. Dog is-a Animal).' },
-          { id: 'C', text: '"uses-a" relationship', rationale: 'Incorrect. "uses-a" describes dependency injection or association.' },
-          { id: 'D', text: '"implements-a" relationship', rationale: 'Incorrect. "implements-a" is not a standard OOP term, classes implement interfaces.' }
-        ],
-        correctOptionId: 'B'
-      },
-      {
-        id: 'q2',
-        question: 'Which keyword is used to call a parent class constructor in Java?',
-        options: [
-          { id: 'A', text: 'this', rationale: 'Incorrect. The "this" keyword invokes current class constructors or refers to the current object.' },
-          { id: 'B', text: 'parent', rationale: 'Incorrect. "parent" is used in PHP, but not in Java.' },
-          { id: 'C', text: 'super', rationale: 'Correct! The "super" keyword is used to invoke a parent class constructor or reference parent members.' },
-          { id: 'D', text: 'base', rationale: 'Incorrect. "base" is used in C#, but not in Java.' }
-        ],
-        correctOptionId: 'C'
-      },
-      {
-        id: 'q3',
-        question: 'What must be the first statement in a subclass constructor if you explicitly call a parent constructor?',
-        options: [
-          { id: 'A', text: 'The parent field initialization', rationale: 'Incorrect. Fields cannot be accessed before the constructor is run.' },
-          { id: 'B', text: 'A call to super() or super(...)', rationale: 'Correct! Subclass constructors must invoke parent constructors as the first statement in the body.' },
-          { id: 'C', text: 'A static method call', rationale: 'Incorrect. Non-static constructor statements cannot precede super().' },
-          { id: 'D', text: 'System.out.println()', rationale: 'Incorrect. Printing is an statement and cannot run before parent construction.' }
-        ],
-        correctOptionId: 'B'
-      },
-      {
-        id: 'q4',
-        question: 'What will be printed when compiling and running the following code?',
-        codeSnippet: `class Animal {
-    void sound() {
-        System.out.println("Animal");
-    }
-}
+const WATCH_KEY = 'oophub_oop_video_progress';
+const QUIZ_KEY = 'oophub_oop_quiz_attempts';
+const PASSING_PERCENTAGE = 70;
 
-class Dog extends Animal {
-    void sound() {
-        System.out.println("Dog");
-    }
-}
+const getAssessmentLockedReason = (lessonId: string, watchDb: WatchDb, quizDb: QuizDb) => {
+  const lesson = OOP_COURSE_LESSONS.find(item => item.id === lessonId);
+  if (!lesson) return 'Lesson unavailable';
 
-public class Main {
-    public static void main(String[] args) {
-        Animal a = new Dog();
-        a.sound();
-    }
-}`,
-        options: [
-          { id: 'A', text: 'Animal', rationale: 'Incorrect. Java resolves virtual methods dynamically based on the object on the heap, not the reference type.' },
-          { id: 'B', text: 'Dog', rationale: 'Correct! At runtime, a refers to a Dog instance, so the overridden Dog.sound() method is called.' },
-          { id: 'C', text: 'Compilation Error', rationale: 'Incorrect. Upcasting is implicit and fully valid.' },
-          { id: 'D', text: 'Runtime Exception', rationale: 'Incorrect. The object on the heap matches the sound() signature.' }
-        ],
-        correctOptionId: 'B'
-      },
-      {
-        id: 'q5',
-        question: 'What will be printed by the following constructor cascading execution?',
-        codeSnippet: `class Parent {
-    Parent() {
-        System.out.print("Parent ");
-    }
-}
-class Child extends Parent {
-    Child() {
-        System.out.print("Child ");
-    }
-}
-public class Main {
-    public static void main(String[] args) {
-        Child c = new Child();
-    }
-}`,
-        options: [
-          { id: 'A', text: 'Child Parent', rationale: 'Incorrect. Parent constructors execute before Child constructors.' },
-          { id: 'B', text: 'Parent Child', rationale: 'Correct! When constructing Child, the compiler implicitly inserts a call to super() at the start, printing "Parent " then "Child ".' },
-          { id: 'C', text: 'Child', rationale: 'Incorrect. Parent constructor is automatically triggered.' },
-          { id: 'D', text: 'Parent', rationale: 'Incorrect. Both constructors are executed sequentially.' }
-        ],
-        correctOptionId: 'B'
-      },
-      {
-        id: 'q6',
-        question: 'What is the compilation outcome of overriding a public parent class method with a private access modifier in the child class?',
-        codeSnippet: `class Parent {
-    public void display() {
-        System.out.println("Parent");
-    }
-}
-class Child extends Parent {
-    private void display() { // Attempting override
-        System.out.println("Child");
-    }
-}`,
-        options: [
-          { id: 'A', text: 'Compiles and runs normally', rationale: 'Incorrect. Subclasses cannot restrict access permissions.' },
-          { id: 'B', text: 'Compilation Error: Cannot reduce the visibility of the inherited method', rationale: 'Correct! Overriding methods cannot have a more restrictive access modifier than the parent method.' },
-          { id: 'C', text: 'Compiles but throws IllegalAccessError at runtime', rationale: 'Incorrect. This issue is caught during compilation.' },
-          { id: 'D', text: 'Runs successfully, but suppresses child output', rationale: 'Incorrect. It fails compilation completely.' }
-        ],
-        correctOptionId: 'B'
-      },
-      {
-        id: 'q7',
-        question: 'Which of the following is true about method overriding in Java?',
-        options: [
-          { id: 'A', text: 'Method name and parameter types must match exactly', rationale: 'Correct! Method signature (name + parameters) must match the parent signature to override.' },
-          { id: 'B', text: 'Return types can be completely arbitrary', rationale: 'Incorrect. The return type must match or be a covariant subtype.' },
-          { id: 'C', text: 'Static methods can be overridden by subclasses', rationale: 'Incorrect. Static methods are hidden (shadowed), not dynamically overridden.' },
-          { id: 'D', text: 'Overriding methods must throw more general checked exceptions', rationale: 'Incorrect. Overriding methods can only throw narrower checked exceptions.' }
-        ],
-        correctOptionId: 'A'
-      },
-      {
-        id: 'q8',
-        question: 'What is the printed output of this dynamic method invocation?',
-        codeSnippet: `class Printer {
-    void print() { System.out.print("P "); }
-}
-class LaserPrinter extends Printer {
-    void print() { System.out.print("L "); }
-}
-public class Main {
-    public static void main(String[] args) {
-        Printer p1 = new Printer();
-        Printer p2 = new LaserPrinter();
-        p1.print();
-        p2.print();
-    }
-}`,
-        options: [
-          { id: 'A', text: 'P P', rationale: 'Incorrect. p2 references a LaserPrinter, which overrides the print method.' },
-          { id: 'B', text: 'L L', rationale: 'Incorrect. p1 is a plain Printer class.' },
-          { id: 'C', text: 'P L', rationale: 'Correct! p1 prints "P " and p2 uses late binding to invoke LaserPrinter.print() printing "L ".' },
-          { id: 'D', text: 'L P', rationale: 'Incorrect. The order is Printer first, then LaserPrinter.' }
-        ],
-        correctOptionId: 'C'
-      },
-      {
-        id: 'q9',
-        question: 'If a class does not explicitly extend any class, what class is its direct superclass in Java?',
-        options: [
-          { id: 'A', text: 'java.lang.Object', rationale: 'Correct! java.lang.Object is the root of the Java class hierarchy.' },
-          { id: 'B', text: 'java.lang.Class', rationale: 'Incorrect. java.lang.Class represents runtime class structures, it is not inherited by default.' },
-          { id: 'C', text: 'java.lang.System', rationale: 'Incorrect. System is a helper utility class.' },
-          { id: 'D', text: 'None', rationale: 'Incorrect. Object is always the implicit ancestor.' }
-        ],
-        correctOptionId: 'A'
-      },
-      {
-        id: 'q10',
-        question: 'What is the compilation outcome of attempting to override a method declared as final?',
-        codeSnippet: `class Base {
-    final void show() {
-        System.out.println("Base");
-    }
-}
-class Derived extends Base {
-    void show() { // Attempting override
-        System.out.println("Derived");
-    }
-}`,
-        options: [
-          { id: 'A', text: 'Compiles successfully', rationale: 'Incorrect. final prevents overriding.' },
-          { id: 'B', text: 'Compilation Error: Cannot override the final method from Base', rationale: 'Correct! In Java, "final" prevents subclasses from overriding base class method definitions.' },
-          { id: 'C', text: 'Compiles, but calls default Base method at runtime', rationale: 'Incorrect. Overriding validation fails at compilation.' },
-          { id: 'D', text: 'Throws FinalOverrideException at runtime', rationale: 'Incorrect. This validation is done by the javac compiler.' }
-        ],
-        correctOptionId: 'B'
-      }
-    ]
-  },
-  {
-    id: 'a2',
-    title: 'Encapsulation & Access',
-    topicName: 'Encapsulation & Variables',
-    questionsCount: 5,
-    timeLimitMinutes: 5,
-    difficulty: 'Easy',
-    questions: [
-      {
-        id: 'eq1',
-        question: 'Which access modifier restricts member visibility strictly to the declaring class itself?',
-        options: [
-          { id: 'A', text: 'public', rationale: 'Incorrect. Public makes it accessible from any package.' },
-          { id: 'B', text: 'protected', rationale: 'Incorrect. Protected is accessible to package members and subclasses.' },
-          { id: 'C', text: 'private', rationale: 'Correct! The private modifier hides class variables and methods from outside access.' },
-          { id: 'D', text: 'default (package-private)', rationale: 'Incorrect. Default access allows visibility within the entire package.' }
-        ],
-        correctOptionId: 'C'
-      },
-      {
-        id: 'eq2',
-        question: 'What is the primary role of getter and setter methods in class design?',
-        options: [
-          { id: 'A', text: 'To bypass Java safety rules', rationale: 'Incorrect. Getters/setters reinforce design guidelines.' },
-          { id: 'B', text: 'To safely retrieve/modify fields and validate updates', rationale: 'Correct! They encapsulate data fields, preventing direct field mutation and permitting validation logic.' },
-          { id: 'C', text: 'To allow faster memory allocations', rationale: 'Incorrect. They are standard method calls and add no memory optimization.' },
-          { id: 'D', text: 'To automatically compile structures', rationale: 'Incorrect. Compilation is independent of design patterns.' }
-        ],
-        correctOptionId: 'B'
-      },
-      {
-        id: 'eq3',
-        question: 'Which modifier grants access to a class member from subclasses, even if they reside in different packages?',
-        options: [
-          { id: 'A', text: 'private', rationale: 'Incorrect. Private is restricted to the declaring class.' },
-          { id: 'B', text: 'protected', rationale: 'Correct! Protected fields can be accessed by subclasses in other packages.' },
-          { id: 'C', text: 'default (package-private)', rationale: 'Incorrect. Default allows access within the same package only.' },
-          { id: 'D', text: 'final', rationale: 'Incorrect. Final controls mutability, not access permissions.' }
-        ],
-        correctOptionId: 'B'
-      },
-      {
-        id: 'eq4',
-        question: 'What is the compilation outcome of accessing a private variable directly from another class?',
-        codeSnippet: `class BankAccount {
-    private double balance = 100.0;
-}
-public class Main {
-    public static void main(String[] args) {
-        BankAccount account = new BankAccount();
-        System.out.println(account.balance);
-    }
-}`,
-        options: [
-          { id: 'A', text: 'Prints "100.0"', rationale: 'Incorrect. Direct private access is blocked by compilers.' },
-          { id: 'B', text: 'Compilation Error: balance has private access in BankAccount', rationale: 'Correct! Compilers block references to private fields from outer classes.' },
-          { id: 'C', text: 'Compiles, but prints "0.0" at runtime', rationale: 'Incorrect. The code fails to compile.' },
-          { id: 'D', text: 'Throws NullPointerException', rationale: 'Incorrect. It is a compilation visibility error.' }
-        ],
-        correctOptionId: 'B'
-      },
-      {
-        id: 'eq5',
-        question: 'Which OOP concept emphasizes bundling data and methods inside a class and restricting direct data modifications?',
-        options: [
-          { id: 'A', text: 'Polymorphism', rationale: 'Incorrect. Polymorphism deals with multi-form behaviors.' },
-          { id: 'B', text: 'Inheritance', rationale: 'Incorrect. Inheritance deals with base class extensions.' },
-          { id: 'C', text: 'Encapsulation', rationale: 'Correct! Encapsulation bundles fields and methods together and hides raw internal state.' },
-          { id: 'D', text: 'Abstraction', rationale: 'Incorrect. Abstraction hides implementation detail complexity.' }
-        ],
-        correctOptionId: 'C'
-      }
-    ]
+  if (lesson.sequence > 1) {
+    const previous = OOP_COURSE_LESSONS.find(item => item.sequence === lesson.sequence - 1);
+    const previousAssessment = previous ? OOP_ASSESSMENTS.find(item => item.lessonId === previous.id) : undefined;
+    if (previous && !watchDb[previous.id]?.completed) return `Complete Lesson ${previous.sequence} video first.`;
+    if (previousAssessment && !quizDb[previousAssessment.id]?.passed) return `Pass Assessment ${lesson.sequence - 1} first.`;
   }
-];
 
-export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, lessons }: AssessmentsProps) {
+  if (!watchDb[lessonId]?.completed) return 'Watch at least 95% of this lesson video first.';
+  return '';
+};
+
+export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: AssessmentsProps) {
+  const [watchDb] = useState<WatchDb>(() => getStoredJson(WATCH_KEY, {}));
+  const [quizDb, setQuizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
+  const [activeAssessmentId, setActiveAssessmentId] = useState<string | null>(null);
+  const [questions, setQuestions] = useState<CourseQuestion[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [view, setView] = useState<'dashboard' | 'active' | 'result' | 'review'>('dashboard');
-  const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
-  
-  // Quiz progress states
-  const [currentQuestionIdx, setCurrentQuestionIdx] = useState<number>(0);
-  const [answers, setAnswers] = useState<Record<number, string>>({}); // { questionIdx: optionId }
-  const [timeRemaining, setTimeRemaining] = useState<number>(0);
-  const [timeSpentSeconds, setTimeSpentSeconds] = useState<number>(0);
-  const [assessmentStatuses, setAssessmentStatuses] = useState<Record<string, 'Not Started' | 'In Progress' | 'Passed'>>({
-    'a1': 'Not Started',
-    'a2': 'Not Started'
-  });
+  const [latestAttempt, setLatestAttempt] = useState<QuizAttempt | null>(null);
 
-  // Timer useEffect
-  useEffect(() => {
-    if (view !== 'active') return;
+  const activeAssessment = OOP_ASSESSMENTS.find(item => item.id === activeAssessmentId) || null;
+  const activeLesson = activeAssessment ? OOP_COURSE_LESSONS.find(item => item.id === activeAssessment.lessonId) : null;
+  const currentQuestion = questions[currentIndex];
 
-    const interval = setInterval(() => {
-      setTimeRemaining(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          // Auto submit
-          handleAutoSubmit();
-          return 0;
-        }
-        return prev - 1;
-      });
-      setTimeSpentSeconds(prev => prev + 1);
-    }, 1000);
+  const courseStats = useMemo(() => {
+    const completedLessons = OOP_COURSE_LESSONS.filter(lesson => watchDb[lesson.id]?.completed).length;
+    const passedAssessments = OOP_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
+    return {
+      completedLessons,
+      lockedLessons: OOP_COURSE_LESSONS.length - completedLessons,
+      passedAssessments,
+      overall: Math.round(((completedLessons + passedAssessments) / (OOP_COURSE_LESSONS.length * 2)) * 100)
+    };
+  }, [watchDb, quizDb]);
 
-    return () => clearInterval(interval);
-  }, [view]);
+  const startAssessment = (assessmentId: string) => {
+    const assessment = OOP_ASSESSMENTS.find(item => item.id === assessmentId);
+    if (!assessment) return;
+    const reason = getAssessmentLockedReason(assessment.lessonId, watchDb, quizDb);
+    if (reason) return;
 
-  const handleStartAssessment = (assessment: Assessment) => {
-    setSelectedAssessment(assessment);
-    setCurrentQuestionIdx(0);
+    const seed = Date.now();
+    setActiveAssessmentId(assessment.id);
+    setQuestions(shuffleArray(assessment.questions, seed).map((item, index) => ({
+      ...item,
+      options: shuffleArray(item.options, seed + index + 1)
+    })));
+    setCurrentIndex(0);
     setAnswers({});
-    setTimeRemaining(assessment.timeLimitMinutes * 60);
-    setTimeSpentSeconds(0);
+    setLatestAttempt(null);
     setView('active');
-
-    // Update status
-    setAssessmentStatuses(prev => ({
-      ...prev,
-      [assessment.id]: 'In Progress'
-    }));
   };
 
-  const handleOptionSelect = (optionId: string) => {
-    setAnswers(prev => ({
-      ...prev,
-      [currentQuestionIdx]: optionId
-    }));
-  };
+  const submitAssessment = () => {
+    if (!activeAssessment) return;
 
-  const handleNext = () => {
-    if (!selectedAssessment) return;
-    if (currentQuestionIdx < selectedAssessment.questions.length - 1) {
-      setCurrentQuestionIdx(prev => prev + 1);
-    }
-  };
-
-  const handlePrevious = () => {
-    if (currentQuestionIdx > 0) {
-      setCurrentQuestionIdx(prev => prev - 1);
-    }
-  };
-
-  const handleAutoSubmit = () => {
-    submitQuiz();
-  };
-
-  const submitQuiz = () => {
-    if (!selectedAssessment) return;
-    
-    // Save state, switch view
-    setView('result');
-    
-    // Calculate passing score
-    const score = getScore();
-    const passed = score >= Math.ceil(selectedAssessment.questions.length * 0.7);
-    
-    if (passed) {
-      onCorrectAnswerAdded(150); // Add points/XP!
-      setAssessmentStatuses(prev => ({
-        ...prev,
-        [selectedAssessment.id]: 'Passed'
-      }));
-    }
-  };
-
-  const getScore = () => {
-    if (!selectedAssessment) return 0;
     let score = 0;
-    selectedAssessment.questions.forEach((q, idx) => {
-      if (answers[idx] === q.correctOptionId) {
-        score++;
-      }
+    questions.forEach(question => {
+      if (answers[question.id] === question.correctAnswer) score += 1;
     });
-    return score;
+
+    const total = questions.length;
+    const percentage = Math.round((score / total) * 100);
+    const previousAttempt = quizDb[activeAssessment.id]?.attemptNumber || 0;
+    const attempt: QuizAttempt = {
+      assessmentId: activeAssessment.id,
+      lessonId: activeAssessment.lessonId,
+      score,
+      total,
+      percentage,
+      correctAnswers: score,
+      incorrectAnswers: total - score,
+      passed: percentage >= PASSING_PERCENTAGE,
+      attemptNumber: previousAttempt + 1,
+      answers,
+      dateCompleted: new Date().toISOString()
+    };
+
+    const nextDb = { ...quizDb, [activeAssessment.id]: attempt };
+    setQuizDb(nextDb);
+    setStoredJson(QUIZ_KEY, nextDb);
+    setLatestAttempt(attempt);
+    setView('result');
+
+    if (attempt.passed) onCorrectAnswerAdded(150);
   };
 
-  const formatTimer = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  // Dashboard Renderer
-  const renderDashboard = () => {
-    return (
-      <div className="space-y-8 animate-fade-in" id="assessment-dashboard">
-        <div className="max-w-2xl">
-          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full uppercase tracking-wider">LMS Evaluations</span>
-          <h2 className="text-2xl font-extrabold text-slate-900 mt-2">Module Assessments</h2>
-          <p className="text-slate-500 text-sm mt-1">
-            Test your Object-Oriented conceptual masteries. Complete assessments to unlock coding challenges inside the compiler IDE.
-          </p>
+  const renderDashboard = () => (
+    <div className="space-y-6 animate-fade-in" id="oop-assessments-dashboard">
+      <section className="rounded-2xl border border-slate-200 bg-white/70 p-5 shadow-sm backdrop-blur-md">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+              OOP Fundamentals
+            </span>
+            <h2 className="mt-3 text-2xl font-extrabold text-slate-900">Lesson Assessments</h2>
+            <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
+              Each lesson has exactly 25 randomized MCQs. Passing score is 70%, and lessons unlock sequentially.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
+            {[
+              ['Progress', `${courseStats.overall}%`],
+              ['Completed', `${courseStats.completedLessons}/5`],
+              ['Locked', `${courseStats.lockedLessons}`],
+              ['Passed', `${courseStats.passedAssessments}/5`]
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                <span className="block text-[10px] font-black uppercase text-slate-400">{label}</span>
+                <span className="mt-1 block font-mono text-lg font-black text-slate-900">{value}</span>
+              </div>
+            ))}
+          </div>
         </div>
+      </section>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {ASSESSMENTS.map(item => {
-            const status = assessmentStatuses[item.id] || 'Not Started';
-            const lockingVideo = lessons.find(
-              l => l.unlockedAssessmentId === item.id && (!l.progressPercent || l.progressPercent < 90)
-            );
-            const isLocked = Boolean(lockingVideo);
+      <div className="grid gap-5 lg:grid-cols-5">
+        {OOP_ASSESSMENTS.map(assessment => {
+          const lesson = OOP_COURSE_LESSONS.find(item => item.id === assessment.lessonId);
+          const reason = getAssessmentLockedReason(assessment.lessonId, watchDb, quizDb);
+          const attempt = quizDb[assessment.id];
+          const passed = attempt?.passed;
 
-            return (
-              <div 
-                key={item.id} 
-                className={`bg-white border transition-all rounded-2xl p-6 shadow-sm flex flex-col justify-between space-y-5 ${
-                  isLocked ? 'opacity-85 border-slate-200 bg-slate-50/50' : 'border-slate-200 hover:border-slate-350'
-                }`}
-              >
-                <div className="space-y-3 text-left">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase font-mono">{item.topicName}</span>
-                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full font-mono ${
-                      isLocked ? 'bg-slate-100 text-slate-400 border border-slate-200' :
-                      status === 'Passed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                      status === 'In Progress' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
-                      'bg-slate-50 text-slate-500 border border-slate-100'
-                    }`}>
-                      {isLocked ? 'Locked' : status}
-                    </span>
+          return (
+            <article key={assessment.id} className={`rounded-2xl border bg-white/80 p-5 shadow-sm backdrop-blur-md ${reason ? 'border-slate-200 opacity-75' : 'border-emerald-200'}`}>
+              <div className="flex min-h-[190px] flex-col justify-between gap-4">
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-[10px] font-black uppercase text-slate-400">Lesson {lesson?.sequence}</span>
+                    {reason ? <Lock className="h-4 w-4 text-slate-400" /> : passed ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <Award className="h-4 w-4 text-emerald-600" />}
                   </div>
-                  
-                  <h3 className="text-lg font-extrabold text-slate-900 leading-tight">
-                    {isLocked ? '🔒 ' : ''}{item.title} Assessment
-                  </h3>
-                  
-                  {isLocked && lockingVideo ? (
-                    <div className="p-2.5 bg-rose-50/40 border border-rose-100 rounded-xl text-[10.5px] text-rose-900 leading-relaxed font-semibold">
-                      Complete at least 90% of the video <strong>"{lockingVideo.title}"</strong> to unlock this assessment.
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-4 text-xs text-slate-500 font-medium pt-1">
-                      <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {item.timeLimitMinutes} Mins</span>
-                      <span>•</span>
-                      <span>{item.questionsCount} Questions</span>
-                      <span>•</span>
-                      <span className="font-semibold text-emerald-600">{item.difficulty}</span>
-                    </div>
+                  <h3 className="mt-2 text-sm font-extrabold text-slate-900">{assessment.title}</h3>
+                  <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
+                    25 questions: 10 Easy, 10 Medium, 5 Hard.
+                  </p>
+                  {attempt && (
+                    <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>
+                      Latest: {attempt.score}/{attempt.total} ({attempt.percentage}%) - Attempt {attempt.attemptNumber}
+                    </p>
                   )}
+                  {reason && <p className="mt-3 text-[11px] font-bold leading-5 text-slate-400">{reason}</p>}
                 </div>
-
                 <button
-                  onClick={() => {
-                    if (isLocked && lockingVideo) {
-                      alert(`🔒 Locked: You must watch "${lockingVideo.title}" to at least 90% before starting this assessment.`);
-                      return;
-                    }
-                    handleStartAssessment(item);
-                  }}
-                  className={`w-full py-3 rounded-xl font-bold text-xs cursor-pointer select-none transition-all active:scale-95 flex items-center justify-center gap-1.5 ${
-                    isLocked
-                      ? 'bg-slate-100 text-slate-405 border border-slate-200 cursor-not-allowed'
-                      : status === 'Passed'
-                        ? 'bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-200 text-emerald-700'
-                        : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-50'
-                  }`}
+                  disabled={Boolean(reason)}
+                  onClick={() => startAssessment(assessment.id)}
+                  className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                  {isLocked ? 'Locked' : status === 'Passed' ? 'Retake Assessment' : 'Start Assessment'} <ArrowIcon className="w-3.5 h-3.5" />
+                  {attempt?.passed ? 'Retake Assessment' : 'Start Assessment'}
                 </button>
               </div>
-            );
-          })}
-        </div>
+            </article>
+          );
+        })}
       </div>
-    );
-  };
+    </div>
+  );
 
-  // Active Test-Taking Screen
-  const renderActiveAssessment = () => {
-    if (!selectedAssessment) return null;
-    const currentQuestion = selectedAssessment.questions[currentQuestionIdx];
+  const renderActive = () => {
+    if (!activeAssessment || !currentQuestion) return null;
+    const selected = answers[currentQuestion.id];
     const answeredCount = Object.keys(answers).length;
-    const remainingCount = selectedAssessment.questions.length - answeredCount;
-    const percentComplete = Math.round((currentQuestionIdx + 1) / selectedAssessment.questions.length * 100);
 
     return (
-      <div className="grid lg:grid-cols-12 gap-6 items-start text-slate-800 animate-fade-in" id="active-assessment-screen">
-        
-        {/* Left main content column */}
-        <div className="lg:col-span-8 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
-          <div className="border-b border-slate-100 pb-4 flex justify-between items-center">
-            <div>
-              <span className="text-[10px] font-mono tracking-widest text-slate-400 font-bold uppercase">{selectedAssessment.title} Assessment</span>
-              <h2 className="text-xl font-extrabold text-slate-900 mt-1">Question {currentQuestionIdx + 1} of {selectedAssessment.questions.length}</h2>
-            </div>
-            <div className="flex flex-col items-end gap-1.5 shrink-0">
-              <span className="text-xs px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 font-mono font-bold">Difficulty: {selectedAssessment.difficulty}</span>
-              <span className="text-xs font-mono font-black text-rose-650 lg:hidden flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" />
-                {formatTimer(timeRemaining)}
-              </span>
+      <div className="grid gap-6 lg:grid-cols-12 animate-fade-in" id="oop-assessment-active">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-8">
+          <div className="border-b border-slate-100 pb-4">
+            <span className="font-mono text-[10px] font-black uppercase text-slate-400">{activeAssessment.title}</span>
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-xl font-extrabold text-slate-900">Question {currentIndex + 1} of {questions.length}</h2>
+              <span className="rounded-lg bg-slate-50 px-3 py-1 text-xs font-black text-slate-600">{currentQuestion.difficulty}</span>
             </div>
           </div>
 
-          {/* Question Text */}
-          <p className="text-sm font-semibold text-slate-850 leading-relaxed">
-            {currentQuestion.question}
-          </p>
-
-          {/* Code Area */}
+          <p className="mt-5 text-sm font-bold leading-7 text-slate-800">{currentQuestion.question}</p>
           {currentQuestion.codeSnippet && (
-            <div className="bg-slate-900 rounded-xl p-4 font-mono text-xs text-sky-400 border border-slate-800 overflow-x-auto relative shadow-inner">
-              <span className="absolute top-2 right-3 text-[9px] font-mono tracking-widest text-slate-500 font-bold uppercase select-none">Java Editor</span>
-              <pre className="leading-relaxed whitespace-pre">{currentQuestion.codeSnippet}</pre>
-            </div>
+            <pre className="mt-4 overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs leading-6 text-sky-300">{currentQuestion.codeSnippet}</pre>
           )}
 
-          {/* Options (Radio Style) */}
-          <div className="space-y-2.5">
-            {currentQuestion.options.map((opt) => {
-              const isSelected = answers[currentQuestionIdx] === opt.id;
+          <div className="mt-5 space-y-3">
+            {currentQuestion.options.map((option, index) => {
+              const isSelected = selected === option;
+              const letter = ['A', 'B', 'C', 'D'][index];
               return (
-                <div
-                  key={opt.id}
-                  onClick={() => handleOptionSelect(opt.id)}
-                  className={`p-4 rounded-xl border flex items-center gap-3 transition-all cursor-pointer select-none ${
-                    isSelected 
-                      ? 'bg-emerald-50/40 border-emerald-600 shadow-sm ring-1 ring-emerald-600/20' 
-                      : 'bg-white border-slate-200 hover:border-slate-350'
-                  }`}
+                <button
+                  key={option}
+                  onClick={() => setAnswers(prev => ({ ...prev, [currentQuestion.id]: option }))}
+                  className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left text-sm font-bold transition ${isSelected ? 'border-emerald-600 bg-emerald-50/60 text-slate-950' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}`}
                 >
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                    isSelected ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300'
-                  }`}>
-                    {isSelected && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
-                  </div>
-                  <span className={`text-xs sm:text-sm font-bold text-slate-800 ${isSelected ? 'text-slate-950 font-extrabold' : ''}`}>
-                    {opt.text}
-                  </span>
-                </div>
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{letter}</span>
+                  {option}
+                </button>
               );
             })}
           </div>
 
-          {/* Nav Buttons */}
-          <div className="flex justify-between items-center border-t border-slate-100 pt-5">
-            <button
-              onClick={handlePrevious}
-              disabled={currentQuestionIdx === 0}
-              className={`px-4 py-2 border rounded-xl font-bold text-xs flex items-center gap-1 select-none transition-all ${
-                currentQuestionIdx === 0 
-                  ? 'border-slate-100 text-slate-300 cursor-not-allowed' 
-                  : 'border-slate-250 text-slate-600 hover:bg-slate-55 hover:border-slate-350 cursor-pointer'
-              }`}
-            >
-              <ChevronLeft className="w-4 h-4" /> Previous
+          <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-5">
+            <button disabled={currentIndex === 0} onClick={() => setCurrentIndex(value => value - 1)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-600 disabled:cursor-not-allowed disabled:opacity-40">
+              <ChevronLeft className="h-4 w-4" /> Previous
             </button>
-
-            {currentQuestionIdx === selectedAssessment.questions.length - 1 ? (
-              <button
-                onClick={submitQuiz}
-                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs select-none transition-all active:scale-95 shadow-md shadow-emerald-50 cursor-pointer"
-              >
+            {currentIndex === questions.length - 1 ? (
+              <button onClick={submitAssessment} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white hover:bg-emerald-700">
                 Submit Assessment
               </button>
             ) : (
-              <button
-                onClick={handleNext}
-                className="px-4 py-2 border border-slate-250 text-slate-650 hover:bg-slate-50 rounded-xl font-bold text-xs flex items-center gap-1 select-none transition-all cursor-pointer"
-              >
-                Next <ChevronRight className="w-4 h-4" />
+              <button onClick={() => setCurrentIndex(value => value + 1)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-600">
+                Next <ChevronRight className="h-4 w-4" />
               </button>
             )}
           </div>
-        </div>
+        </section>
 
-        {/* Right Sidebar */}
-        <div className="lg:col-span-4 space-y-6">
-          
-          {/* Progress Card */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide border-b border-slate-100 pb-2">Progress</h3>
-            
-            {/* Dots */}
-            <div className="flex flex-wrap gap-2 justify-center py-1">
-              {selectedAssessment.questions.map((_, idx) => {
-                const isCurrent = idx === currentQuestionIdx;
-                const isAnswered = answers[idx] !== undefined;
-                return (
-                  <span 
-                    key={idx}
-                    className={`w-3.5 h-3.5 rounded-full transition-all ${
-                      isCurrent ? 'bg-emerald-600 scale-125' :
-                      isAnswered ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
-                      'bg-slate-100'
-                    }`}
-                  />
-                );
-              })}
+        <aside className="space-y-4 lg:col-span-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-extrabold text-slate-900">Quiz Progress</h3>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {questions.map((question, index) => (
+                <button
+                  key={question.id}
+                  onClick={() => setCurrentIndex(index)}
+                  className={`h-8 w-8 rounded-lg text-[10px] font-black ${index === currentIndex ? 'bg-emerald-600 text-white' : answers[question.id] ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}
+                >
+                  {index + 1}
+                </button>
+              ))}
             </div>
-
-            <div className="text-center">
-              <span className="text-[10px] font-extrabold text-slate-400 font-mono uppercase">{percentComplete}% Complete</span>
-            </div>
+            <p className="mt-4 text-xs font-bold text-slate-500">{answeredCount} of {questions.length} answered</p>
           </div>
-
-          {/* Timer Card */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3 text-center">
-            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Time Remaining</h3>
-            <div className="text-3xl font-extrabold font-mono text-slate-900 tracking-tight flex items-center justify-center gap-2">
-              <Clock className="w-6 h-6 text-emerald-600" />
-              {formatTimer(timeRemaining)}
-            </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 text-xs font-semibold leading-6 text-amber-800">
+            <AlertCircle className="mb-2 h-4 w-4" />
+            Passing requires 70%. If you score below 70%, the next lesson remains locked and the system recommends rewatching the current video.
           </div>
-
-          {/* Stats Card */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide border-b border-slate-100 pb-2">Stats</h3>
-            <div className="space-y-2 text-xs font-medium text-slate-600">
-              <div className="flex justify-between">
-                <span>Questions Answered:</span>
-                <span className="font-extrabold text-slate-900">{answeredCount}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Remaining:</span>
-                <span className="font-extrabold text-slate-900">{remainingCount}</span>
-              </div>
-            </div>
-
-            <button
-              onClick={submitQuiz}
-              className="w-full mt-3 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs transition cursor-pointer select-none active:scale-95"
-            >
-              Submit Assessment
-            </button>
-          </div>
-
-        </div>
-
+        </aside>
       </div>
     );
   };
 
-  // Result Summary Screen
   const renderResult = () => {
-    if (!selectedAssessment) return null;
-    const score = getScore();
-    const total = selectedAssessment.questions.length;
-    const accuracy = Math.round((score / total) * 100);
-    const passed = accuracy >= 70;
-    
-    const timeSpentMinutes = Math.max(1, Math.round(timeSpentSeconds / 60));
+    if (!activeAssessment || !latestAttempt || !activeLesson) return null;
 
     return (
-      <div className="max-w-2xl mx-auto space-y-6 text-slate-800 animate-scale-in" id="assessment-result-screen">
-        
-        {/* Core Result Card */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm space-y-6 text-center">
-          <div className="flex flex-col items-center space-y-3">
-            <div className={`w-14 h-14 rounded-full flex items-center justify-center ${passed ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
-              <Award className="w-8 h-8" />
-            </div>
-            <div>
-              <h2 className="text-xl font-extrabold text-slate-900">Assessment Complete</h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                {passed 
-                  ? `Congratulations! You passed the ${selectedAssessment.title} assessment.` 
-                  : 'Study the concepts and explanations below, and try again.'}
-              </p>
-            </div>
+      <div className="mx-auto max-w-3xl space-y-5 animate-scale-in" id="oop-assessment-result">
+        <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${latestAttempt.passed ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
+            {latestAttempt.passed ? <CheckCircle className="h-9 w-9" /> : <AlertCircle className="h-9 w-9" />}
           </div>
-
-          {/* Key Metrics grid */}
-          <div className="grid grid-cols-3 gap-4 border-t border-b border-slate-100 py-5">
-            <div>
-              <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wide">Score</span>
-              <span className="text-xl font-extrabold text-slate-900 font-mono mt-1 block">{score} / {total}</span>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wide">Accuracy</span>
-              <span className={`text-xl font-extrabold font-mono mt-1 block ${passed ? 'text-emerald-600' : 'text-orange-500'}`}>{accuracy}%</span>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wide">Time Taken</span>
-              <span className="text-xl font-extrabold text-slate-900 font-mono mt-1 block">{timeSpentMinutes} {timeSpentMinutes === 1 ? 'Min' : 'Mins'}</span>
-            </div>
+          <h2 className="mt-4 text-2xl font-extrabold text-slate-900">{latestAttempt.passed ? 'Assessment Passed' : 'Assessment Not Passed'}</h2>
+          <p className="mt-2 text-sm font-semibold text-slate-500">
+            {latestAttempt.passed ? `Lesson ${activeLesson.sequence + 1} is now unlocked when available.` : `Rewatch ${activeLesson.title}, then retake the assessment.`}
+          </p>
+          <div className="mt-6 grid grid-cols-3 gap-3 border-y border-slate-100 py-5">
+            <div><span className="block text-[10px] font-black uppercase text-slate-400">Score</span><strong className="font-mono text-xl">{latestAttempt.score}/{latestAttempt.total}</strong></div>
+            <div><span className="block text-[10px] font-black uppercase text-slate-400">Percentage</span><strong className="font-mono text-xl">{latestAttempt.percentage}%</strong></div>
+            <div><span className="block text-[10px] font-black uppercase text-slate-400">Attempt</span><strong className="font-mono text-xl">{latestAttempt.attemptNumber}</strong></div>
           </div>
-
-          {/* Strength Areas & Improvement Areas */}
-          <div className="grid sm:grid-cols-2 gap-6 text-left pt-2">
-            {/* Strength Areas */}
-            <div className="space-y-2.5">
-              <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">Strength Areas</h4>
-              <ul className="space-y-1.5 text-xs text-slate-600 font-medium">
-                <li className="flex items-center gap-1.5 text-emerald-800">
-                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Encapsulation
-                </li>
-                <li className="flex items-center gap-1.5 text-emerald-800">
-                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Inheritance
-                </li>
-                <li className="flex items-center gap-1.5 text-emerald-800">
-                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Polymorphism
-                </li>
-              </ul>
-            </div>
-
-            {/* Areas for Improvement */}
-            <div className="space-y-2.5">
-              <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">Areas for Improvement</h4>
-              <ul className="space-y-1.5 text-xs text-slate-650 font-medium">
-                <li className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" /> Abstract Classes
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" /> Interfaces
-                </li>
-              </ul>
-            </div>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <button onClick={() => setView('review')} className="rounded-xl border border-slate-200 px-5 py-2.5 text-xs font-black text-slate-700">Review Answers</button>
+            <button onClick={() => startAssessment(activeAssessment.id)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-5 py-2.5 text-xs font-black text-slate-700"><RotateCcw className="h-4 w-4" /> Retake</button>
+            <button onClick={() => onNavigateTo?.('videos')} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white">Continue Learning</button>
           </div>
-
-          {/* Action buttons */}
-          <div className="flex flex-wrap gap-3 pt-4 justify-center">
-            <button
-              onClick={() => setView('review')}
-              className="px-5 py-2.5 border border-slate-250 hover:border-slate-350 text-slate-750 font-bold text-xs rounded-xl transition cursor-pointer select-none active:scale-95"
-            >
-              Review Answers
-            </button>
-            <button
-              onClick={() => onNavigateTo?.('videos')}
-              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition cursor-pointer select-none active:scale-95"
-            >
-              Continue Learning
-            </button>
-            <button
-              onClick={() => onNavigateTo?.('ide')}
-              className="px-5 py-2.5 border border-slate-250 hover:border-slate-350 text-slate-750 font-bold text-xs rounded-xl transition cursor-pointer select-none active:scale-95"
-            >
-              Practice in IDE
-            </button>
-          </div>
-        </div>
-
-        {/* Coding Challenge Unlock Integration */}
-        {passed && (
-          <div className="bg-emerald-50/50 border border-emerald-200 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-5 animate-pulse">
-            <div className="space-y-1 text-center sm:text-left">
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md uppercase font-mono">Coding Challenge Unlocked</span>
-              <h3 className="text-sm font-extrabold text-slate-900 pt-1">Create Vehicle parent class and Car child class</h3>
-              <p className="text-xs text-slate-500 leading-normal max-w-md">
-                Demonstrate constructor invocation matching parameters and override displayInfo() logic directly.
-              </p>
-              <span className="text-[10px] text-emerald-700 font-bold font-mono uppercase block pt-0.5">Difficulty: Easy</span>
-            </div>
-            
-            <button
-              onClick={() => onNavigateTo?.('ide')}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-3 rounded-xl flex items-center gap-1.5 active:scale-95 shadow-md shadow-emerald-100 transition-all cursor-pointer self-stretch sm:self-auto justify-center text-center shrink-0"
-            >
-              <Code2 className="w-4 h-4" /> Open Practice IDE
-            </button>
-          </div>
-        )}
-
-        <div className="text-center pt-2">
-          <button
-            onClick={() => setView('dashboard')}
-            className="text-xs text-slate-400 hover:text-slate-650 font-bold transition flex items-center gap-1 mx-auto cursor-pointer"
-          >
-            ← Back to Assessment Dashboard
-          </button>
-        </div>
-
+        </section>
       </div>
     );
   };
 
-  // Review Screen (detailed view of questions & answers with rationale)
   const renderReview = () => {
-    if (!selectedAssessment) return null;
+    if (!activeAssessment || !latestAttempt) return null;
 
     return (
-      <div className="max-w-3xl mx-auto space-y-6 text-slate-800 animate-fade-in" id="assessment-review-screen">
-        <div className="flex justify-between items-center">
+      <div className="mx-auto max-w-4xl space-y-5 animate-fade-in" id="oop-assessment-review">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase font-mono">{selectedAssessment.title} Assessment</span>
-            <h2 className="text-xl font-extrabold text-slate-900 mt-0.5">Answer Review</h2>
+            <span className="font-mono text-[10px] font-black uppercase text-slate-400">{activeAssessment.title}</span>
+            <h2 className="text-xl font-extrabold text-slate-900">Correct and Incorrect Answers</h2>
           </div>
-          
-          <button
-            onClick={() => setView('result')}
-            className="px-4 py-2 border border-slate-250 hover:bg-slate-50 rounded-xl font-bold text-xs transition cursor-pointer select-none"
-          >
-            Back to Results
-          </button>
+          <button onClick={() => setView('result')} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700">Back to Result</button>
         </div>
+        {questions.map((question, index) => {
+          const selected = latestAttempt.answers[question.id];
+          const isCorrect = selected === question.correctAnswer;
 
-        <div className="space-y-6">
-          {selectedAssessment.questions.map((q, qIdx) => {
-            const userAnswerId = answers[qIdx];
-            const isCorrect = userAnswerId === q.correctOptionId;
-
-            return (
-              <div 
-                key={q.id} 
-                className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4"
-              >
-                <div className="flex justify-between items-start">
-                  <h3 className="text-sm font-extrabold text-slate-900 leading-tight">Question {qIdx + 1}: {q.question}</h3>
-                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded font-mono ${
-                    isCorrect ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'
-                  }`}>
-                    {isCorrect ? 'Correct' : 'Incorrect'}
-                  </span>
-                </div>
-
-                {q.codeSnippet && (
-                  <div className="bg-slate-900 rounded-xl p-4 font-mono text-xs text-sky-400 border border-slate-800 overflow-x-auto relative">
-                    <pre className="leading-relaxed whitespace-pre">{q.codeSnippet}</pre>
-                  </div>
-                )}
-
-                {/* Options list in review mode */}
-                <div className="space-y-2">
-                  {q.options.map(opt => {
-                    const isSelected = userAnswerId === opt.id;
-                    const isCorrectOption = opt.id === q.correctOptionId;
-
-                    let rowStyle = 'border-slate-100 bg-slate-50/20 opacity-70';
-                    if (isSelected) {
-                      rowStyle = isCorrectOption 
-                        ? 'border-emerald-300 bg-emerald-50/20' 
-                        : 'border-orange-300 bg-orange-50/20';
-                    } else if (isCorrectOption) {
-                      rowStyle = 'border-emerald-300 bg-emerald-50/10 font-medium';
-                    }
-
-                    return (
-                      <div 
-                        key={opt.id} 
-                        className={`p-3.5 rounded-xl border text-xs sm:text-sm flex gap-3 items-start transition-all ${rowStyle}`}
-                      >
-                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 ${
-                          isCorrectOption ? 'bg-emerald-600 border-emerald-600 text-white' :
-                          isSelected ? 'bg-orange-600 border-orange-600 text-white' :
-                          'bg-slate-100 text-slate-500'
-                        }`}>
-                          {opt.id}
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-slate-800 font-semibold">{opt.text}</p>
-                          
-                          {/* Rationale feedback */}
-                          {(isSelected || isCorrectOption) && (
-                            <p className={`text-[11px] leading-relaxed mt-1 font-medium ${isCorrectOption ? 'text-emerald-700' : 'text-orange-700'}`}>
-                              {opt.id === q.correctOptionId ? '✓ ' : '✗ '} {opt.rationale}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+          return (
+            <article key={question.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="text-sm font-extrabold leading-6 text-slate-900">{index + 1}. {question.question}</h3>
+                <span className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-black ${isCorrect ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>
+                  {isCorrect ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                  {isCorrect ? 'Correct' : 'Incorrect'}
+                </span>
               </div>
-            );
-          })}
-        </div>
-
-        <div className="text-center pt-2">
-          <button
-            onClick={() => setView('result')}
-            className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs transition active:scale-95 cursor-pointer shadow-md select-none"
-          >
-            Return to Summary Results
-          </button>
-        </div>
-
+              {question.codeSnippet && <pre className="mt-4 overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs leading-6 text-sky-300">{question.codeSnippet}</pre>}
+              <div className="mt-4 space-y-2">
+                {question.options.map(option => {
+                  const correct = option === question.correctAnswer;
+                  const chosen = option === selected;
+                  return (
+                    <div key={option} className={`rounded-xl border px-4 py-3 text-xs font-bold ${correct ? 'border-emerald-300 bg-emerald-50/50 text-emerald-800' : chosen ? 'border-orange-300 bg-orange-50/50 text-orange-800' : 'border-slate-100 bg-slate-50 text-slate-500'}`}>
+                      {option}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-4 rounded-xl bg-slate-50 p-4 text-xs font-semibold leading-6 text-slate-600">
+                <strong>Explanation:</strong> {question.explanation}
+              </p>
+              <p className="mt-2 font-mono text-[10px] font-black uppercase text-slate-400">Difficulty: {question.difficulty}</p>
+            </article>
+          );
+        })}
       </div>
     );
   };
@@ -909,7 +358,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, lesson
   return (
     <div className="w-full" id="assessments-workspace">
       {view === 'dashboard' && renderDashboard()}
-      {view === 'active' && renderActiveAssessment()}
+      {view === 'active' && renderActive()}
       {view === 'result' && renderResult()}
       {view === 'review' && renderReview()}
     </div>

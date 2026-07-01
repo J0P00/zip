@@ -11,6 +11,14 @@ app.get("/", (req, res) => {
     res.send("Backend Running");
 });
 
+app.get("/api/test", async (req, res) => {
+    try {
+        const result = await pool.query("SELECT NOW()");
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 // GET all lessons
 app.get("/lessons", async (req, res) => {
     try {
@@ -24,4 +32,17 @@ app.get("/lessons", async (req, res) => {
 
 app.listen(5000, () => {
     console.log("Server running on port 5000");
+});
+
+pool.connect()
+  .then(() => {
+    console.log("✅ PostgreSQL Connected Successfully!");
+  })
+  .catch((err) => {
+    console.error("❌ PostgreSQL Connection Failed");
+    console.error(err.message);
+  });
+
+app.get("/hello", (req, res) => {
+    res.send("Hello World");
 });

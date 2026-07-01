@@ -51,7 +51,6 @@ import {
 // Import Mock Data
 import { 
   INITIAL_JAVA_FILES, 
-  INITIAL_LESSONS, 
   INITIAL_QUESTIONS, 
   INITIAL_LEADERBOARD_USERS, 
   INITIAL_SUBMISSIONS, 
@@ -59,6 +58,7 @@ import {
   INITIAL_LESSON_ITEMS, 
   INITIAL_ADAPTIVE_RULES 
 } from './data/mockData';
+import { OOP_COURSE_LESSONS } from './data/oopCourse';
 
 // Import Sub Components
 import LandingPage from './components/LandingPage';
@@ -138,24 +138,20 @@ export default function App() {
   // Dynamic shared database states
   const [videoLessons, setVideoLessons] = useState<VideoLesson[]>(() => {
     try {
-      const [videoLessons, setVideoLessons] = useState<VideoLesson[]>(() => {
-    try {
-        const APP_VERSION = "1.0.2";
+      const APP_VERSION = '1.0.3';
+      const version = localStorage.getItem('app_version');
 
-        const version = localStorage.getItem("app_version");
+      if (version !== APP_VERSION) {
+        localStorage.removeItem('oophub_video_lessons');
+        localStorage.setItem('app_version', APP_VERSION);
+      }
 
-        if (version !== APP_VERSION) {
-            localStorage.removeItem("oophub_video_lessons");
-            localStorage.setItem("app_version", APP_VERSION);
-        }
-
-        const saved = localStorage.getItem("oophub_video_lessons");
-
-        return saved ? JSON.parse(saved) : INITIAL_LESSONS;
+      const saved = localStorage.getItem('oophub_video_lessons');
+      return saved ? JSON.parse(saved) : OOP_COURSE_LESSONS;
     } catch {
-        return INITIAL_LESSONS;
+      return OOP_COURSE_LESSONS;
     }
-});
+  });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     try {
@@ -304,7 +300,7 @@ export default function App() {
         
         const prevProgress = video.progressPercent || 0;
         const nextProgress = Math.max(prevProgress, progress);
-        const isCompletedNow = nextProgress >= 90 && video.status !== 'completed';
+        const isCompletedNow = nextProgress >= 95 && video.status !== 'completed';
         
         let completed = [...(video.completedStudents || [])];
         let inProgress = [...(video.inProgressStudents || [])];
@@ -312,7 +308,7 @@ export default function App() {
         
         notStarted = notStarted.filter(s => s !== userEmail);
         
-        if (nextProgress >= 90) {
+        if (nextProgress >= 95) {
           if (!completed.includes(userEmail)) completed.push(userEmail);
           inProgress = inProgress.filter(s => s !== userEmail);
         } else if (nextProgress > 0) {
@@ -348,22 +344,6 @@ export default function App() {
             );
           }
           
-          // Auto unlock next video in sequence
-          setTimeout(() => {
-            setVideoLessons(prevLessons => {
-              const list = [...prevLessons].sort((a, b) => a.sequence - b.sequence);
-              const index = list.findIndex(l => l.id === videoId);
-              if (index !== -1 && index < list.length - 1) {
-                const nextVideo = list[index + 1];
-                if (nextVideo.status === 'locked') {
-                  const updatedList = prevLessons.map(l => l.id === nextVideo.id ? { ...l, status: 'active' as any } : l);
-                  localStorage.setItem('oophub_video_lessons', JSON.stringify(updatedList));
-                  return updatedList;
-                }
-              }
-              return prevLessons;
-            });
-          }, 100);
         }
 
         return updatedVideo;
