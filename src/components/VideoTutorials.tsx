@@ -69,12 +69,11 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
   const firstAvailable = lessons.find(lesson => lesson.status === 'active') || lessons[0];
   const [activeLessonId, setActiveLessonId] = useState(firstAvailable.id);
   const activeLesson = lessons.find(lesson => lesson.id === activeLessonId) || firstAvailable;
-  const activeWatch = watchDb[activeLesson.id];
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(activeWatch?.lastPosition || 0);
+  const [currentTime, setCurrentTime] = useState(watchDb[activeLesson.id]?.lastPosition || 0);
   const [volume, setVolume] = useState(0.9);
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -87,7 +86,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
     const watch = watchDb[activeLesson.id];
     setCurrentTime(watch?.lastPosition || 0);
     setIsPlaying(false);
-  }, [activeLesson.id, watchDb]);
+  }, [activeLesson.id]);
 
   useEffect(() => {
     if (!videoRef.current) return;
