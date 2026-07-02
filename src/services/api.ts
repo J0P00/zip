@@ -1,0 +1,119 @@
+import { AuthenticatedUser, Persona } from '../types';
+
+export const API_BASE_URL =
+  (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://oop-backend-j0oj.onrender.com')
+    .replace(/\/+$/, '');
+
+const TOKEN_KEY = 'oophub_auth_token';
+
+export const getAuthToken = () => {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
+export const setAuthToken = (token: string) => {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Authentication still succeeds for the current render even if storage is disabled.
+  }
+};
+
+type RequestOptions = RequestInit & {
+  token?: string;
+};
+
+async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const token = options.token ?? getAuthToken();
+  const headers = new Headers(options.headers);
+  headers.set('Content-Type', 'application/json');
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers
+  });
+
+  let payload: any = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.message || payload?.error || `Request failed with status ${response.status}`);
+  }
+
+  return payload as T;
+}
+
+export type AuthResponse = {
+  success: boolean;
+  message: string;
+  token: string;
+  user: AuthenticatedUser;
+};
+
+export const authApi = {
+  register: (body: Record<string, unknown>) =>
+    apiRequest<AuthResponse>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  login: (email: string, password: string) =>
+    apiRequest<AuthResponse>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    }),
+  me: (token?: string) => apiRequest<{ success: boolean; user: AuthenticatedUser }>('/api/auth/me', { token })
+};
+
+export const userApi = {
+  updateProfile: (id: string, updates: Partial<AuthenticatedUser>) =>
+    apiRequest<{ success: boolean; data: AuthenticatedUser }>(`/api/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates)
+    })
+};
+
+export const progressApi = {
+  getVideoProgress: (studentId: string, token?: string) =>
+    apiRequest<{ success: boolean; data: any[] }>(`/api/progress/${studentId}`, { token }),
+  saveVideoProgress: (body: {
+    videoId: string;
+    lastPosition?: number;
+    completionPercentage: number;
+    completed: boolean;
+  }) =>
+    apiRequest<{ success: boolean; data: any }>('/api/progress', {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    }),
+  getQuizAttempts: (studentId: string, token?: string) =>
+    apiRequest<{ success: boolean; data: any[] }>(`/api/quiz-attempts/${studentId}`, { token }),
+  saveQuizAttempt: (body: Record<string, unknown>) =>
+    apiRequest<{ success: boolean; data: any }>('/api/quiz-attempts', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    })
+};
+
+export const appApi = {
+  getLessons: () => apiRequest<{ success: boolean; data: any[] }>('/api/lessons'),
+  health: () => apiRequest<{ status?: string; message?: string }>('/health')
+};
+
+export const isDemoEmail = (email: string, role?: Persona) => {
+  const normalized = email.toLowerCase();
+  return (
+    normalized === 'dmitry@oophub.edu' ||
+    normalized === 'elena@oophub.edu' ||
+    normalized === 'jericokunn@gmail.com' ||
+    role === 'admin'
+  );
+};

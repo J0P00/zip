@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Award, Check, CheckCircle, ChevronLeft, ChevronRight, Lock, RotateCcw, X } from 'lucide-react';
 import { StudentSubView, VideoLesson } from '../types';
 import { CourseQuestion, getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson, shuffleArray } from '../data/oopCourse';
+import { progressApi } from '../services/api';
 
 interface AssessmentsProps {
   onCorrectAnswerAdded: (xp: number) => void;
@@ -67,6 +68,44 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: Asse
   const activeLesson = activeAssessment ? OOP_COURSE_LESSONS.find(item => item.id === activeAssessment.lessonId) : null;
   const currentQuestion = questions[currentIndex];
 
+  useEffect(() => {
+    let isMounted = true;
+    const token = localStorage.getItem('oophub_auth_token');
+    const user = localStorage.getItem('oophub_current_user_id');
+    if (!token || !user) return;
+
+    progressApi.getQuizAttempts(user, token)
+      .then(response => {
+        if (!isMounted) return;
+        const remoteDb = response.data.reduce((acc: QuizDb, row: any) => {
+          acc[row.assessment_id] = {
+            assessmentId: row.assessment_id,
+            lessonId: row.lesson_id || '',
+            score: row.score,
+            total: row.total,
+            percentage: Number(row.percentage || 0),
+            correctAnswers: row.correct_answers,
+            incorrectAnswers: row.incorrect_answers,
+            passed: Boolean(row.passed),
+            attemptNumber: row.attempt_number,
+            answers: row.answers || {},
+            dateCompleted: row.date_completed
+          };
+          return acc;
+        }, {});
+        setQuizDb(prev => {
+          const next = { ...prev, ...remoteDb };
+          setStoredJson(QUIZ_KEY, next);
+          return next;
+        });
+      })
+      .catch(error => console.warn('Unable to load assessment attempts from backend:', error));
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const courseStats = useMemo(() => {
     const completedLessons = OOP_COURSE_LESSONS.filter(lesson => watchDb[lesson.id]?.completed).length;
     const passedAssessments = OOP_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
@@ -124,6 +163,9 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: Asse
     const nextDb = { ...quizDb, [activeAssessment.id]: attempt };
     setQuizDb(nextDb);
     setStoredJson(QUIZ_KEY, nextDb);
+    progressApi.saveQuizAttempt(attempt).catch(error => {
+      console.warn('Unable to sync assessment attempt with backend:', error);
+    });
     setLatestAttempt(attempt);
     setView('result');
 

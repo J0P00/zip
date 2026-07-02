@@ -1,21 +1,389 @@
 require("dotenv").config();
-const express = require("express");
+
+const bcrypt = require("bcrypt");
 const cors = require("cors");
+const express = require("express");
+const jwt = require("jsonwebtoken");
 const pool = require("./db");
 
 const app = express();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+const allowedOrigins = (process.env.CORS_ORIGIN || process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
-// Home Route
-app.get("/", (req, res) => {
+app.use(cors({
+    origin(origin, callback) {
+        if (!origin) return callback(null, true);
+        if (!allowedOrigins.length || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error(`CORS blocked origin: ${origin}`));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+}));
+app.options(/.*/, cors());
+app.use(express.json({ limit: "10mb" }));
+
+const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+
+const buildUserId = (email, role) => {
+    const seed = String(email)
+        .trim()
+        .toLowerCase()
+        .split("")
+        .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    return `${String(role).slice(0, 3).toUpperCase()}-${String(seed).padStart(4, "0")}`;
+};
+
+const signToken = (user) => jwt.sign({
+    id: user.id,
+    userId: user.user_id,
+    email: user.email,
+    role: user.role
+}, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
+const toClientUser = (row) => ({
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    accountSource: row.account_source || "custom",
+    registrationDate: row.created_at,
+    contactNumber: row.contact_number || "",
+    address: row.address || "",
+    dateOfBirth: row.date_of_birth || "",
+    accountStatus: row.account_status || "Active",
+    onlineStatus: row.online_status || "online",
+    avatar: row.avatar || "",
+    termsAgreementAccepted: row.terms_agreement_accepted || false,
+    termsAcceptedAt: row.terms_accepted_at || "",
+    termsVersion: row.terms_version || "",
+    studentNumber: row.student_number || "",
+    course: row.course || "",
+    yearLevel: row.year_level || "",
+    section: row.section || "",
+    programStatus: row.program_status || "",
+    employeeId: row.employee_id || "",
+    department: row.department || "",
+    specialization: row.specialization || "",
+    assignedCourses: row.assigned_courses || "",
+    adminId: row.admin_id || "",
+    systemRole: row.system_role || "",
+    accessLevel: row.access_level || ""
+});
+
+const findUserByEmail = async (email) => {
+    const result = await pool.query(`
+        SELECT u.*, s.student_number, s.course, s.year_level, s.section, s.program_status,
+               t.employee_id, t.department, t.specialization, t.assigned_courses,
+               a.admin_id, a.system_role, a.access_level
+        FROM users u
+        LEFT JOIN students s ON s.user_id = u.id
+        LEFT JOIN teachers t ON t.user_id = u.id
+        LEFT JOIN admins a ON a.user_id = u.id
+        WHERE LOWER(u.email) = LOWER($1)
+    `, [email]);
+    return result.rows[0] || null;
+};
+
+const findUserById = async (id) => {
+    const result = await pool.query(`
+        SELECT u.*, s.student_number, s.course, s.year_level, s.section, s.program_status,
+               t.employee_id, t.department, t.specialization, t.assigned_courses,
+               a.admin_id, a.system_role, a.access_level
+        FROM users u
+        LEFT JOIN students s ON s.user_id = u.id
+        LEFT JOIN teachers t ON t.user_id = u.id
+        LEFT JOIN admins a ON a.user_id = u.id
+        WHERE u.id = $1
+    `, [id]);
+    return result.rows[0] || null;
+};
+
+const requireAuth = async (req, res, next) => {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+    if (!token) return res.status(401).json({ success: false, message: "Authentication token is required." });
+
+    try {
+        const payload = jwt.verify(token, JWT_SECRET);
+        const result = await pool.query("SELECT id FROM users WHERE id = $1", [payload.id]);
+        if (result.rowCount === 0) {
+            return res.status(401).json({ success: false, message: "User session is no longer valid." });
+        }
+        req.authUser = payload;
+        return next();
+    } catch {
+        return res.status(401).json({ success: false, message: "Invalid or expired authentication token." });
+    }
+};
+
+const requireRole = (roles) => (req, res, next) => {
+    if (!req.authUser) return res.status(401).json({ success: false, message: "Authentication required." });
+    if (!roles.includes(req.authUser.role)) {
+        return res.status(403).json({ success: false, message: "You do not have permission to access this resource." });
+    }
+    return next();
+};
+
+const initializeDatabase = async () => {
+    await pool.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
+    await pool.query(`
+        DO $$ BEGIN
+          CREATE TYPE user_role AS ENUM ('student', 'teacher', 'admin');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+    `);
+    await pool.query(`
+        DO $$ BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'users'
+              AND column_name = 'user_id'
+              AND data_type = 'uuid'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'users'
+              AND column_name = 'id'
+          ) THEN
+            ALTER TABLE users RENAME COLUMN user_id TO id;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'users'
+              AND column_name = 'full_name'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'users'
+              AND column_name = 'name'
+          ) THEN
+            ALTER TABLE users RENAME COLUMN full_name TO name;
+          END IF;
+        END $$
+    `);
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          role user_role NOT NULL,
+          account_status TEXT NOT NULL DEFAULT 'Active',
+          contact_number TEXT DEFAULT '',
+          address TEXT DEFAULT '',
+          date_of_birth TEXT DEFAULT '',
+          online_status TEXT DEFAULT 'online',
+          avatar TEXT DEFAULT '',
+          terms_agreement_accepted BOOLEAN NOT NULL DEFAULT FALSE,
+          terms_accepted_at TIMESTAMPTZ,
+          terms_version TEXT DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS user_id TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS role user_role DEFAULT 'student';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status TEXT DEFAULT 'Active';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_number TEXT DEFAULT '';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT DEFAULT '';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth TEXT DEFAULT '';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS online_status TEXT DEFAULT 'online';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT DEFAULT '';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_agreement_accepted BOOLEAN DEFAULT FALSE;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version TEXT DEFAULT '';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+        UPDATE users
+        SET
+          id = COALESCE(id, gen_random_uuid()),
+          user_id = COALESCE(NULLIF(user_id, ''), UPPER(LEFT(role::TEXT, 3)) || '-' || SUBSTRING(MD5(email), 1, 8)),
+          name = COALESCE(NULLIF(name, ''), email),
+          password_hash = COALESCE(password_hash, ''),
+          account_status = COALESCE(account_status, 'Active'),
+          contact_number = COALESCE(contact_number, ''),
+          address = COALESCE(address, ''),
+          date_of_birth = COALESCE(date_of_birth, ''),
+          online_status = COALESCE(online_status, 'online'),
+          avatar = COALESCE(avatar, ''),
+          terms_agreement_accepted = COALESCE(terms_agreement_accepted, FALSE),
+          terms_version = COALESCE(terms_version, ''),
+          created_at = COALESCE(created_at, NOW()),
+          updated_at = COALESCE(updated_at, NOW());
+        ALTER TABLE users ALTER COLUMN id SET NOT NULL;
+        ALTER TABLE users ALTER COLUMN user_id SET NOT NULL;
+        ALTER TABLE users ALTER COLUMN name SET NOT NULL;
+        ALTER TABLE users ALTER COLUMN password_hash SET NOT NULL;
+        ALTER TABLE users ALTER COLUMN account_status SET NOT NULL;
+        ALTER TABLE users ALTER COLUMN terms_agreement_accepted SET NOT NULL;
+        ALTER TABLE users ALTER COLUMN created_at SET NOT NULL;
+        ALTER TABLE users ALTER COLUMN updated_at SET NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_lower_email ON users (LOWER(email));
+        CREATE TABLE IF NOT EXISTS students (
+          user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          student_number TEXT UNIQUE,
+          course TEXT,
+          year_level TEXT,
+          section TEXT,
+          program_status TEXT DEFAULT 'Regular',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS teachers (
+          user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          employee_id TEXT UNIQUE,
+          department TEXT,
+          specialization TEXT,
+          assigned_courses TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS admins (
+          user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          admin_id TEXT UNIQUE,
+          system_role TEXT,
+          access_level TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS user_terms_agreements (
+          agreement_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          accepted BOOLEAN NOT NULL DEFAULT TRUE,
+          accepted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          ip_address TEXT,
+          version TEXT NOT NULL,
+          user_role user_role NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS lessons (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          module TEXT DEFAULT '',
+          sequence INTEGER NOT NULL DEFAULT 0,
+          duration TEXT DEFAULT '',
+          video_url TEXT DEFAULT '',
+          description TEXT DEFAULT '',
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS student_progress (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          video_id TEXT NOT NULL,
+          last_position NUMERIC NOT NULL DEFAULT 0,
+          completion_percentage NUMERIC NOT NULL DEFAULT 0,
+          completed BOOLEAN NOT NULL DEFAULT FALSE,
+          date_completed TIMESTAMPTZ,
+          notes TEXT DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(student_user_id, video_id)
+        );
+        CREATE TABLE IF NOT EXISTS quiz_attempts (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          assessment_id TEXT NOT NULL,
+          lesson_id TEXT DEFAULT '',
+          score INTEGER NOT NULL,
+          total INTEGER NOT NULL,
+          percentage NUMERIC NOT NULL,
+          correct_answers INTEGER NOT NULL,
+          incorrect_answers INTEGER NOT NULL,
+          passed BOOLEAN NOT NULL DEFAULT FALSE,
+          attempt_number INTEGER NOT NULL,
+          answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+          date_completed TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+    `);
+};
+
+const seedDemoUsers = async () => {
+    const demoUsers = [
+        ["Dmitry Vance (Alex Mercer)", "dmitry@oophub.edu", "password123", "student"],
+        ["Dr. Elena Vance", "elena@oophub.edu", "password123", "teacher"],
+        ["Jerico Vance (Admin)", "jericokunn@gmail.com", "password123", "admin"]
+    ];
+
+    for (const [name, email, password, role] of demoUsers) {
+        const existing = await pool.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email]);
+        if (existing.rowCount) continue;
+
+        const passwordHash = await bcrypt.hash(password, 12);
+        const userResult = await pool.query(`
+            INSERT INTO users (user_id, name, email, password_hash, role, terms_agreement_accepted, terms_accepted_at, terms_version)
+            VALUES ($1, $2, LOWER($3), $4, $5, TRUE, NOW(), '2026.06.26')
+            RETURNING id
+        `, [buildUserId(email, role), name, email, passwordHash, role]);
+        const id = userResult.rows[0].id;
+
+        if (role === "student") {
+            await pool.query(`
+                INSERT INTO students (user_id, student_number, course, year_level, section, program_status)
+                VALUES ($1, '2026-0001', 'BS Computer Science', '3rd Year', 'CS-3A', 'Regular')
+            `, [id]);
+        } else if (role === "teacher") {
+            await pool.query(`
+                INSERT INTO teachers (user_id, employee_id, department, specialization, assigned_courses)
+                VALUES ($1, 'EMP-0001', 'College of Computer Studies', 'Object-Oriented Programming', 'OOP 101, Advanced Java, Software Architecture')
+            `, [id]);
+        } else if (role === "admin") {
+            await pool.query(`
+                INSERT INTO admins (user_id, admin_id, system_role, access_level)
+                VALUES ($1, 'ADM-0001', 'Super Admin', 'Level 5 - Full Access')
+            `, [id]);
+        }
+    }
+};
+
+const seedLessons = async () => {
+    const lessons = [
+        ["oop_lesson_1", "Classes & Objects", "Intro to Java & Classes", 1, "13:50", "/videos/lesson1.mp4"],
+        ["oop_lesson_2", "Constructors", "Inheritance vs Composition", 2, "17:29", "/videos/lesson2.mp4"],
+        ["oop_lesson_3", "Object Methods", "Polymorphism & Dynamic Binding", 3, "18:15", "/videos/lesson3.mp4"],
+        ["oop_lesson_4", "Encapsulation", "Design Patterns Core", 4, "12:05", "/videos/lesson4.mp4"],
+        ["oop_lesson_5", "Constructor Overloading", "Polymorphism & Dynamic Binding", 5, "10:42", "/videos/lesson5.mp4"]
+    ];
+
+    for (const lesson of lessons) {
+        await pool.query(`
+            INSERT INTO lessons (id, title, module, sequence, duration, video_url)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (id) DO UPDATE SET
+              title = EXCLUDED.title,
+              module = EXCLUDED.module,
+              sequence = EXCLUDED.sequence,
+              duration = EXCLUDED.duration,
+              video_url = EXCLUDED.video_url,
+              updated_at = NOW()
+        `, lesson);
+    }
+};
+
+app.get("/", (_req, res) => {
     res.send("Backend Running");
 });
 
-// Database Test Route
-app.get("/api/test", async (req, res) => {
+app.get("/health", (_req, res) => {
+    res.json({ status: "ok", backend: "Render", timestamp: new Date().toISOString() });
+});
+
+app.get("/api/test", async (_req, res) => {
     try {
         const result = await pool.query("SELECT NOW()");
         res.json(result.rows);
@@ -25,35 +393,304 @@ app.get("/api/test", async (req, res) => {
     }
 });
 
-// Get All Lessons
-app.get("/lessons", async (req, res) => {
+app.post("/api/auth/register", async (req, res, next) => {
+    const client = await pool.connect();
     try {
-        const result = await pool.query("SELECT * FROM lessons");
-        res.json(result.rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send("Database Error");
+        const {
+            name,
+            email,
+            password,
+            role,
+            studentNumber,
+            course,
+            yearLevel,
+            section,
+            employeeId,
+            department,
+            specialization,
+            assignedCourses,
+            termsVersion
+        } = req.body || {};
+
+        if (!name || String(name).trim().length < 3) {
+            return res.status(400).json({ success: false, message: "Name must be at least 3 characters." });
+        }
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+            return res.status(400).json({ success: false, message: "A valid email address is required." });
+        }
+        if (!password || String(password).length < 6) {
+            return res.status(400).json({ success: false, message: "Password must be at least 6 characters." });
+        }
+        if (!["student", "teacher", "admin"].includes(role)) {
+            return res.status(400).json({ success: false, message: "Role must be student, teacher, or admin." });
+        }
+
+        const existing = await findUserByEmail(email);
+        if (existing) {
+            return res.status(409).json({ success: false, message: "An account is already registered with this email address." });
+        }
+
+        await client.query("BEGIN");
+        const passwordHash = await bcrypt.hash(password, 12);
+        const computedUserId = buildUserId(email, role);
+        const userResult = await client.query(`
+            INSERT INTO users (user_id, name, email, password_hash, role, terms_agreement_accepted, terms_accepted_at, terms_version)
+            VALUES ($1, $2, LOWER($3), $4, $5, TRUE, NOW(), $6)
+            RETURNING *
+        `, [computedUserId, String(name).trim(), email, passwordHash, role, termsVersion || "2026.06.26"]);
+        const user = userResult.rows[0];
+
+        if (role === "student") {
+            await client.query(`
+                INSERT INTO students (user_id, student_number, course, year_level, section, program_status)
+                VALUES ($1, $2, $3, $4, $5, 'Regular')
+            `, [user.id, studentNumber || computedUserId, course || "", yearLevel || "", section || ""]);
+        }
+        if (role === "teacher") {
+            await client.query(`
+                INSERT INTO teachers (user_id, employee_id, department, specialization, assigned_courses)
+                VALUES ($1, $2, $3, $4, $5)
+            `, [
+                user.id,
+                employeeId || computedUserId,
+                department || "College of Computer Studies",
+                specialization || "Object-Oriented Programming",
+                assignedCourses || "OOP 101, Advanced Java"
+            ]);
+        }
+        await client.query(`
+            INSERT INTO user_terms_agreements (user_id, accepted, version, user_role, ip_address)
+            VALUES ($1, TRUE, $2, $3, $4)
+        `, [user.id, termsVersion || "2026.06.26", role, req.ip]);
+        await client.query("COMMIT");
+
+        const fullUser = await findUserById(user.id);
+        const token = signToken(fullUser);
+        res.status(201).json({ success: true, message: "Account registered successfully.", token, user: toClientUser(fullUser) });
+    } catch (error) {
+        await client.query("ROLLBACK");
+        next(error);
+    } finally {
+        client.release();
     }
 });
 
-// Hello Route
-app.get("/hello", (req, res) => {
+app.post("/api/auth/login", async (req, res, next) => {
+    try {
+        const { email, password } = req.body || {};
+        if (!email || !password) {
+            return res.status(400).json({ success: false, message: "Email and password are required." });
+        }
+        const user = await findUserByEmail(email);
+        if (!user) return res.status(401).json({ success: false, message: "Invalid email or password." });
+
+        const valid = await bcrypt.compare(password, user.password_hash);
+        if (!valid) return res.status(401).json({ success: false, message: "Invalid email or password." });
+
+        const token = signToken(user);
+        res.json({ success: true, message: "Login successful.", token, user: toClientUser(user) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/auth/me", requireAuth, async (req, res, next) => {
+    try {
+        const user = await findUserById(req.authUser.id);
+        res.json({ success: true, user: toClientUser(user) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/users", requireAuth, requireRole(["admin", "teacher"]), async (_req, res, next) => {
+    try {
+        const result = await pool.query(`
+            SELECT u.*, s.student_number, s.course, s.year_level, s.section, s.program_status,
+                   t.employee_id, t.department, t.specialization, t.assigned_courses,
+                   a.admin_id, a.system_role, a.access_level
+            FROM users u
+            LEFT JOIN students s ON s.user_id = u.id
+            LEFT JOIN teachers t ON t.user_id = u.id
+            LEFT JOIN admins a ON a.user_id = u.id
+            ORDER BY u.created_at DESC
+        `);
+        res.json({ success: true, data: result.rows.map(toClientUser) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.put("/api/users/:id", requireAuth, async (req, res, next) => {
+    try {
+        if (req.authUser.role !== "admin" && req.authUser.id !== req.params.id) {
+            return res.status(403).json({ success: false, message: "You can only update your own profile." });
+        }
+        const updates = req.body || {};
+        await pool.query(`
+            UPDATE users SET
+              name = COALESCE($2, name),
+              contact_number = COALESCE($3, contact_number),
+              address = COALESCE($4, address),
+              date_of_birth = COALESCE($5, date_of_birth),
+              online_status = COALESCE($6, online_status),
+              avatar = COALESCE($7, avatar),
+              updated_at = NOW()
+            WHERE id = $1
+        `, [req.params.id, updates.name, updates.contactNumber, updates.address, updates.dateOfBirth, updates.onlineStatus, updates.avatar]);
+        const user = await findUserById(req.params.id);
+        res.json({ success: true, data: toClientUser(user) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/lessons", async (_req, res, next) => {
+    try {
+        const result = await pool.query("SELECT * FROM lessons ORDER BY sequence, title");
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/lessons", async (_req, res, next) => {
+    try {
+        const result = await pool.query("SELECT * FROM lessons ORDER BY sequence, title");
+        res.json(result.rows);
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
+    try {
+        if (req.authUser.role === "student" && req.authUser.id !== req.params.studentId) {
+            return res.status(403).json({ success: false, message: "Students can only view their own progress." });
+        }
+        const result = await pool.query(
+            "SELECT * FROM student_progress WHERE student_user_id = $1 ORDER BY updated_at DESC",
+            [req.params.studentId]
+        );
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.put("/api/progress", requireAuth, async (req, res, next) => {
+    try {
+        const { videoId, lastPosition = 0, completionPercentage = 0, completed = false, notes = "" } = req.body || {};
+        if (!videoId) return res.status(400).json({ success: false, message: "videoId is required." });
+
+        const result = await pool.query(`
+            INSERT INTO student_progress (student_user_id, video_id, last_position, completion_percentage, completed, date_completed, notes)
+            VALUES ($1, $2, $3, $4, $5, CASE WHEN $5 THEN NOW() ELSE NULL END, $6)
+            ON CONFLICT (student_user_id, video_id) DO UPDATE SET
+              last_position = EXCLUDED.last_position,
+              completion_percentage = GREATEST(student_progress.completion_percentage, EXCLUDED.completion_percentage),
+              completed = student_progress.completed OR EXCLUDED.completed,
+              date_completed = CASE
+                WHEN student_progress.completed THEN student_progress.date_completed
+                WHEN EXCLUDED.completed THEN NOW()
+                ELSE student_progress.date_completed
+              END,
+              notes = EXCLUDED.notes,
+              updated_at = NOW()
+            RETURNING *
+        `, [req.authUser.id, videoId, lastPosition, completionPercentage, Boolean(completed), notes]);
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/quiz-attempts/:studentId", requireAuth, async (req, res, next) => {
+    try {
+        if (req.authUser.role === "student" && req.authUser.id !== req.params.studentId) {
+            return res.status(403).json({ success: false, message: "Students can only view their own quiz attempts." });
+        }
+        const result = await pool.query(`
+            SELECT DISTINCT ON (assessment_id) *
+            FROM quiz_attempts
+            WHERE student_user_id = $1
+            ORDER BY assessment_id, attempt_number DESC, date_completed DESC
+        `, [req.params.studentId]);
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
+    try {
+        const {
+            assessmentId,
+            lessonId = "",
+            score = 0,
+            total = 0,
+            percentage = 0,
+            correctAnswers = 0,
+            incorrectAnswers = 0,
+            passed = false,
+            attemptNumber = 1,
+            answers = {},
+            dateCompleted
+        } = req.body || {};
+
+        if (!assessmentId) return res.status(400).json({ success: false, message: "assessmentId is required." });
+
+        const result = await pool.query(`
+            INSERT INTO quiz_attempts (
+              student_user_id, assessment_id, lesson_id, score, total, percentage,
+              correct_answers, incorrect_answers, passed, attempt_number, answers, date_completed
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, COALESCE($12::timestamptz, NOW()))
+            RETURNING *
+        `, [
+            req.authUser.id,
+            assessmentId,
+            lessonId,
+            score,
+            total,
+            percentage,
+            correctAnswers,
+            incorrectAnswers,
+            Boolean(passed),
+            attemptNumber,
+            JSON.stringify(answers),
+            dateCompleted || null
+        ]);
+        res.status(201).json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/hello", (_req, res) => {
     res.send("Hello World");
 });
 
-// Test PostgreSQL Connection
-pool.connect()
-    .then(() => {
-        console.log("✅ PostgreSQL Connected Successfully!");
-    })
-    .catch((err) => {
-        console.error("❌ PostgreSQL Connection Failed");
-        console.error(err.message);
-    });
+app.use((err, _req, res, _next) => {
+    console.error(err);
+    const message = err.code === "23505"
+        ? "A record with the same unique value already exists."
+        : err.message || "Internal server error.";
+    res.status(err.status || 500).json({ success: false, message });
+});
 
-// Start Server
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-});
+initializeDatabase()
+    .then(seedDemoUsers)
+    .then(seedLessons)
+    .then(() => {
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error("PostgreSQL initialization failed");
+        console.error(err);
+        process.exit(1);
+    });

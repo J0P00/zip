@@ -638,10 +638,10 @@ export default function ProfilePage({ user, metrics, onUpdateProfile }: ProfileP
 
                 <div className="divide-y divide-slate-100 text-xs">
                   {[
-                    { event: 'Logged in successfully', ip: '127.0.0.1', device: 'Chrome / Windows', time: 'June 16, 2026 at 7:42 PM' },
-                    { event: 'Modified personal bio status', ip: '127.0.0.1', device: 'Chrome / Windows', time: 'June 16, 2026 at 7:35 PM' },
-                    { event: 'Compiled vehicle test suite challenge', ip: '127.0.0.1', device: 'Chrome / Windows', time: 'June 16, 2026 at 6:42 PM' },
-                    { event: 'Authorized profile information card synchronize', ip: '127.0.0.1', device: 'Chrome / Windows', time: 'June 01, 2026 at 10:00 AM' }
+                    { event: 'Logged in successfully', ip: 'Cloud session', device: 'Chrome / Windows', time: 'June 16, 2026 at 7:42 PM' },
+                    { event: 'Modified personal bio status', ip: 'Cloud session', device: 'Chrome / Windows', time: 'June 16, 2026 at 7:35 PM' },
+                    { event: 'Compiled vehicle test suite challenge', ip: 'Cloud session', device: 'Chrome / Windows', time: 'June 16, 2026 at 6:42 PM' },
+                    { event: 'Authorized profile information card synchronize', ip: 'Cloud session', device: 'Chrome / Windows', time: 'June 01, 2026 at 10:00 AM' }
                   ].map((log, idx) => (
                     <div key={idx} className="py-3.5 flex justify-between gap-4 items-start flex-wrap">
                       <div className="space-y-1">

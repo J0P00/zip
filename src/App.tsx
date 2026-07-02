@@ -76,6 +76,7 @@ import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
 import AdminVideoManager from './components/AdminVideoManager';
 import AdminTermsManager from './components/AdminTermsManager';
+import { appApi, setAuthToken, userApi } from './services/api';
 
 const DEMO_STUDENT_PROGRESS = {
   streak: 12,
@@ -124,6 +125,15 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
+
+  useEffect(() => {
+    appApi.health().catch(error => {
+      console.warn('Backend health check failed:', error);
+    });
+    appApi.getLessons().catch(error => {
+      console.warn('Backend lessons check failed:', error);
+    });
+  }, []);
 
   // Authenticated user profile and state triggers
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
@@ -666,6 +676,12 @@ export default function App() {
       const updated = { ...prev, ...updates };
 
       if (prev.accountSource === 'custom') {
+        if (prev.id && prev.token) {
+          userApi.updateProfile(prev.id, updates).catch(error => {
+            console.warn('Unable to sync profile changes with backend:', error);
+          });
+        }
+
         try {
           const saved = localStorage.getItem('oophub_users');
           const usersList = saved ? JSON.parse(saved) : [];
@@ -1215,6 +1231,8 @@ export default function App() {
                   setShowLogoutConfirm(false);
                   setPersona('public');
                   setCurrentUser(null);
+                  setAuthToken('');
+                  localStorage.removeItem('oophub_current_user_id');
                   setAuthMode(null);
                 }}
                 className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition shadow-md shadow-rose-100 cursor-pointer select-none"

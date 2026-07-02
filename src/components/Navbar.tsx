@@ -362,7 +362,7 @@ export default function Navbar({
             <div className="space-y-2 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-xl border border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 space-y-3">
               <div className="flex justify-between">
                 <span className="font-bold">Current Browser Session:</span>
-                <span className="font-mono text-emerald-650 dark:text-emerald-400 font-bold">127.0.0.1 (Chrome / Windows)</span>
+                <span className="font-mono text-emerald-650 dark:text-emerald-400 font-bold">Cloud session (Chrome / Windows)</span>
               </div>
               <div className="flex justify-between">
                 <span className="font-bold">Last Security Audit Pass:</span>

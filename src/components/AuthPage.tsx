@@ -24,6 +24,7 @@ import {
   recordTermsAcceptance,
   requiresTermsAcceptance
 } from '../data/termsStore';
+import { authApi, isDemoEmail, progressApi, setAuthToken } from '../services/api';
 import TermsAgreementModal from './TermsAgreementModal';
 
 interface AuthPageProps {
@@ -35,6 +36,8 @@ interface AuthPageProps {
 type Notice = { type: 'success' | 'error'; message: string } | null;
 
 type StoredUser = {
+  id?: string;
+  token?: string;
   name: string;
   email: string;
   password: string;
@@ -315,20 +318,67 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     setIsTermsModalOpen(true);
   };
 
-  const startAuthenticatedSession = (user: StoredUser, accountSource: AccountSource) => {
+  const startAuthenticatedSession = async (user: StoredUser, accountSource: AccountSource, token = user.token || '') => {
     if (rememberMe) {
       localStorage.setItem('oophub_remembered_email', user.email);
     } else {
       localStorage.removeItem('oophub_remembered_email');
     }
 
+    setAuthToken(token);
+    if (user.id) localStorage.setItem('oophub_current_user_id', user.id);
+
+    if (token && user.id) {
+      try {
+        const [videoProgress, quizAttempts] = await Promise.all([
+          progressApi.getVideoProgress(user.id, token),
+          progressApi.getQuizAttempts(user.id, token)
+        ]);
+
+        const watchDb = videoProgress.data.reduce((acc: Record<string, any>, row: any) => {
+          acc[row.video_id] = {
+            lessonId: row.video_id,
+            lastPosition: Number(row.last_position || 0),
+            completionPercentage: Number(row.completion_percentage || 0),
+            completed: Boolean(row.completed),
+            dateCompleted: row.date_completed || undefined
+          };
+          return acc;
+        }, {});
+
+        const quizDb = quizAttempts.data.reduce((acc: Record<string, any>, row: any) => {
+          acc[row.assessment_id] = {
+            assessmentId: row.assessment_id,
+            lessonId: row.lesson_id || '',
+            score: row.score,
+            total: row.total,
+            percentage: Number(row.percentage || 0),
+            correctAnswers: row.correct_answers,
+            incorrectAnswers: row.incorrect_answers,
+            passed: Boolean(row.passed),
+            attemptNumber: row.attempt_number,
+            answers: row.answers || {},
+            dateCompleted: row.date_completed
+          };
+          return acc;
+        }, {});
+
+        localStorage.setItem('oophub_oop_video_progress', JSON.stringify(watchDb));
+        localStorage.setItem('oophub_oop_quiz_attempts', JSON.stringify(quizDb));
+      } catch {
+        // The authenticated session can still start; progress will retry from each workspace view.
+      }
+    }
+
     showNotice('success', `Welcome back, ${user.name}. Loading workspace...`);
     window.setTimeout(() => {
       onAuthSuccess({
+        id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
         accountSource,
+        token,
         userId: user.userId ?? buildUserId(user.email, user.role),
         registrationDate: user.registrationDate ?? new Date().toISOString(),
         contactNumber: user.contactNumber ?? '',
@@ -364,7 +414,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     }, 800);
   };
 
-  const completeLogin = (user: StoredUser, accountSource: AccountSource) => {
+  const completeLogin = async (user: StoredUser, accountSource: AccountSource) => {
     const activePolicy = getPublishedPolicy();
     const userId = user.userId ?? buildUserId(user.email, user.role);
     const mustAcceptTerms =
@@ -383,7 +433,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       return;
     }
 
-    startAuthenticatedSession(user, accountSource);
+    await startAuthenticatedSession(user, accountSource);
   };
 
   const handleTermsModalClose = () => {
@@ -395,7 +445,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     }
   };
 
-  const handleTermsModalAccept = () => {
+  const handleTermsModalAccept = async () => {
     if (pendingLogin) {
       const activePolicy = getPublishedPolicy();
       const userId = pendingLogin.user.userId ?? buildUserId(pendingLogin.user.email, pendingLogin.user.role);
@@ -417,7 +467,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
         updateStoredUserTermsMetadata(updatedUser, acceptance);
         setPendingLogin(null);
         setIsTermsModalOpen(false);
-        startAuthenticatedSession(updatedUser, pendingLogin.accountSource);
+        await startAuthenticatedSession(updatedUser, pendingLogin.accountSource);
       } catch {
         showNotice('error', 'Unable to record terms acceptance. Please try again.');
       }
@@ -430,7 +480,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     showNotice('success', `Terms version ${publishedPolicy.version} accepted for registration.`);
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginTouched({ email: true, password: true });
 
@@ -440,31 +490,26 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     }
 
     setIsSubmitting(true);
-    window.setTimeout(() => {
+    try {
       const normalizedEmail = loginEmail.trim().toLowerCase();
-      const matchedDefault = demoAccounts.find(
-        user => user.email.toLowerCase() === normalizedEmail && user.password === loginPassword
+      const response = await authApi.login(normalizedEmail, loginPassword);
+      const accountSource: AccountSource = isDemoEmail(response.user.email, response.user.role) ? 'demo' : 'custom';
+      await completeLogin(
+        {
+          ...response.user,
+          role: response.user.role as Persona,
+          token: response.token,
+          password: ''
+        },
+        accountSource
       );
-      const matchedCustom = readStoredUsers().find(
-        user => user.email.toLowerCase() === normalizedEmail && user.password === loginPassword
-      );
-
-      if (matchedDefault) {
-        completeLogin(matchedDefault, 'demo');
-        return;
-      }
-
-      if (matchedCustom) {
-        completeLogin(matchedCustom, 'custom');
-        return;
-      }
-
+    } catch (error) {
       setIsSubmitting(false);
-      showNotice('error', 'Invalid email or password. Please verify credentials or create an account.');
-    }, 700);
+      showNotice('error', error instanceof Error ? error.message : 'Invalid email or password. Please verify credentials or create an account.');
+    }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterTouched({
       username: true,
@@ -487,79 +532,39 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     }
 
     setIsSubmitting(true);
-    window.setTimeout(() => {
-      const usersList = readStoredUsers();
-      const normalizedEmail = regEmail.trim().toLowerCase();
-      const alreadyExists = [...demoAccounts, ...usersList].some(
-        user => user.email.toLowerCase() === normalizedEmail
-      );
-
-      if (alreadyExists) {
-        setIsSubmitting(false);
-        showNotice('error', 'An account is already registered with this email address.');
-        return;
-      }
-
+    try {
       const displayCourse = regCourse === 'CS' ? 'CS (Computer Science)' : 'IT (Information Technology)';
       const computedSection = regRole === 'student' ? regSection.trim().toUpperCase() : undefined;
       const activePolicy = getPublishedPolicy();
-      const newUserId = buildUserId(regEmail, regRole);
-      let acceptance: UserTermsAgreement;
 
-      try {
-        acceptance = recordTermsAcceptance({
-          userId: newUserId,
-          role: regRole,
-          version: activePolicy.version
-        });
-        setPublishedPolicy(activePolicy);
-      } catch {
-        setIsSubmitting(false);
-        showNotice('error', 'Unable to record terms acceptance. Please try again.');
-        return;
-      }
-
-      const newUser: StoredUser = {
+      const response = await authApi.register({
         name: regUsername.trim(),
         email: regEmail.trim(),
         password: regPassword,
         role: regRole,
-        userId: newUserId,
-        registrationDate: new Date().toISOString(),
-        contactNumber: '',
-        address: '',
-        dateOfBirth: '',
-        accountStatus: 'Active',
-        
-        // Student-specific fields
         studentNumber: regRole === 'student' ? regStudentNumber.trim() : undefined,
         course: regRole === 'student' ? displayCourse : undefined,
         yearLevel: regRole === 'student' ? regYearLevel : undefined,
         section: computedSection,
         programStatus: regRole === 'student' ? 'Regular' : undefined,
-
-        // Teacher-specific fields
         employeeId: regRole === 'teacher' ? regTeacherId.trim() : undefined,
         department: regRole === 'teacher' ? 'College of Computer Studies' : undefined,
         specialization: regRole === 'teacher' ? 'Object-Oriented Programming' : undefined,
         assignedCourses: regRole === 'teacher' ? 'OOP 101, Advanced Java' : undefined,
+        termsVersion: activePolicy.version
+      });
 
-        // Global defaults
-        onlineStatus: 'online',
-        avatar: '',
-        termsAgreementAccepted: acceptance.accepted,
-        termsAcceptedAt: acceptance.accepted_at,
-        termsVersion: acceptance.version
-      };
-
-      usersList.push(newUser);
-      localStorage.setItem('oophub_users', JSON.stringify(usersList));
-      setLoginEmail(newUser.email);
+      setPublishedPolicy(activePolicy);
+      setAuthToken(response.token);
+      setLoginEmail(response.user.email);
       setLoginPassword('');
       setTermsAccepted(false);
       setIsSubmitting(false);
       setIsRegSuccess(true);
-    }, 700);
+    } catch (error) {
+      setIsSubmitting(false);
+      showNotice('error', error instanceof Error ? error.message : 'Unable to create account. Please try again.');
+    }
   };
 
   const socialNotice = (provider: string) => {

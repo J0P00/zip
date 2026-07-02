@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { StudentSubView, VideoLesson } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson } from '../data/oopCourse';
+import { progressApi } from '../services/api';
 
 interface VideoTutorialsProps {
   lessons: VideoLesson[];
@@ -83,6 +84,38 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
   const courseProgress = Math.round(((completedLessons + passedAssessments) / (lessons.length * 2)) * 100);
 
   useEffect(() => {
+    let isMounted = true;
+    const token = localStorage.getItem('oophub_auth_token');
+    const user = localStorage.getItem('oophub_current_user_id');
+    if (!token || !user) return;
+
+    progressApi.getVideoProgress(user, token)
+      .then(response => {
+        if (!isMounted) return;
+        const remoteDb = response.data.reduce((acc: WatchDb, row: any) => {
+          acc[row.video_id] = {
+            lessonId: row.video_id,
+            lastPosition: Number(row.last_position || 0),
+            completionPercentage: Number(row.completion_percentage || 0),
+            completed: Boolean(row.completed),
+            dateCompleted: row.date_completed || undefined
+          };
+          return acc;
+        }, {});
+        setWatchDb(prev => {
+          const next = { ...prev, ...remoteDb };
+          setStoredJson(WATCH_KEY, next);
+          return next;
+        });
+      })
+      .catch(error => console.warn('Unable to load video progress from backend:', error));
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const watch = watchDb[activeLesson.id];
     setCurrentTime(watch?.lastPosition || 0);
     setIsPlaying(false);
@@ -120,6 +153,12 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
 
     setWatchDb(nextDb);
     setStoredJson(WATCH_KEY, nextDb);
+    progressApi.saveVideoProgress({
+      videoId: activeLesson.id,
+      lastPosition: position,
+      completionPercentage: percentage,
+      completed
+    }).catch(error => console.warn('Unable to sync video progress with backend:', error));
     onUpdateVideoProgress(activeLesson.id, percentage);
   };
 

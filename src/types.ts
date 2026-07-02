@@ -3,10 +3,12 @@ export type AccountSource = 'demo' | 'custom';
 export type PolicyStatus = 'Draft' | 'Published' | 'Archived';
 
 export interface AuthenticatedUser {
+  id?: string;
   name: string;
   email: string;
   role: Persona;
   accountSource: AccountSource;
+  token?: string;
   userId?: string;
   registrationDate?: string;
   contactNumber?: string;
