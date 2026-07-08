@@ -198,25 +198,25 @@ class Dog extends Animal {
     id: 'oop_lesson_7',
     assessmentId: 'oop_assessment_7',
     sequence: 7,
-    title: 'Method Overriding',
+    title: 'Polymorphism',
     videoUrl: '/videos/lesson7.mp4',
     duration: '14:20',
-    description: 'Explains how subclasses provide their own implementation of inherited methods while keeping the same method signature.',
-    concepts: ['Override behavior', 'Same signature', '@Override annotation', 'Runtime method call', 'Subclass implementation'],
-    topic: 'Method Overriding',
+    description: 'Covers polymorphism through overloaded methods, overridden behavior, parent references, and dynamic method dispatch.',
+    concepts: ['Many forms', 'Method overloading', 'Method overriding', 'Parent reference', 'Runtime dispatch'],
+    topic: 'Polymorphism',
     module: 'Core OOP',
     difficulty: 'Intermediate',
-    anchors: ['overriding', 'method signature', '@Override', 'subclass method', 'runtime behavior'],
-    codeSnippet: `class Animal {
-    void sound() {
-        System.out.println("Animal sound");
+    anchors: ['polymorphism', 'overloading', 'overriding', 'parent reference', 'runtime dispatch'],
+    codeSnippet: `class Notification {
+    void send() {
+        System.out.println("generic");
     }
 }
 
-class Dog extends Animal {
+class EmailNotification extends Notification {
     @Override
-    void sound() {
-        System.out.println("Bark");
+    void send() {
+        System.out.println("email");
     }
 }`
   },
@@ -224,76 +224,86 @@ class Dog extends Animal {
     id: 'oop_lesson_8',
     assessmentId: 'oop_assessment_8',
     sequence: 8,
-    title: 'Polymorphism',
+    title: 'Abstract Classes',
     videoUrl: '/videos/lesson8.mp4',
     duration: '11:55',
-    description: 'Covers polymorphism through parent references, subclass objects, and dynamic method dispatch in Java programs.',
-    concepts: ['Many forms', 'Parent reference', 'Subclass object', 'Dynamic dispatch', 'Late binding'],
-    topic: 'Polymorphism',
-    module: 'Core OOP',
+    description: 'Explains abstract classes as shared base definitions that can declare required behavior and provide reusable concrete methods.',
+    concepts: ['abstract class', 'Abstract method', 'Concrete method', 'Shared base class', 'Subclass responsibility'],
+    topic: 'Abstract Classes',
+    module: 'Advanced OOP',
     difficulty: 'Intermediate',
-    anchors: ['polymorphism', 'parent reference', 'subclass object', 'dynamic dispatch', 'late binding'],
-    codeSnippet: `Animal pet = new Dog();
-pet.sound();`
+    anchors: ['abstract class', 'abstract method', 'concrete method', 'base class', 'subclass responsibility'],
+    codeSnippet: `abstract class Report {
+    abstract String title();
+
+    void printHeader() {
+        System.out.println("Report");
+    }
+}`
   },
   {
     id: 'oop_lesson_9',
     assessmentId: 'oop_assessment_9',
     sequence: 9,
-    title: 'Abstraction',
+    title: 'Interfaces / Abstraction',
     videoUrl: '/videos/lesson9.mp4',
     duration: '13:35',
-    description: 'Shows how abstraction hides implementation details and focuses attention on essential behavior and contracts.',
-    concepts: ['Essential behavior', 'Implementation hiding', 'Abstract idea', 'Reusable contract', 'Simplified design'],
-    topic: 'Abstraction',
+    description: 'Introduces interfaces and abstraction as ways to expose essential behavior while hiding implementation details.',
+    concepts: ['interface keyword', 'implements keyword', 'Behavior contract', 'Implementation hiding', 'Default methods'],
+    topic: 'Interfaces / Abstraction',
     module: 'Advanced OOP',
     difficulty: 'Intermediate',
-    anchors: ['abstraction', 'implementation hiding', 'essential behavior', 'contract', 'design'],
-    codeSnippet: `abstract class Shape {
-    abstract double area();
+    anchors: ['interface', 'implements', 'contract', 'abstraction', 'default method'],
+    codeSnippet: `interface Payable {
+    double computePay();
+}
+
+class Instructor implements Payable {
+    public double computePay() {
+        return 1500.0;
+    }
 }`
   },
   {
     id: 'oop_lesson_10',
     assessmentId: 'oop_assessment_10',
     sequence: 10,
-    title: 'Abstract Classes',
+    title: 'Array of Objects',
     videoUrl: '/videos/lesson10.mp4',
     duration: '18:40',
-    description: 'Explains abstract classes as shared base definitions that can contain both abstract methods and concrete reusable behavior.',
-    concepts: ['abstract class', 'Abstract method', 'Concrete method', 'Shared base class', 'Subclass responsibility'],
-    topic: 'Abstract Classes',
+    description: 'Shows how arrays can store object references, how each element must be initialized, and how loops process object collections.',
+    concepts: ['Object reference array', 'Element initialization', 'Null elements', 'Array traversal', 'Object state per element'],
+    topic: 'Array of Objects',
     module: 'Advanced OOP',
     difficulty: 'Advanced',
-    anchors: ['abstract class', 'abstract method', 'concrete method', 'base class', 'subclass responsibility'],
-    codeSnippet: `abstract class Vehicle {
-    abstract void move();
-
-    void start() {
-        System.out.println("Starting");
-    }
-}`
+    anchors: ['array of objects', 'object reference', 'new object', 'null element', 'loop traversal'],
+    codeSnippet: `Student[] roster = new Student[3];
+roster[0] = new Student("Mia");
+roster[1] = new Student("Noah");
+roster[2] = new Student("Lia");`
   },
   {
     id: 'oop_lesson_11',
     assessmentId: 'oop_assessment_11',
     sequence: 11,
-    title: 'Interfaces',
+    title: 'Enum',
     videoUrl: '/videos/lesson11.mp4',
     duration: '15:25',
-    description: 'Introduces Java interfaces as contracts that classes can implement to guarantee common capabilities across different types.',
-    concepts: ['interface keyword', 'implements keyword', 'Contract methods', 'Multiple interfaces', 'Capability design'],
-    topic: 'Interfaces',
+    description: 'Explains Java enums as type-safe named constants that can also contain fields, constructors, and methods.',
+    concepts: ['enum keyword', 'Named constants', 'Type safety', 'switch with enum', 'Enum fields and methods'],
+    topic: 'Enum',
     module: 'Advanced OOP',
     difficulty: 'Advanced',
-    anchors: ['interface', 'implements', 'contract', 'multiple interfaces', 'capability'],
-    codeSnippet: `interface Drivable {
-    void drive();
+    anchors: ['enum', 'constant', 'type safety', 'switch', 'values()'],
+    codeSnippet: `enum Role {
+    STUDENT, TEACHER, ADMIN
 }
 
-class Car implements Drivable {
-    public void drive() {
-        System.out.println("Driving");
+class Account {
+    Role role;
+
+    Account(Role role) {
+        this.role = role;
     }
 }`
   }
@@ -329,44 +339,243 @@ export const OOP_COURSE_LESSONS: VideoLesson[] = OOP_LESSON_BLUEPRINTS.map((less
   license_type: 'Local Educational Asset'
 }));
 
-const buildLessonQuestions = (lesson: LessonBlueprint): CourseQuestion[] => {
+const javaName = (lesson: LessonBlueprint, suffix: string) =>
+  `${lesson.title.replace(/[^A-Za-z]/g, '') || 'Topic'}${suffix}`;
+
+const explain = (correct: string, others: string, focus: string) =>
+  `${correct} is correct because it matches how ${focus} works in Java. The other choices are incorrect because ${others}.`;
+
+const buildConceptualQuestions = (lesson: LessonBlueprint): CourseQuestion[] => {
   const [a, b, c, d, e] = lesson.anchors;
-  const easy = [
-    question(lesson, 1, 'Easy', `In "${lesson.title}", which term is presented as the main focus of the lesson?`, lesson.title, ['Inheritance', 'Arrays', 'Exception Handling'], `This lesson is centered on ${lesson.title}.`),
-    question(lesson, 2, 'Easy', `Which Java idea from the lesson is most closely connected to "${a}"?`, a, [b, c, d], `The lesson introduces ${a} as a key term for understanding ${lesson.title}.`),
-    question(lesson, 3, 'Easy', `Which item belongs to the vocabulary introduced for this lesson?`, b, ['HTML tag', 'SQL table', 'CSS selector'], `${b} is part of the lesson vocabulary.`),
-    question(lesson, 4, 'Easy', `What kind of programming language examples does the lesson use?`, 'Java', ['Python only', 'SQL only', 'HTML only'], 'The course videos and code examples are focused on Java syntax.'),
-    question(lesson, 5, 'Easy', `Which concept is paired with "${lesson.title}" in the course syllabus?`, lesson.topic, ['Network Routing', 'Database Indexing', 'Page Styling'], `${lesson.topic} is the lesson topic for this video.`),
-    question(lesson, 6, 'Easy', `Which folder supplies the video for this lesson?`, '/videos/', ['https://youtube.com/', '/images/', '/api/videos/'], 'The videos are loaded from the local public/videos folder through /videos paths.'),
-    question(lesson, 7, 'Easy', `Which lesson number is "${lesson.title}"?`, `Lesson ${lesson.sequence}`, ['Lesson 9', 'Lesson 0', 'Final Exam'], `The syllabus places this topic at lesson ${lesson.sequence}.`),
-    question(lesson, 8, 'Easy', `Which of the following is listed as a key concept for "${lesson.title}"?`, c, ['Package install', 'HTTP status', 'CSS grid'], `${c} is one of this lesson's listed concepts.`),
-    question(lesson, 9, 'Easy', `What should a student do before taking Assessment ${lesson.sequence}?`, 'Watch the lesson video', ['Skip to the next lesson', 'Delete progress', 'Use an external video'], 'Progression requires watching the current video before the assessment is available.'),
-    question(lesson, 10, 'Easy', `What does the course use to present the "${lesson.title}" tutorial?`, 'An HTML5 video player', ['A YouTube embed', 'An external livestream', 'A PDF-only reader'], 'The module uses a responsive HTML5 video player for local MP4 files.')
-  ];
+  const focus = lesson.title;
 
-  const medium = [
-    question(lesson, 11, 'Medium', `In the Java example style for "${lesson.title}", which code block best matches the lesson focus?`, lesson.codeSnippet || 'class Example {}', ['SELECT * FROM lessons;', '<div>Example</div>', 'body { color: red; }'], `The lesson is Java-focused, so the matching example is the Java snippet.`, lesson.codeSnippet),
-    question(lesson, 12, 'Medium', `Why does the lesson emphasize "${d}"?`, `Because it helps explain ${lesson.title} in Java programs`, ['Because it installs dependencies', 'Because it creates database rows', 'Because it deploys the website'], `${d} is directly related to how ${lesson.title} works in Java.`),
-    question(lesson, 13, 'Medium', `Which statement best matches the instructor-style explanation for "${lesson.title}"?`, lesson.description, ['The lesson teaches CSS animations only.', 'The lesson teaches database joins only.', 'The lesson teaches Git branching only.'], 'The description summarizes the local lesson content used by this module.'),
-    question(lesson, 14, 'Medium', `Which pair is most relevant to "${lesson.title}"?`, `${a} and ${b}`, ['route and controller', 'margin and padding', 'request and response'], `${a} and ${b} are both lesson anchors for this topic.`),
-    question(lesson, 15, 'Medium', `If a student scores below 70% on this lesson assessment, what should happen?`, 'Keep the next lesson locked and recommend rewatching', ['Unlock every lesson', 'Mark the course completed', 'Hide the current lesson'], 'The progression rule keeps the next lesson locked until the current quiz is passed.'),
-    question(lesson, 16, 'Medium', `Which progress threshold completes the "${lesson.title}" video?`, '95% watched', ['50% watched', '70% watched', '10 seconds watched'], 'The module marks a lesson video complete only after at least 95% has been watched.'),
-    question(lesson, 17, 'Medium', `Which data should be saved while watching "${lesson.title}"?`, 'Last watched position and completion percentage', ['Only the title color', 'Only the browser size', 'Only the navigation label'], 'The system saves video progress so playback can resume.'),
-    question(lesson, 18, 'Medium', `Which concept would be a reasonable review target after missing this lesson's questions?`, e || d, ['DNS caching', 'Flexbox wrapping', 'Image compression'], `${e || d} is part of the lesson anchor set.`),
-    question(lesson, 19, 'Medium', `Which assessment belongs immediately after "${lesson.title}"?`, `Assessment ${lesson.sequence}`, ['Assessment 99', 'Landing Page', 'Teacher Portal'], `Each lesson has its own matching assessment in sequence.`),
-    question(lesson, 20, 'Medium', `What does answer randomization protect in Assessment ${lesson.sequence}?`, 'It reduces memorizing positions instead of understanding concepts', ['It changes the video file', 'It edits the database password', 'It skips explanations'], 'Randomizing answer order helps students focus on understanding.')
+  return [
+    question(lesson, 1, 'Easy', `A teammate is learning ${focus}. Which statement best describes its role in Java OOP?`, `It helps model behavior around ${a} and ${b}.`, [`It is mainly used to style web pages.`, `It replaces the Java compiler.`, `It is only available inside SQL queries.`], explain(`Modeling ${a} and ${b}`, 'they describe unrelated technologies or impossible Java behavior', focus)),
+    question(lesson, 2, 'Easy', `Which Java keyword or idea is most directly connected to ${focus}?`, a, ['catch', 'SELECT', 'margin'], explain(`${a}`, 'the distractors belong to exception handling, databases, or CSS rather than this OOP topic', focus)),
+    question(lesson, 3, 'Easy', `When should a beginner use the idea of ${b} while writing Java code?`, `When the program needs ${b} as part of object design.`, ['When declaring an HTML element.', 'When choosing a database port.', 'When setting a browser cookie only.'], explain(`${b}`, 'the other answers move outside Java OOP design', focus)),
+    question(lesson, 4, 'Easy', `Which pair of terms belongs together for the topic ${focus}?`, `${a} and ${c}`, ['HTML and CSS', 'table and row id only', 'IP address and gateway'], explain(`${a} and ${c}`, 'the other pairs are not Java OOP concepts for this lesson', focus)),
+    question(lesson, 5, 'Easy', `A student says, "${focus} is only about memorizing syntax." Which response is best?`, `Syntax matters, but the concept mainly guides how objects and behavior are designed.`, ['Yes, no design decision is involved.', 'Yes, Java objects are not affected by it.', 'No, it is used only for network routing.'], explain('The design-focused response', 'they either deny the OOP purpose or confuse it with networking', focus)),
+    question(lesson, 6, 'Easy', `Which learning objective best fits ${focus}?`, `Use ${lesson.topic} correctly in a small Java class design.`, ['Create a spreadsheet formula.', 'Write CSS animations only.', 'Configure a router firewall.'], explain(`${lesson.topic}`, 'the other objectives do not assess Java OOP understanding', focus)),
+    question(lesson, 7, 'Easy', `Which item is a valid concept from this lesson's vocabulary?`, c, ['DOM selector', 'HTTP cache header', 'SQL foreign key only'], explain(`${c}`, 'the alternatives are from web or database topics rather than this Java lesson', focus)),
+    question(lesson, 8, 'Easy', `Why does Java code often combine ${a} with ${d}?`, `Together they help express ${focus} in maintainable object-oriented code.`, ['They turn Java into Python.', 'They disable compile-time checking.', 'They automatically create database tables.'], explain('The maintainability answer', 'the other options describe impossible or unrelated effects', focus)),
+    question(lesson, 9, 'Easy', `Which statement shows the safest beginner mindset for ${focus}?`, `Write code that makes object responsibilities clear.`, ['Hide all names so no one can read the program.', 'Use the longest possible class names every time.', 'Avoid methods completely.'], explain('Clear responsibilities', 'the other choices reduce readability or prevent useful object behavior', focus)),
+    question(lesson, 10, 'Easy', `What should a student check first when reviewing code about ${focus}?`, `Whether the code uses ${a}, ${b}, and ${e || d} consistently.`, ['Whether every class is public.', 'Whether comments replace working code.', 'Whether the file contains HTML tags.'], explain('Checking the relevant OOP concepts', 'the other checks are not reliable indicators of correct Java OOP design', focus))
   ];
-
-  const hard = [
-    question(lesson, 21, 'Hard', `A student watches 96% of "${lesson.title}" but fails the assessment. What is the correct unlock state?`, 'The next lesson remains locked', ['The next lesson unlocks immediately', 'All lessons reset', 'The video becomes external'], 'Both requirements are needed: video completion and passing assessment.'),
-    question(lesson, 22, 'Hard', `A student passes Assessment ${lesson.sequence} but only watched 80% of the video. What should the module require?`, 'Return to the video and reach 95%', ['Skip the video requirement', 'Delete the assessment attempt', 'Open YouTube'], 'The video must be completed at 95% or more before progression is satisfied.'),
-    question(lesson, 23, 'Hard', `Which saved record best proves mastery for "${lesson.title}"?`, 'Video completed, quiz score, percentage, correct answers, attempt number, and completion date', ['Only the video filename', 'Only the current tab', 'Only the selected theme'], 'The requested database fields include watch completion and quiz attempt details.'),
-    question(lesson, 24, 'Hard', `If answer choices are shuffled, how should correctness be checked?`, 'Compare the selected answer text to the stored correct answer', ['Compare the visual letter only', 'Assume option A is always correct', 'Use the previous question answer'], 'Shuffled choices cannot rely on fixed positions.'),
-    question(lesson, 25, 'Hard', `What makes Assessment ${lesson.sequence} scalable for a future lesson video?`, 'It is generated from the lesson blueprint and associated content', ['It is pasted into the video tag', 'It depends on YouTube URLs', 'It removes local progress'], 'New lesson blueprints can add videos and assessments without rewriting the UI.')
-  ];
-
-  return [...easy, ...medium, ...hard];
 };
+
+const buildCodeAnalysisQuestions = (lesson: LessonBlueprint): CourseQuestion[] => {
+  const cls = javaName(lesson, 'Demo');
+  const helper = javaName(lesson, 'Item');
+  const focus = lesson.title;
+
+  return [
+    question(
+      lesson,
+      11,
+      'Medium',
+      `Which statement about this ${focus} code is correct?`,
+      'The object stores its own state and the method reads that state.',
+      ['The field belongs only to the main method.', 'The method cannot access instance fields.', 'The constructor must return void.'],
+      explain('The object-state statement', 'fields can be instance state, methods can read them, and constructors do not declare a return type', focus),
+      `class ${helper} {
+    String label;
+
+    ${helper}(String label) {
+        this.label = label;
+    }
+
+    String describe() {
+        return label;
+    }
+}`
+    ),
+    question(
+      lesson,
+      12,
+      'Medium',
+      'Which line contains the Java error?',
+      'Line 3',
+      ['Line 1', 'Line 2', 'Line 5'],
+      explain('Line 3', 'constructors use the class name without a return type, while the other listed lines are valid in this context', focus),
+      `1 class ${cls} {
+2     int count;
+3     void ${cls}(int count) { this.count = count; }
+4     int getCount() { return count; }
+5 }`
+    ),
+    question(
+      lesson,
+      13,
+      'Medium',
+      'What should replace the missing code so the object is initialized before use?',
+      `new ${helper}("core")`,
+      [`${helper}`, `"core".${helper}()`, `null`],
+      explain(`new ${helper}("core")`, 'the other choices do not construct a usable object instance', focus),
+      `class ${helper} {
+    String name;
+    ${helper}(String name) { this.name = name; }
+}
+class Main {
+    public static void main(String[] args) {
+        ${helper} item = /* missing code */;
+        System.out.println(item.name);
+    }
+}`
+    ),
+    question(
+      lesson,
+      14,
+      'Medium',
+      `Which revision best improves the ${focus} design without changing the behavior?`,
+      'Keep object data inside fields and expose behavior through methods.',
+      ['Move all data to unrelated global variables.', 'Replace every class with one long main method.', 'Use comments instead of constructors or methods.'],
+      explain('Encapsulating data with behavior', 'the other revisions make the design less object-oriented and harder to maintain', focus),
+      lesson.codeSnippet
+    ),
+    question(
+      lesson,
+      15,
+      'Medium',
+      'Which statement correctly identifies the purpose of the highlighted Java structure?',
+      `It demonstrates ${lesson.topic} by organizing related data and behavior.`,
+      ['It converts Java code to HTML.', 'It prevents all runtime errors automatically.', 'It removes the need for object creation in every case.'],
+      explain(`The ${lesson.topic} statement`, 'the alternatives describe unrelated or impossible behavior', focus),
+      lesson.codeSnippet
+    )
+  ];
+};
+
+const buildOutputQuestions = (lesson: LessonBlueprint): CourseQuestion[] => {
+  const base = javaName(lesson, 'Base');
+  const child = javaName(lesson, 'Child');
+  const focus = lesson.title;
+
+  return [
+    question(
+      lesson,
+      16,
+      'Medium',
+      'What is the output?',
+      'Ava-2',
+      ['Ava', '2-Ava', 'Compilation error'],
+      explain('Ava-2', 'string concatenation follows the expression order and the class compiles', focus),
+      `class StudentRecord {
+    String name;
+    int level;
+    StudentRecord(String name, int level) {
+        this.name = name;
+        this.level = level;
+    }
+    String label() { return name + "-" + level; }
+}
+class Main {
+    public static void main(String[] args) {
+        System.out.println(new StudentRecord("Ava", 2).label());
+    }
+}`
+    ),
+    question(
+      lesson,
+      17,
+      'Medium',
+      'What is the output?',
+      'Base Child',
+      ['Child Base', 'Base', 'Compilation error'],
+      explain('Base Child', 'the parent constructor runs before the child constructor, and the code is valid', focus),
+      `class ${base} {
+    ${base}() { System.out.print("Base "); }
+}
+class ${child} extends ${base} {
+    ${child}() { System.out.print("Child"); }
+}
+class Main {
+    public static void main(String[] args) {
+        new ${child}();
+    }
+}`
+    ),
+    question(
+      lesson,
+      18,
+      'Medium',
+      'What is the output?',
+      'email',
+      ['generic', 'email generic', 'Compilation error'],
+      explain('email', 'overridden methods are selected from the actual object type at runtime', focus),
+      `class Message {
+    void send() { System.out.print("generic"); }
+}
+class Email extends Message {
+    void send() { System.out.print("email"); }
+}
+class Main {
+    public static void main(String[] args) {
+        Message m = new Email();
+        m.send();
+    }
+}`
+    ),
+    question(
+      lesson,
+      19,
+      'Medium',
+      'What is the output?',
+      '2',
+      ['0', '1', 'Compilation error'],
+      explain('2', 'two initialized array elements are non-null, while the third slot remains null', focus),
+      `class Course {
+    String title;
+    Course(String title) { this.title = title; }
+}
+class Main {
+    public static void main(String[] args) {
+        Course[] list = new Course[3];
+        list[0] = new Course("OOP");
+        list[1] = new Course("Java");
+        int count = 0;
+        for (Course c : list) if (c != null) count++;
+        System.out.print(count);
+    }
+}`
+    ),
+    question(
+      lesson,
+      20,
+      'Medium',
+      'What is the output?',
+      'ADMIN',
+      ['0', 'Role.ADMIN', 'Compilation error'],
+      explain('ADMIN', 'printing an enum constant uses its declared constant name by default', focus),
+      `enum Role { STUDENT, TEACHER, ADMIN }
+class Main {
+    public static void main(String[] args) {
+        Role current = Role.ADMIN;
+        System.out.print(current);
+    }
+}`
+    )
+  ];
+};
+
+const buildScenarioQuestions = (lesson: LessonBlueprint): CourseQuestion[] => {
+  const [a, b, c, d, e] = lesson.anchors;
+  const focus = lesson.title;
+
+  return [
+    question(lesson, 21, 'Hard', `A school LMS must represent each learner with a name, number, course, and behavior for printing a profile. Which design best applies ${focus}?`, `Create a Java type that groups the learner state with profile behavior.`, ['Store every learner in one comma-separated String.', 'Use unrelated local variables in many methods.', 'Represent learners only as comments.'], explain('A grouped Java type', 'the alternatives scatter state, remove behavior, or are not executable designs', focus)),
+    question(lesson, 22, 'Hard', `An instructor wants future lessons to reuse ${a} but still allow specialized behavior using ${b}. What is the best design goal?`, `Separate shared structure from the parts that vary.`, ['Duplicate every line in every class.', 'Avoid compiling until all topics are finished.', 'Put all code into a single static method.'], explain('Separating shared and varying behavior', 'the other choices create duplication or remove useful object design', focus)),
+    question(lesson, 23, 'Hard', `A grading module fails because students can put invalid values into an object. Which improvement best follows Java OOP practice?`, `Protect object state and expose controlled methods for updates.`, ['Make every field public for faster typing.', 'Delete constructors from the program.', 'Use random values instead of validation.'], explain('Controlled updates', 'the other choices make invalid state easier or remove initialization support', focus)),
+    question(lesson, 24, 'Hard', `A team is reviewing code for ${focus}. Which evidence shows deeper understanding rather than memorization?`, `The student explains why ${c} changes the design and predicts the code behavior.`, ['The student only recites the file name.', 'The student chooses the longest option.', 'The student ignores the code and guesses.'], explain('Explaining design and behavior', 'the other responses do not demonstrate conceptual or code-level understanding', focus)),
+    question(lesson, 25, 'Hard', `You are extending the LMS with a new feature that uses ${d} and ${e || a}. Which choice is the best long-term decision?`, `Write small Java classes or interfaces with clear responsibilities and testable behavior.`, ['Hard-code every result in the user interface.', 'Mix database passwords into model classes.', 'Avoid names that describe the domain.'], explain('Clear, testable responsibilities', 'the alternatives are brittle, insecure, or unreadable', focus))
+  ];
+};
+
+const buildLessonQuestions = (lesson: LessonBlueprint): CourseQuestion[] => [
+  ...buildConceptualQuestions(lesson),
+  ...buildCodeAnalysisQuestions(lesson),
+  ...buildOutputQuestions(lesson),
+  ...buildScenarioQuestions(lesson)
+];
 
 export const OOP_ASSESSMENTS: LessonAssessment[] = OOP_LESSON_BLUEPRINTS.map(lesson => ({
   id: lesson.assessmentId,
