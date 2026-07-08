@@ -76,7 +76,7 @@ import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
 import AdminVideoManager from './components/AdminVideoManager';
 import AdminTermsManager from './components/AdminTermsManager';
-import { appApi, setAuthToken, userApi } from './services/api';
+import { appApi, authApi, getAuthToken, isDemoEmail, setAuthToken, userApi } from './services/api';
 
 const DEMO_STUDENT_PROGRESS = {
   streak: 12,
@@ -98,13 +98,62 @@ const DEMO_STUDENT_GRADE = {
 
 const DEMO_STUDENT_BADGES = INITIAL_LEADERBOARD_USERS.find(user => user.isCurrentUser)?.badges ?? [];
 const OOP_LESSON_COUNT = OOP_COURSE_LESSONS.length;
+const SESSION_USER_KEY = 'oophub_current_user';
+const SESSION_VIEW_KEY = 'oophub_workspace_view';
+
+type WorkspaceViewState = {
+  persona?: Persona;
+  studentTab?: StudentSubView;
+  teacherTab?: TeacherSubView;
+  adminTab?: AdminSubView;
+};
+
+const readSessionUser = (): AuthenticatedUser | null => {
+  try {
+    const saved = localStorage.getItem(SESSION_USER_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+};
+
+const readWorkspaceView = (): WorkspaceViewState => {
+  try {
+    const saved = localStorage.getItem(SESSION_VIEW_KEY);
+    return saved ? JSON.parse(saved) : {};
+  } catch {
+    return {};
+  }
+};
+
+const persistSessionUser = (user: AuthenticatedUser) => {
+  try {
+    localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+    if (user.id) localStorage.setItem('oophub_current_user_id', user.id);
+  } catch {
+    // The active React session still works if storage is unavailable.
+  }
+};
+
+const clearSessionUser = () => {
+  try {
+    localStorage.removeItem(SESSION_USER_KEY);
+    localStorage.removeItem(SESSION_VIEW_KEY);
+    localStorage.removeItem('oophub_current_user_id');
+  } catch {
+    // Logout should still complete even if storage cleanup is blocked.
+  }
+};
 
 export default function App() {
+  const savedUser = readSessionUser();
+  const savedView = readWorkspaceView();
+
   // Core Persona and Navigation state
-  const [persona, setPersona] = useState<Persona>('public');
-  const [studentTab, setStudentTab] = useState<StudentSubView>('dashboard');
-  const [teacherTab, setTeacherTab] = useState<TeacherSubView>('dashboard');
-  const [adminTab, setAdminTab] = useState<AdminSubView>('dashboard');
+  const [persona, setPersona] = useState<Persona>(savedUser?.role ?? 'public');
+  const [studentTab, setStudentTab] = useState<StudentSubView>(savedView.studentTab ?? 'dashboard');
+  const [teacherTab, setTeacherTab] = useState<TeacherSubView>(savedView.teacherTab ?? 'dashboard');
+  const [adminTab, setAdminTab] = useState<AdminSubView>(savedView.adminTab ?? 'dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -136,10 +185,72 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    if (persona === 'public') return;
+
+    try {
+      localStorage.setItem(SESSION_VIEW_KEY, JSON.stringify({
+        persona,
+        studentTab,
+        teacherTab,
+        adminTab
+      }));
+    } catch {
+      // Navigation still works for this render when persistence is unavailable.
+    }
+  }, [adminTab, persona, studentTab, teacherTab]);
+
   // Authenticated user profile and state triggers
-  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(savedUser);
   const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isRestoringSession, setIsRestoringSession] = useState(() => Boolean(getAuthToken()) && !savedUser);
+
+  useEffect(() => {
+    if (currentUser) {
+      persistSessionUser(currentUser);
+      return;
+    }
+
+    const token = getAuthToken();
+    if (!token) {
+      setIsRestoringSession(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsRestoringSession(true);
+
+    authApi.me(token)
+      .then(response => {
+        if (isCancelled) return;
+
+        const restoredUser: AuthenticatedUser = {
+          ...response.user,
+          role: response.user.role as Persona,
+          accountSource: response.user.accountSource ?? (isDemoEmail(response.user.email, response.user.role) ? 'demo' : 'custom'),
+          token
+        };
+
+        persistSessionUser(restoredUser);
+        setCurrentUser(restoredUser);
+        setPersona(restoredUser.role);
+      })
+      .catch(error => {
+        if (isCancelled) return;
+        console.warn('Session restore failed:', error);
+        setAuthToken('');
+        clearSessionUser();
+        setPersona('public');
+      })
+      .finally(() => {
+        if (!isCancelled) setIsRestoringSession(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUser]);
 
   // Student Statistics State
   const [streak, setStreak] = useState<number>(DEMO_STUDENT_PROGRESS.streak);
@@ -675,6 +786,7 @@ export default function App() {
       if (!prev) return prev;
 
       const updated = { ...prev, ...updates };
+      persistSessionUser(updated);
 
       if (prev.accountSource === 'custom') {
         if (prev.id && prev.token) {
@@ -769,11 +881,19 @@ export default function App() {
       
 
       {/* Main Rendering Logic block depending on Persona */}
-      {authMode ? (
+      {isRestoringSession ? (
+        <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center">
+          <div className="space-y-3">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
+            <p className="text-sm font-bold text-slate-600">Restoring your workspace...</p>
+          </div>
+        </main>
+      ) : authMode ? (
         <AuthPage 
           initialMode={authMode}
           onCancel={() => setAuthMode(null)}
           onAuthSuccess={(user) => {
+            persistSessionUser(user);
             setCurrentUser(user);
             setPersona(user.role);
             setAuthMode(null);
@@ -1233,7 +1353,7 @@ export default function App() {
                   setPersona('public');
                   setCurrentUser(null);
                   setAuthToken('');
-                  localStorage.removeItem('oophub_current_user_id');
+                  clearSessionUser();
                   setAuthMode(null);
                 }}
                 className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition shadow-md shadow-rose-100 cursor-pointer select-none"
