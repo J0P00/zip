@@ -188,9 +188,9 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: Asse
           <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
             {[
               ['Progress', `${courseStats.overall}%`],
-              ['Completed', `${courseStats.completedLessons}/5`],
+              ['Completed', `${courseStats.completedLessons}/${OOP_COURSE_LESSONS.length}`],
               ['Locked', `${courseStats.lockedLessons}`],
-              ['Passed', `${courseStats.passedAssessments}/5`]
+              ['Passed', `${courseStats.passedAssessments}/${OOP_ASSESSMENTS.length}`]
             ].map(([label, value]) => (
               <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                 <span className="block text-[10px] font-black uppercase text-slate-400">{label}</span>

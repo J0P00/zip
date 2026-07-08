@@ -168,6 +168,134 @@ export const OOP_LESSON_BLUEPRINTS: LessonBlueprint[] = [
         System.out.println(name);
     }
 }`
+  },
+  {
+    id: 'oop_lesson_6',
+    assessmentId: 'oop_assessment_6',
+    sequence: 6,
+    title: 'Inheritance',
+    videoUrl: '/videos/lesson6.mp4',
+    duration: '16:10',
+    description: 'Introduces inheritance in Java, showing how child classes reuse and extend parent class fields and methods.',
+    concepts: ['Parent class', 'Child class', 'extends keyword', 'is-a relationship', 'Code reuse'],
+    topic: 'Inheritance',
+    module: 'Core OOP',
+    difficulty: 'Intermediate',
+    anchors: ['inheritance', 'parent class', 'child class', 'extends', 'is-a relationship', 'reuse'],
+    codeSnippet: `class Animal {
+    void eat() {
+        System.out.println("Eating");
+    }
+}
+
+class Dog extends Animal {
+    void bark() {
+        System.out.println("Barking");
+    }
+}`
+  },
+  {
+    id: 'oop_lesson_7',
+    assessmentId: 'oop_assessment_7',
+    sequence: 7,
+    title: 'Method Overriding',
+    videoUrl: '/videos/lesson7.mp4',
+    duration: '14:20',
+    description: 'Explains how subclasses provide their own implementation of inherited methods while keeping the same method signature.',
+    concepts: ['Override behavior', 'Same signature', '@Override annotation', 'Runtime method call', 'Subclass implementation'],
+    topic: 'Method Overriding',
+    module: 'Core OOP',
+    difficulty: 'Intermediate',
+    anchors: ['overriding', 'method signature', '@Override', 'subclass method', 'runtime behavior'],
+    codeSnippet: `class Animal {
+    void sound() {
+        System.out.println("Animal sound");
+    }
+}
+
+class Dog extends Animal {
+    @Override
+    void sound() {
+        System.out.println("Bark");
+    }
+}`
+  },
+  {
+    id: 'oop_lesson_8',
+    assessmentId: 'oop_assessment_8',
+    sequence: 8,
+    title: 'Polymorphism',
+    videoUrl: '/videos/lesson8.mp4',
+    duration: '11:55',
+    description: 'Covers polymorphism through parent references, subclass objects, and dynamic method dispatch in Java programs.',
+    concepts: ['Many forms', 'Parent reference', 'Subclass object', 'Dynamic dispatch', 'Late binding'],
+    topic: 'Polymorphism',
+    module: 'Core OOP',
+    difficulty: 'Intermediate',
+    anchors: ['polymorphism', 'parent reference', 'subclass object', 'dynamic dispatch', 'late binding'],
+    codeSnippet: `Animal pet = new Dog();
+pet.sound();`
+  },
+  {
+    id: 'oop_lesson_9',
+    assessmentId: 'oop_assessment_9',
+    sequence: 9,
+    title: 'Abstraction',
+    videoUrl: '/videos/lesson9.mp4',
+    duration: '13:35',
+    description: 'Shows how abstraction hides implementation details and focuses attention on essential behavior and contracts.',
+    concepts: ['Essential behavior', 'Implementation hiding', 'Abstract idea', 'Reusable contract', 'Simplified design'],
+    topic: 'Abstraction',
+    module: 'Advanced OOP',
+    difficulty: 'Intermediate',
+    anchors: ['abstraction', 'implementation hiding', 'essential behavior', 'contract', 'design'],
+    codeSnippet: `abstract class Shape {
+    abstract double area();
+}`
+  },
+  {
+    id: 'oop_lesson_10',
+    assessmentId: 'oop_assessment_10',
+    sequence: 10,
+    title: 'Abstract Classes',
+    videoUrl: '/videos/lesson10.mp4',
+    duration: '18:40',
+    description: 'Explains abstract classes as shared base definitions that can contain both abstract methods and concrete reusable behavior.',
+    concepts: ['abstract class', 'Abstract method', 'Concrete method', 'Shared base class', 'Subclass responsibility'],
+    topic: 'Abstract Classes',
+    module: 'Advanced OOP',
+    difficulty: 'Advanced',
+    anchors: ['abstract class', 'abstract method', 'concrete method', 'base class', 'subclass responsibility'],
+    codeSnippet: `abstract class Vehicle {
+    abstract void move();
+
+    void start() {
+        System.out.println("Starting");
+    }
+}`
+  },
+  {
+    id: 'oop_lesson_11',
+    assessmentId: 'oop_assessment_11',
+    sequence: 11,
+    title: 'Interfaces',
+    videoUrl: '/videos/lesson11.mp4',
+    duration: '15:25',
+    description: 'Introduces Java interfaces as contracts that classes can implement to guarantee common capabilities across different types.',
+    concepts: ['interface keyword', 'implements keyword', 'Contract methods', 'Multiple interfaces', 'Capability design'],
+    topic: 'Interfaces',
+    module: 'Advanced OOP',
+    difficulty: 'Advanced',
+    anchors: ['interface', 'implements', 'contract', 'multiple interfaces', 'capability'],
+    codeSnippet: `interface Drivable {
+    void drive();
+}
+
+class Car implements Drivable {
+    public void drive() {
+        System.out.println("Driving");
+    }
+}`
   }
 ];
 

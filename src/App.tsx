@@ -97,6 +97,7 @@ const DEMO_STUDENT_GRADE = {
 };
 
 const DEMO_STUDENT_BADGES = INITIAL_LEADERBOARD_USERS.find(user => user.isCurrentUser)?.badges ?? [];
+const OOP_LESSON_COUNT = OOP_COURSE_LESSONS.length;
 
 export default function App() {
   // Core Persona and Navigation state
@@ -148,7 +149,7 @@ export default function App() {
   // Dynamic shared database states
   const [videoLessons, setVideoLessons] = useState<VideoLesson[]>(() => {
     try {
-      const APP_VERSION = '1.0.3';
+      const APP_VERSION = '1.0.4';
       const version = localStorage.getItem('app_version');
 
       if (version !== APP_VERSION) {
@@ -338,7 +339,7 @@ export default function App() {
 
         if (isCompletedNow) {
           setPoints(p => p + 100);
-          setCompletedLessonsCount(c => Math.min(c + 1, 5));
+          setCompletedLessonsCount(c => Math.min(c + 1, OOP_LESSON_COUNT));
           
           addNotification(
             `Lesson Completed! 🎉`,
@@ -482,7 +483,7 @@ export default function App() {
     // Increment points & complete lessons count
     setPoints(prev => prev + 150);
     setStreak(prev => prev + 1);
-    setCompletedLessonsCount(prev => Math.min(prev + 1, 5));
+    setCompletedLessonsCount(prev => Math.min(prev + 1, OOP_LESSON_COUNT));
 
     // Append new active row inside Instructor queue review pending
     const newSub: PendingSubmission = {
@@ -650,7 +651,7 @@ export default function App() {
     avatar: ''
   };
 
-  const learningProgress = Math.min(100, Math.round((completedLessonsCount / 5) * 100));
+  const learningProgress = Math.min(100, Math.round((completedLessonsCount / OOP_LESSON_COUNT) * 100));
   const profileMetrics = displayUser.role === 'teacher'
     ? [
         { label: 'Courses Created', value: String(lessonItems.length), helper: 'Lessons and catalog items prepared for students' },
@@ -664,7 +665,7 @@ export default function App() {
           { label: 'System Status', value: 'Online', helper: 'Pedagogical core services are currently active' }
         ]
       : [
-          { label: 'Completed Courses', value: completedLessonsCount >= 5 ? '1' : '0', helper: 'Courses completed from the active learning path' },
+          { label: 'Completed Courses', value: completedLessonsCount >= OOP_LESSON_COUNT ? '1' : '0', helper: 'Courses completed from the active learning path' },
           { label: 'Learning Progress', value: `${learningProgress}%`, helper: 'Progress through the current OOP module sequence' },
           { label: 'Certificates Earned', value: points >= 1500 ? '1' : '0', helper: 'Certificates unlocked by finishing course requirements' }
         ];

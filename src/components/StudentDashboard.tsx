@@ -21,6 +21,7 @@ import {
   Check
 } from 'lucide-react';
 import { AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
+import { OOP_COURSE_LESSONS } from '../data/oopCourse';
 
 interface StudentDashboardProps {
   userName: string;
@@ -55,7 +56,8 @@ export default function StudentDashboard({
 }: StudentDashboardProps) {
   const firstName = userName.trim().split(/\s+/)[0] || 'Student';
   const hasProgress = streak > 0 || points > 0 || completedLessonsCount > 0 || Boolean(recentGrade);
-  const moduleProgress = Math.min(100, Math.round((completedLessonsCount / 5) * 100));
+  const lessonCount = OOP_COURSE_LESSONS.length;
+  const moduleProgress = Math.min(100, Math.round((completedLessonsCount / lessonCount) * 100));
   const weeklyActivityHours = hasProgress
     ? `${(completedLessonsCount * 1.4 + Math.min(streak, 7) * 0.4).toFixed(1)} hrs`
     : '0 hrs';
@@ -199,7 +201,7 @@ export default function StudentDashboard({
               </div>
               <div>
                 <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider font-mono">Mastery Completed</div>
-                <div className="text-xs sm:text-sm font-extrabold text-slate-800 font-mono">{completedLessonsCount}/5 Lessons</div>
+                <div className="text-xs sm:text-sm font-extrabold text-slate-800 font-mono">{completedLessonsCount}/{lessonCount} Lessons</div>
               </div>
             </div>
           </div>

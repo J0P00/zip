@@ -209,7 +209,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
             </span>
             <h2 className="mt-3 text-2xl font-extrabold text-slate-900 dark:text-white">OOP Fundamentals</h2>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-              Five local Java OOP lessons using the MP4 files in <span className="font-mono">public/videos</span>. Lessons unlock only after video completion and a passed assessment.
+              {OOP_COURSE_LESSONS.length} local Java OOP lessons using the MP4 files in <span className="font-mono">public/videos</span>. Lessons unlock only after video completion and a passed assessment.
             </p>
           </div>
           <div className="min-w-[220px] rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
