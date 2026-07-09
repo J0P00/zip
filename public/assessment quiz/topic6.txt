@@ -1,0 +1,396 @@
+Topic 6: Inheritance | extends | super in Java OOP
+
+Question Bank (Questions 1–25)
+
+1. What is inheritance in Java?
+
+A. A way to create multiple constructors
+
+B. A mechanism that allows one class to acquire the properties and methods of another class
+
+C. A method for hiding data
+
+D. A way to overload methods
+
+Answer: B
+
+2. Which keyword is used to inherit a class in Java?
+
+A. inherit
+
+B. implements
+
+C. extends
+
+D. super
+
+Answer: C
+
+3. In inheritance, the class being inherited is called the:
+
+A. Child Class
+
+B. Derived Class
+
+C. Parent (Superclass)
+
+D. Object Class
+
+Answer: C
+
+4. The class that inherits from another class is called the:
+
+A. Parent Class
+
+B. Child (Subclass)
+
+C. Main Class
+
+D. Static Class
+
+Answer: B
+
+5. Which of the following correctly creates an inheritance relationship?
+
+A.
+
+class Dog inherits Animal { }
+
+B.
+
+class Dog extends Animal { }
+
+C.
+
+class Dog implements Animal { }
+
+D.
+
+class Dog super Animal { }
+
+Answer: B
+
+6. What is the primary benefit of inheritance?
+
+A. Faster compilation
+
+B. Code reusability
+
+C. Smaller variables
+
+D. Automatic object creation
+
+Answer: B
+
+7. Which keyword refers to members of the parent class?
+
+A. this
+
+B. parent
+
+C. super
+
+D. extends
+
+Answer: C
+
+8. What is the purpose of the super keyword?
+
+A. Create a new object
+
+B. Access members of the parent class
+
+C. Declare a class
+
+D. Hide variables
+
+Answer: B
+
+9. Consider the code:
+class Animal{
+    void eat(){
+        System.out.println("Eating...");
+    }
+}
+
+class Dog extends Animal{
+}
+
+public class Main{
+    public static void main(String[] args){
+        Dog d = new Dog();
+        d.eat();
+    }
+}
+
+What is the output?
+
+A.
+
+Eating...
+
+B.
+
+Dog
+
+C.
+
+Animal
+
+D. Compilation Error
+
+Answer: A
+
+10. Which statement is TRUE?
+
+A. A child class cannot use methods from the parent class.
+
+B. A child class inherits accessible members of the parent class.
+
+C. Only variables are inherited.
+
+D. Constructors are inherited.
+
+Answer: B
+
+11. Which keyword calls the parent class constructor?
+
+A. this()
+
+B. super()
+
+C. extends()
+
+D. parent()
+
+Answer: B
+
+12. What happens if a child class constructor does not explicitly call super()?
+
+A. Compilation Error
+
+B. Java automatically calls the parent's no-argument constructor.
+
+C. The child constructor is ignored.
+
+D. Nothing happens.
+
+Answer: B
+
+13. What is the output?
+class Animal{
+    Animal(){
+        System.out.println("Animal");
+    }
+}
+
+class Dog extends Animal{
+    Dog(){
+        System.out.println("Dog");
+    }
+}
+
+public class Main{
+    public static void main(String[] args){
+        new Dog();
+    }
+}
+
+A.
+
+Dog
+Animal
+
+B.
+
+Animal
+Dog
+
+C.
+
+Dog
+
+D. Error
+
+Answer: B
+
+14. Which statement about constructors and inheritance is TRUE?
+
+A. Constructors are inherited.
+
+B. Parent constructors can be called using super().
+
+C. Constructors are overridden.
+
+D. Constructors are private by default.
+
+Answer: B
+
+15. What will super.display(); do?
+
+A. Call the child class method.
+
+B. Call the parent class method.
+
+C. Create an object.
+
+D. Override a method.
+
+Answer: B
+
+16. Which statement is FALSE?
+
+A. Java supports single inheritance for classes.
+
+B. A subclass can access public members of its superclass.
+
+C. A class can extend multiple classes directly.
+
+D. Inheritance promotes code reuse.
+
+Answer: C
+
+17. Which type of inheritance is supported directly by Java classes?
+
+A. Multiple Inheritance
+
+B. Single Inheritance
+
+C. Hybrid Inheritance
+
+D. Circular Inheritance
+
+Answer: B
+
+18. Consider the code:
+class Vehicle{
+    void move(){
+        System.out.println("Moving");
+    }
+}
+
+class Car extends Vehicle{
+}
+
+Which method can a Car object call?
+
+A. move() only
+
+B. Only methods declared inside Car
+
+C. None
+
+D. Constructors only
+
+Answer: A
+
+19. What is the output?
+class Person{
+    String name = "John";
+}
+
+class Student extends Person{
+}
+
+public class Main{
+    public static void main(String[] args){
+        Student s = new Student();
+        System.out.println(s.name);
+    }
+}
+
+A.
+
+Student
+
+B.
+
+John
+
+C.
+
+Person
+
+D. Error
+
+Answer: B
+
+20. Why would a programmer use inheritance?
+
+A. To reduce duplicate code.
+
+B. To increase the number of constructors.
+
+C. To replace methods.
+
+D. To avoid creating objects.
+
+Answer: A
+
+21. Which keyword refers to the current object?
+
+A. parent
+
+B. super
+
+C. this
+
+D. extends
+
+Answer: C
+
+22. Which statement correctly distinguishes this and super?
+
+A. Both always refer to the current object.
+
+B. this refers to the current object, while super refers to the parent class.
+
+C. super creates objects.
+
+D. They are identical.
+
+Answer: B
+
+23. A SavingsAccount class extends an Account class. What is the relationship?
+
+A. SavingsAccount is the parent class.
+
+B. Account inherits from SavingsAccount.
+
+C. SavingsAccount is the child class.
+
+D. The classes are unrelated.
+
+Answer: C
+
+24. Which code correctly calls a parent constructor with one parameter?
+
+A.
+
+super(name);
+
+B.
+
+this(name);
+
+C.
+
+parent(name);
+
+D.
+
+extends(name);
+
+Answer: A
+
+25. A Teacher class and a Student class both share common attributes such as name and age. What is the BEST design?
+
+A. Duplicate the variables in both classes.
+
+B. Create a Person parent class and let both classes extend it.
+
+C. Use only interfaces.
+
+D. Store everything in the main() method.
+
+Answer: B

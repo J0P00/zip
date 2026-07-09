@@ -1,0 +1,431 @@
+Topic 11: Enum in Java OOP
+
+Question Bank (Questions 1–25)
+
+1. What is an enum in Java?
+
+A. A class used for inheritance
+
+B. A special data type used to define a fixed set of constants
+
+C. A constructor
+
+D. A method
+
+Answer: B
+
+2. Which keyword is used to declare an enum?
+
+A. class
+
+B. interface
+
+C. enum
+
+D. final
+
+Answer: C
+
+3. Which of the following correctly declares an enum?
+
+A.
+
+enum Day {
+    MONDAY, TUESDAY, WEDNESDAY
+}
+
+B.
+
+class Day {
+    MONDAY, TUESDAY
+}
+
+C.
+
+Enum Day {
+}
+
+D.
+
+constant Day {
+}
+
+Answer: A
+
+4. Which statement is TRUE about enum constants?
+
+A. They can change at runtime.
+
+B. They are fixed and predefined.
+
+C. They must be integers.
+
+D. They are methods.
+
+Answer: B
+
+5. Which enum declaration is valid?
+
+A.
+
+enum Color{
+    RED, GREEN, BLUE
+}
+
+B.
+
+enum Color{
+    RED GREEN BLUE
+}
+
+C.
+
+Color enum{
+}
+
+D.
+
+class enum Color{
+}
+
+Answer: A
+
+6. What does the values() method return?
+
+A. A single enum constant
+
+B. An array containing all enum constants
+
+C. A String
+
+D. An integer
+
+Answer: B
+
+7. What does the valueOf() method do?
+
+A. Returns all enum values
+
+B. Converts a String to its corresponding enum constant
+
+C. Returns the index of an enum constant
+
+D. Creates a new enum
+
+Answer: B
+
+8. What does the ordinal() method return?
+
+A. The name of the enum constant
+
+B. The index position of the enum constant
+
+C. The total number of constants
+
+D. A boolean value
+
+Answer: B
+
+9. Consider the following enum:
+enum Day{
+    MONDAY,
+    TUESDAY,
+    WEDNESDAY
+}
+
+What is the result of:
+
+System.out.println(Day.MONDAY.ordinal());
+
+A. 1
+
+B. 0
+
+C. MONDAY
+
+D. Error
+
+Answer: B
+
+10. What is the output?
+enum Day{
+    MONDAY
+}
+
+public class Main{
+    public static void main(String[] args){
+        System.out.println(Day.MONDAY);
+    }
+}
+
+A.
+
+MONDAY
+
+B.
+
+0
+
+C.
+
+Day
+
+D. Error
+
+Answer: A
+
+11. Which statement is FALSE?
+
+A. Enums can contain methods.
+
+B. Enums can contain constructors.
+
+C. New enum constants can be added at runtime.
+
+D. Enums improve code readability.
+
+Answer: C
+
+12. Which code retrieves all enum constants?
+
+A.
+
+Day.values();
+
+B.
+
+Day.valueOf();
+
+C.
+
+Day.ordinal();
+
+D.
+
+Day.getValues();
+
+Answer: A
+
+13. Which statement converts the string "RED" into an enum constant?
+
+A.
+
+Color.valueOf("RED");
+
+B.
+
+Color.values("RED");
+
+C.
+
+new Color("RED");
+
+D.
+
+Color.ordinal("RED");
+
+Answer: A
+
+14. Which statement best describes enums?
+
+A. They represent a fixed set of related constants.
+
+B. They replace interfaces.
+
+C. They create objects.
+
+D. They overload constructors.
+
+Answer: A
+
+15. Which of the following is a practical use of enums?
+
+A. Days of the week
+
+B. Student names
+
+C. User passwords
+
+D. Variable input values
+
+Answer: A
+
+16. Which statement is TRUE?
+
+A. Enums cannot be used in switch statements.
+
+B. Enums can be used in switch statements.
+
+C. Enums are only used for integers.
+
+D. Enums cannot contain methods.
+
+Answer: B
+
+17. What is the output?
+enum Traffic{
+    RED,
+    GREEN
+}
+
+public class Main{
+    public static void main(String[] args){
+        Traffic light = Traffic.GREEN;
+        System.out.println(light);
+    }
+}
+
+A.
+
+GREEN
+
+B.
+
+1
+
+C.
+
+Traffic
+
+D. Error
+
+Answer: A
+
+18. What is the purpose of using enums?
+
+A. Prevent invalid values by limiting choices
+
+B. Increase inheritance
+
+C. Hide variables
+
+D. Replace methods
+
+Answer: A
+
+19. Which code correctly iterates through all enum constants?
+
+A.
+
+for(Day d : Day.values()){
+    System.out.println(d);
+}
+
+B.
+
+for(Day d : Day){
+}
+
+C.
+
+Day.loop();
+
+D.
+
+Day.foreach();
+
+Answer: A
+
+20. What is the output?
+enum Color{
+    RED,
+    BLUE
+}
+
+System.out.println(Color.BLUE.ordinal());
+
+A. 0
+
+B. 1
+
+C. BLUE
+
+D. Error
+
+Answer: B
+
+21. Which statement is NOT a good use of an enum?
+
+A. User Roles
+
+B. Months of the Year
+
+C. Traffic Light Colors
+
+D. Student Ages
+
+Answer: D
+
+22. Which switch statement correctly uses an enum?
+
+A.
+
+switch(day){
+    case MONDAY:
+        System.out.println("Start");
+        break;
+}
+
+B.
+
+switch(enum){
+}
+
+C.
+
+switch(values()){
+}
+
+D.
+
+switch(ordinal()){
+}
+
+Answer: A
+
+23. Which statement is TRUE about enum constructors?
+
+A. They are always public.
+
+B. They are implicitly private.
+
+C. They do not exist.
+
+D. They must return a value.
+
+Answer: B
+
+24. A school system has three student statuses:
+ENROLLED
+GRADUATED
+DROPPED
+
+Which Java feature is most appropriate?
+
+A. Array
+
+B. Interface
+
+C. Enum
+
+D. Constructor
+
+Answer: C
+
+25. A game has four difficulty levels:
+EASY
+MEDIUM
+HARD
+EXPERT
+
+Which Java feature best represents these values?
+
+A. Class
+
+B. Interface
+
+C. Enum
+
+D. Abstract Class
+
+Answer: C

@@ -1,0 +1,381 @@
+Topic 7: Polymorphism in Java OOP
+
+Question Bank (Questions 1–25)
+
+1. What is polymorphism in Java?
+
+A. The ability of one object to take many forms
+
+B. The process of hiding data
+
+C. Creating multiple constructors
+
+D. Declaring private variables
+
+Answer: A
+
+2. Which OOP principle allows one interface to have multiple implementations?
+
+A. Encapsulation
+
+B. Inheritance
+
+C. Polymorphism
+
+D. Abstraction
+
+Answer: C
+
+3. Runtime polymorphism in Java is achieved through:
+
+A. Constructor Overloading
+
+B. Method Overloading
+
+C. Method Overriding
+
+D. Interfaces only
+
+Answer: C
+
+4. Which keyword is commonly used when overriding a method?
+
+A. @Override
+
+B. @Inherited
+
+C. @Method
+
+D. @Polymorphism
+
+Answer: A
+
+5. What is method overriding?
+
+A. Defining multiple methods with the same name in one class
+
+B. Redefining a parent class method in the child class
+
+C. Calling multiple methods at once
+
+D. Creating multiple constructors
+
+Answer: B
+
+6. Which statement correctly demonstrates polymorphism?
+Animal animal = new Dog();
+
+A. It creates two objects.
+
+B. A parent reference refers to a child object.
+
+C. It creates an interface.
+
+D. It is invalid Java syntax.
+
+Answer: B
+
+7. Which method is executed during runtime?
+Animal animal = new Dog();
+animal.sound();
+
+A. The parent's sound() method
+
+B. The child's overridden sound() method
+
+C. Both methods
+
+D. No method
+
+Answer: B
+
+8. What is the output?
+class Animal{
+    void sound(){
+        System.out.println("Animal Sound");
+    }
+}
+
+class Dog extends Animal{
+    @Override
+    void sound(){
+        System.out.println("Dog Barks");
+    }
+}
+
+public class Main{
+    public static void main(String[] args){
+        Animal a = new Dog();
+        a.sound();
+    }
+}
+
+A.
+
+Animal Sound
+
+B.
+
+Dog Barks
+
+C.
+
+Animal
+Dog
+
+D. Error
+
+Answer: B
+
+9. Which concept is illustrated by this code?
+Animal a = new Cat();
+
+A. Encapsulation
+
+B. Constructor Overloading
+
+C. Upcasting
+
+D. Data Hiding
+
+Answer: C
+
+10. Which statement is TRUE about polymorphism?
+
+A. It reduces flexibility.
+
+B. It allows the same method call to behave differently.
+
+C. It removes inheritance.
+
+D. It only works with interfaces.
+
+Answer: B
+
+11. Which of the following is required for runtime polymorphism?
+
+A. Static methods
+
+B. Method Overriding
+
+C. Constructor Overloading
+
+D. Private variables
+
+Answer: B
+
+12. What is the output?
+class Bird{
+    void fly(){
+        System.out.println("Bird Flying");
+    }
+}
+
+class Eagle extends Bird{
+    @Override
+    void fly(){
+        System.out.println("Eagle Soaring");
+    }
+}
+
+public class Main{
+    public static void main(String[] args){
+        Bird b = new Eagle();
+        b.fly();
+    }
+}
+
+A.
+
+Bird Flying
+
+B.
+
+Eagle Soaring
+
+C. Error
+
+D. null
+
+Answer: B
+
+13. Which statement is FALSE?
+
+A. Polymorphism increases flexibility.
+
+B. Method overriding supports runtime polymorphism.
+
+C. Polymorphism requires inheritance.
+
+D. Constructors can be overridden.
+
+Answer: D
+
+14. Which relationship is commonly used in polymorphism?
+
+A. Parent class reference → Child object
+
+B. Child class reference → Parent object
+
+C. Object → Package
+
+D. Constructor → Method
+
+Answer: A
+
+15. What does @Override indicate?
+
+A. The method replaces an inherited method.
+
+B. The constructor is overloaded.
+
+C. The variable is private.
+
+D. The class is abstract.
+
+Answer: A
+
+16. Which method is selected at runtime?
+
+A. The method based on the reference type
+
+B. The method based on the actual object type
+
+C. The first method in the class
+
+D. A random method
+
+Answer: B
+
+17. What is the output?
+class Shape{
+    void draw(){
+        System.out.println("Shape");
+    }
+}
+
+class Circle extends Shape{
+    @Override
+    void draw(){
+        System.out.println("Circle");
+    }
+}
+
+public class Main{
+    public static void main(String[] args){
+        Shape s = new Circle();
+        s.draw();
+    }
+}
+
+A.
+
+Shape
+
+B.
+
+Circle
+
+C. Shape Circle
+
+D. Error
+
+Answer: B
+
+18. Which concept allows different classes to respond differently to the same method call?
+
+A. Encapsulation
+
+B. Polymorphism
+
+C. Abstraction
+
+D. Enumeration
+
+Answer: B
+
+19. Which of the following is an example of polymorphism in a real-world application?
+
+A. A payment system where CreditCard, PayPal, and GCash each implement pay() differently.
+
+B. A class with only private variables.
+
+C. A constructor with two parameters.
+
+D. An enum representing months.
+
+Answer: A
+
+20. Which statement about method overriding is TRUE?
+
+A. The method name and parameters must match.
+
+B. The method must have a different name.
+
+C. The return type must always be different.
+
+D. Overriding is only possible with static methods.
+
+Answer: A
+
+21. Which of the following demonstrates polymorphic behavior?
+Animal pet = new Dog();
+pet.sound();
+
+A. Constructor Overloading
+
+B. Method Overloading
+
+C. Runtime Polymorphism
+
+D. Encapsulation
+
+Answer: C
+
+22. What is dynamic method dispatch?
+
+A. Choosing the overridden method during runtime.
+
+B. Creating multiple objects.
+
+C. Calling constructors.
+
+D. Hiding variables.
+
+Answer: A
+
+23. Which statement is TRUE about polymorphic references?
+
+A. A parent reference can refer to a child object.
+
+B. A child reference can always refer to a parent object without casting.
+
+C. A constructor can become polymorphic.
+
+D. Only interfaces support polymorphism.
+
+Answer: A
+
+24. Why is polymorphism useful?
+
+A. It reduces code flexibility.
+
+B. It allows reusable and extensible code.
+
+C. It replaces inheritance.
+
+D. It prevents method overriding.
+
+Answer: B
+
+25. A graphics program has classes Circle, Rectangle, and Triangle, each with a draw() method. The program stores them in a list of Shape references and calls draw() on each object. Which OOP concept makes this possible?
+
+A. Encapsulation
+
+B. Constructor Overloading
+
+C. Polymorphism
+
+D. Enumeration
+
+Answer: C

@@ -163,7 +163,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: Asse
     const nextDb = { ...quizDb, [activeAssessment.id]: attempt };
     setQuizDb(nextDb);
     setStoredJson(QUIZ_KEY, nextDb);
-    progressApi.saveQuizAttempt(attempt).catch(error => {
+    progressApi.saveQuizAttempt(attempt as any).catch(error => {
       console.warn('Unable to sync assessment attempt with backend:', error);
     });
     setLatestAttempt(attempt);
@@ -182,7 +182,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: Asse
             </span>
             <h2 className="mt-3 text-2xl font-extrabold text-slate-900">Lesson Assessments</h2>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-              Each lesson has exactly 25 randomized MCQs. Passing score is 70%, and lessons unlock sequentially.
+              Each lesson has exactly 15 randomized MCQs. Passing score is 70%, and lessons unlock sequentially.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
@@ -218,7 +218,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: Asse
                   </div>
                   <h3 className="mt-2 text-sm font-extrabold text-slate-900">{assessment.title}</h3>
                   <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
-                    25 questions: 10 Easy, 10 Medium, 5 Hard.
+                    15 questions: 5 Easy, 5 Medium, 5 Hard.
                   </p>
                   {attempt && (
                     <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>
@@ -274,7 +274,9 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: Asse
                   className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left text-sm font-bold transition ${isSelected ? 'border-emerald-600 bg-emerald-50/60 text-slate-950' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}`}
                 >
                   <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>{letter}</span>
-                  {option}
+                  <span className={option.includes('\n') || option.includes(';') || option.includes('{') ? "font-mono text-xs whitespace-pre-wrap leading-relaxed" : ""}>
+                    {option}
+                  </span>
                 </button>
               );
             })}

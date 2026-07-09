@@ -1,0 +1,355 @@
+Topic 1: Classes & Objects in Java OOP
+
+Question Bank (Questions 1–25)
+
+1. What is a class in Java?
+
+A. A method used to execute code
+
+B. A blueprint used to create objects
+
+C. A package containing Java files
+
+D. An instance of an object
+
+Answer: B
+
+2. What is an object in Java?
+
+A. A package
+
+B. A class definition
+
+C. An instance of a class
+
+D. A constructor
+
+Answer: C
+
+3. Which keyword is used to create an object?
+
+A. class
+
+B. object
+
+C. new
+
+D. create
+
+Answer: C
+
+4. Which statement correctly declares a class?
+
+A.
+
+Student();
+
+B.
+
+class Student { }
+
+C.
+
+Student class { }
+
+D.
+
+object Student { }
+
+Answer: B
+
+5. Which statement correctly creates an object named student?
+
+A.
+
+Student();
+
+B.
+
+Student student = new Student();
+
+C.
+
+new Student student;
+
+D.
+
+Student = new();
+
+Answer: B
+
+6. Which part of a class stores the characteristics of an object?
+
+A. Methods
+
+B. Packages
+
+C. Fields (Attributes)
+
+D. Constructors
+
+Answer: C
+
+7. Which part of a class defines what an object can do?
+
+A. Variables
+
+B. Methods
+
+C. Packages
+
+D. Constructors
+
+Answer: B
+
+8. How many objects can be created from one class?
+
+A. One
+
+B. Two
+
+C. Five
+
+D. Unlimited
+
+Answer: D
+
+9. What does the new keyword do?
+
+A. Deletes an object
+
+B. Creates a new object
+
+C. Declares a class
+
+D. Imports a package
+
+Answer: B
+
+10. Which statement is TRUE?
+
+A. A class is an instance of an object.
+
+B. Objects are created from classes.
+
+C. Classes are created from objects.
+
+D. Objects cannot have methods.
+
+Answer: B
+
+11. Consider the following code:
+class Car {
+    String brand;
+}
+
+Car car = new Car();
+
+What is car?
+
+A. A class
+
+B. A method
+
+C. An object reference
+
+D. A constructor
+
+Answer: C
+
+12. What is the output?
+class Student{
+    String name = "John";
+}
+
+public class Main{
+    public static void main(String[] args){
+        Student s = new Student();
+        System.out.println(s.name);
+    }
+}
+
+A. Student
+
+B. null
+
+C. John
+
+D. Error
+
+Answer: C
+
+13. Which statement best describes a class?
+
+A. A blueprint
+
+B. A variable
+
+C. A package
+
+D. A loop
+
+Answer: A
+
+14. Which statement creates two different objects?
+
+A.
+
+Student s;
+Student t;
+
+B.
+
+Student s = new Student();
+Student t = new Student();
+
+C.
+
+new Student();
+
+D.
+
+Student();
+
+Answer: B
+
+15. A university wants to represent every student individually. Which OOP concept should be used?
+
+A. Package
+
+B. Method
+
+C. Object
+
+D. Interface
+
+Answer: C
+
+16. Which is the best example of a class?
+
+A. Toyota Vios
+
+B. My Car
+
+C. Car
+
+D. ABC-123
+
+Answer: C
+
+17. Which is the best example of an object?
+
+A. Student
+
+B. Car
+
+C. Book
+
+D. John (Student)
+
+Answer: D
+
+18. Which keyword defines a class?
+
+A. object
+
+B. class
+
+C. new
+
+D. public
+
+Answer: B
+
+19. A class can contain:
+
+A. Only methods
+
+B. Only variables
+
+C. Fields and methods
+
+D. Packages only
+
+Answer: C
+
+20. Which statement is FALSE?
+
+A. Objects have state.
+
+B. Objects have behavior.
+
+C. A class is an object.
+
+D. Objects are instances of classes.
+
+Answer: C
+
+21. Which code accesses the field name?
+Student s = new Student();
+
+A.
+
+s->name;
+
+B.
+
+Student.name;
+
+C.
+
+s.name;
+
+D.
+
+name.s;
+
+Answer: C
+
+22. Which of the following is NOT an object?
+
+A. Dog
+
+B. MyDog
+
+C. Student named Alice
+
+D. Car owned by John
+
+Answer: A
+
+23. What happens if no object is created from a class?
+
+A. The class automatically creates one.
+
+B. The class still exists, but no object exists.
+
+C. Java reports a syntax error.
+
+D. Java exits immediately.
+
+Answer: B
+
+24. Which symbol is used to access an object's field or method?
+
+A. ->
+
+B. :
+
+C. .
+
+D. ::
+
+Answer: C
+
+25. Which of the following best models real-world OOP?
+
+A. Class = Student, Object = John
+
+B. Class = John, Object = Student
+
+C. Class = Toyota Vios, Object = Car
+
+D. Class = My Laptop, Object = Laptop
+
+Answer: A

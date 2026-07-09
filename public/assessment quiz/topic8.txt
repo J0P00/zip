@@ -1,0 +1,404 @@
+Topic 8: Abstraction (Abstract Classes) in Java OOP
+
+Question Bank (Questions 1–25)
+
+1. What is abstraction in Java?
+
+A. Hiding implementation details while showing only essential features
+
+B. Creating multiple objects
+
+C. Hiding variables using private
+
+D. Creating constructors
+
+Answer: A
+
+2. Which keyword is used to declare an abstract class?
+
+A. interface
+
+B. public
+
+C. abstract
+
+D. extends
+
+Answer: C
+
+3. Which statement best describes an abstract class?
+
+A. It can only contain variables.
+
+B. It cannot contain methods.
+
+C. It cannot be instantiated directly.
+
+D. It is automatically an interface.
+
+Answer: C
+
+4. Which of the following correctly declares an abstract class?
+
+A.
+
+class Animal{
+}
+
+B.
+
+abstract class Animal{
+}
+
+C.
+
+interface Animal{
+}
+
+D.
+
+public Animal{
+}
+
+Answer: B
+
+5. What is an abstract method?
+
+A. A method with no body that must be implemented by subclasses
+
+B. A method with a constructor
+
+C. A static method
+
+D. A private method
+
+Answer: A
+
+6. Which declaration is a valid abstract method?
+
+A.
+
+abstract void sound();
+
+B.
+
+void sound(){}
+
+C.
+
+abstract sound(){}
+
+D.
+
+sound();
+
+Answer: A
+
+7. Can an abstract class contain normal (non-abstract) methods?
+
+A. No
+
+B. Yes
+
+C. Only private methods
+
+D. Only constructors
+
+Answer: B
+
+8. Can you create an object directly from an abstract class?
+
+A. Yes
+
+B. Only once
+
+C. No
+
+D. Only if it has constructors
+
+Answer: C
+
+9. What happens if a subclass does not implement all inherited abstract methods?
+
+A. The program runs normally.
+
+B. The subclass must also be declared abstract.
+
+C. Java automatically implements them.
+
+D. The abstract methods are removed.
+
+Answer: B
+
+10. Which statement is TRUE?
+
+A. Abstract classes can have constructors.
+
+B. Abstract classes cannot have constructors.
+
+C. Abstract classes cannot contain variables.
+
+D. Abstract classes cannot extend other classes.
+
+Answer: A
+
+11. What is the output?
+abstract class Animal{
+    abstract void sound();
+}
+
+class Dog extends Animal{
+    void sound(){
+        System.out.println("Bark");
+    }
+}
+
+public class Main{
+    public static void main(String[] args){
+        Animal a = new Dog();
+        a.sound();
+    }
+}
+
+A.
+
+Animal
+
+B.
+
+Bark
+
+C.
+
+Dog
+
+D. Error
+
+Answer: B
+
+12. Which class must implement the abstract methods?
+
+A. Parent class
+
+B. Child class
+
+C. Main class
+
+D. Package class
+
+Answer: B
+
+13. Why are abstract classes useful?
+
+A. They provide a common template for related classes.
+
+B. They replace constructors.
+
+C. They eliminate inheritance.
+
+D. They automatically create objects.
+
+Answer: A
+
+14. Which of the following is NOT allowed?
+
+A.
+
+abstract class Shape{}
+
+B.
+
+Shape s = new Shape();
+
+C.
+
+class Circle extends Shape{}
+
+D.
+
+abstract class Animal{
+    abstract void eat();
+}
+
+Answer: B
+
+15. Which keyword allows a class to inherit an abstract class?
+
+A. implements
+
+B. extends
+
+C. abstract
+
+D. super
+
+Answer: B
+
+16. What is the output?
+abstract class Vehicle{
+    void start(){
+        System.out.println("Starting");
+    }
+}
+
+class Car extends Vehicle{
+}
+
+public class Main{
+    public static void main(String[] args){
+        Car c = new Car();
+        c.start();
+    }
+}
+
+A.
+
+Starting
+
+B.
+
+Car
+
+C.
+
+Vehicle
+
+D. Error
+
+Answer: A
+
+17. Which statement is FALSE?
+
+A. Abstract classes can contain fields.
+
+B. Abstract classes can contain constructors.
+
+C. Abstract classes can be instantiated directly.
+
+D. Abstract classes can contain implemented methods.
+
+Answer: C
+
+18. Which class is considered a concrete class?
+
+A. A class declared with abstract
+
+B. A class that implements all inherited abstract methods
+
+C. An interface
+
+D. A package
+
+Answer: B
+
+19. Which method declaration is correct inside an abstract class?
+
+A.
+
+abstract void draw();
+
+B.
+
+void draw();
+
+C.
+
+draw(){}
+
+D.
+
+method draw();
+
+Answer: A
+
+20. What is the main purpose of abstract classes?
+
+A. Prevent inheritance
+
+B. Define common behavior while leaving specific implementations to subclasses
+
+C. Replace interfaces
+
+D. Hide private variables
+
+Answer: B
+
+21. Which real-world example best demonstrates abstraction using an abstract class?
+
+A. An abstract Employee class with subclasses Teacher and Programmer
+
+B. A single Student class
+
+C. An enum for months
+
+D. A static utility class
+
+Answer: A
+
+22. What is the output?
+abstract class Shape{
+    abstract void draw();
+}
+
+class Circle extends Shape{
+    void draw(){
+        System.out.println("Circle");
+    }
+}
+
+public class Main{
+    public static void main(String[] args){
+        Shape s = new Circle();
+        s.draw();
+    }
+}
+
+A.
+
+Shape
+
+B.
+
+Circle
+
+C. Error
+
+D. null
+
+Answer: B
+
+23. Which statement best distinguishes an abstract class from a regular class?
+
+A. An abstract class cannot have variables.
+
+B. An abstract class may contain abstract methods and cannot be instantiated directly.
+
+C. An abstract class cannot extend another class.
+
+D. An abstract class cannot contain implemented methods.
+
+Answer: B
+
+24. If a subclass implements every abstract method, what can be done?
+
+A. It can be instantiated.
+
+B. It must remain abstract.
+
+C. It becomes an interface.
+
+D. It cannot contain constructors.
+
+Answer: A
+
+25. A software developer wants every Payment type (CashPayment, CreditCardPayment, GCashPayment) to implement a processPayment() method while sharing common payment details. Which feature is most appropriate?
+
+A. Constructor Overloading
+
+B. Abstract Class
+
+C. Enum
+
+D. Encapsulation
+
+Answer: B
