@@ -98,8 +98,35 @@ const DEMO_STUDENT_GRADE = {
 
 const DEMO_STUDENT_BADGES = INITIAL_LEADERBOARD_USERS.find(user => user.isCurrentUser)?.badges ?? [];
 const OOP_LESSON_COUNT = OOP_COURSE_LESSONS.length;
+const clampCompletedLessons = (count: number) => Math.min(Math.max(count, 0), OOP_LESSON_COUNT);
 const SESSION_USER_KEY = 'oophub_current_user';
 const SESSION_VIEW_KEY = 'oophub_workspace_view';
+const PERSONAS: Persona[] = ['public', 'student', 'teacher', 'admin'];
+const STUDENT_TABS: StudentSubView[] = ['dashboard', 'ide', 'videos', 'assessments', 'leaderboard', 'profile'];
+const TEACHER_TABS: TeacherSubView[] = ['dashboard', 'students', 'submission-review', 'analytics', 'profile'];
+const ADMIN_TABS: AdminSubView[] = ['dashboard', 'users', 'courses', 'library', 'assessments', 'analytics', 'reports', 'settings', 'terms', 'profile', 'videos'];
+
+const isPersona = (value: unknown): value is Persona =>
+  typeof value === 'string' && PERSONAS.includes(value as Persona);
+
+const sanitizeUser = (value: unknown): AuthenticatedUser | null => {
+  if (!value || typeof value !== 'object') return null;
+  const user = value as Partial<AuthenticatedUser>;
+  if (!user.name || !user.email || !isPersona(user.role) || user.role === 'public') return null;
+  return user as AuthenticatedUser;
+};
+
+const sanitizeWorkspaceView = (value: unknown): WorkspaceViewState => {
+  if (!value || typeof value !== 'object') return {};
+  const view = value as WorkspaceViewState;
+
+  return {
+    persona: isPersona(view.persona) ? view.persona : undefined,
+    studentTab: STUDENT_TABS.includes(view.studentTab as StudentSubView) ? view.studentTab : undefined,
+    teacherTab: TEACHER_TABS.includes(view.teacherTab as TeacherSubView) ? view.teacherTab : undefined,
+    adminTab: ADMIN_TABS.includes(view.adminTab as AdminSubView) ? view.adminTab : undefined
+  };
+};
 
 type WorkspaceViewState = {
   persona?: Persona;
@@ -111,7 +138,7 @@ type WorkspaceViewState = {
 const readSessionUser = (): AuthenticatedUser | null => {
   try {
     const saved = localStorage.getItem(SESSION_USER_KEY);
-    return saved ? JSON.parse(saved) : null;
+    return saved ? sanitizeUser(JSON.parse(saved)) : null;
   } catch {
     return null;
   }
@@ -120,7 +147,7 @@ const readSessionUser = (): AuthenticatedUser | null => {
 const readWorkspaceView = (): WorkspaceViewState => {
   try {
     const saved = localStorage.getItem(SESSION_VIEW_KEY);
-    return saved ? JSON.parse(saved) : {};
+    return saved ? sanitizeWorkspaceView(JSON.parse(saved)) : {};
   } catch {
     return {};
   }
@@ -450,7 +477,7 @@ export default function App() {
 
         if (isCompletedNow) {
           setPoints(p => p + 100);
-          setCompletedLessonsCount(c => Math.min(c + 1, OOP_LESSON_COUNT));
+          setCompletedLessonsCount(c => clampCompletedLessons(c + 1));
           
           addNotification(
             `Lesson Completed! 🎉`,
@@ -594,7 +621,7 @@ export default function App() {
     // Increment points & complete lessons count
     setPoints(prev => prev + 150);
     setStreak(prev => prev + 1);
-    setCompletedLessonsCount(prev => Math.min(prev + 1, OOP_LESSON_COUNT));
+    setCompletedLessonsCount(prev => clampCompletedLessons(prev + 1));
 
     // Append new active row inside Instructor queue review pending
     const newSub: PendingSubmission = {

@@ -75,6 +75,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(watchDb[activeLesson.id]?.lastPosition || 0);
+  const [maxWatchedTime, setMaxWatchedTime] = useState(watchDb[activeLesson.id]?.lastPosition || 0);
   const [volume, setVolume] = useState(0.9);
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -118,6 +119,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
   useEffect(() => {
     const watch = watchDb[activeLesson.id];
     setCurrentTime(watch?.lastPosition || 0);
+    setMaxWatchedTime(watch?.lastPosition || 0);
     setIsPlaying(false);
   }, [activeLesson.id]);
 
@@ -177,14 +179,16 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
     const video = videoRef.current;
     if (!video) return;
     setCurrentTime(video.currentTime);
+    setMaxWatchedTime(value => Math.max(value, video.currentTime));
     persistProgress(video.currentTime, video.duration);
   };
 
   const handleSeek = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const nextTime = Number(event.target.value);
-    if (videoRef.current) videoRef.current.currentTime = nextTime;
-    setCurrentTime(nextTime);
-    persistProgress(nextTime);
+    const requestedTime = Number(event.target.value);
+    const allowedTime = Math.min(requestedTime, maxWatchedTime + 5, duration || requestedTime);
+    if (videoRef.current) videoRef.current.currentTime = allowedTime;
+    setCurrentTime(allowedTime);
+    persistProgress(allowedTime);
   };
 
   const handleFullscreen = () => {

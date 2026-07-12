@@ -30,6 +30,19 @@ app.use(express.json({ limit: "10mb" }));
 
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+const isProduction = process.env.NODE_ENV === "production";
+
+if (isProduction && JWT_SECRET === "change-this-secret") {
+    throw new Error("JWT_SECRET must be configured in production.");
+}
+
+const clampNumber = (value, min, max) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return min;
+    return Math.min(Math.max(parsed, min), max);
+};
+
+const cleanText = (value, maxLength = 255) => String(value ?? "").trim().slice(0, maxLength);
 
 const buildUserId = (email, role) => {
     const seed = String(email)
@@ -582,6 +595,15 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
     try {
         const { videoId, lastPosition = 0, completionPercentage = 0, completed = false, notes = "" } = req.body || {};
         if (!videoId) return res.status(400).json({ success: false, message: "videoId is required." });
+        if (req.authUser.role !== "student") {
+            return res.status(403).json({ success: false, message: "Only students can update lesson progress." });
+        }
+
+        const safeVideoId = cleanText(videoId, 120);
+        const safeLastPosition = clampNumber(lastPosition, 0, 60 * 60 * 6);
+        const safeCompletionPercentage = clampNumber(completionPercentage, 0, 100);
+        const safeCompleted = Boolean(completed) && safeCompletionPercentage >= 95;
+        const safeNotes = cleanText(notes, 5000);
 
         const result = await pool.query(`
             INSERT INTO student_progress (student_user_id, video_id, last_position, completion_percentage, completed, date_completed, notes)
@@ -598,7 +620,7 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
               notes = EXCLUDED.notes,
               updated_at = NOW()
             RETURNING *
-        `, [req.authUser.id, videoId, lastPosition, completionPercentage, Boolean(completed), notes]);
+        `, [req.authUser.id, safeVideoId, safeLastPosition, safeCompletionPercentage, safeCompleted, safeNotes]);
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
         next(error);
@@ -639,6 +661,17 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
         } = req.body || {};
 
         if (!assessmentId) return res.status(400).json({ success: false, message: "assessmentId is required." });
+        if (req.authUser.role !== "student") {
+            return res.status(403).json({ success: false, message: "Only students can submit quiz attempts." });
+        }
+
+        const safeTotal = Math.max(1, Math.floor(clampNumber(total, 1, 100)));
+        const safeScore = Math.floor(clampNumber(score, 0, safeTotal));
+        const computedPercentage = Math.round((safeScore / safeTotal) * 100);
+        const safeCorrectAnswers = Math.floor(clampNumber(correctAnswers, 0, safeTotal));
+        const safeIncorrectAnswers = Math.floor(clampNumber(incorrectAnswers, 0, safeTotal));
+        const safeAttemptNumber = Math.max(1, Math.floor(clampNumber(attemptNumber, 1, 1000)));
+        const safeAnswers = answers && typeof answers === "object" && !Array.isArray(answers) ? answers : {};
 
         const result = await pool.query(`
             INSERT INTO quiz_attempts (
@@ -649,16 +682,16 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
             RETURNING *
         `, [
             req.authUser.id,
-            assessmentId,
-            lessonId,
-            score,
-            total,
-            percentage,
-            correctAnswers,
-            incorrectAnswers,
-            Boolean(passed),
-            attemptNumber,
-            JSON.stringify(answers),
+            cleanText(assessmentId, 120),
+            cleanText(lessonId, 120),
+            safeScore,
+            safeTotal,
+            computedPercentage,
+            safeCorrectAnswers,
+            safeIncorrectAnswers,
+            Boolean(passed) && computedPercentage >= 70,
+            safeAttemptNumber,
+            JSON.stringify(safeAnswers),
             dateCompleted || null
         ]);
         res.status(201).json({ success: true, data: result.rows[0] });
