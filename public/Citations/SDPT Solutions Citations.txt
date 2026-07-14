@@ -1,0 +1,45 @@
+video citation 11 topics
+
+1.Classes & Objects
+Author: SDPT Solutions
+Citations: https://www.youtube.com/watch?v=CwdhP_zA3lg&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or
+
+2.Constructors
+Author:SDPT Solutions
+Citations: https://www.youtube.com/watch?v=zoZ8uzpDiBA&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=2
+
+3.Object Methods
+Author:SDPT Solutions
+Citations: https://www.youtube.com/watch?v=nlwXDmrF3Lg&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=3
+
+4.Encapsulation
+Author:SDPT Solutions
+Citations: https://www.youtube.com/watch?v=RkOgR2gTD20&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=4
+
+5.Overloading Constructors
+Author:SDPT Solutions
+Citations: https://www.youtube.com/watch?v=FcJnGlDRlP8&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=5
+
+6.Inheritance (extends & super)
+Author:SDPT Solutions
+Citations: https://www.youtube.com/watch?v=ptyqpfyB6oA&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=6
+
+7.Polymorphism
+Author:SDPT Solutions
+Citations: https://www.youtube.com/watch?v=3uPkB0_OdiM&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=7
+
+8.Abstraction (Abstract Classes)
+Author:SDPT Solutions
+Citations: https://www.youtube.com/watch?v=vr-OAZZZE_Y&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=8
+
+9.Abstraction (Interfaces)
+Author:SDPT Solutions
+Citations: https://www.youtube.com/watch?v=ynHgzRZyOXE&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=9
+
+10.Array of Objects
+Author:SDPT Solutions
+Citations: https://www.youtube.com/watch?v=eLgxaCtIkAc&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=10
+
+11,Enum
+Author:SDPT Solutions
+Citations: https://www.youtube.com/watch?v=D4ZEbQ6v2Zk&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=11

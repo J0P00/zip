@@ -38,6 +38,97 @@ interface LessonBlueprint {
   codeSnippet?: string;
 }
 
+const SDPT_VIDEO_CITATIONS: Record<number, Pick<VideoLesson, 'video_title' | 'creator_name' | 'publisher_name' | 'source_url' | 'accessed_date' | 'license_type'>> = {
+  1: {
+    video_title: 'Classes & Objects',
+    creator_name: 'SDPT Solutions',
+    publisher_name: 'YouTube',
+    source_url: 'https://www.youtube.com/watch?v=CwdhP_zA3lg&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or',
+    accessed_date: '2026-07-14',
+    license_type: 'YouTube video'
+  },
+  2: {
+    video_title: 'Constructors',
+    creator_name: 'SDPT Solutions',
+    publisher_name: 'YouTube',
+    source_url: 'https://www.youtube.com/watch?v=zoZ8uzpDiBA&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=2',
+    accessed_date: '2026-07-14',
+    license_type: 'YouTube video'
+  },
+  3: {
+    video_title: 'Object Methods',
+    creator_name: 'SDPT Solutions',
+    publisher_name: 'YouTube',
+    source_url: 'https://www.youtube.com/watch?v=nlwXDmrF3Lg&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=3',
+    accessed_date: '2026-07-14',
+    license_type: 'YouTube video'
+  },
+  4: {
+    video_title: 'Encapsulation',
+    creator_name: 'SDPT Solutions',
+    publisher_name: 'YouTube',
+    source_url: 'https://www.youtube.com/watch?v=RkOgR2gTD20&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=4',
+    accessed_date: '2026-07-14',
+    license_type: 'YouTube video'
+  },
+  5: {
+    video_title: 'Overloading Constructors',
+    creator_name: 'SDPT Solutions',
+    publisher_name: 'YouTube',
+    source_url: 'https://www.youtube.com/watch?v=FcJnGlDRlP8&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=5',
+    accessed_date: '2026-07-14',
+    license_type: 'YouTube video'
+  },
+  6: {
+    video_title: 'Inheritance (extends & super)',
+    creator_name: 'SDPT Solutions',
+    publisher_name: 'YouTube',
+    source_url: 'https://www.youtube.com/watch?v=ptyqpfyB6oA&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=6',
+    accessed_date: '2026-07-14',
+    license_type: 'YouTube video'
+  },
+  7: {
+    video_title: 'Polymorphism',
+    creator_name: 'SDPT Solutions',
+    publisher_name: 'YouTube',
+    source_url: 'https://www.youtube.com/watch?v=3uPkB0_OdiM&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=7',
+    accessed_date: '2026-07-14',
+    license_type: 'YouTube video'
+  },
+  8: {
+    video_title: 'Abstraction (Abstract Classes)',
+    creator_name: 'SDPT Solutions',
+    publisher_name: 'YouTube',
+    source_url: 'https://www.youtube.com/watch?v=vr-OAZZZE_Y&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=8',
+    accessed_date: '2026-07-14',
+    license_type: 'YouTube video'
+  },
+  9: {
+    video_title: 'Abstraction (Interfaces)',
+    creator_name: 'SDPT Solutions',
+    publisher_name: 'YouTube',
+    source_url: 'https://www.youtube.com/watch?v=ynHgzRZyOXE&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=9',
+    accessed_date: '2026-07-14',
+    license_type: 'YouTube video'
+  },
+  10: {
+    video_title: 'Array of Objects',
+    creator_name: 'SDPT Solutions',
+    publisher_name: 'YouTube',
+    source_url: 'https://www.youtube.com/watch?v=eLgxaCtIkAc&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=10',
+    accessed_date: '2026-07-14',
+    license_type: 'YouTube video'
+  },
+  11: {
+    video_title: 'Enum',
+    creator_name: 'SDPT Solutions',
+    publisher_name: 'YouTube',
+    source_url: 'https://www.youtube.com/watch?v=D4ZEbQ6v2Zk&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=11',
+    accessed_date: '2026-07-14',
+    license_type: 'YouTube video'
+  }
+};
+
 const optionSet = (correctAnswer: string, distractors: string[]) => {
   const unique = [correctAnswer, ...distractors].filter((item, index, arr) => arr.indexOf(item) === index);
   return unique.slice(0, 4);
@@ -310,35 +401,41 @@ class Account {
   }
 ];
 
-export const OOP_COURSE_LESSONS: VideoLesson[] = OOP_LESSON_BLUEPRINTS.map((lesson, index) => ({
-  id: lesson.id,
-  sequence: lesson.sequence,
-  title: lesson.title,
-  duration: lesson.duration,
-  status: index === 0 ? 'active' : 'locked',
-  videoUrl: lesson.videoUrl,
-  description: lesson.description,
-  concepts: lesson.concepts,
-  topic: lesson.topic,
-  difficulty: lesson.difficulty,
-  language: 'Java',
-  module: lesson.module,
-  category: 'Core OOP',
-  courseId: 'oop',
-  isArchived: false,
-  unlockedAssessmentId: lesson.assessmentId,
-  views: 0,
-  avgWatchTime: 0,
-  completedStudents: [],
-  inProgressStudents: [],
-  notStartedStudents: [],
-  progressPercent: 0,
-  video_title: lesson.title,
-  creator_name: 'Local OOP Fundamentals Tutorial',
-  publisher_name: 'OOP Pedagogical Hub',
-  source_url: lesson.videoUrl,
-  license_type: 'Local Educational Asset'
-}));
+export const OOP_COURSE_LESSONS: VideoLesson[] = OOP_LESSON_BLUEPRINTS.map((lesson, index) => {
+  const citation = SDPT_VIDEO_CITATIONS[lesson.sequence];
+
+  return {
+    id: lesson.id,
+    sequence: lesson.sequence,
+    title: lesson.title,
+    duration: lesson.duration,
+    status: index === 0 ? 'active' : 'locked',
+    videoUrl: lesson.videoUrl,
+    description: lesson.description,
+    concepts: lesson.concepts,
+    topic: lesson.topic,
+    difficulty: lesson.difficulty,
+    language: 'Java',
+    module: lesson.module,
+    category: 'Core OOP',
+    courseId: 'oop',
+    isArchived: false,
+    unlockedAssessmentId: lesson.assessmentId,
+    views: 0,
+    avgWatchTime: 0,
+    completedStudents: [],
+    inProgressStudents: [],
+    notStartedStudents: [],
+    progressPercent: 0,
+    video_title: citation.video_title,
+    creator_name: citation.creator_name,
+    publisher_name: citation.publisher_name,
+    source_url: citation.source_url,
+    accessed_date: citation.accessed_date,
+    license_type: citation.license_type,
+    citation_created_at: citation.accessed_date
+  };
+});
 
 export const OOP_ASSESSMENTS: LessonAssessment[] = OOP_LESSON_BLUEPRINTS.map(lesson => ({
   id: lesson.assessmentId,

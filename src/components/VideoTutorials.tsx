@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen,
   CheckCircle,
+  FileText,
   Gauge,
+  Link2,
   Lock,
   Maximize2,
   Pause,
@@ -305,6 +307,36 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
                   </div>
                 ))}
               </div>
+              {activeLesson.creator_name && activeLesson.source_url && (
+                <div className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wide text-slate-900">
+                        <FileText className="h-4 w-4 text-emerald-700" />
+                        Video Citation
+                      </h4>
+                      <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
+                        {activeLesson.creator_name}. {activeLesson.video_title || activeLesson.title}. {activeLesson.publisher_name || 'Video source'}.
+                        {activeLesson.accessed_date ? ` Accessed ${activeLesson.accessed_date}.` : ''}
+                      </p>
+                      {activeLesson.license_type && (
+                        <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">
+                          {activeLesson.license_type}
+                        </p>
+                      )}
+                    </div>
+                    <a
+                      href={activeLesson.source_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50"
+                    >
+                      <Link2 className="h-4 w-4" />
+                      Source
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </section>
