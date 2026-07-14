@@ -287,7 +287,7 @@ export default function App() {
   // Dynamic shared database states
   const [videoLessons, setVideoLessons] = useState<VideoLesson[]>(() => {
     try {
-      const APP_VERSION = '1.0.6';
+      const APP_VERSION = '1.0.7';
       const version = localStorage.getItem('app_version');
 
       if (version !== APP_VERSION) {
