@@ -319,11 +319,6 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
                         {activeLesson.creator_name}. {activeLesson.video_title || activeLesson.title}. {activeLesson.publisher_name || 'Video source'}.
                         {activeLesson.accessed_date ? ` Accessed ${activeLesson.accessed_date}.` : ''}
                       </p>
-                      {activeLesson.license_type && (
-                        <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">
-                          {activeLesson.license_type}
-                        </p>
-                      )}
                     </div>
                     <a
                       href={activeLesson.source_url}
