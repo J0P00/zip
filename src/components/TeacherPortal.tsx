@@ -34,7 +34,7 @@ interface TeacherPortalProps {
   onSelectPersona: (persona: Persona) => void;
   currentUser: AuthenticatedUser;
   monitoringRequests: MonitoringRequest[];
-  onSendRequest: (studentEmailOrId: string) => { success: boolean; message: string };
+  onSendRequest: (studentEmailOrId: string) => Promise<{ success: boolean; message: string }>;
   onRemoveConnection: (requestId: string) => void;
   onReopenSubmission?: (id: string) => void;
   theme?: 'light' | 'dark';
@@ -352,6 +352,7 @@ export default function TeacherPortal({
   const [selectedStudentId, setSelectedStudentId] = useState(initialStudents[0]?.id ?? '');
   const [studentInput, setStudentInput] = useState('');
   const [requestFeedback, setRequestFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [selectedSubId, setSelectedSubId] = useState<string>('');
@@ -478,13 +479,18 @@ export default function TeacherPortal({
     setScoreText(Number(selectedSubmission.grade ?? selectedSubmission.score ?? 90));
   }, [selectedSubmission?.id]);
 
-  const handleSendRequestSubmit = (event: React.FormEvent) => {
+  const handleSendRequestSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!studentInput.trim()) return;
-    const res = onSendRequest(studentInput.trim());
-    setRequestFeedback({ type: res.success ? 'success' : 'error', message: res.message });
-    if (res.success) setStudentInput('');
-    window.setTimeout(() => setRequestFeedback(null), 5000);
+    setIsSendingInvite(true);
+    try {
+      const res = await onSendRequest(studentInput.trim());
+      setRequestFeedback({ type: res.success ? 'success' : 'error', message: res.message });
+      if (res.success) setStudentInput('');
+      window.setTimeout(() => setRequestFeedback(null), 5000);
+    } finally {
+      setIsSendingInvite(false);
+    }
   };
 
   const handleCopyInvitation = async () => {
@@ -745,7 +751,9 @@ export default function TeacherPortal({
                   placeholder="student@oophub.edu or STU-0001"
                   className={`min-h-11 flex-1 rounded-xl border px-3 text-sm outline-none focus:border-[#6b7f2a] ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}
                 />
-                <button type="submit" className="rounded-xl bg-[#6b7f2a] px-4 text-xs font-black text-white">Invite</button>
+                <button type="submit" disabled={isSendingInvite} className="rounded-xl bg-[#6b7f2a] px-4 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-60">
+                  {isSendingInvite ? 'Checking...' : 'Invite'}
+                </button>
               </div>
             </form>
             {requestFeedback && (

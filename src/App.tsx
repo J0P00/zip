@@ -504,7 +504,7 @@ export default function App() {
   };
 
   // Utility to lookup a student by email/ID
-  const findStudentByEmailOrId = (query: string) => {
+  const findStudentByEmailOrId = async (query: string) => {
     const normalized = query.trim().toLowerCase();
     
     // 1. Check default demo student
@@ -534,15 +534,38 @@ export default function App() {
         }
       }
     } catch {}
+
+    // 4. Check registered backend users so deployed accounts can be invited.
+    try {
+      const response = await userApi.listUsers(currentUser?.token);
+      const found = response.data.find((user: AuthenticatedUser) => {
+        if (user.role !== 'student') return false;
+        const email = user.email?.toLowerCase();
+        const publicId = user.userId?.toLowerCase();
+        const dbId = user.id?.toLowerCase();
+        const studentNumber = user.studentNumber?.toLowerCase();
+        return email === normalized || publicId === normalized || dbId === normalized || studentNumber === normalized;
+      });
+
+      if (found) {
+        return {
+          name: found.name,
+          email: found.email,
+          userId: found.userId || found.studentNumber || found.id || 'STU-CUSTOM'
+        };
+      }
+    } catch (error) {
+      console.warn('Unable to search backend users for monitoring invitation:', error);
+    }
     
     return null;
   };
 
   // Connection actions
-  const handleSendMonitoringRequest = (studentEmailOrId: string) => {
+  const handleSendMonitoringRequest = async (studentEmailOrId: string) => {
     if (!currentUser) return { success: false, message: 'Not authenticated' };
     
-    const found = findStudentByEmailOrId(studentEmailOrId);
+    const found = await findStudentByEmailOrId(studentEmailOrId);
     if (!found) {
       return { success: false, message: `No student found with Email or ID: "${studentEmailOrId}"` };
     }

@@ -74,6 +74,8 @@ export const authApi = {
 };
 
 export const userApi = {
+  listUsers: (token?: string) =>
+    apiRequest<{ success: boolean; data: AuthenticatedUser[] }>('/api/users', { token }),
   updateProfile: (id: string, updates: Partial<AuthenticatedUser>) =>
     apiRequest<{ success: boolean; data: AuthenticatedUser }>(`/api/users/${id}`, {
       method: 'PUT',
