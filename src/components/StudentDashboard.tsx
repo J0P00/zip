@@ -21,7 +21,7 @@ import {
   Check
 } from 'lucide-react';
 import { AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
-import { getStoredJson, OOP_COURSE_LESSONS } from '../data/oopCourse';
+import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
 import { PRACTICE_CHALLENGES } from '../data/practiceChallenges';
 
 interface StudentDashboardProps {
@@ -112,6 +112,39 @@ export default function StudentDashboard({
   const practiceScore = Number(practiceSubmission?.score || 0);
   const performanceIndex = Math.round((0.4 * Number(practiceQuiz?.percentage || 0)) + (0.5 * practiceScore) + (0.1 * moduleProgress));
   const performanceClass = performanceIndex >= 85 ? 'Mastered' : performanceIndex >= 70 ? 'Completed' : 'In Progress';
+  const pendingAssessments = OOP_ASSESSMENTS
+    .map(assessment => {
+      const lesson = OOP_COURSE_LESSONS.find(item => item.id === assessment.lessonId);
+      const attempt = quizDb[assessment.id];
+      const previousLesson = lesson?.sequence && lesson.sequence > 1
+        ? OOP_COURSE_LESSONS.find(item => item.sequence === lesson.sequence - 1)
+        : undefined;
+      const previousAssessment = previousLesson
+        ? OOP_ASSESSMENTS.find(item => item.lessonId === previousLesson.id)
+        : undefined;
+      const needsPreviousVideo = Boolean(previousLesson && !watchDb[previousLesson.id]?.completed);
+      const needsPreviousAssessment = Boolean(previousAssessment && !quizDb[previousAssessment.id]?.passed);
+      const needsCurrentVideo = Boolean(lesson && !watchDb[lesson.id]?.completed);
+      const isLocked = needsPreviousVideo || needsPreviousAssessment || needsCurrentVideo;
+      const status = attempt && !attempt.passed
+        ? 'Retry'
+        : isLocked
+          ? 'Locked'
+          : 'Ready Now';
+
+      return {
+        id: assessment.id,
+        title: assessment.title,
+        type: `${assessment.questions.length || 15} MCQ | ${lesson?.topic || lesson?.title || 'Assessment'}`,
+        sequence: lesson?.sequence || 999,
+        status,
+        color: status === 'Ready Now' ? 'border-l-emerald-600' : status === 'Retry' ? 'border-l-amber-500' : 'border-l-slate-400',
+        isPassed: Boolean(attempt?.passed)
+      };
+    })
+    .filter(item => !item.isPassed)
+    .sort((a, b) => a.sequence - b.sequence)
+    .slice(0, 3);
 
   return (
     <div className={`space-y-6 ${isDark ? 'text-slate-100' : 'text-slate-800'}`} id="student-dashboard-root">
@@ -413,19 +446,20 @@ export default function StudentDashboard({
             </h3>
             
             <div className="space-y-3">
-              {[
-                { title: 'Late Dispatch UML Quiz', type: 'Identification MCQ', date: 'Starts Tomorrow', color: 'border-l-amber-500' },
-                { title: 'Vehicles Inheritance Sandbox', type: 'IDE Code Submit', date: 'Due in 3 Days', color: 'border-l-emerald-600' },
-                { title: 'Design Patterns Factory', type: 'Interactive Concept', date: 'Due in 1 Week', color: 'border-l-slate-400' },
-              ].map((item, i) => (
-                <div key={i} className={`p-3 bg-slate-50 rounded-xl border border-slate-100 border-l-4 ${item.color} flex justify-between items-center hover:bg-white hover:shadow-sm transition-all`}>
+              {pendingAssessments.length > 0 ? pendingAssessments.map(item => (
+                <div key={item.id} className={`p-3 bg-slate-50 rounded-xl border border-slate-100 border-l-4 ${item.color} flex justify-between items-center hover:bg-white hover:shadow-sm transition-all`}>
                   <div>
                     <h4 className="font-extrabold text-slate-900 text-xs">{item.title}</h4>
                     <span className="text-[10px] text-slate-400 font-bold font-mono">{item.type}</span>
                   </div>
-                  <span className="text-[10px] font-semibold text-slate-650 bg-slate-100 border border-slate-150 px-2 py-0.5 rounded text-right font-mono block whitespace-nowrap">{item.date}</span>
+                  <span className="text-[10px] font-semibold text-slate-650 bg-slate-100 border border-slate-150 px-2 py-0.5 rounded text-right font-mono block whitespace-nowrap">{item.status}</span>
                 </div>
-              ))}
+              )) : (
+                <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 p-4 text-center">
+                  <h4 className="text-xs font-extrabold text-emerald-800">All assessments cleared</h4>
+                  <p className="mt-1 text-[11px] font-semibold text-emerald-700">No pending assessment attempts right now.</p>
+                </div>
+              )}
             </div>
           </div>
 
