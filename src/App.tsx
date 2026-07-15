@@ -1068,11 +1068,11 @@ export default function App() {
               
               {/* STUDENT TAB LINKS */}
               {persona === 'student' && [
-                { id: 'dashboard', label: '📊 Dashboard Overview', icon: <Compass className="w-4 h-4" /> },
+                { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
                 { id: 'ide', label: 'Practice IDE', icon: <Code2 className="w-4 h-4" /> },
-                { id: 'videos', label: '🎥 Course Syllabus', icon: <BookOpen className="w-4 h-4" /> },
-                { id: 'assessments', label: '💡 Diagnosis Quiz', icon: <TrendingUp className="w-4 h-4" /> },
-                { id: 'leaderboard', label: '🏆 Hall of Fame', icon: <Award className="w-4 h-4" /> },
+                { id: 'videos', label: 'Video Tutorial', icon: <BookOpen className="w-4 h-4" /> },
+                { id: 'assessments', label: 'Assessment/Quiz', icon: <TrendingUp className="w-4 h-4" /> },
+                { id: 'leaderboard', label: 'Rankings', icon: <Award className="w-4 h-4" /> },
               ].map((tab) => (
                 <button
                   key={tab.id}
