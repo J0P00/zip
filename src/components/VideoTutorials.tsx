@@ -206,19 +206,19 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
   const activeQuiz = assessment ? quizDb[assessment.id] : undefined;
 
   return (
-    <div className="space-y-6 animate-fade-in" id="oop-course-syllabus">
-      <section className="rounded-2xl border border-slate-200 bg-white/70 p-5 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/70">
+    <div className="space-y-4 overflow-x-hidden sm:space-y-6 animate-fade-in" id="oop-course-syllabus">
+      <section className="rounded-xl border border-slate-200 bg-white/70 p-4 shadow-sm backdrop-blur-md sm:rounded-2xl sm:p-5 dark:border-slate-800 dark:bg-slate-950/70">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
+          <div className="min-w-0">
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700">
               Course Syllabus
             </span>
-            <h2 className="mt-3 text-2xl font-extrabold text-slate-900 dark:text-white">OOP Fundamentals</h2>
+            <h2 className="mt-3 text-xl font-extrabold text-slate-900 sm:text-2xl dark:text-white">OOP Fundamentals</h2>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
               {OOP_COURSE_LESSONS.length} local Java OOP lessons using the MP4 files in <span className="font-mono">public/videos</span>. Lessons unlock only after video completion and a passed assessment.
             </p>
           </div>
-          <div className="min-w-[220px] rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
+          <div className="w-full rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 sm:min-w-[220px] lg:w-auto">
             <div className="flex items-center justify-between text-xs font-black text-slate-700">
               <span>Overall Progress</span>
               <span className="font-mono text-emerald-700">{courseProgress}%</span>
@@ -232,7 +232,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
 
       <div className="grid gap-6 lg:grid-cols-12">
         <section className="lg:col-span-8">
-          <div ref={shellRef} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm">
+          <div ref={shellRef} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-950 shadow-sm sm:rounded-2xl">
             <div className="relative aspect-video bg-black">
               <video
                 key={activeLesson.id}
@@ -247,7 +247,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
                   if (videoRef.current) persistProgress(videoRef.current.duration, videoRef.current.duration);
                 }}
               />
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-4">
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-2.5 sm:p-4">
                 <input
                   type="range"
                   min={0}
@@ -257,8 +257,8 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
                   className="w-full accent-emerald-500"
                   aria-label="Video progress"
                 />
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-white">
-                  <div className="flex items-center gap-2">
+                <div className="mt-2 flex flex-col gap-2 text-white sm:mt-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
                     <button onClick={() => setIsPlaying(value => !value)} className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Play or pause">
                       {isPlaying ? <Pause className="h-4 w-4 fill-white" /> : <Play className="h-4 w-4 fill-white" />}
                     </button>
@@ -267,7 +267,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
                     }} className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Rewind 10 seconds">
                       <RotateCcw className="h-4 w-4" />
                     </button>
-                    <span className="font-mono text-xs font-bold">{formatTime(currentTime)} / {formatTime(duration)}</span>
+                    <span className="min-w-0 font-mono text-[11px] font-bold sm:text-xs">{formatTime(currentTime)} / {formatTime(duration)}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <select value={playbackRate} onChange={event => setPlaybackRate(Number(event.target.value))} className="rounded-lg bg-white/10 px-2 py-2 text-xs font-bold outline-none">
@@ -276,7 +276,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
                     <button onClick={() => setIsMuted(value => !value)} className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Mute or unmute">
                       {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
                     </button>
-                    <input type="range" min={0} max={1} step={0.05} value={volume} onChange={event => setVolume(Number(event.target.value))} className="w-20 accent-emerald-500" aria-label="Volume" />
+                    <input type="range" min={0} max={1} step={0.05} value={volume} onChange={event => setVolume(Number(event.target.value))} className="hidden w-20 accent-emerald-500 min-[380px]:block" aria-label="Volume" />
                     <button onClick={handleFullscreen} className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Fullscreen">
                       <Maximize2 className="h-4 w-4" />
                     </button>
@@ -284,9 +284,9 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
                 </div>
               </div>
             </div>
-            <div className="border-t border-slate-800 bg-white p-5 dark:bg-slate-950">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
+            <div className="border-t border-slate-800 bg-white p-4 sm:p-5 dark:bg-slate-950">
+              <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
                   <span className="font-mono text-[10px] font-black uppercase text-slate-400">Lesson {activeLesson.sequence}</span>
                   <h3 className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">{activeLesson.title}</h3>
                   <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{activeLesson.description}</p>
@@ -294,7 +294,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
                 <button
                   disabled={!watchDb[activeLesson.id]?.completed}
                   onClick={() => onNavigateTo('assessments')}
-                  className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
                 >
                   Take Assessment
                 </button>
@@ -309,8 +309,8 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
               </div>
               {activeLesson.creator_name && activeLesson.source_url && (
                 <div className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
+                  <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
                       <h4 className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wide text-slate-900">
                         <FileText className="h-4 w-4 text-emerald-700" />
                         Video Citation
@@ -324,7 +324,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
                       href={activeLesson.source_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50 sm:w-auto"
                     >
                       <Link2 className="h-4 w-4" />
                       Source
@@ -337,7 +337,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
         </section>
 
         <aside className="space-y-4 lg:col-span-4">
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/80">
+          <div className="rounded-xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur-md sm:rounded-2xl sm:p-5 dark:border-slate-800 dark:bg-slate-950/80">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-extrabold uppercase tracking-tight text-slate-900 dark:text-white">
               <BookOpen className="h-4 w-4 text-emerald-600" />
               Lesson Queue
@@ -366,7 +366,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
                     <div className="mt-3 h-1.5 rounded-full bg-slate-100">
                       <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress}%` }} />
                     </div>
-                    <div className="mt-2 flex justify-between text-[10px] font-bold text-slate-400">
+                    <div className="mt-2 flex flex-wrap justify-between gap-2 text-[10px] font-bold text-slate-400">
                       <span>{progress}% watched</span>
                       <span>{quizPassed ? 'Assessment passed' : 'Assessment pending'}</span>
                     </div>
@@ -376,7 +376,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 text-xs font-semibold leading-6 text-slate-500 shadow-sm backdrop-blur-md">
+          <div className="rounded-xl border border-slate-200 bg-white/80 p-4 text-xs font-semibold leading-6 text-slate-500 shadow-sm backdrop-blur-md sm:rounded-2xl sm:p-5">
             <h3 className="mb-2 text-sm font-extrabold text-slate-900">Unlock Rule</h3>
             Complete at least 95% of the current video and pass its assessment with 70% or higher. The next lesson unlocks automatically after both are done.
             {activeQuiz && (
