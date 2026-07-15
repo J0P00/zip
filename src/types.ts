@@ -189,6 +189,19 @@ export interface PendingSubmission {
   code: string;
   grade?: number;
   feedback?: string;
+  studentId?: string;
+  studentEmail?: string;
+  section?: string;
+  topicId?: string;
+  topicTitle?: string;
+  programOutput?: string;
+  compileStatus?: 'not_run' | 'success' | 'failed' | 'runtime_error';
+  runtime?: number;
+  memoryUsage?: number;
+  score?: number;
+  isLocked?: boolean;
+  errorMessage?: string;
+  testResults?: ChallengeTestResult[];
 }
 
 export interface CurriculumModule {
@@ -265,4 +278,60 @@ export interface StudentIDEProgress {
   successfulExecutions: number;
   completed: boolean;
   code?: string;
+}
+
+export interface ChallengeTestCase {
+  id: string;
+  input: string;
+  expectedOutput: string;
+  isHidden: boolean;
+  matcher: string;
+}
+
+export interface ProgrammingChallenge {
+  id: string;
+  topicId: string;
+  lessonId: string;
+  assessmentId: string;
+  title: string;
+  description: string;
+  learningObjectives: string[];
+  requirements: string[];
+  starterCode: string;
+  sampleInput: string;
+  sampleOutput: string;
+  passingScore: number;
+  testCases: ChallengeTestCase[];
+  createdAt: string;
+}
+
+export interface ChallengeTestResult {
+  id: string;
+  isHidden: boolean;
+  passed: boolean;
+  expectedOutput: string;
+  actualOutput: string;
+  message: string;
+}
+
+export interface PracticeSubmission {
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  section: string;
+  challengeId: string;
+  challengeTitle: string;
+  topicId: string;
+  topicTitle: string;
+  sourceCode: string;
+  programOutput: string;
+  compileStatus: 'success' | 'failed' | 'runtime_error';
+  runtime: number;
+  memoryUsage?: number;
+  score: number;
+  submittedAt: string;
+  isLocked: boolean;
+  errorMessage?: string;
+  testResults: ChallengeTestResult[];
 }

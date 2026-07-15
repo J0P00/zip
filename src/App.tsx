@@ -45,7 +45,8 @@ import {
   LessonItem, 
   AdaptiveRule,
   MonitoringRequest,
-  NotificationItem
+  NotificationItem,
+  PracticeSubmission
 } from './types';
 
 // Import Mock Data
@@ -617,20 +618,38 @@ export default function App() {
   // Core functions to interactively link dashboards together
   
   // 1. When student compiles and submits vehicle code
-  const handleStudentSubmitCode = (submittedCode: string) => {
+  const handleStudentSubmitCode = (submission: PracticeSubmission) => {
     // Increment points & complete lessons count
-    setPoints(prev => prev + 150);
+    const xpAward = Math.max(25, Math.round(submission.score * 1.5));
+    setPoints(prev => prev + xpAward);
     setStreak(prev => prev + 1);
-    setCompletedLessonsCount(prev => clampCompletedLessons(prev + 1));
+    if (submission.score >= 70) setCompletedLessonsCount(prev => clampCompletedLessons(prev + 1));
 
     // Append new active row inside Instructor queue review pending
     const newSub: PendingSubmission = {
-      id: `sub_${Date.now()}`,
-      studentName: currentUser ? `${currentUser.name} (You)` : 'Alex Mercer (You)',
-      challengeName: 'Inheritance Constraints with Vehicle/Car Override',
+      id: submission.id,
+      studentId: submission.studentId,
+      studentEmail: submission.studentEmail,
+      studentName: `${submission.studentName} (You)`,
+      section: submission.section,
+      challengeName: submission.challengeTitle,
       submittedAt: 'Just Now',
-      status: 'pending',
-      code: submittedCode
+      status: 'reviewed',
+      code: submission.sourceCode,
+      grade: submission.score,
+      score: submission.score,
+      topicId: submission.topicId,
+      topicTitle: submission.topicTitle,
+      compileStatus: submission.compileStatus,
+      runtime: submission.runtime,
+      memoryUsage: submission.memoryUsage,
+      programOutput: submission.programOutput,
+      errorMessage: submission.errorMessage,
+      isLocked: submission.isLocked,
+      testResults: submission.testResults,
+      feedback: submission.score >= 70
+        ? 'Automated grader: passed hidden test cases and practice requirements.'
+        : 'Automated grader: submission recorded, but one or more hidden tests failed.'
     };
 
     setPendingSubmissions(prev => [newSub, ...prev]);
@@ -638,14 +657,27 @@ export default function App() {
     // Lift leaderboard rankings score dynamically on the current student row
     setLeaderboardUsers(prev => prev.map(u => {
       if (u.isCurrentUser) {
-        return { ...u, points: u.points + 150, streak: u.streak + 1 };
+        return { ...u, points: u.points + xpAward, streak: u.streak + 1 };
       }
       return u;
     }));
 
-    // Unlock Chapter 4 Lesson
-    setVideoLessons(prev => prev.map(l => {
-      if (l.id === 'l4') {
+    setRecentStudentGrade({
+      grade: submission.score,
+      feedback: newSub.feedback || '',
+      challenge: submission.challengeTitle
+    });
+
+    addNotification(
+      'Practice IDE Submitted',
+      `${submission.challengeTitle} was graded automatically with a score of ${submission.score}%.`,
+      'unlock'
+    );
+
+    // Unlock next lesson only when both quiz and practice work are passed.
+    const completedPracticeSequence = Number(submission.challengeId.replace('practice_', ''));
+    if (submission.score >= 70) setVideoLessons(prev => prev.map(l => {
+      if (l.sequence === completedPracticeSequence + 1) {
         return { ...l, status: 'active' };
       }
       return l;
@@ -697,6 +729,25 @@ export default function App() {
         challenge: targetSub.challengeName
       });
       setPoints(prev => prev + 100); // Incentive
+    }
+  };
+
+  const handleReopenPracticeSubmission = (submissionId: string) => {
+    setPendingSubmissions(prev => prev.map(s => (
+      s.id === submissionId
+        ? { ...s, status: 'pending', isLocked: false, feedback: 'Submission reopened by teacher for one additional attempt.' }
+        : s
+    )));
+
+    try {
+      const saved = localStorage.getItem('oophub_practice_submissions');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const next = Object.fromEntries(Object.entries(parsed).filter(([, value]: [string, any]) => value?.id !== submissionId));
+        localStorage.setItem('oophub_practice_submissions', JSON.stringify(next));
+      }
+    } catch {
+      // Teacher queue still reflects the reopen even if browser storage is unavailable.
     }
   };
 
@@ -1187,8 +1238,9 @@ export default function App() {
 
             {persona === 'student' && studentTab === 'ide' && (
               <PracticeIDE 
-                initialFiles={INITIAL_JAVA_FILES} 
+                currentUser={displayUser}
                 onSubmitCompleted={handleStudentSubmitCode}
+                theme={theme}
               />
             )}
 
@@ -1224,6 +1276,7 @@ export default function App() {
                 monitoringRequests={monitoringRequests}
                 onSendRequest={handleSendMonitoringRequest}
                 onRemoveConnection={handleRemoveMonitoringConnection}
+                onReopenSubmission={handleReopenPracticeSubmission}
                 theme={theme}
               />
             )}

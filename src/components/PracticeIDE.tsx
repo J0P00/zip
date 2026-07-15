@@ -1,413 +1,288 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Folder, 
-  FileCode, 
-  ChevronRight, 
-  ChevronDown, 
-  Play, 
-  Send, 
-  RotateCcw, 
-  Terminal, 
-  Sparkles, 
-  Lightbulb, 
-  CheckSquare, 
-  HelpCircle 
-} from 'lucide-react';
-import { CodeFile } from '../types';
+import React, { useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle2, Code2, Lock, Play, RotateCcw, Send, Terminal } from 'lucide-react';
+import { AuthenticatedUser, PracticeSubmission } from '../types';
+import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson } from '../data/oopCourse';
+import { getPracticeChallengeForLesson, gradePracticeSource, PRACTICE_CHALLENGES } from '../data/practiceChallenges';
 
 interface PracticeIDEProps {
-  initialFiles: Record<string, string>;
-  onSubmitCompleted: (code: string) => void;
+  currentUser: AuthenticatedUser;
+  onSubmitCompleted: (submission: PracticeSubmission) => void;
+  theme?: 'light' | 'dark';
 }
 
-export default function PracticeIDE({ initialFiles, onSubmitCompleted }: PracticeIDEProps) {
-  const [files, setFiles] = useState<Record<string, string>>(initialFiles);
-  const [activeFile, setActiveFile] = useState<string>('src/main/java/Car.java');
-  const [editorText, setEditorText] = useState<string>(initialFiles['src/main/java/Car.java'] || '');
-  const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [testSuccess, setTestSuccess] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  
-  // Custom state for mobile tabbed view
-  const [activeMobileTab, setActiveMobileTab] = useState<'instructions' | 'code' | 'console'>('instructions');
+interface WatchRecord {
+  lessonId: string;
+  completionPercentage: number;
+  completed: boolean;
+}
 
-  // Custom directory state
-  const [isFolderOpen, setIsFolderOpen] = useState({
-    src: true,
-    main: true,
-    java: true
-  });
+interface QuizAttempt {
+  assessmentId: string;
+  lessonId: string;
+  percentage: number;
+  passed: boolean;
+}
 
-  // Track editor edits and sync with file system dictionary
-  useEffect(() => {
-    setEditorText(files[activeFile] || '');
-  }, [activeFile, files]);
+const WATCH_KEY = 'oophub_oop_video_progress';
+const QUIZ_KEY = 'oophub_oop_quiz_attempts';
+const SUBMISSIONS_KEY = 'oophub_practice_submissions';
+const DRAFT_KEY = 'oophub_practice_drafts';
 
-  const handleEditorChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setEditorText(val);
-    setFiles(prev => ({
-      ...prev,
-      [activeFile]: val
-    }));
+type WatchDb = Record<string, WatchRecord>;
+type QuizDb = Record<string, QuizAttempt>;
+type SubmissionDb = Record<string, PracticeSubmission>;
+type DraftDb = Record<string, string>;
+
+const formatDateTime = (value: string) =>
+  new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+
+export default function PracticeIDE({ currentUser, onSubmitCompleted, theme }: PracticeIDEProps) {
+  const isDark = theme === 'dark';
+  const [watchDb] = useState<WatchDb>(() => getStoredJson(WATCH_KEY, {}));
+  const [quizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
+  const [submissionDb, setSubmissionDb] = useState<SubmissionDb>(() => getStoredJson(SUBMISSIONS_KEY, {}));
+  const [draftDb, setDraftDb] = useState<DraftDb>(() => getStoredJson(DRAFT_KEY, {}));
+  const [activeChallengeId, setActiveChallengeId] = useState(() => PRACTICE_CHALLENGES[0].id);
+  const activeChallenge = PRACTICE_CHALLENGES.find(challenge => challenge.id === activeChallengeId) || PRACTICE_CHALLENGES[0];
+  const submissionKey = `${currentUser.id || currentUser.userId || currentUser.email}:${activeChallenge.id}`;
+  const submitted = submissionDb[submissionKey];
+  const [sourceCode, setSourceCode] = useState(() => submitted?.sourceCode || draftDb[submissionKey] || activeChallenge.starterCode);
+  const [consoleLogs, setConsoleLogs] = useState<string[]>(['Console ready. Run code as often as you need before final submission.']);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastResult, setLastResult] = useState<ReturnType<typeof gradePracticeSource> | null>(submitted ? {
+    compileStatus: submitted.compileStatus,
+    score: submitted.score,
+    runtime: submitted.runtime,
+    memoryUsage: submitted.memoryUsage,
+    programOutput: submitted.programOutput,
+    errorMessage: submitted.errorMessage || '',
+    testResults: submitted.testResults
+  } : null);
+
+  const activeLesson = OOP_COURSE_LESSONS.find(lesson => lesson.id === activeChallenge.lessonId);
+  const activeAssessment = OOP_ASSESSMENTS.find(assessment => assessment.id === activeChallenge.assessmentId);
+
+  const lockReason = useMemo(() => {
+    const watchRecord = watchDb[activeChallenge.lessonId];
+    const quizAttempt = quizDb[activeChallenge.assessmentId];
+    if (!watchRecord?.completed || watchRecord.completionPercentage < 95) return 'Practice IDE is locked until the lesson video is completed at 100%.';
+    if (!quizAttempt) return 'Practice IDE is locked until the assessment is completed.';
+    if (!quizAttempt.passed || quizAttempt.percentage < 70) return 'Practice IDE is locked until the quiz score is 70% or higher.';
+    return '';
+  }, [activeChallenge.assessmentId, activeChallenge.lessonId, quizDb, watchDb]);
+
+  const isLocked = Boolean(lockReason) || Boolean(submitted?.isLocked);
+  const passedRun = Boolean(lastResult && lastResult.score >= activeChallenge.passingScore && lastResult.compileStatus === 'success');
+
+  const selectChallenge = (challengeId: string) => {
+    const challenge = PRACTICE_CHALLENGES.find(item => item.id === challengeId) || PRACTICE_CHALLENGES[0];
+    const key = `${currentUser.id || currentUser.userId || currentUser.email}:${challenge.id}`;
+    setActiveChallengeId(challenge.id);
+    setSourceCode(submissionDb[key]?.sourceCode || draftDb[key] || challenge.starterCode);
+    setLastResult(submissionDb[key] ? {
+      compileStatus: submissionDb[key].compileStatus,
+      score: submissionDb[key].score,
+      runtime: submissionDb[key].runtime,
+      memoryUsage: submissionDb[key].memoryUsage,
+      programOutput: submissionDb[key].programOutput,
+      errorMessage: submissionDb[key].errorMessage || '',
+      testResults: submissionDb[key].testResults
+    } : null);
+    setConsoleLogs([submissionDb[key] ? 'Already Submitted. Editor is locked for this challenge.' : 'Console ready. Run code as often as you need before final submission.']);
   };
 
-  const handleFileClick = (path: string) => {
-    setActiveFile(path);
+  const updateSource = (value: string) => {
+    setSourceCode(value);
+    const next = { ...draftDb, [submissionKey]: value };
+    setDraftDb(next);
+    setStoredJson(DRAFT_KEY, next);
+  };
+
+  const runCode = () => {
+    setIsRunning(true);
+    setConsoleLogs(['javac Main.java', 'Compiling source in the Java sandbox...']);
+    window.setTimeout(() => {
+      const result = gradePracticeSource(activeChallenge, sourceCode);
+      setLastResult(result);
+      setConsoleLogs([
+        ...consoleLogs.slice(0, 1),
+        result.compileStatus === 'failed' ? 'Compilation failed.' : 'Compilation succeeded.',
+        result.errorMessage || 'All visible checks completed.',
+        `Score preview: ${result.score}%`,
+        `Runtime: ${result.runtime} ms`,
+        `Output: ${result.programOutput || '(none)'}`
+      ]);
+      setIsRunning(false);
+    }, 650);
   };
 
   const resetCode = () => {
-    if (window.confirm('Reset changes to initial exercise code?')) {
-      setFiles(initialFiles);
-      setEditorText(initialFiles[activeFile] || '');
-      setConsoleLogs(['Console cleared.', 'Click "Run Code" to compile and execute program.']);
-      setTestSuccess(false);
-    }
+    if (isLocked) return;
+    updateSource(activeChallenge.starterCode);
+    setLastResult(null);
+    setConsoleLogs(['Editor reset to starter code.']);
   };
 
-  // Compiler Simulator Engine
-  const runCodeCompileSimulation = () => {
-    setIsRunning(true);
-    setConsoleLogs([
-      '➜ javac -d bin src/main/java/Vehicle.java src/main/java/Car.java src/main/java/Main.java',
-      'Compiling files...'
-    ]);
-
-    setTimeout(() => {
-      // Analyze current Car.java code to verify if the student completed the inheritance exercises correctly
-      const carCode = files['src/main/java/Car.java'] || '';
-      
-      const containsSuperCall = carCode.includes('super(') && carCode.includes('super(brand);');
-      const containsOverride = carCode.includes('displayInfo') && carCode.includes('@Override');
-      const printsDoors = carCode.includes('doors') && (carCode.includes('System.out.println') || carCode.includes('System.out.print'));
-
-      if (!containsSuperCall) {
-        setConsoleLogs(prev => [
-          ...prev,
-          'src/main/java/Car.java:3: error: constructor Vehicle in class Vehicle cannot be applied to given types; \n    public Car(String brand, int doors) {\n                                        ^\n  required: java.lang.String\n  found: no arguments\n  reason: actual and formal argument lists differ in length. Subclasses must explicitly invoke the parent constructor using super(brand)!\n1 error',
-          '❌ COMPILATION FAILED.'
-        ]);
-        setTestSuccess(false);
-        setIsRunning(false);
-        return;
-      }
-
-      if (!containsOverride) {
-        setConsoleLogs(prev => [
-          ...prev,
-          'Compiling success.',
-          '➜ java Main',
-          '--- Booting OOP Vehicle Fleet Simulator ---',
-          'Vehicle brand: Generic Hovercraft, speed: 40 km/h',
-          '\n--- testing Customized Subclass Polymorphism ---',
-          'Vehicle brand: Tesla Model S, speed: 110 km/h',
-          '\n⚠️ WARNING: Car class compiled successfully, but you have not overridden displayInfo() to expose door parameters!',
-          'Hint: Write an @Override method for displayInfo() to finalize the layout checklist.',
-          '❌ CHALLENGE VERIFICATION FAILED.'
-        ]);
-        setTestSuccess(false);
-        setIsRunning(false);
-        return;
-      }
-
-      if (!printsDoors) {
-        setConsoleLogs(prev => [
-          ...prev,
-          'Compiling success.',
-          '➜ java Main',
-          '--- Booting OOP Vehicle Fleet Simulator ---',
-          'Vehicle brand: Generic Hovercraft, speed: 40 km/h',
-          '\n--- testing Customized Subclass Polymorphism ---',
-          'Car: Tesla Model S, speed: 110 km/h',
-          '\n⚠️ WARNING: Your Overridden displayInfo() is called, but it does not print the private int "doors" parameter!',
-          '❌ CHALLENGE VERIFICATION FAILED.'
-        ]);
-        setTestSuccess(false);
-        setIsRunning(false);
-        return;
-      }
-
-      // If they passed all regex checkpoints perfectly!
-      setConsoleLogs(prev => [
-        ...prev,
-        'Compiling success.',
-        '➜ java Main',
-        '------------------------------------------------',
-        '--- Booting OOP Vehicle Fleet Simulator ---',
-        'Vehicle brand: Generic Hovercraft, speed: 40 km/h',
-        '\n--- Testing Subclass Polymorphism ---',
-        'Car: Tesla Model S, speed: 110 km/h, doors: 4',
-        '------------------------------------------------',
-        '✔ COMPILER CODE EVALUATION PASSED!',
-        '✔ Sub-Constructors bind successfully.',
-        '✔ Polymorphic overriden displays resolved correctly in dynamic heap.',
-        '🏆 All JUnit verification tests green! ready to submit challenge.'
-      ]);
-      setTestSuccess(true);
-      setIsRunning(false);
-    }, 1100);
-  };
-
-  const submitToInstructor = () => {
-    if (!testSuccess) {
-      alert('Please run compile and pass all automated verification checks before submitting the challenge.');
-      return;
-    }
-    
+  const submitCode = () => {
+    if (submitted) return;
     setIsSubmitting(true);
-    setTimeout(() => {
-      onSubmitCompleted(files['src/main/java/Car.java']);
-      setIsSubmitting(false);
-      alert('🏆 Submission Successful! Your code has been uploaded to Dr. Elena Vance\'s Review Queue. Your score was updated (+150 XP). Check your Student Dashboard for reviews!');
-    }, 1000);
-  };
+    const result = gradePracticeSource(activeChallenge, sourceCode);
+    const now = new Date().toISOString();
+    const practiceSubmission: PracticeSubmission = {
+      id: `practice_sub_${Date.now()}`,
+      studentId: currentUser.id || currentUser.userId || currentUser.email,
+      studentName: currentUser.name,
+      studentEmail: currentUser.email,
+      section: currentUser.section || 'Unassigned',
+      challengeId: activeChallenge.id,
+      challengeTitle: activeChallenge.title,
+      topicId: activeChallenge.topicId,
+      topicTitle: activeChallenge.topicId.split('-').map(part => part[0].toUpperCase() + part.slice(1)).join(' '),
+      sourceCode,
+      programOutput: result.programOutput,
+      compileStatus: result.compileStatus,
+      runtime: result.runtime,
+      memoryUsage: result.memoryUsage,
+      score: result.score,
+      submittedAt: now,
+      isLocked: true,
+      errorMessage: result.errorMessage,
+      testResults: result.testResults
+    };
 
-  // Helper code lines count representation
-  const linesCount = editorText.split('\n').length;
+    window.setTimeout(() => {
+      const next = { ...submissionDb, [submissionKey]: practiceSubmission };
+      setSubmissionDb(next);
+      setStoredJson(SUBMISSIONS_KEY, next);
+      setLastResult(result);
+      setConsoleLogs([
+        'Final submission saved.',
+        `Compile status: ${result.compileStatus}`,
+        `Final score: ${result.score}%`,
+        `Submitted: ${formatDateTime(now)}`
+      ]);
+      onSubmitCompleted(practiceSubmission);
+      setIsSubmitting(false);
+    }, 500);
+  };
 
   return (
-    <div className="flex flex-col lg:grid lg:grid-cols-12 gap-5 h-[calc(100vh-180px)] lg:h-[calc(100vh-140px)] min-h-[500px] lg:min-h-[600px] text-slate-800" id="ide-workspace">
-      
-      {/* Mobile view tab buttons */}
-      <div className="flex border border-slate-200/80 rounded-xl bg-slate-50 p-1 lg:hidden w-full select-none shrink-0 mb-1">
-        {[
-          { id: 'instructions', label: 'Instructions' },
-          { id: 'code', label: 'Code Editor' },
-          { id: 'console', label: 'Console' }
-        ].map(t => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setActiveMobileTab(t.id as any)}
-            className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeMobileTab === t.id ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* File Tree Panel & Center editor */}
-      <div className={`lg:col-span-8 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm h-full ${activeMobileTab === 'instructions' ? 'hidden lg:flex flex-col' : 'flex flex-col'}`}>
-        
-        {/* Workspace core navigation layout */}
-        <div className="flex flex-1 overflow-hidden">
-          
-          {/* File explorer panel */}
-          <div className="hidden md:block w-56 bg-slate-50 border-r border-slate-200 p-4 font-mono select-none overflow-y-auto flex-shrink-0" id="ide-explorer">
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider font-sans block mb-3">Project Explorer</span>
-            
-            {/* Folder rows */}
-            <div className="space-y-1.5 text-xs">
-              <div 
-                className="flex items-center gap-1 text-slate-600 cursor-pointer hover:text-indigo-600 select-none"
-                onClick={() => setIsFolderOpen(prev => ({ ...prev, src: !prev.src }))}
-              >
-                {isFolderOpen.src ? <ChevronDown className="w-3.5 h-3.5 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 shrink-0" />}
-                <Folder className="w-4 h-4 text-slate-400 fill-slate-200 shrink-0" />
-                <span>src</span>
-              </div>
-
-              {isFolderOpen.src && (
-                <div className="pl-4 space-y-1.5 border-l border-slate-200 ml-1.5">
-                  <div 
-                    className="flex items-center gap-1 text-slate-600 cursor-pointer hover:text-indigo-600"
-                    onClick={() => setIsFolderOpen(prev => ({ ...prev, main: !prev.main }))}
-                  >
-                    {isFolderOpen.main ? <ChevronDown className="w-3.5 h-3.5 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 shrink-0" />}
-                    <Folder className="w-4 h-4 text-slate-400 fill-slate-200 shrink-0" />
-                    <span>main</span>
-                  </div>
-
-                  {isFolderOpen.main && (
-                    <div className="pl-4 space-y-1.5 border-l border-slate-200 ml-1.5">
-                      <div 
-                        className="flex items-center gap-1 text-slate-600 cursor-pointer hover:text-indigo-600"
-                        onClick={() => setIsFolderOpen(prev => ({ ...prev, java: !prev.java }))}
-                      >
-                        {isFolderOpen.java ? <ChevronDown className="w-3.5 h-3.5 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 shrink-0" />}
-                        <Folder className="w-4 h-4 text-slate-400 fill-slate-200 shrink-0" />
-                        <span>java</span>
-                      </div>
-
-                      {isFolderOpen.java && (
-                        <div className="pl-4 space-y-1 ml-1.5">
-                          {[
-                            { name: 'Vehicle.java', path: 'src/main/java/Vehicle.java' },
-                            { name: 'Car.java', path: 'src/main/java/Car.java' },
-                            { name: 'Main.java', path: 'src/main/java/Main.java' },
-                          ].map((item, index) => (
-                            <div 
-                              key={index}
-                              onClick={() => handleFileClick(item.path)}
-                              className={`flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer transition ${activeFile === item.path ? 'bg-indigo-100/60 text-indigo-700 font-bold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
-                            >
-                              <FileCode className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span>{item.name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className={`flex-grow bg-[#1e293b] text-slate-100 overflow-hidden ${activeMobileTab === 'console' ? 'hidden lg:flex flex-col' : 'flex flex-col'}`} id="ide-editor-container">
-            <div className="bg-[#0f172a] px-4 py-2 flex items-center justify-between border-b border-[#0f172a]/50 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <FileCode className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs font-mono font-bold text-slate-300 hidden md:inline">{activeFile.split('/').pop()}</span>
-                <select
-                  value={activeFile}
-                  onChange={(e) => setActiveFile(e.target.value)}
-                  className="md:hidden bg-[#1e293b] text-xs font-mono font-bold text-slate-300 border border-[#334155] rounded px-2 py-0.5 outline-none focus:border-indigo-400 cursor-pointer"
+    <div className={`grid gap-5 lg:grid-cols-12 ${isDark ? 'text-slate-100' : 'text-slate-800'}`} id="practice-ide-workflow">
+      <aside className="lg:col-span-3 space-y-4">
+        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <h2 className="text-sm font-extrabold text-slate-900 dark:text-white">Practice Topics</h2>
+          <div className="mt-3 space-y-2 max-h-[480px] overflow-y-auto pr-1">
+            {PRACTICE_CHALLENGES.map((challenge, index) => {
+              const lessonChallenge = getPracticeChallengeForLesson(challenge.lessonId);
+              const challengeKey = `${currentUser.id || currentUser.userId || currentUser.email}:${challenge.id}`;
+              const done = Boolean(submissionDb[challengeKey]);
+              return (
+                <button
+                  key={challenge.id}
+                  onClick={() => selectChallenge(lessonChallenge.id)}
+                  className={`w-full rounded-md border px-3 py-2 text-left text-xs font-bold transition ${activeChallenge.id === challenge.id ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'}`}
                 >
-                  <option value="src/main/java/Vehicle.java">Vehicle.java</option>
-                  <option value="src/main/java/Car.java">Car.java</option>
-                  <option value="src/main/java/Main.java">Main.java</option>
-                </select>
-                <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded uppercase tracking-wider">Java Sandbox</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={resetCode}
-                  className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer transition"
-                  title="Reset exercises file parameters"
-                >
-                  <RotateCcw className="w-3 h-3" /> Reset Code
+                  <span className="block font-mono text-[10px] text-slate-400">Topic {index + 1}</span>
+                  <span className="block truncate">{challenge.title}</span>
+                  <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[9px] uppercase ${done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>
+                    {done ? 'Submitted' : 'Available when unlocked'}
+                  </span>
                 </button>
-              </div>
-            </div>
-
-            {/* Editable panel element */}
-            <div className="flex-grow flex font-mono text-xs overflow-auto relative p-2">
-              {/* Line gutter numbers */}
-              <div className="w-8 flex-shrink-0 text-right pr-2 select-none border-r border-[#334155]/40 text-[#475569] font-medium mr-2">
-                {Array.from({ length: linesCount }).map((_, idx) => (
-                  <div key={idx} className="h-5 leading-5">{idx + 1}</div>
-                ))}
-              </div>
-
-              {/* Text editor block */}
-              <textarea
-                id="ide-textarea"
-                className="flex-grow h-full bg-transparent outline-none border-none resize-none font-mono text-[12px] leading-5 text-indigo-200 selection:bg-indigo-600/40 selection:text-white max-w-full focus:ring-0 focus:border-transparent whitespace-pre"
-                value={editorText}
-                onChange={handleEditorChange}
-                spellCheck="false"
-              />
-            </div>
+              );
+            })}
           </div>
+        </section>
+      </aside>
 
-        </div>
-
-        {/* Compiling Terminal console */}
-        <div className={`bg-[#090d16] text-[#94a3b8] font-mono text-xs border-t border-[#1e293b] flex-shrink-0 ${activeMobileTab === 'code' ? 'hidden lg:flex flex-col h-44' : activeMobileTab === 'console' ? 'flex flex-col flex-grow lg:flex-grow-0 lg:h-44' : 'flex flex-col h-44'}`} id="ide-console">
-          <div className="bg-[#0f172a] px-4 py-1.5 flex items-center justify-between border-b border-[#1e293b]/50 flex-shrink-0">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-[#64748b] flex items-center gap-1.5"><Terminal className="w-3.5 h-3.5" /> Output Console</span>
-            <span className="text-[9px] text-[#475569]">JDK v21.0.2 compiler</span>
+      <main className="lg:col-span-6 rounded-lg border border-slate-200 bg-slate-950 shadow-sm overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Code2 className="h-4 w-4 text-emerald-400" />
+            <span className="font-mono text-xs font-bold text-slate-200">Main.java</span>
+            <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-black uppercase text-slate-400">Auto-save</span>
           </div>
-
-          <div className="flex-grow overflow-y-auto p-4 space-y-1 block text-left" id="ide-console-logs">
-            {consoleLogs.length === 0 ? (
-              <p className="text-slate-500 italic">Console initialized. Edit class options in the tabs above and click "Run Code" in the challenge sidebar to evaluate.</p>
-            ) : (
-              consoleLogs.map((log, i) => (
-                <pre key={i} className={`whitespace-pre-wrap ${log.includes('error') || log.includes('FAILED') ? 'text-rose-400' : log.includes('PASSED') || log.includes('🏆') || log.includes('✔') ? 'text-emerald-400' : log.includes('➜') ? 'text-indigo-400' : 'text-slate-300'}`}>{log}</pre>
-              ))
-            )}
+          <div className="flex gap-2">
+            <button onClick={resetCode} disabled={isLocked} className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-3 py-1.5 text-[11px] font-bold text-slate-300 disabled:opacity-40">
+              <RotateCcw className="h-3.5 w-3.5" /> Reset
+            </button>
+            <button onClick={runCode} disabled={isRunning || isSubmitting || Boolean(lockReason)} className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-3 py-1.5 text-[11px] font-black text-slate-900 disabled:opacity-40">
+              <Play className="h-3.5 w-3.5 text-emerald-600" /> {isRunning ? 'Running' : 'Run'}
+            </button>
           </div>
         </div>
+        <textarea
+          value={sourceCode}
+          onChange={event => updateSource(event.target.value)}
+          disabled={isLocked}
+          spellCheck={false}
+          className="h-[520px] w-full resize-none bg-slate-950 p-5 font-mono text-xs leading-6 text-emerald-100 outline-none disabled:cursor-not-allowed disabled:opacity-70"
+        />
+      </main>
 
-      </div>
-
-      {/* Challenge Instruction Panel */}
-      <div className={`lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 overflow-y-auto h-full ${activeMobileTab !== 'instructions' ? 'hidden lg:flex flex-col lg:justify-between' : 'flex flex-col justify-between'}`} id="ide-challenge-sidebar">
-        
-        <div className="space-y-5">
-          <div className="border-b border-slate-100 pb-3">
-            <span className="text-[10px] font-mono bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded uppercase">Active Sandbox</span>
-            <h2 className="text-base font-bold text-slate-900 mt-1">Challenge: Inheritance Mastery</h2>
-            <p className="text-xs text-slate-500 mt-1">Deconstruct class relationships by modeling and compiling active subclass blueprints.</p>
-          </div>
-
-          {/* Checklist boxes */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide">Exercise Checkpoints</h3>
-            
-            <div className="space-y-2.5">
-              {[
-                { label: 'Inherit Car from base class Vehicle in Car.java (extends keyword)', sub: 'Code must establish Car subclassing structure.' },
-                { label: 'Write subclass contractor accepting brand & doors', sub: 'Pass brand parameter upstream via super(brand).' },
-                { label: 'Override displayInfo() method to detail vehicle parameters', sub: 'Construct print command printing speed & doors count.' }
-              ].map((task, i) => {
-                // Approximate dynamic determination based on code
-                const carCode = files['src/main/java/Car.java'] || '';
-                let checked = false;
-                if (i === 0) checked = carCode.includes('extends Vehicle');
-                if (i === 1) checked = carCode.includes('super(') && carCode.includes('super(brand);');
-                if (i === 2) checked = carCode.includes('displayInfo') && carCode.includes('@Override') && carCode.includes('doors');
-
-                return (
-                  <div key={i} className="flex gap-2.5 items-start p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                    <input 
-                      type="checkbox" 
-                      checked={checked} 
-                      disabled 
-                      className="mt-0.5 w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-0 cursor-not-allowed" 
-                    />
-                    <div>
-                      <h4 className="font-bold text-xs text-slate-900">{task.label}</h4>
-                      <p className="text-[10.5px] text-slate-400 font-medium leading-normal mt-0.5">{task.sub}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Quick tips display */}
-          <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 flex gap-2.5 items-start">
-            <Lightbulb className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+      <aside className="lg:col-span-3 space-y-4">
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <h4 className="text-xs font-bold text-indigo-900">Pro-Tip Card</h4>
-              <p className="text-[11px] text-indigo-700/80 leading-normal mt-0.5">
-                Always include the <code>@Override</code> annotation above overridden subclasses. It forces the Java compiler to assert that the parent classes actually define matching function profiles, catching typing typos before runtime errors occur!
-              </p>
+              <span className="font-mono text-[10px] font-black uppercase text-emerald-600">{activeLesson?.title}</span>
+              <h2 className="mt-1 text-base font-extrabold text-slate-900 dark:text-white">{activeChallenge.title}</h2>
+            </div>
+            {isLocked ? <Lock className="h-5 w-5 text-slate-400" /> : <CheckCircle2 className="h-5 w-5 text-emerald-600" />}
+          </div>
+          <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">{activeChallenge.description}</p>
+          {lockReason && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">
+              <AlertCircle className="mb-1 h-4 w-4" />
+              {lockReason}
+            </div>
+          )}
+          {submitted && (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-800">
+              Already Submitted: {submitted.score}% on {formatDateTime(submitted.submittedAt)}
+            </div>
+          )}
+          <div className="mt-4 space-y-3">
+            <div>
+              <h3 className="text-[10px] font-black uppercase text-slate-400">Requirements</h3>
+              <ul className="mt-2 space-y-1.5 text-xs font-semibold leading-5 text-slate-600 dark:text-slate-300">
+                {activeChallenge.requirements.map(item => <li key={item}>- {item}</li>)}
+              </ul>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-950">
+              <span className="block font-mono text-[10px] font-black uppercase text-slate-400">Sample Output</span>
+              <pre className="mt-1 whitespace-pre-wrap font-mono text-slate-800 dark:text-slate-200">{activeChallenge.sampleOutput}</pre>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Action Triggers Footer */}
-        <div className="border-t border-slate-200 pt-4 mt-6 space-y-3">
-          <div className="flex gap-3">
-            <button
-              id="ide-run-btn"
-              onClick={runCodeCompileSimulation}
-              disabled={isRunning || isSubmitting}
-              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold text-xs px-4 py-3 rounded-lg flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
-            >
-              <Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" /> {isRunning ? 'Compiling...' : 'Run Code'}
-            </button>
-            <button
-              id="ide-submit-btn"
-              onClick={submitToInstructor}
-              disabled={!testSuccess || isSubmitting || isRunning}
-              className={`flex-1 font-bold text-xs px-4 py-3 rounded-lg flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer disabled:opacity-50 ${testSuccess ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-100' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}
-            >
-              <Send className="w-3.5 h-3.5" /> {isSubmitting ? 'Uploading...' : 'Submit Lab'}
-            </button>
+        <section className="rounded-lg border border-slate-200 bg-slate-950 p-4 shadow-sm">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="inline-flex items-center gap-1 font-mono text-[10px] font-black uppercase text-slate-400"><Terminal className="h-3.5 w-3.5" /> Console</span>
+            {lastResult && <span className="rounded bg-slate-800 px-2 py-0.5 font-mono text-[10px] font-black text-emerald-300">{lastResult.score}%</span>}
           </div>
-          <span className="text-[10px] text-slate-400 block text-center">
-            {testSuccess ? '🏆 Code checks passed! Click Submit to receive grades.' : '⚡ Compiling errors will assist your debugging efforts.'}
-          </span>
-        </div>
-
-      </div>
-
+          <div className="max-h-52 space-y-1 overflow-y-auto font-mono text-[11px] leading-5 text-slate-300">
+            {consoleLogs.map((line, index) => <pre key={`${line}-${index}`} className="whitespace-pre-wrap">{line}</pre>)}
+          </div>
+          {lastResult && (
+            <div className="mt-3 space-y-1 border-t border-slate-800 pt-3">
+              {lastResult.testResults.map(test => (
+                <div key={test.id} className={`flex justify-between gap-2 text-[10px] font-bold ${test.passed ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <span>{test.isHidden ? 'Hidden test' : 'Sample test'}</span>
+                  <span>{test.passed ? 'Passed' : 'Failed'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            onClick={submitCode}
+            disabled={Boolean(lockReason) || Boolean(submitted) || isRunning || isSubmitting}
+            className={`mt-4 flex w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${passedRun || !lastResult ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-amber-500 text-white hover:bg-amber-600'}`}
+          >
+            <Send className="h-4 w-4" /> {submitted ? 'Already Submitted' : isSubmitting ? 'Submitting' : 'Submit Final Solution'}
+          </button>
+          {!passedRun && lastResult && !submitted && <p className="mt-2 text-center text-[10px] font-bold text-amber-300">You may submit now, but failed tests will be recorded in the final grade.</p>}
+        </section>
+      </aside>
     </div>
   );
 }

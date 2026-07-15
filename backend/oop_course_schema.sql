@@ -82,6 +82,48 @@ CREATE TABLE IF NOT EXISTS oop_student_progress (
   UNIQUE(student_id, course_id)
 );
 
+CREATE TABLE IF NOT EXISTS programming_challenges (
+  id TEXT PRIMARY KEY,
+  topic_id TEXT NOT NULL,
+  lesson_id TEXT REFERENCES oop_lessons(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  learning_objectives JSONB NOT NULL DEFAULT '[]'::jsonb,
+  requirements JSONB NOT NULL DEFAULT '[]'::jsonb,
+  starter_code TEXT DEFAULT '',
+  sample_input TEXT DEFAULT '',
+  sample_output TEXT DEFAULT '',
+  passing_score NUMERIC NOT NULL DEFAULT 70,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS challenge_test_cases (
+  id TEXT PRIMARY KEY,
+  challenge_id TEXT NOT NULL REFERENCES programming_challenges(id) ON DELETE CASCADE,
+  input TEXT DEFAULT '',
+  expected_output TEXT NOT NULL,
+  is_hidden BOOLEAN NOT NULL DEFAULT TRUE,
+  matcher TEXT DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS practice_submissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id TEXT NOT NULL,
+  challenge_id TEXT NOT NULL REFERENCES programming_challenges(id) ON DELETE CASCADE,
+  source_code TEXT NOT NULL,
+  program_output TEXT DEFAULT '',
+  compile_status TEXT NOT NULL DEFAULT 'not_run' CHECK (compile_status IN ('not_run', 'success', 'failed', 'runtime_error')),
+  runtime NUMERIC DEFAULT 0,
+  memory_usage NUMERIC,
+  score NUMERIC NOT NULL DEFAULT 0,
+  error_message TEXT DEFAULT '',
+  test_results JSONB NOT NULL DEFAULT '[]'::jsonb,
+  submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  is_locked BOOLEAN NOT NULL DEFAULT TRUE,
+  UNIQUE(student_id, challenge_id)
+);
+
 INSERT INTO oop_courses (id, name, description)
 VALUES ('oop_fundamentals', 'OOP Fundamentals', 'Local-video Java OOP fundamentals course.')
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description;

@@ -323,6 +323,45 @@ const initializeDatabase = async () => {
           answers JSONB NOT NULL DEFAULT '{}'::jsonb,
           date_completed TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        CREATE TABLE IF NOT EXISTS programming_challenges (
+          id TEXT PRIMARY KEY,
+          topic_id TEXT NOT NULL,
+          lesson_id TEXT DEFAULT '',
+          title TEXT NOT NULL,
+          description TEXT NOT NULL,
+          learning_objectives JSONB NOT NULL DEFAULT '[]'::jsonb,
+          requirements JSONB NOT NULL DEFAULT '[]'::jsonb,
+          starter_code TEXT DEFAULT '',
+          sample_input TEXT DEFAULT '',
+          sample_output TEXT DEFAULT '',
+          passing_score NUMERIC NOT NULL DEFAULT 70,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS challenge_test_cases (
+          id TEXT PRIMARY KEY,
+          challenge_id TEXT NOT NULL REFERENCES programming_challenges(id) ON DELETE CASCADE,
+          input TEXT DEFAULT '',
+          expected_output TEXT NOT NULL,
+          is_hidden BOOLEAN NOT NULL DEFAULT TRUE,
+          matcher TEXT DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS practice_submissions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id TEXT NOT NULL,
+          challenge_id TEXT NOT NULL REFERENCES programming_challenges(id) ON DELETE CASCADE,
+          source_code TEXT NOT NULL,
+          program_output TEXT DEFAULT '',
+          compile_status TEXT NOT NULL DEFAULT 'not_run',
+          runtime NUMERIC DEFAULT 0,
+          memory_usage NUMERIC,
+          score NUMERIC NOT NULL DEFAULT 0,
+          error_message TEXT DEFAULT '',
+          test_results JSONB NOT NULL DEFAULT '[]'::jsonb,
+          submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          is_locked BOOLEAN NOT NULL DEFAULT TRUE,
+          UNIQUE(student_id, challenge_id)
+        );
     `);
 };
 
@@ -385,6 +424,57 @@ const seedLessons = async () => {
               video_url = EXCLUDED.video_url,
               updated_at = NOW()
         `, lesson);
+    }
+};
+
+const seedPracticeChallenges = async () => {
+    const topics = [
+        ["practice_1", "classes-objects", "oop_lesson_1", "Create a Student object"],
+        ["practice_2", "constructors", "oop_lesson_2", "Initialize a Book"],
+        ["practice_3", "encapsulation", "oop_lesson_4", "Protect BankAccount balance"],
+        ["practice_4", "inheritance", "oop_lesson_6", "Extend Employee into Manager"],
+        ["practice_5", "polymorphism", "oop_lesson_7", "Override notification sending"],
+        ["practice_6", "abstraction", "oop_lesson_8", "Implement an abstract shape"],
+        ["practice_7", "interfaces", "oop_lesson_9", "Implement Payable"],
+        ["practice_8", "exception-handling", "oop_lesson_10", "Validate division safely"],
+        ["practice_9", "collections", "oop_lesson_10", "Track unique names"],
+        ["practice_10", "file-handling", "oop_lesson_11", "Read simple file content"],
+        ["practice_11", "mini-oop-project", "oop_lesson_11", "Mini library checkout"]
+    ];
+
+    for (const [id, topicId, lessonId, title] of topics) {
+        await pool.query(`
+            INSERT INTO programming_challenges (
+              id, topic_id, lesson_id, title, description, learning_objectives,
+              requirements, starter_code, sample_input, sample_output, passing_score
+            )
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, '', $9, 70)
+            ON CONFLICT (id) DO UPDATE SET
+              topic_id = EXCLUDED.topic_id,
+              lesson_id = EXCLUDED.lesson_id,
+              title = EXCLUDED.title,
+              description = EXCLUDED.description,
+              learning_objectives = EXCLUDED.learning_objectives,
+              requirements = EXCLUDED.requirements,
+              starter_code = EXCLUDED.starter_code,
+              sample_output = EXCLUDED.sample_output
+        `, [
+            id,
+            topicId,
+            lessonId,
+            title,
+            `Automated Java practice challenge for ${topicId.replace(/-/g, " ")}.`,
+            JSON.stringify(["Apply the topic in Java", "Pass visible and hidden tests"]),
+            JSON.stringify(["Keep the class named Main", "Print the required sample output"]),
+            "public class Main {\n    public static void main(String[] args) {\n        // TODO\n    }\n}\n",
+            "Expected output depends on the published challenge."
+        ]);
+
+        await pool.query(`
+            INSERT INTO challenge_test_cases (id, challenge_id, expected_output, is_hidden, matcher)
+            VALUES ($1, $2, $3, FALSE, 'class\\s+Main')
+            ON CONFLICT (id) DO UPDATE SET expected_output = EXCLUDED.expected_output, matcher = EXCLUDED.matcher
+        `, [`${id}_sample`, id, "Expected output depends on the published challenge."]);
     }
 };
 
@@ -700,6 +790,127 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
     }
 });
 
+app.get("/api/practice-challenges", requireAuth, async (_req, res, next) => {
+    try {
+        const result = await pool.query(`
+            SELECT c.*, COALESCE(json_agg(t.*) FILTER (WHERE t.id IS NOT NULL), '[]') AS test_cases
+            FROM programming_challenges c
+            LEFT JOIN challenge_test_cases t ON t.challenge_id = c.id
+            GROUP BY c.id
+            ORDER BY c.id
+        `);
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin"]), async (_req, res, next) => {
+    try {
+        const result = await pool.query(`
+            SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id
+            FROM practice_submissions ps
+            JOIN programming_challenges pc ON pc.id = ps.challenge_id
+            ORDER BY ps.submitted_at DESC
+        `);
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/practice-submissions/me", requireAuth, requireRole(["student"]), async (req, res, next) => {
+    try {
+        const result = await pool.query(`
+            SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id
+            FROM practice_submissions ps
+            JOIN programming_challenges pc ON pc.id = ps.challenge_id
+            WHERE ps.student_id = $1
+            ORDER BY ps.submitted_at DESC
+        `, [req.authUser.id]);
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), async (req, res, next) => {
+    try {
+        const {
+            challengeId,
+            sourceCode,
+            programOutput = "",
+            compileStatus = "not_run",
+            runtime = 0,
+            memoryUsage = null,
+            score = 0,
+            errorMessage = "",
+            testResults = []
+        } = req.body || {};
+
+        if (!challengeId || !sourceCode) {
+            return res.status(400).json({ success: false, message: "challengeId and sourceCode are required." });
+        }
+
+        const existing = await pool.query(
+            "SELECT id, is_locked FROM practice_submissions WHERE student_id = $1 AND challenge_id = $2",
+            [req.authUser.id, cleanText(challengeId, 120)]
+        );
+        if (existing.rows[0]?.is_locked) {
+            return res.status(409).json({ success: false, message: "This challenge has already been submitted." });
+        }
+
+        const result = await pool.query(`
+            INSERT INTO practice_submissions (
+              student_id, challenge_id, source_code, program_output, compile_status,
+              runtime, memory_usage, score, error_message, test_results, is_locked
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, TRUE)
+            ON CONFLICT (student_id, challenge_id) DO UPDATE SET
+              source_code = EXCLUDED.source_code,
+              program_output = EXCLUDED.program_output,
+              compile_status = EXCLUDED.compile_status,
+              runtime = EXCLUDED.runtime,
+              memory_usage = EXCLUDED.memory_usage,
+              score = EXCLUDED.score,
+              error_message = EXCLUDED.error_message,
+              test_results = EXCLUDED.test_results,
+              submitted_at = NOW(),
+              is_locked = TRUE
+            RETURNING *
+        `, [
+            req.authUser.id,
+            cleanText(challengeId, 120),
+            String(sourceCode).slice(0, 50000),
+            String(programOutput).slice(0, 20000),
+            ["success", "failed", "runtime_error", "not_run"].includes(compileStatus) ? compileStatus : "not_run",
+            clampNumber(runtime, 0, 30000),
+            memoryUsage === null ? null : clampNumber(memoryUsage, 0, 4096),
+            clampNumber(score, 0, 100),
+            String(errorMessage).slice(0, 20000),
+            JSON.stringify(Array.isArray(testResults) ? testResults : [])
+        ]);
+        res.status(201).json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
+    try {
+        const result = await pool.query(`
+            UPDATE practice_submissions
+            SET is_locked = FALSE
+            WHERE id = $1
+            RETURNING *
+        `, [req.params.id]);
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Submission not found." });
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.get("/hello", (_req, res) => {
     res.send("Hello World");
 });
@@ -717,6 +928,7 @@ const PORT = process.env.PORT || 5000;
 initializeDatabase()
     .then(seedDemoUsers)
     .then(seedLessons)
+    .then(seedPracticeChallenges)
     .then(() => {
         app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);

@@ -32,6 +32,7 @@ interface TeacherPortalProps {
   monitoringRequests: MonitoringRequest[];
   onSendRequest: (studentEmailOrId: string) => { success: boolean; message: string };
   onRemoveConnection: (requestId: string) => void;
+  onReopenSubmission?: (id: string) => void;
   theme?: 'light' | 'dark';
 }
 
@@ -76,6 +77,7 @@ export default function TeacherPortal({
   monitoringRequests,
   onSendRequest,
   onRemoveConnection,
+  onReopenSubmission,
   theme
 }: TeacherPortalProps) {
   const isDark = theme === 'dark';
@@ -115,6 +117,9 @@ export default function TeacherPortal({
 
   // IDE Monitoring states
   const [searchQuery, setSearchQuery] = useState('');
+  const [topicFilter, setTopicFilter] = useState('All');
+  const [sectionFilter, setSectionFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
 
   // 1. Determine accepted student emails for current teacher
   const acceptedEmails = monitoringRequests
@@ -123,7 +128,7 @@ export default function TeacherPortal({
 
   // 2. Filter submissions list based on accepted students only
   const visibleSubmissions = submissions.filter(sub => {
-    const studentEmail = getStudentEmailByName(sub.studentName);
+    const studentEmail = sub.studentEmail || getStudentEmailByName(sub.studentName);
     return acceptedEmails.includes(studentEmail.toLowerCase());
   });
 
@@ -252,10 +257,24 @@ export default function TeacherPortal({
   const pendingRequests = teacherRequests.filter(req => req.status === 'pending');
   const acceptedRequests = teacherRequests.filter(req => req.status === 'accepted');
 
-  const filteredSubmissions = visibleSubmissions.filter(s => 
-    s.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.challengeName.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredSubmissions = visibleSubmissions.filter(s => {
+    const matchesSearch =
+      s.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.challengeName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTopic = topicFilter === 'All' || s.topicTitle === topicFilter || s.challengeName === topicFilter;
+    const matchesSection = sectionFilter === 'All' || (s.section || 'Unassigned') === sectionFilter;
+    const matchesStatus = statusFilter === 'All' || (statusFilter === 'Passed' ? (s.score ?? s.grade ?? 0) >= 70 : (s.score ?? s.grade ?? 0) < 70);
+    return matchesSearch && matchesTopic && matchesSection && matchesStatus;
+  });
+  const submissionScores = visibleSubmissions.map(s => Number(s.score ?? s.grade ?? 0));
+  const avgPracticeScore = submissionScores.length ? Math.round(submissionScores.reduce((sum, score) => sum + score, 0) / submissionScores.length) : 0;
+  const passRate = submissionScores.length ? Math.round((submissionScores.filter(score => score >= 70).length / submissionScores.length) * 100) : 0;
+  const failedStudents = visibleSubmissions.filter(s => Number(s.score ?? s.grade ?? 0) < 70).map(s => s.studentName);
+  const notSubmittedStudents = connectedStudentsDetails.filter(student =>
+    !visibleSubmissions.some(sub => (sub.studentEmail || getStudentEmailByName(sub.studentName)).toLowerCase() === student.email.toLowerCase())
   );
+  const topicOptions = Array.from(new Set(visibleSubmissions.map(s => s.topicTitle || s.challengeName).filter(Boolean)));
+  const sectionOptions = Array.from(new Set(visibleSubmissions.map(s => s.section || 'Unassigned')));
 
   return (
     <div className={`space-y-6 ${isDark ? 'text-slate-100' : 'text-slate-800'}`} id="teacher-portal-root">
@@ -768,7 +787,23 @@ export default function TeacherPortal({
 
       {/* 5. IDE SUBMISSIONS MONITORING VIEW */}
       {activeTab === 'ide_monitoring' && (
-        <div className="grid lg:grid-cols-12 gap-6 text-left">
+        <div className="space-y-5 text-left">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            {[
+              ['Submissions', String(visibleSubmissions.length)],
+              ['Pass Rate', `${passRate}%`],
+              ['Average Score', `${avgPracticeScore}%`],
+              ['Not Submitted', String(notSubmittedStudents.length)],
+              ['Failed', String(failedStudents.length)]
+            ].map(([label, value]) => (
+              <div key={label} className={`rounded-xl border p-4 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                <span className="block text-[10px] font-black uppercase text-slate-400">{label}</span>
+                <strong className="mt-1 block font-mono text-xl">{value}</strong>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid lg:grid-cols-12 gap-6">
           {/* Left: Queue List */}
           <div className={`lg:col-span-7 rounded-2xl border p-5 shadow-sm space-y-4 flex flex-col justify-between min-h-[500px] ${
             isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
@@ -779,6 +814,7 @@ export default function TeacherPortal({
                   <h3 className="text-sm font-extrabold">IDE Submissions Monitor Panel</h3>
                   <p className="text-xs text-slate-505">Grade, comment on, and verify student compilation solutions</p>
                 </div>
+                <div className="flex flex-wrap gap-2">
                 <div className="relative w-44 shrink-0">
                   <input
                     type="text"
@@ -789,6 +825,20 @@ export default function TeacherPortal({
                       isDark ? 'bg-slate-950 border-slate-800 text-slate-200 focus:border-emerald-650' : 'bg-slate-50 border-slate-250 text-slate-650 focus:bg-white focus:border-emerald-600'
                     }`}
                   />
+                </div>
+                <select value={topicFilter} onChange={e => setTopicFilter(e.target.value)} className={`px-2 py-1.5 border outline-none rounded-xl text-xs ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-250 text-slate-650'}`}>
+                  <option>All</option>
+                  {topicOptions.map(topic => <option key={topic}>{topic}</option>)}
+                </select>
+                <select value={sectionFilter} onChange={e => setSectionFilter(e.target.value)} className={`px-2 py-1.5 border outline-none rounded-xl text-xs ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-250 text-slate-650'}`}>
+                  <option>All</option>
+                  {sectionOptions.map(section => <option key={section}>{section}</option>)}
+                </select>
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={`px-2 py-1.5 border outline-none rounded-xl text-xs ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-250 text-slate-650'}`}>
+                  <option>All</option>
+                  <option>Passed</option>
+                  <option>Failed</option>
+                </select>
                 </div>
               </div>
 
@@ -805,6 +855,7 @@ export default function TeacherPortal({
                 <div className="space-y-2.5 overflow-y-auto max-h-[360px] pr-1">
                   {filteredSubmissions.map((sub) => {
                     const isSelected = selectedSub?.id === sub.id;
+                    const score = Number(sub.score ?? sub.grade ?? 0);
                     const isPending = sub.status === 'pending';
                     return (
                       <div 
@@ -820,6 +871,7 @@ export default function TeacherPortal({
                             <span className="text-[9.5px] text-slate-400 font-mono">{sub.submittedAt}</span>
                           </div>
                           <p className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate max-w-[280px]">{sub.challengeName}</p>
+                          <p className="text-[10px] font-mono text-slate-400">{sub.topicTitle || 'Practice IDE'} · {sub.compileStatus || 'manual'} · {sub.section || 'Unassigned'}</p>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           {isPending ? (
@@ -829,7 +881,7 @@ export default function TeacherPortal({
                           ) : (
                             <div className="text-right">
                               <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 dark:text-emerald-400 px-1.5 py-0.5 rounded">
-                                {sub.grade}% score
+                                {score}% score
                               </span>
                               <span className="text-[9px] text-slate-400 block font-medium mt-0.5">Reviewed</span>
                             </div>
@@ -853,6 +905,7 @@ export default function TeacherPortal({
                       <span className="text-[9px] font-mono bg-slate-800 text-emerald-400 font-bold px-2 py-0.5 rounded uppercase tracking-wide">Reviewing Draft File</span>
                       <h4 className="text-slate-100 font-bold text-sm mt-1">{selectedSub.studentName}</h4>
                       <p className="text-[10.5px] text-slate-400 italic truncate max-w-[180px]">{selectedSub.challengeName}</p>
+                      <p className="text-[10px] text-slate-500 font-mono">{selectedSub.topicTitle || 'Practice IDE'} · {selectedSub.section || 'Unassigned'}</p>
                     </div>
                     <span className={`text-[9px] font-bold font-mono px-2 py-0.5 rounded ${
                       selectedSub.status === 'pending' ? 'bg-rose-950/40 text-rose-450 border border-rose-950/60' : 'bg-emerald-950/40 text-emerald-400 border border-emerald-950/60'
@@ -867,6 +920,40 @@ export default function TeacherPortal({
                       {selectedSub.code}
                     </pre>
                   </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    {[
+                      ['Compile', selectedSub.compileStatus || 'manual'],
+                      ['Runtime', selectedSub.runtime ? `${selectedSub.runtime} ms` : '--'],
+                      ['Memory', selectedSub.memoryUsage ? `${selectedSub.memoryUsage} MB` : '--']
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-xl border border-slate-800 bg-slate-950 p-2">
+                        <span className="block text-[9px] font-black uppercase text-slate-500">{label}</span>
+                        <strong className="mt-1 block text-[10px] text-slate-200">{value}</strong>
+                      </div>
+                    ))}
+                  </div>
+
+                  {(selectedSub.programOutput || selectedSub.errorMessage) && (
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Program Output / Errors</span>
+                      <pre className="max-h-24 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-3 font-mono text-[10px] leading-relaxed text-slate-300">{selectedSub.programOutput || selectedSub.errorMessage}</pre>
+                    </div>
+                  )}
+
+                  {selectedSub.testResults && selectedSub.testResults.length > 0 && (
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Hidden Test Case Results</span>
+                      <div className="space-y-1">
+                        {selectedSub.testResults.map(test => (
+                          <div key={test.id} className={`flex justify-between rounded-lg border px-2 py-1 text-[10px] font-bold ${test.passed ? 'border-emerald-950 bg-emerald-950/30 text-emerald-300' : 'border-rose-950 bg-rose-950/30 text-rose-300'}`}>
+                            <span>{test.isHidden ? 'Hidden' : 'Sample'}: {test.id}</span>
+                            <span>{test.passed ? 'Passed' : 'Failed'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="space-y-3 pt-2 border-t border-slate-850">
                     <div className="space-y-1">
@@ -892,7 +979,15 @@ export default function TeacherPortal({
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-slate-800 flex">
+                <div className="pt-3 border-t border-slate-800 flex gap-2">
+                  {onReopenSubmission && (
+                    <button
+                      onClick={() => onReopenSubmission(selectedSub.id)}
+                      className="w-40 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold text-xs py-2.5 rounded-xl cursor-pointer transition shadow-md"
+                    >
+                      Reopen
+                    </button>
+                  )}
                   <button
                     onClick={handlePostGrade}
                     className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl cursor-pointer transition shadow-md"
@@ -908,6 +1003,7 @@ export default function TeacherPortal({
                 <p>Select a student submission from the queue on the left to inspect source code and submit grades.</p>
               </div>
             )}
+          </div>
           </div>
         </div>
       )}
