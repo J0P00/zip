@@ -304,14 +304,14 @@ export default function StudentDashboard({
                 <div>
                   <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block">Recommended Lab Unit</span>
                   <h4 className="font-extrabold text-slate-900 text-sm mt-1">Car Vehicle Subclass Override</h4>
-                  <p className="text-[11px] text-slate-500 mt-1 leading-normal">Write Java inheritance hierarchies and call super constructors securely inside our sandbox debugger.</p>
+                  <p className="text-[11px] text-slate-500 mt-1 leading-normal">Write Java inheritance hierarchies and call super constructors securely inside our Practice IDE debugger.</p>
                 </div>
                 <button
                   id="student-bento-lab-cta"
                   onClick={() => onNavigateTo('ide')}
                   className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer max-w-max transition shadow-sm hover:shadow active:scale-95"
                 >
-                  <Code2 className="w-3.5 h-3.5" /> Open Sandbox IDE
+                  <Code2 className="w-3.5 h-3.5" /> Open IDE
                 </button>
               </div>
 
@@ -326,7 +326,7 @@ export default function StudentDashboard({
                   onClick={() => onNavigateTo('assessments')}
                   className="mt-4 bg-white border border-slate-300 hover:bg-emerald-50 hover:border-emerald-500 text-slate-700 hover:text-emerald-800 font-bold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer max-w-max transition shadow-sm"
                 >
-                  <BookOpen className="w-3.5 h-3.5 text-slate-500" /> Start Diagnostic Quiz
+                  <BookOpen className="w-3.5 h-3.5 text-slate-500" /> Start Assessment Quiz
                 </button>
               </div>
             </div>
@@ -345,11 +345,11 @@ export default function StudentDashboard({
                 <p className="text-xs text-slate-600 leading-relaxed max-w-xl">
                   {hasProgress ? (
                     <>
-                      Static analysis detected inheritance Constructor Override anomalies inside your sandbox Car draft code. We suggest completing <strong>"Super Constructor Chaining" (Lesson Lecture 3)</strong> to level up before continuing.
+                      Static analysis detected inheritance Constructor Override anomalies inside your Practice IDE Car draft code. We suggest completing <strong>"Super Constructor Chaining" (Lesson Lecture 3)</strong> to level up before continuing.
                     </>
                   ) : (
                     <>
-                      Start with the first OOP foundation lesson, then open the sandbox IDE to submit your first practice activity.
+                      Start with the first OOP foundation lesson, then open the Practice IDE to submit your first practice activity.
                     </>
                   )}
                 </p>
