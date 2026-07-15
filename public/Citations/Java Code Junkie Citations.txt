@@ -1,0 +1,24 @@
+Lesson 1: Hello World | Java Swing 
+Author: Java Code Junkie
+Citation: https://www.youtube.com/watch?v=1vVJPzVzaK8&list=PL3bGLnkkGnuV699lP_f9DvxyK5lMFpq6U&index=1
+
+Lesson 2: JFrame | Java Swing 
+Author: Java Code Junkie
+Citation: https://www.youtube.com/watch?v=4BRUmU-ETRk&list=PL3bGLnkkGnuV699lP_f9DvxyK5lMFpq6U&index=2
+
+Lesson 3: JPanel | Java Swing 
+Author: Java Code Junkie
+Citation: https://www.youtube.com/watch?v=4PfDdJ8GFHI&list=PL3bGLnkkGnuV699lP_f9DvxyK5lMFpq6U&index=3
+
+Lesson 4: BorderLayout | Java Swing
+Author: Java Code Junkie
+Citation: https://www.youtube.com/watch?v=1G4lBJW1vfM&list=PL3bGLnkkGnuV699lP_f9DvxyK5lMFpq6U&index=4
+
+Lesson 5: FlowLayout | Java Swing
+Author: Java Code Junkie
+Citation: https://www.youtube.com/watch?v=jBOpJ8giqhE&list=PL3bGLnkkGnuV699lP_f9DvxyK5lMFpq6U&index=5
+
+Lesson 6: GridLayout | Java Swing 
+Author:Java Code Junkie
+Citation: https://www.youtube.com/watch?v=impJtkTcQ94&list=PL3bGLnkkGnuV699lP_f9DvxyK5lMFpq6U&index=6
+

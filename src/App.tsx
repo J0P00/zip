@@ -1069,7 +1069,7 @@ export default function App() {
               {/* STUDENT TAB LINKS */}
               {persona === 'student' && [
                 { id: 'dashboard', label: '📊 Dashboard Overview', icon: <Compass className="w-4 h-4" /> },
-                { id: 'ide', label: '🎮 Sandbox Practice IDE', icon: <Code2 className="w-4 h-4" /> },
+                { id: 'ide', label: 'Practice IDE', icon: <Code2 className="w-4 h-4" /> },
                 { id: 'videos', label: '🎥 Course Syllabus', icon: <BookOpen className="w-4 h-4" /> },
                 { id: 'assessments', label: '💡 Diagnosis Quiz', icon: <TrendingUp className="w-4 h-4" /> },
                 { id: 'leaderboard', label: '🏆 Hall of Fame', icon: <Award className="w-4 h-4" /> },
