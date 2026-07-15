@@ -201,6 +201,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
   const [regUsername, setRegUsername] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [regRole, setRegRole] = useState<'student' | 'teacher'>('student');
 
   // Student specific fields
@@ -218,6 +219,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     username: false,
     email: false,
     password: false,
+    confirmPassword: false,
     section: false,
     studentNumber: false,
     teacherId: false,
@@ -264,6 +266,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
   const isRegUsernameValid = regUsername.trim().length >= 3;
   const isRegEmailValid = isValidEmail(regEmail);
   const isRegPasswordValid = regPassword.length >= 6;
+  const isRegConfirmPasswordValid = regConfirmPassword.length > 0 && regConfirmPassword === regPassword;
   const isRegSectionValid = regRole === 'student' ? regSection.trim().length > 0 : true;
   const isRegStudentNumberValid = regRole === 'student' ? regStudentNumber.trim().length > 0 : true;
   const isRegTeacherIdValid = regRole === 'teacher' ? regTeacherId.trim().length > 0 : true;
@@ -279,6 +282,10 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
   const registerPasswordError =
     registerTouched.password && !isRegPasswordValid
       ? 'Password must be at least 6 characters.'
+      : '';
+  const registerConfirmPasswordError =
+    registerTouched.confirmPassword && !isRegConfirmPasswordValid
+      ? 'Confirm password must match your password.'
       : '';
   const registerSectionError =
     regRole === 'student' && registerTouched.section && !isRegSectionValid
@@ -301,6 +308,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     isRegUsernameValid &&
     isRegEmailValid &&
     isRegPasswordValid &&
+    isRegConfirmPasswordValid &&
     (regRole === 'student'
       ? isRegSectionValid && isRegStudentNumberValid
       : isRegTeacherIdValid);
@@ -515,6 +523,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       username: true,
       email: true,
       password: true,
+      confirmPassword: true,
       studentNumber: true,
       section: true,
       teacherId: true,
@@ -1005,6 +1014,31 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                         <p className="text-xs font-semibold text-rose-600 mt-1 flex items-center gap-1">
                           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                           {registerPasswordError}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1 text-left">
+                      <label htmlFor="reg-confirm-password" className="text-xs font-bold text-slate-700">
+                        Confirm Password
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                          id="reg-confirm-password"
+                          type={showPassword ? 'text' : 'password'}
+                          value={regConfirmPassword}
+                          onBlur={() => setRegisterTouched(prev => ({ ...prev, confirmPassword: true }))}
+                          onChange={e => setRegConfirmPassword(e.target.value)}
+                          placeholder="Confirm password"
+                          className={`${inputBase} pr-12 ${registerConfirmPasswordError ? inputError : inputNormal}`}
+                          aria-label="Confirm Password"
+                        />
+                      </div>
+                      {registerConfirmPasswordError && (
+                        <p className="text-xs font-semibold text-rose-600 mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                          {registerConfirmPasswordError}
                         </p>
                       )}
                     </div>

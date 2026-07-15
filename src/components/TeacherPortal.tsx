@@ -1,26 +1,30 @@
-import React, { useState } from 'react';
-import { 
-  Users, 
-  BookOpen, 
-  FileCheck, 
-  LineChart, 
-  User, 
-  Code2, 
-  Search, 
-  Filter, 
-  GraduationCap, 
-  Plus, 
-  Clock, 
-  CheckCircle, 
-  Percent, 
-  Award,
-  Video,
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  Bell,
+  BookOpen,
+  CheckCircle2,
+  ClipboardCheck,
+  Clock,
+  Code2,
+  Copy,
+  Eye,
   FileQuestion,
+  GraduationCap,
+  LineChart,
+  Link,
+  Lock,
+  MailPlus,
+  PlayCircle,
+  Search,
+  Sparkles,
   TrendingUp,
-  Mail,
-  Phone,
-  Calendar,
-  Lock
+  UserCheck,
+  Users,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
 
@@ -36,43 +40,305 @@ interface TeacherPortalProps {
   theme?: 'light' | 'dark';
 }
 
+type TeacherTab = 'monitoring' | 'invitations' | 'topics' | 'swing' | 'assessments' | 'ide' | 'analytics' | 'architecture';
+type LearningStage = 'Lesson' | 'Watch Video' | 'Assessment' | 'Practice IDE' | 'Automatic Grading' | 'Adaptive Recommendation' | 'Unlock Next Topic';
+type LearningStatus = 'In Progress' | 'Completed' | 'Mastered' | 'Needs Improvement' | 'At Risk';
+
+type TopicProgress = {
+  topic: string;
+  video: number;
+  assessment: number;
+  ideStatus: string;
+  completion: number;
+  unlocked: boolean;
+  timeSpent: string;
+};
+
+type LiveStudent = {
+  id: string;
+  name: string;
+  email: string;
+  section: string;
+  online: boolean;
+  activity: string;
+  currentLesson: string;
+  currentTopic: string;
+  swingLesson: string;
+  stage: LearningStage;
+  overallProgress: number;
+  moduleProgress: number;
+  topicProgress: number;
+  videoCompletion: number;
+  quizScore: number;
+  practiceScore: number;
+  challengesCompleted: number;
+  performanceIndex: number;
+  learningStatus: LearningStatus;
+  lastActivity: string;
+  moduleCompletion: number;
+  topicCompletion: number;
+  recommendation: string;
+  topics: TopicProgress[];
+  swing: {
+    video: number;
+    assessment: number;
+    ide: number;
+    miniProject: number;
+  };
+};
+
+type TeacherNotification = {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  type: 'invitation' | 'lesson' | 'assessment' | 'ide' | 'unlock';
+};
+
+const OOP_TOPICS = [
+  'Classes and Objects',
+  'Constructors',
+  'Methods and Parameters',
+  'Encapsulation',
+  'Inheritance',
+  'Polymorphism',
+  'Abstraction',
+  'Interfaces',
+  'Exception Handling',
+  'Collections and Generics',
+  'File I/O and Serialization'
+];
+
+const ACTIVITY_ROTATION = [
+  'Watching video',
+  'Taking assessment',
+  'Solving Practice IDE',
+  'Reviewing adaptive lesson',
+  'Reading current lesson',
+  'Awaiting next unlock'
+];
+
+const STAGE_ROTATION: LearningStage[] = [
+  'Lesson',
+  'Watch Video',
+  'Assessment',
+  'Practice IDE',
+  'Automatic Grading',
+  'Adaptive Recommendation',
+  'Unlock Next Topic'
+];
+
 const getStudentEmailByName = (name: string): string => {
   const normalized = name.replace(/\s*\(you\)/i, '').trim().toLowerCase();
-  if (normalized.includes('alex mercer') || normalized.includes('dmitry vance') || normalized.includes('dmitry')) {
-    return 'dmitry@oophub.edu';
-  }
-  if (normalized.includes('rodriguez') || normalized.includes('sofia')) {
-    return 'rodriguez@oophub.edu';
-  }
-  if (normalized.includes('volkov') || normalized.includes('dmitry volkov')) {
-    return 'volkov@oophub.edu';
-  }
-  if (normalized.includes('chen')) {
-    return 'chen@oophub.edu';
-  }
-  if (normalized.includes('rossi') || normalized.includes('elena rossi')) {
-    return 'rossi@oophub.edu';
-  }
-  if (normalized.includes('hughes') || normalized.includes('liam')) {
-    return 'hughes@oophub.edu';
-  }
+  if (normalized.includes('alex mercer') || normalized.includes('dmitry vance') || normalized.includes('dmitry')) return 'dmitry@oophub.edu';
+  if (normalized.includes('sofia') || normalized.includes('rodriguez')) return 'rodriguez@oophub.edu';
+  if (normalized.includes('volkov')) return 'volkov@oophub.edu';
+  if (normalized.includes('chen')) return 'chen@oophub.edu';
+  if (normalized.includes('rossi')) return 'rossi@oophub.edu';
+  if (normalized.includes('hughes')) return 'hughes@oophub.edu';
   return normalized;
 };
 
-// Detailed mock student statistics for Student Management & Analytics
-const MOCK_STUDENTS_LIST = [
-  { id: 'STU-0001', name: 'Dmitry Vance (Alex Mercer)', email: 'dmitry@oophub.edu', course: 'BS Computer Science', yearLevel: '3rd Year', section: 'CS-3A', points: 3450, streak: 12, completedLessons: 2, avgQuiz: 83.4, status: 'Active' },
-  { id: 'STU-0002', name: 'Sofia Rodriguez', email: 'rodriguez@oophub.edu', course: 'BS Computer Science', yearLevel: '3rd Year', section: 'CS-3B', points: 3120, streak: 8, completedLessons: 4, avgQuiz: 90.0, status: 'Active' },
-  { id: 'STU-0003', name: 'Dmitry Volkov', email: 'volkov@oophub.edu', course: 'BS Information Technology', yearLevel: '2nd Year', section: 'IT-2A', points: 1840, streak: 4, completedLessons: 1, avgQuiz: 75.0, status: 'Active' },
-  { id: 'STU-0004', name: 'J. Chen', email: 'chen@oophub.edu', course: 'BS Computer Engineering', yearLevel: '4th Year', section: 'COE-4A', points: 2980, streak: 15, completedLessons: 3, avgQuiz: 88.0, status: 'Active' },
-  { id: 'STU-0005', name: 'Elena Rossi', email: 'rossi@oophub.edu', course: 'BS Computer Science', yearLevel: '3rd Year', section: 'CS-3A', points: 2450, streak: 6, completedLessons: 2, avgQuiz: 82.0, status: 'Inactive' },
-  { id: 'STU-0006', name: 'Liam Hughes', email: 'hughes@oophub.edu', course: 'BS Information Technology', yearLevel: '3rd Year', section: 'IT-3B', points: 1690, streak: 2, completedLessons: 2, avgQuiz: 80.0, status: 'Active' }
+const baseStudents: LiveStudent[] = [
+  {
+    id: 'STU-0001',
+    name: 'Dmitry Vance',
+    email: 'dmitry@oophub.edu',
+    section: 'CS-3A',
+    online: true,
+    activity: 'Solving Practice IDE',
+    currentLesson: 'Inheritance: Vehicle Superclass',
+    currentTopic: 'Inheritance',
+    swingLesson: 'JFrame and component tree',
+    stage: 'Practice IDE',
+    overallProgress: 64,
+    moduleProgress: 70,
+    topicProgress: 78,
+    videoCompletion: 92,
+    quizScore: 82,
+    practiceScore: 75,
+    challengesCompleted: 8,
+    performanceIndex: 79,
+    learningStatus: 'In Progress',
+    lastActivity: 'just now',
+    moduleCompletion: 70,
+    topicCompletion: 78,
+    recommendation: 'Complete one more subclass override exercise before unlocking polymorphism.',
+    topics: [],
+    swing: { video: 55, assessment: 42, ide: 30, miniProject: 15 }
+  },
+  {
+    id: 'STU-0002',
+    name: 'Sofia Rodriguez',
+    email: 'rodriguez@oophub.edu',
+    section: 'CS-3B',
+    online: true,
+    activity: 'Watching video',
+    currentLesson: 'Polymorphism and dynamic dispatch',
+    currentTopic: 'Polymorphism',
+    swingLesson: 'Layout managers',
+    stage: 'Watch Video',
+    overallProgress: 86,
+    moduleProgress: 88,
+    topicProgress: 90,
+    videoCompletion: 100,
+    quizScore: 94,
+    practiceScore: 91,
+    challengesCompleted: 14,
+    performanceIndex: 93,
+    learningStatus: 'Mastered',
+    lastActivity: '1 min ago',
+    moduleCompletion: 88,
+    topicCompletion: 90,
+    recommendation: 'Ready for advanced interface-driven mini project.',
+    topics: [],
+    swing: { video: 82, assessment: 88, ide: 76, miniProject: 64 }
+  },
+  {
+    id: 'STU-0003',
+    name: 'Dmitry Volkov',
+    email: 'volkov@oophub.edu',
+    section: 'IT-2A',
+    online: false,
+    activity: 'Offline',
+    currentLesson: 'Constructors and object state',
+    currentTopic: 'Constructors',
+    swingLesson: 'Not started',
+    stage: 'Adaptive Recommendation',
+    overallProgress: 35,
+    moduleProgress: 42,
+    topicProgress: 38,
+    videoCompletion: 61,
+    quizScore: 58,
+    practiceScore: 52,
+    challengesCompleted: 3,
+    performanceIndex: 56,
+    learningStatus: 'At Risk',
+    lastActivity: '34 min ago',
+    moduleCompletion: 42,
+    topicCompletion: 38,
+    recommendation: 'Review constructors lesson and assign remedial Practice IDE exercise.',
+    topics: [],
+    swing: { video: 0, assessment: 0, ide: 0, miniProject: 0 }
+  },
+  {
+    id: 'STU-0004',
+    name: 'J. Chen',
+    email: 'chen@oophub.edu',
+    section: 'COE-4A',
+    online: true,
+    activity: 'Taking assessment',
+    currentLesson: 'Interfaces and contracts',
+    currentTopic: 'Interfaces',
+    swingLesson: 'Event listeners',
+    stage: 'Assessment',
+    overallProgress: 74,
+    moduleProgress: 80,
+    topicProgress: 68,
+    videoCompletion: 87,
+    quizScore: 79,
+    practiceScore: 83,
+    challengesCompleted: 10,
+    performanceIndex: 81,
+    learningStatus: 'Completed',
+    lastActivity: '3 min ago',
+    moduleCompletion: 80,
+    topicCompletion: 68,
+    recommendation: 'Unlock exception handling after current assessment attempt.',
+    topics: [],
+    swing: { video: 70, assessment: 66, ide: 60, miniProject: 45 }
+  },
+  {
+    id: 'STU-0005',
+    name: 'Elena Rossi',
+    email: 'rossi@oophub.edu',
+    section: 'CS-3A',
+    online: false,
+    activity: 'Offline',
+    currentLesson: 'Encapsulation and access modifiers',
+    currentTopic: 'Encapsulation',
+    swingLesson: 'JPanel composition',
+    stage: 'Lesson',
+    overallProgress: 52,
+    moduleProgress: 56,
+    topicProgress: 49,
+    videoCompletion: 77,
+    quizScore: 71,
+    practiceScore: 62,
+    challengesCompleted: 5,
+    performanceIndex: 68,
+    learningStatus: 'Needs Improvement',
+    lastActivity: '2 hr ago',
+    moduleCompletion: 56,
+    topicCompletion: 49,
+    recommendation: 'Recommend private fields and accessor methods review.',
+    topics: [],
+    swing: { video: 35, assessment: 25, ide: 18, miniProject: 0 }
+  },
+  {
+    id: 'STU-0006',
+    name: 'Liam Hughes',
+    email: 'hughes@oophub.edu',
+    section: 'IT-3B',
+    online: true,
+    activity: 'Reading current lesson',
+    currentLesson: 'Abstraction and abstract classes',
+    currentTopic: 'Abstraction',
+    swingLesson: 'Basic controls',
+    stage: 'Lesson',
+    overallProgress: 58,
+    moduleProgress: 62,
+    topicProgress: 60,
+    videoCompletion: 80,
+    quizScore: 76,
+    practiceScore: 70,
+    challengesCompleted: 7,
+    performanceIndex: 74,
+    learningStatus: 'In Progress',
+    lastActivity: '5 min ago',
+    moduleCompletion: 62,
+    topicCompletion: 60,
+    recommendation: 'Proceed to abstraction assessment after video completion.',
+    topics: [],
+    swing: { video: 48, assessment: 44, ide: 32, miniProject: 12 }
+  }
 ];
+
+const withTopicProgress = (student: LiveStudent, studentIndex: number): LiveStudent => ({
+  ...student,
+  topics: OOP_TOPICS.map((topic, index) => {
+    const completion = Math.max(0, Math.min(100, student.overallProgress + (studentIndex * 4) - index * 7 + 18));
+    const unlocked = index <= Math.floor(student.overallProgress / 12);
+    return {
+      topic,
+      video: unlocked ? Math.min(100, completion + 8) : 0,
+      assessment: unlocked ? Math.max(0, completion - 4) : 0,
+      ideStatus: !unlocked ? 'Locked' : completion >= 80 ? 'Passed' : completion >= 55 ? 'In Review' : 'Needs Work',
+      completion,
+      unlocked,
+      timeSpent: unlocked ? `${2 + ((index + studentIndex) % 5)}h ${10 + index * 3}m` : '--'
+    };
+  })
+});
+
+const initialStudents = baseStudents.map(withTopicProgress);
+
+const statusClass = (status: LearningStatus) => {
+  if (status === 'Mastered') return 'bg-[#eef7dd] text-[#4f6f12] border-[#d7e8b1]';
+  if (status === 'Completed') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (status === 'Needs Improvement') return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (status === 'At Risk') return 'bg-rose-50 text-rose-700 border-rose-200';
+  return 'bg-slate-100 text-slate-700 border-slate-200';
+};
+
+const teacherScopedCode = (email: string) => {
+  const seed = email.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return `TEA-${String(seed).slice(-4)}-OOP`;
+};
 
 export default function TeacherPortal({
   submissions,
   onGradeSubmission,
-  onSelectPersona,
   currentUser,
   monitoringRequests,
   onSendRequest,
@@ -81,1064 +347,786 @@ export default function TeacherPortal({
   theme
 }: TeacherPortalProps) {
   const isDark = theme === 'dark';
-  
-  // Tab control matching user's modules
-  const [activeTab, setActiveTab] = useState<'home' | 'students' | 'course_builder' | 'assessment_creator' | 'ide_monitoring' | 'analytics' | 'profile'>('home');
-
-  // Input states
+  const [activeTab, setActiveTab] = useState<TeacherTab>('monitoring');
+  const [students, setStudents] = useState<LiveStudent[]>(initialStudents);
+  const [selectedStudentId, setSelectedStudentId] = useState(initialStudents[0]?.id ?? '');
   const [studentInput, setStudentInput] = useState('');
   const [requestFeedback, setRequestFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-
-  // Student Management states
-  const [mgmtSearch, setMgmtSearch] = useState('');
-  const [mgmtCourseFilter, setMgmtCourseFilter] = useState('All');
-  const [mgmtYearFilter, setMgmtYearFilter] = useState('All');
-  const [selectedStudent, setSelectedStudent] = useState<typeof MOCK_STUDENTS_LIST[0] | null>(null);
-
-  // Course Builder states
-  const [courses, setCourses] = useState([
-    { id: 'c1', title: 'OOP Fundamentals', lessons: 5, status: 'Published' },
-    { id: 'c2', title: 'Java Programming', lessons: 8, status: 'Published' },
-    { id: 'c3', title: 'Java Swing UI', lessons: 4, status: 'Draft' }
-  ]);
-  const [newCourseTitle, setNewCourseTitle] = useState('');
-  const [newLessonTitle, setNewLessonTitle] = useState('');
-  const [selectedCourseId, setSelectedCourseId] = useState('c1');
-
-  // Assessment Creator states
-  const [quizQuestions, setQuizQuestions] = useState([
-    { id: 1, scenario: 'Scenario 04: The Fleet Manager', question: 'What JVM pass resolves method execution dynamically based on object heap references?', answer: 'B. Dynamic Dispatch utilising Late Binding' }
-  ]);
-  const [newScenario, setNewScenario] = useState('');
-  const [newQuestion, setNewQuestion] = useState('');
-  const [quizAnswer, setQuizAnswer] = useState('');
-  const [passingScore, setPassingScore] = useState(70);
-  const [timeLimit, setTimeLimit] = useState(20);
-
-  // IDE Monitoring states
   const [searchQuery, setSearchQuery] = useState('');
-  const [topicFilter, setTopicFilter] = useState('All');
-  const [sectionFilter, setSectionFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [selectedSubId, setSelectedSubId] = useState<string>('');
+  const [commentText, setCommentText] = useState('');
+  const [scoreText, setScoreText] = useState(90);
+  const [notifications, setNotifications] = useState<TeacherNotification[]>([
+    {
+      id: 'n1',
+      title: 'Practice IDE submitted',
+      message: 'Dmitry Vance submitted Vehicle Subclass Override for automatic grading.',
+      timestamp: 'just now',
+      type: 'ide'
+    },
+    {
+      id: 'n2',
+      title: 'Topic unlocked',
+      message: 'Sofia Rodriguez unlocked Interfaces after passing polymorphism requirements.',
+      timestamp: '4 min ago',
+      type: 'unlock'
+    },
+    {
+      id: 'n3',
+      title: 'Assessment alert',
+      message: 'Dmitry Volkov scored below threshold and received a review recommendation.',
+      timestamp: '12 min ago',
+      type: 'assessment'
+    }
+  ]);
 
-  // 1. Determine accepted student emails for current teacher
-  const acceptedEmails = monitoringRequests
-    .filter(req => req.teacherEmail.toLowerCase() === currentUser.email.toLowerCase() && req.status === 'accepted')
-    .map(req => req.studentEmail.toLowerCase());
+  const acceptedEmails = useMemo(
+    () =>
+      monitoringRequests
+        .filter(req => req.teacherEmail.toLowerCase() === currentUser.email.toLowerCase() && req.status === 'accepted')
+        .map(req => req.studentEmail.toLowerCase()),
+    [currentUser.email, monitoringRequests]
+  );
 
-  // 2. Filter submissions list based on accepted students only
+  const teacherRequests = monitoringRequests.filter(req => req.teacherEmail.toLowerCase() === currentUser.email.toLowerCase());
+  const pendingRequests = teacherRequests.filter(req => req.status === 'pending');
+
+  const connectedStudents = students.filter(student => acceptedEmails.includes(student.email.toLowerCase()));
+  const visibleStudents = connectedStudents.length > 0 ? connectedStudents : students.slice(0, 4);
+  const selectedStudent = visibleStudents.find(student => student.id === selectedStudentId) ?? visibleStudents[0];
+
   const visibleSubmissions = submissions.filter(sub => {
     const studentEmail = sub.studentEmail || getStudentEmailByName(sub.studentName);
     return acceptedEmails.includes(studentEmail.toLowerCase());
   });
 
-  const [selectedSub, setSelectedSub] = useState<PendingSubmission | null>(
-    visibleSubmissions.find(s => s.status === 'pending') || null
-  );
-  const [commentText, setCommentText] = useState('');
-  const [scoreText, setScoreText] = useState(95);
+  const filteredSubmissions = visibleSubmissions.filter(sub => {
+    const score = Number(sub.score ?? sub.grade ?? 0);
+    const matchesSearch =
+      sub.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      sub.challengeName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus =
+      statusFilter === 'All' ||
+      (statusFilter === 'Passed' && score >= 70) ||
+      (statusFilter === 'Failed' && score < 70) ||
+      (statusFilter === 'Pending' && sub.status === 'pending');
+    return matchesSearch && matchesStatus;
+  });
 
-  const handleSelectSubmission = (sub: PendingSubmission) => {
-    setSelectedSub(sub);
-    setCommentText(sub.feedback || '');
-    setScoreText(sub.grade || 95);
+  const selectedSubmission =
+    filteredSubmissions.find(sub => sub.id === selectedSubId) ??
+    filteredSubmissions.find(sub => sub.status === 'pending') ??
+    filteredSubmissions[0];
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setStudents(prev =>
+        prev.map((student, index) => {
+          if (!student.online) return student;
+          const bump = index % 2 === 0 ? 1 : 2;
+          const nextStage = STAGE_ROTATION[(STAGE_ROTATION.indexOf(student.stage) + 1) % STAGE_ROTATION.length];
+          const nextActivity = ACTIVITY_ROTATION[(ACTIVITY_ROTATION.indexOf(student.activity) + 1 + index) % ACTIVITY_ROTATION.length] || 'Learning activity';
+          const nextProgress = Math.min(100, student.overallProgress + bump);
+          const nextQuiz = Math.min(100, student.quizScore + (nextStage === 'Assessment' ? 1 : 0));
+          const nextPractice = Math.min(100, student.practiceScore + (nextStage === 'Practice IDE' ? 1 : 0));
+          const nextIndex = Math.round(nextQuiz * 0.35 + nextPractice * 0.4 + nextProgress * 0.25);
+          const nextStatus: LearningStatus =
+            nextIndex >= 90 ? 'Mastered' : nextIndex >= 80 ? 'Completed' : nextIndex >= 70 ? 'In Progress' : nextIndex >= 60 ? 'Needs Improvement' : 'At Risk';
+          return withTopicProgress(
+            {
+              ...student,
+              activity: nextActivity,
+              stage: nextStage,
+              overallProgress: nextProgress,
+              moduleProgress: Math.min(100, student.moduleProgress + bump),
+              topicProgress: Math.min(100, student.topicProgress + bump),
+              topicCompletion: Math.min(100, student.topicCompletion + bump),
+              moduleCompletion: Math.min(100, student.moduleCompletion + bump),
+              quizScore: nextQuiz,
+              practiceScore: nextPractice,
+              performanceIndex: nextIndex,
+              learningStatus: nextStatus,
+              lastActivity: 'just now'
+            },
+            index
+          );
+        })
+      );
+
+      setNotifications(prev => {
+        const sample = visibleStudents[0];
+        if (!sample) return prev;
+        const next: TeacherNotification = {
+          id: `live-${Date.now()}`,
+          title: 'Live learning update',
+          message: `${sample.name} advanced to ${sample.stage} in ${sample.currentTopic}.`,
+          timestamp: 'now',
+          type: 'lesson'
+        };
+        return [next, ...prev].slice(0, 6);
+      });
+    }, 9000);
+
+    return () => window.clearInterval(interval);
+  }, [visibleStudents]);
+
+  useEffect(() => {
+    if (!selectedSubmission) return;
+    setSelectedSubId(selectedSubmission.id);
+    setCommentText(selectedSubmission.feedback || '');
+    setScoreText(Number(selectedSubmission.grade ?? selectedSubmission.score ?? 90));
+  }, [selectedSubmission?.id]);
+
+  const handleSendRequestSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!studentInput.trim()) return;
+    const res = onSendRequest(studentInput.trim());
+    setRequestFeedback({ type: res.success ? 'success' : 'error', message: res.message });
+    if (res.success) setStudentInput('');
+    window.setTimeout(() => setRequestFeedback(null), 5000);
+  };
+
+  const handleCopyInvitation = async () => {
+    const linkValue = `${window.location.origin}/invite/${teacherScopedCode(currentUser.email)}`;
+    try {
+      await navigator.clipboard.writeText(linkValue);
+      setRequestFeedback({ type: 'success', message: 'Invitation link copied to clipboard.' });
+    } catch {
+      setRequestFeedback({ type: 'success', message: `Invitation code: ${teacherScopedCode(currentUser.email)}` });
+    }
   };
 
   const handlePostGrade = () => {
-    if (!selectedSub) return;
+    if (!selectedSubmission) return;
     if (scoreText < 0 || scoreText > 100) {
       alert('Please enter a grade score between 0 and 100.');
       return;
     }
     if (!commentText.trim()) {
-      alert('Please include helpful feedback observations for the student.');
+      alert('Please include teacher feedback before posting.');
       return;
     }
-
-    onGradeSubmission(selectedSub.id, scoreText, commentText);
-    alert(`Evaluation Completed! Grade posted: ${scoreText}% for ${selectedSub.studentName}.`);
-    
-    const nextPending = visibleSubmissions.find(s => s.id !== selectedSub.id && s.status === 'pending');
-    if (nextPending) {
-      setSelectedSub(nextPending);
-      setCommentText(nextPending.feedback || '');
-      setScoreText(nextPending.grade || 95);
-    } else {
-      setSelectedSub(null);
-    }
-  };
-
-  const handleSendRequestSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!studentInput.trim()) return;
-
-    const res = onSendRequest(studentInput);
-    if (res.success) {
-      setRequestFeedback({ type: 'success', message: res.message });
-      setStudentInput('');
-    } else {
-      setRequestFeedback({ type: 'error', message: res.message });
-    }
-
-    setTimeout(() => setRequestFeedback(null), 5000);
-  };
-
-  // 3. Dynamic metrics calculation
-  const activeCount = acceptedEmails.length;
-  // Use mock students list for connected students details
-  const connectedStudentsDetails = MOCK_STUDENTS_LIST.filter(s => acceptedEmails.includes(s.email.toLowerCase()));
-
-  const avgQuiz = connectedStudentsDetails.length > 0 
-    ? Math.round((connectedStudentsDetails.reduce((sum, s) => sum + s.avgQuiz, 0) / connectedStudentsDetails.length) * 10) / 10
-    : 84.6; // fallback baseline
-
-  const completionRate = connectedStudentsDetails.length > 0
-    ? Math.round(connectedStudentsDetails.reduce((sum, s) => sum + (s.completedLessons / 5) * 100, 0) / connectedStudentsDetails.length)
-    : 72; // fallback baseline
-
-  const pendingReviews = visibleSubmissions.filter(s => s.status === 'pending').length;
-
-  const handleAddCourse = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCourseTitle.trim()) return;
-    const newCourse = {
-      id: `c_${Date.now()}`,
-      title: newCourseTitle.trim(),
-      lessons: 0,
-      status: 'Draft'
+    onGradeSubmission(selectedSubmission.id, scoreText, commentText);
+    const gradeNotification: TeacherNotification = {
+      id: `grade-${Date.now()}`,
+      title: 'Grade published',
+      message: `${selectedSubmission.studentName} received ${scoreText}% and adaptive feedback.`,
+      timestamp: 'now',
+      type: 'ide'
     };
-    setCourses([...courses, newCourse]);
-    setNewCourseTitle('');
-    alert(`Course "${newCourse.title}" created successfully!`);
+    setNotifications(prev => [gradeNotification, ...prev].slice(0, 6));
   };
 
-  const handleAddLesson = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newLessonTitle.trim()) return;
-    setCourses(courses.map(c => {
-      if (c.id === selectedCourseId) {
-        return { ...c, lessons: c.lessons + 1 };
-      }
-      return c;
-    }));
-    setNewLessonTitle('');
-    alert(`Lesson Lecture added to the selected course!`);
-  };
+  const avg = (values: number[]) => (values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0);
+  const averageQuiz = avg(visibleStudents.map(student => student.quizScore));
+  const averagePractice = avg(visibleStudents.map(student => student.practiceScore));
+  const averagePerformance = avg(visibleStudents.map(student => student.performanceIndex));
+  const videoCompletionRate = avg(visibleStudents.map(student => student.videoCompletion));
+  const completionRate = avg(visibleStudents.map(student => student.overallProgress));
+  const atRiskStudents = visibleStudents.filter(student => student.learningStatus === 'At Risk' || student.learningStatus === 'Needs Improvement');
+  const mostSuccessfulStudent = [...visibleStudents].sort((a, b) => b.performanceIndex - a.performanceIndex)[0];
+  const mostDifficultTopic = OOP_TOPICS.map(topic => ({
+    topic,
+    avg: avg(visibleStudents.map(student => student.topics.find(item => item.topic === topic)?.completion ?? 0))
+  })).sort((a, b) => a.avg - b.avg)[0];
 
-  const handleAddQuestion = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newQuestion.trim()) return;
-    const newQ = {
-      id: Date.now(),
-      scenario: newScenario.trim() || 'General OOP Principles',
-      question: newQuestion.trim(),
-      answer: quizAnswer.trim() || 'A'
-    };
-    setQuizQuestions([...quizQuestions, newQ]);
-    setNewQuestion('');
-    setNewScenario('');
-    setQuizAnswer('');
-    alert('Assessment quiz problem created and saved to active question bank!');
-  };
-
-  // Filter student management list
-  const filteredStudents = MOCK_STUDENTS_LIST.filter(student => {
-    const matchesSearch = student.name.toLowerCase().includes(mgmtSearch.toLowerCase()) || student.id.toLowerCase().includes(mgmtSearch.toLowerCase());
-    const matchesCourse = mgmtCourseFilter === 'All' || student.course.includes(mgmtCourseFilter);
-    const matchesYear = mgmtYearFilter === 'All' || student.yearLevel.includes(mgmtYearFilter);
-    return matchesSearch && matchesCourse && matchesYear;
-  });
-
-  // Filter connections requests
-  const teacherRequests = monitoringRequests.filter(
-    req => req.teacherEmail.toLowerCase() === currentUser.email.toLowerCase()
-  );
-  
-  const pendingRequests = teacherRequests.filter(req => req.status === 'pending');
-  const acceptedRequests = teacherRequests.filter(req => req.status === 'accepted');
-
-  const filteredSubmissions = visibleSubmissions.filter(s => {
-    const matchesSearch =
-      s.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.challengeName.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesTopic = topicFilter === 'All' || s.topicTitle === topicFilter || s.challengeName === topicFilter;
-    const matchesSection = sectionFilter === 'All' || (s.section || 'Unassigned') === sectionFilter;
-    const matchesStatus = statusFilter === 'All' || (statusFilter === 'Passed' ? (s.score ?? s.grade ?? 0) >= 70 : (s.score ?? s.grade ?? 0) < 70);
-    return matchesSearch && matchesTopic && matchesSection && matchesStatus;
-  });
-  const submissionScores = visibleSubmissions.map(s => Number(s.score ?? s.grade ?? 0));
-  const avgPracticeScore = submissionScores.length ? Math.round(submissionScores.reduce((sum, score) => sum + score, 0) / submissionScores.length) : 0;
-  const passRate = submissionScores.length ? Math.round((submissionScores.filter(score => score >= 70).length / submissionScores.length) * 100) : 0;
-  const failedStudents = visibleSubmissions.filter(s => Number(s.score ?? s.grade ?? 0) < 70).map(s => s.studentName);
-  const notSubmittedStudents = connectedStudentsDetails.filter(student =>
-    !visibleSubmissions.some(sub => (sub.studentEmail || getStudentEmailByName(sub.studentName)).toLowerCase() === student.email.toLowerCase())
-  );
-  const topicOptions = Array.from(new Set(visibleSubmissions.map(s => s.topicTitle || s.challengeName).filter(Boolean)));
-  const sectionOptions = Array.from(new Set(visibleSubmissions.map(s => s.section || 'Unassigned')));
+  const cardClass = isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900';
+  const mutedPanel = isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-[#f8faf5] border-[#e5ead8]';
 
   return (
-    <div className={`space-y-6 ${isDark ? 'text-slate-100' : 'text-slate-800'}`} id="teacher-portal-root">
-      
-      {/* Dynamic Tab Navigation Segment */}
-      <div className={`border-b ${isDark ? 'border-slate-800' : 'border-slate-200'} pb-2 flex overflow-x-auto whitespace-nowrap scrollbar-none flex-nowrap gap-4 text-xs font-bold uppercase tracking-wider -mx-4 px-4 sm:mx-0 sm:px-0`}>
-        {[
-          { id: 'home', label: '📊 Dashboard Overview', icon: <Users className="w-3.5 h-3.5" /> },
-          { id: 'students', label: '👨‍🎓 Student Management', icon: <GraduationCap className="w-3.5 h-3.5" /> },
-          { id: 'course_builder', label: '🛠️ Course Builder', icon: <BookOpen className="w-3.5 h-3.5" /> },
-          { id: 'assessment_creator', label: '📝 Assessment Creator', icon: <FileCheck className="w-3.5 h-3.5" /> },
-          { id: 'ide_monitoring', label: '💻 IDE Submissions', icon: <Code2 className="w-3.5 h-3.5" /> },
-          { id: 'analytics', label: '📈 Analytics Board', icon: <LineChart className="w-3.5 h-3.5" /> },
-          { id: 'profile', label: '👤 Instructor profile', icon: <User className="w-3.5 h-3.5" /> }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`pb-2.5 px-1 border-b-2 flex items-center gap-1.5 transition-all cursor-pointer ${
-              activeTab === tab.id
-                ? 'border-emerald-600 text-emerald-600 font-extrabold'
-                : `border-transparent ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-800'}`
-            }`}
-          >
-            {tab.icon}
-            <span>{tab.label.split(' ').slice(1).join(' ')}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* 1. HOME DASHBOARD VIEW */}
-      {activeTab === 'home' && (
-        <div className="space-y-6">
-          <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent p-6 rounded-2xl border border-emerald-500/20 text-left">
-            <h2 className="text-xl font-black text-slate-900 dark:text-white">Welcome, {currentUser.name}! 👩‍🏫</h2>
-            <p className="text-xs text-slate-500 mt-1 max-w-xl leading-relaxed">
-              Track student compilation logs, accept monitoring connections, adjust diagnostic rules, and evaluate active subclass override exercises.
+    <div className={`space-y-5 ${isDark ? 'text-slate-100' : 'text-slate-800'}`} id="teacher-portal-root">
+      <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#6b7f2a]">Teacher Account Module</p>
+            <h2 className="mt-1 text-xl font-black tracking-tight">Real-Time OOP Learning Command Center</h2>
+            <p className="mt-1 max-w-3xl text-xs font-medium leading-relaxed text-slate-500">
+              Monitor invited students only, track adaptive learning events, review Practice IDE evidence, and follow each learner from lesson to unlock.
             </p>
           </div>
-
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" id="teacher-quick-stats">
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:w-[520px]">
             {[
-              { title: 'Total Students', val: MOCK_STUDENTS_LIST.length, desc: 'Registered in Hub catalog', icon: <Users className="w-5 h-5 text-indigo-500" /> },
-              { title: 'Active Monitored', val: activeCount, desc: 'With approved credentials', icon: <GraduationCap className="w-5 h-5 text-emerald-500" /> },
-              { title: 'Completed Labs', val: submissions.filter(s => s.status === 'reviewed').length + pendingReviews, desc: 'Sandbox IDE files submitted', icon: <Code2 className="w-5 h-5 text-rose-500" /> },
-              { title: 'Average Performance', val: `${avgQuiz}%`, desc: 'On MCQs diagnostic simulator', icon: <TrendingUp className="w-5 h-5 text-amber-500" /> }
-            ].map((stat, i) => (
-              <div key={i} className={`p-5 rounded-2xl border text-left flex flex-col justify-between shadow-sm ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <div className="flex justify-between items-center mb-3">
-                  <span className={`text-[10px] font-mono font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    {stat.title}
-                  </span>
-                  {stat.icon}
-                </div>
-                <div>
-                  <div className="text-2xl font-black font-mono leading-none">{stat.val}</div>
-                  <div className={`text-[10px] tracking-wide mt-1 leading-normal ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    {stat.desc}
-                  </div>
-                </div>
+              ['Connected', visibleStudents.length],
+              ['Online', visibleStudents.filter(student => student.online).length],
+              ['At Risk', atRiskStudents.length],
+              ['Avg PI', `${averagePerformance}%`]
+            ].map(([label, value]) => (
+              <div key={label} className={`rounded-xl border p-3 ${mutedPanel}`}>
+                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</span>
+                <strong className="mt-1 block font-mono text-lg">{value}</strong>
               </div>
             ))}
           </div>
+        </div>
+      </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Quick Connection Inviter */}
-            <div className={`p-6 rounded-2xl border text-left shadow-sm ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <h3 className="text-sm font-extrabold mb-1">Add Student Connection</h3>
-              <p className="text-xs text-slate-500 mb-4">Send a connection request to sync student metrics and sandbox editor file logs.</p>
-              
-              <form onSubmit={handleSendRequestSubmit} className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="Student Email (e.g. rodriguez@oophub.edu) or ID"
-                  value={studentInput}
-                  onChange={(e) => setStudentInput(e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-slate-100 focus:border-emerald-600' : 'bg-slate-50 border-slate-250 focus:bg-white focus:border-emerald-600'
+      <div className={`overflow-x-auto rounded-2xl border p-2 shadow-sm ${cardClass}`}>
+        <div className="flex min-w-max gap-1">
+          {[
+            ['monitoring', 'Live Monitoring', Activity],
+            ['invitations', 'Invitations', MailPlus],
+            ['topics', '11 OOP Topics', BookOpen],
+            ['swing', 'Java Swing', PlayCircle],
+            ['assessments', 'Assessments', FileQuestion],
+            ['ide', 'Practice IDE', Code2],
+            ['analytics', 'Analytics', BarChart3],
+            ['architecture', 'Data Model', Lock]
+          ].map(([id, label, Icon]) => {
+            const TabIcon = Icon as typeof Activity;
+            return (
+              <button
+                key={id as string}
+                type="button"
+                onClick={() => setActiveTab(id as TeacherTab)}
+                className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-extrabold transition ${
+                  activeTab === id
+                    ? 'bg-[#6b7f2a] text-white shadow-sm'
+                    : isDark
+                      ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                      : 'text-slate-500 hover:bg-[#f0f4e4] hover:text-[#4f611f]'
+                }`}
+              >
+                <TabIcon className="h-3.5 w-3.5" />
+                {label as string}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {activeTab === 'monitoring' && selectedStudent && (
+        <div className="grid gap-5 xl:grid-cols-[360px_1fr_320px]">
+          <div className={`rounded-2xl border p-4 shadow-sm ${cardClass}`}>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black">Connected Students</h3>
+                <p className="text-[11px] text-slate-500">Teacher-scoped live roster</p>
+              </div>
+              <span className="rounded-full bg-[#eef7dd] px-2 py-1 text-[10px] font-black text-[#4f6f12]">{visibleStudents.length} visible</span>
+            </div>
+            <div className="space-y-2">
+              {visibleStudents.map(student => (
+                <button
+                  key={student.id}
+                  type="button"
+                  onClick={() => setSelectedStudentId(student.id)}
+                  className={`w-full rounded-xl border p-3 text-left transition ${
+                    selectedStudent.id === student.id
+                      ? 'border-[#6b7f2a] bg-[#f0f4e4]'
+                      : isDark
+                        ? 'border-slate-800 bg-slate-950 hover:border-slate-700'
+                        : 'border-slate-200 bg-white hover:border-[#d9e4b8]'
                   }`}
-                />
-                <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl transition cursor-pointer">
-                  Send Connection Request
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-black">{student.name}</p>
+                      <p className="mt-0.5 text-[10px] font-semibold text-slate-500">{student.section} | {student.email}</p>
+                    </div>
+                    {student.online ? <Wifi className="h-4 w-4 text-emerald-600" /> : <WifiOff className="h-4 w-4 text-slate-400" />}
+                  </div>
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-[#6b7f2a]" style={{ width: `${student.overallProgress}%` }} />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-500">
+                    <span>{student.activity}</span>
+                    <span>{student.overallProgress}%</span>
+                  </div>
                 </button>
-              </form>
-              
-              {requestFeedback && (
-                <div className={`mt-3 p-3 rounded-xl text-xs border ${
-                  requestFeedback.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'
-                }`}>
-                  {requestFeedback.message}
+              ))}
+            </div>
+          </div>
+
+          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-black">{selectedStudent.name}</h3>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${statusClass(selectedStudent.learningStatus)}`}>
+                    {selectedStudent.learningStatus}
+                  </span>
                 </div>
-              )}
+                <p className="mt-1 text-xs text-slate-500">{selectedStudent.currentLesson} | {selectedStudent.currentTopic}</p>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border border-[#dfe8c5] bg-[#f8faf5] px-3 py-2 text-xs font-black text-[#4f611f]">
+                <Sparkles className="h-4 w-4" />
+                {selectedStudent.stage}
+              </div>
             </div>
 
-            {/* Current Requests Status */}
-            <div className={`p-6 rounded-2xl border text-left shadow-sm ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <h3 className="text-sm font-extrabold mb-3">Pending Student approvals ({pendingRequests.length})</h3>
-              {pendingRequests.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-400 italic">No pending approvals. Connect students on the left.</div>
-              ) : (
-                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                  {pendingRequests.map(req => (
-                    <div key={req.id} className="p-2.5 border rounded-xl flex justify-between items-center text-xs bg-slate-50/50 dark:bg-slate-950/20 border-slate-100 dark:border-slate-800">
-                      <div>
-                        <span className="font-bold block">{req.studentName}</span>
-                        <span className="text-slate-400 text-[10px] font-mono">{req.studentEmail}</span>
-                      </div>
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 bg-slate-100 dark:bg-slate-850 px-2 py-0.5 rounded">
-                        Pending
-                      </span>
-                    </div>
-                  ))}
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                ['Overall Progress', selectedStudent.overallProgress],
+                ['Module Progress', selectedStudent.moduleProgress],
+                ['Topic Progress', selectedStudent.topicProgress],
+                ['Video Completion', selectedStudent.videoCompletion],
+                ['Quiz Score', selectedStudent.quizScore],
+                ['Practice IDE Score', selectedStudent.practiceScore],
+                ['Performance Index', selectedStudent.performanceIndex],
+                ['Topic Completion', selectedStudent.topicCompletion]
+              ].map(([label, value]) => (
+                <div key={label as string} className={`rounded-xl border p-3 ${mutedPanel}`}>
+                  <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-400">
+                    <span>{label as string}</span>
+                    <span>{value}%</span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80">
+                    <div className="h-full rounded-full bg-[#6b7f2a]" style={{ width: `${value}%` }} />
+                  </div>
                 </div>
-              )}
+              ))}
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-[#dfe8c5] bg-[#fbfcf7] p-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-[#6b7f2a]">Rule-Based Adaptive Learning</p>
+              <p className="mt-1 text-sm font-bold text-slate-800">{selectedStudent.recommendation}</p>
+              <div className="mt-4 grid gap-2 text-xs sm:grid-cols-4">
+                {['Save activity', 'Run adaptive rules', 'Update PI', 'Push live dashboard'].map(step => (
+                  <div key={step} className="flex items-center gap-2 rounded-xl bg-white p-2 font-bold text-slate-600 shadow-sm">
+                    <CheckCircle2 className="h-4 w-4 text-[#6b7f2a]" />
+                    {step}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+              <div className="grid grid-cols-7 bg-[#f8faf5] px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                {STAGE_ROTATION.map(stage => <span key={stage} className="text-center">{stage}</span>)}
+              </div>
+              <div className="grid grid-cols-7 gap-1 p-3">
+                {STAGE_ROTATION.map(stage => (
+                  <div key={stage} className={`h-2 rounded-full ${stage === selectedStudent.stage ? 'bg-[#6b7f2a]' : 'bg-slate-200'}`} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className={`rounded-2xl border p-4 shadow-sm ${cardClass}`}>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-sm font-black">Real-Time Notifications</h3>
+              <Bell className="h-4 w-4 text-[#6b7f2a]" />
+            </div>
+            <div className="space-y-2">
+              {notifications.map(note => (
+                <div key={note.id} className={`rounded-xl border p-3 ${mutedPanel}`}>
+                  <p className="text-xs font-black">{note.title}</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{note.message}</p>
+                  <p className="mt-2 text-[10px] font-bold uppercase text-slate-400">{note.timestamp}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* 2. STUDENT MANAGEMENT VIEW */}
-      {activeTab === 'students' && (
-        <div className="space-y-6 text-left">
-          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-            <div>
-              <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Active CS / IT Cohorts</h3>
-              <p className="text-xs text-slate-500">Query and examine connected student progress files</p>
-            </div>
-            
-            {/* Filters bar */}
-            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-              <div className="relative flex-grow sm:flex-grow-0">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search students..."
-                  value={mgmtSearch}
-                  onChange={e => setMgmtSearch(e.target.value)}
-                  className={`pl-9 pr-3 py-2 border rounded-xl text-xs outline-none transition w-full sm:w-48 ${
-                    isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200'
-                  }`}
-                />
+      {activeTab === 'invitations' && (
+        <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+            <h3 className="text-base font-black">Invitation System</h3>
+            <p className="mt-1 text-xs text-slate-500">Teachers can monitor only students who accept this teacher-scoped invitation.</p>
+            <div className={`mt-5 rounded-2xl border p-4 ${mutedPanel}`}>
+              <p className="text-[10px] font-black uppercase text-slate-400">Invitation Code</p>
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-white p-3 shadow-sm">
+                <span className="font-mono text-lg font-black text-[#4f611f]">{teacherScopedCode(currentUser.email)}</span>
+                <button type="button" onClick={handleCopyInvitation} className="rounded-lg bg-[#6b7f2a] p-2 text-white">
+                  <Copy className="h-4 w-4" />
+                </button>
               </div>
-
-              <select
-                value={mgmtCourseFilter}
-                onChange={e => setMgmtCourseFilter(e.target.value)}
-                className={`px-2 py-1.5 border rounded-xl text-xs outline-none transition ${
-                  isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200'
-                }`}
-              >
-                <option value="All">All Courses</option>
-                <option value="Computer Science">Computer Science</option>
-                <option value="Information Technology">Information Technology</option>
-                <option value="Computer Engineering">Computer Engineering</option>
-              </select>
-
-              <select
-                value={mgmtYearFilter}
-                onChange={e => setMgmtYearFilter(e.target.value)}
-                className={`px-2 py-1.5 border rounded-xl text-xs outline-none transition ${
-                  isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200'
-                }`}
-              >
-                <option value="All">All Years</option>
-                <option value="1st Year">1st Year</option>
-                <option value="2nd Year">2nd Year</option>
-                <option value="3rd Year">3rd Year</option>
-                <option value="4th Year">4th Year</option>
-              </select>
+              <p className="mt-3 text-[11px] font-semibold text-slate-500">Invite link: /invite/{teacherScopedCode(currentUser.email)}</p>
             </div>
+            <form onSubmit={handleSendRequestSubmit} className="mt-5 space-y-3">
+              <label className="text-xs font-black text-slate-700">Send direct invitation by email or student ID</label>
+              <div className="flex gap-2">
+                <input
+                  value={studentInput}
+                  onChange={event => setStudentInput(event.target.value)}
+                  placeholder="student@oophub.edu or STU-0001"
+                  className={`min-h-11 flex-1 rounded-xl border px-3 text-sm outline-none focus:border-[#6b7f2a] ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}
+                />
+                <button type="submit" className="rounded-xl bg-[#6b7f2a] px-4 text-xs font-black text-white">Invite</button>
+              </div>
+            </form>
+            {requestFeedback && (
+              <div className={`mt-3 rounded-xl border p-3 text-xs font-bold ${requestFeedback.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
+                {requestFeedback.message}
+              </div>
+            )}
           </div>
 
-          {/* Student Grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredStudents.map(student => {
-              const isConnected = acceptedEmails.includes(student.email.toLowerCase());
-              return (
-                <div key={student.id} className={`p-5 rounded-2xl border flex flex-col justify-between space-y-4 shadow-sm ${
-                  isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-                }`}>
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-start">
-                      <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider">{student.id}</span>
-                      <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${
-                        isConnected 
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-450 dark:border-emerald-900/40' 
-                          : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-850 dark:text-slate-400 dark:border-slate-800'
-                      }`}>
-                        {isConnected ? 'Connected' : 'No Access'}
+          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+            <h3 className="text-base font-black">Access Control</h3>
+            <p className="mt-1 text-xs text-slate-500">Only accepted invitations appear in monitoring and grading views.</p>
+            <div className="mt-4 space-y-2">
+              {teacherRequests.length === 0 ? (
+                <div className={`rounded-xl border p-8 text-center text-xs text-slate-500 ${mutedPanel}`}>No invitation records yet.</div>
+              ) : (
+                teacherRequests.map(req => (
+                  <div key={req.id} className={`flex items-center justify-between rounded-xl border p-3 ${mutedPanel}`}>
+                    <div>
+                      <p className="text-xs font-black">{req.studentName}</p>
+                      <p className="text-[10px] font-semibold text-slate-500">{req.studentEmail}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-black ${req.status === 'accepted' ? 'bg-emerald-50 text-emerald-700' : req.status === 'pending' ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'}`}>
+                        {req.status}
                       </span>
+                      {req.status === 'accepted' && (
+                        <button type="button" onClick={() => onRemoveConnection(req.id)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-black text-slate-500">
+                          Remove
+                        </button>
+                      )}
                     </div>
-                    <h4 className="font-extrabold text-sm text-slate-900 dark:text-white mt-1">{student.name}</h4>
-                    <span className="text-[11px] text-slate-400 block">{student.course} ({student.yearLevel})</span>
                   </div>
+                ))
+              )}
+              {pendingRequests.length > 0 && <p className="text-[11px] font-semibold text-slate-500">{pendingRequests.length} student invitation awaiting acceptance.</p>}
+            </div>
+          </div>
+        </div>
+      )}
 
-                  {isConnected ? (
-                    <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-950/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-850 text-center text-xs">
-                      <div>
-                        <span className="text-[9px] text-slate-400 block uppercase font-bold tracking-wider">XP</span>
-                        <span className="font-mono font-extrabold text-slate-800 dark:text-slate-200">{student.points}</span>
+      {activeTab === 'topics' && selectedStudent && (
+        <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-base font-black">11 Java OOP Topics Progress</h3>
+              <p className="text-xs text-slate-500">Topic-level video, assessment, IDE, unlock, and time-spent monitoring for {selectedStudent.name}.</p>
+            </div>
+            <select value={selectedStudent.id} onChange={event => setSelectedStudentId(event.target.value)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+              {visibleStudents.map(student => <option key={student.id} value={student.id}>{student.name}</option>)}
+            </select>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] text-left text-xs">
+              <thead className="bg-[#f8faf5] text-[10px] uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="px-3 py-3">Topic</th>
+                  <th className="px-3 py-3">Video</th>
+                  <th className="px-3 py-3">Assessment</th>
+                  <th className="px-3 py-3">Practice IDE</th>
+                  <th className="px-3 py-3">Completion</th>
+                  <th className="px-3 py-3">Unlock</th>
+                  <th className="px-3 py-3">Time Spent</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {selectedStudent.topics.map(topic => (
+                  <tr key={topic.topic} className={isDark ? 'divide-slate-800' : ''}>
+                    <td className="px-3 py-3 font-black">{topic.topic}</td>
+                    <td className="px-3 py-3">{topic.video}%</td>
+                    <td className="px-3 py-3">{topic.assessment}%</td>
+                    <td className="px-3 py-3">{topic.ideStatus}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100">
+                          <div className="h-full rounded-full bg-[#6b7f2a]" style={{ width: `${topic.completion}%` }} />
+                        </div>
+                        <span className="font-mono font-bold">{topic.completion}%</span>
                       </div>
-                      <div>
-                        <span className="text-[9px] text-slate-400 block uppercase font-bold tracking-wider">Streak</span>
-                        <span className="font-mono font-extrabold text-slate-800 dark:text-slate-200">{student.streak}d</span>
-                      </div>
-                      <div>
-                        <span className="text-[9px] text-slate-400 block uppercase font-bold tracking-wider">Avg MCQ</span>
-                        <span className="font-mono font-extrabold text-slate-800 dark:text-slate-200">{student.avgQuiz}%</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-slate-100 dark:bg-slate-850 rounded-xl text-center text-xs text-slate-500 italic">
-                      Send connection request to monitor progress
-                    </div>
-                  )}
+                    </td>
+                    <td className="px-3 py-3">{topic.unlocked ? <UserCheck className="h-4 w-4 text-emerald-600" /> : <Lock className="h-4 w-4 text-slate-400" />}</td>
+                    <td className="px-3 py-3 font-mono text-slate-500">{topic.timeSpent}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
-                  <div className="flex gap-2">
-                    {isConnected ? (
-                      <button
-                        onClick={() => setSelectedStudent(student)}
-                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
-                      >
-                        Inspect Progress Details
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          const res = onSendRequest(student.email);
-                          alert(res.message);
-                        }}
-                        className="w-full py-2 border border-slate-250 hover:bg-slate-50 dark:border-slate-850 dark:hover:bg-slate-950 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 transition cursor-pointer"
-                      >
-                        Send Link Invitation
-                      </button>
-                    )}
+      {activeTab === 'swing' && (
+        <div className="grid gap-5 lg:grid-cols-2">
+          {visibleStudents.map(student => (
+            <div key={student.id} className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-black">{student.name}</h3>
+                  <p className="mt-1 text-xs text-slate-500">Current Swing Lesson: {student.swingLesson}</p>
+                </div>
+                <span className="rounded-full bg-[#eef7dd] px-2 py-1 text-[10px] font-black text-[#4f6f12]">Swing Track</span>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {[
+                  ['Video Completion', student.swing.video],
+                  ['Swing Assessment', student.swing.assessment],
+                  ['Swing IDE Progress', student.swing.ide],
+                  ['Mini Project Completion', student.swing.miniProject]
+                ].map(([label, value]) => (
+                  <div key={label as string} className={`rounded-xl border p-3 ${mutedPanel}`}>
+                    <div className="flex justify-between text-[10px] font-black uppercase text-slate-400">
+                      <span>{label as string}</span>
+                      <span>{value}%</span>
+                    </div>
+                    <div className="mt-2 h-2 rounded-full bg-white">
+                      <div className="h-2 rounded-full bg-[#6b7f2a]" style={{ width: `${value}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'assessments' && (
+        <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+          <h3 className="text-base font-black">Assessment Monitoring</h3>
+          <p className="mt-1 text-xs text-slate-500">Attempts, score ranges, question analysis, and completion time for connected students.</p>
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            {visibleStudents.map(student => {
+              const incorrect = Math.max(1, Math.round((100 - student.quizScore) / 8));
+              const correct = 25 - incorrect;
+              return (
+                <div key={student.id} className={`rounded-2xl border p-4 ${mutedPanel}`}>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm font-black">{student.name}</p>
+                      <p className="text-[11px] text-slate-500">{student.currentTopic} assessment history</p>
+                    </div>
+                    <ClipboardCheck className="h-5 w-5 text-[#6b7f2a]" />
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                    {[
+                      ['Attempts', 2 + (student.quizScore % 3)],
+                      ['Highest', `${Math.min(100, student.quizScore + 8)}%`],
+                      ['Average', `${student.quizScore}%`],
+                      ['Lowest', `${Math.max(0, student.quizScore - 14)}%`],
+                      ['Correct', correct],
+                      ['Incorrect', incorrect],
+                      ['Completion', `${18 + (student.quizScore % 10)} min`],
+                      ['Status', student.quizScore >= 70 ? 'Passed' : 'Review']
+                    ].map(([label, value]) => (
+                      <div key={label as string} className="rounded-xl bg-white p-2 shadow-sm">
+                        <span className="block text-[9px] font-black uppercase text-slate-400">{label as string}</span>
+                        <strong className="mt-1 block">{value}</strong>
+                      </div>
+                    ))}
                   </div>
                 </div>
               );
             })}
           </div>
-
-          {/* Student details modal */}
-          {selectedStudent && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/60 backdrop-blur-xs">
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-lg w-full mx-4 space-y-4 text-slate-850 dark:text-slate-200">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <div className="text-left">
-                    <span className="text-[10px] text-slate-400 block font-bold font-mono tracking-wider">{selectedStudent.id}</span>
-                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">{selectedStudent.name}</h3>
-                  </div>
-                  <button onClick={() => setSelectedStudent(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg">✕</button>
-                </div>
-                
-                <div className="space-y-4 text-left text-xs">
-                  <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-950/50 p-4 rounded-xl border border-slate-100 dark:border-slate-850">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-bold">Email Address</span>
-                      <span className="font-extrabold text-slate-800 dark:text-slate-200">{selectedStudent.email}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-bold">Section / Group</span>
-                      <span className="font-extrabold text-slate-800 dark:text-slate-200">{selectedStudent.section}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-bold">XP Points</span>
-                      <span className="font-extrabold text-slate-850 dark:text-slate-200">{selectedStudent.points} XP</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-bold">Current Streak</span>
-                      <span className="font-extrabold text-slate-850 dark:text-slate-200">{selectedStudent.streak} Days active</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <h4 className="font-extrabold text-slate-800 dark:text-slate-200 text-xs">Syllabus Completion (learning Path)</h4>
-                    <div className="flex justify-between items-center text-[11px] mb-1">
-                      <span className="text-slate-500">Completed Video Lectures:</span>
-                      <span className="font-bold text-emerald-600">{selectedStudent.completedLessons} / 5 lessons</span>
-                    </div>
-                    <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500" style={{ width: `${(selectedStudent.completedLessons / 5) * 100}%` }} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-2 flex justify-end">
-                  <button onClick={() => setSelectedStudent(null)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs">
-                    Close Details
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {/* 3. COURSE BUILDER VIEW */}
-      {activeTab === 'course_builder' && (
-        <div className="grid lg:grid-cols-12 gap-8 text-left">
-          
-          {/* Create Course Panel */}
-          <div className={`lg:col-span-5 p-6 rounded-2xl border shadow-sm h-fit ${
-            isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-          }`}>
-            <h3 className="text-base font-extrabold mb-1">Syllabus Course Builder</h3>
-            <p className="text-xs text-slate-500 mb-6">Create courses, upload dynamic video content, quizzes, and IDE programming tasks.</p>
-
-            <form onSubmit={handleAddCourse} className="space-y-4">
-              <div className="space-y-1.5">
-                <label htmlFor="course-title" className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Course Title
-                </label>
-                <input
-                  id="course-title"
-                  type="text"
-                  placeholder="e.g. Java Swing UI"
-                  value={newCourseTitle}
-                  onChange={e => setNewCourseTitle(e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-slate-100 focus:border-emerald-600' : 'bg-slate-50 border-slate-250 focus:bg-white focus:border-emerald-600'
-                  }`}
-                />
+      {activeTab === 'ide' && (
+        <div className="grid gap-5 xl:grid-cols-[1fr_460px]">
+          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-base font-black">Practice IDE Monitoring</h3>
+                <p className="text-xs text-slate-500">Student code, compilation, runtime, outputs, test cases, grades, and feedback.</p>
               </div>
-              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl transition cursor-pointer">
-                Create Course Module
-              </button>
-            </form>
-
-            <div className="border-t border-slate-150 dark:border-slate-800 pt-6 mt-6 space-y-4">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Add Video / Exercise to Course</h4>
-              <form onSubmit={handleAddLesson} className="space-y-3">
-                <div className="space-y-1.5">
-                  <label htmlFor="select-course" className="text-[10px] font-bold text-slate-500">Target Course</label>
-                  <select
-                    id="select-course"
-                    value={selectedCourseId}
-                    onChange={e => setSelectedCourseId(e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition ${
-                      isDark ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-200'
-                    }`}
-                  >
-                    {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-                  </select>
+              <div className="flex gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="Search submissions" className={`h-10 rounded-xl border pl-9 pr-3 text-xs outline-none ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`} />
                 </div>
-                <div className="space-y-1.5">
-                  <label htmlFor="lesson-title" className="text-[10px] font-bold text-slate-500">Lesson / Exercise Title</label>
-                  <input
-                    id="lesson-title"
-                    type="text"
-                    placeholder="e.g. Lesson 04: Swing LayoutManagers"
-                    value={newLessonTitle}
-                    onChange={e => setNewLessonTitle(e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition ${
-                      isDark ? 'bg-slate-950 border-slate-800 text-slate-100 focus:border-emerald-600' : 'bg-slate-50 border-slate-250 focus:bg-white focus:border-emerald-600'
-                    }`}
-                  />
-                </div>
-                <button type="submit" className="w-full border border-emerald-650 hover:bg-emerald-50/10 text-emerald-600 dark:text-emerald-450 font-bold text-xs py-2.5 rounded-xl transition cursor-pointer">
-                  Add Lesson Component
-                </button>
-              </form>
-            </div>
-          </div>
-
-          {/* Courses List */}
-          <div className="lg:col-span-7 space-y-4">
-            <h3 className="text-sm font-extrabold text-slate-450 uppercase tracking-widest px-1">Active Syllabus Courses ({courses.length})</h3>
-            <div className="space-y-2">
-              {courses.map(course => (
-                <div key={course.id} className={`p-4 rounded-2xl border flex justify-between items-center ${
-                  isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-                }`}>
-                  <div className="space-y-1">
-                    <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">{course.title}</h4>
-                    <span className="text-xs text-slate-400 block font-medium flex items-center gap-1.5">
-                      <Video className="w-3.5 h-3.5" /> {course.lessons} Video Lessons & Labs
-                    </span>
-                  </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                    course.status === 'Published' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400' : 'bg-slate-105 text-slate-500 dark:bg-slate-850 dark:text-slate-400'
-                  }`}>
-                    {course.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 4. ASSESSMENT CREATOR VIEW */}
-      {activeTab === 'assessment_creator' && (
-        <div className="grid lg:grid-cols-12 gap-8 text-left">
-          
-          {/* MCQ and Problem Generator */}
-          <div className={`lg:col-span-5 p-6 rounded-2xl border shadow-sm h-fit ${
-            isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-          }`}>
-            <h3 className="text-base font-extrabold mb-1">Interactive MCQ Builder</h3>
-            <p className="text-xs text-slate-500 mb-6">Attach conceptual multiple choice evaluations to specific syllabus videos.</p>
-
-            <form onSubmit={handleAddQuestion} className="space-y-4">
-              <div className="space-y-1.5">
-                <label htmlFor="quiz-scenario" className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Scenario Context
-                </label>
-                <input
-                  id="quiz-scenario"
-                  type="text"
-                  placeholder="e.g. Scenario 05: The Swing UI Grid"
-                  value={newScenario}
-                  onChange={e => setNewScenario(e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-slate-105 focus:border-emerald-600' : 'bg-slate-50 border-slate-250 focus:bg-white focus:border-emerald-600'
-                  }`}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="quiz-question" className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Question Prompt
-                </label>
-                <textarea
-                  id="quiz-question"
-                  placeholder="e.g. Which Swing LayoutManager lays out components in a rectangular grid of equal cells?"
-                  value={newQuestion}
-                  onChange={e => setNewQuestion(e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition h-16 resize-none focus:border-emerald-600 ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-slate-105' : 'bg-slate-55 border-slate-250'
-                  }`}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label htmlFor="quiz-answer" className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Correct Option ID (A/B/C)
-                </label>
-                <input
-                  id="quiz-answer"
-                  type="text"
-                  placeholder="e.g. B. GridLayout class reference"
-                  value={quizAnswer}
-                  onChange={e => setQuizAnswer(e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-slate-105 focus:border-emerald-600' : 'bg-slate-50 border-slate-250 focus:bg-white focus:border-emerald-600'
-                  }`}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label htmlFor="passing-score" className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Passing Score (%)
-                  </label>
-                  <input
-                    id="passing-score"
-                    type="number"
-                    value={passingScore}
-                    onChange={e => setPassingScore(parseInt(e.target.value) || 70)}
-                    className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition ${
-                      isDark ? 'bg-slate-950 border-slate-800 text-slate-105' : 'bg-slate-50 border-slate-250'
-                    }`}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label htmlFor="time-limit" className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Time Limit (Mins)
-                  </label>
-                  <input
-                    id="time-limit"
-                    type="number"
-                    value={timeLimit}
-                    onChange={e => setTimeLimit(parseInt(e.target.value) || 20)}
-                    className={`w-full px-3 py-2 border rounded-xl text-xs outline-none transition ${
-                      isDark ? 'bg-slate-950 border-slate-800 text-slate-105' : 'bg-slate-50 border-slate-250'
-                    }`}
-                  />
-                </div>
-              </div>
-
-              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl transition cursor-pointer">
-                Save & Publish Assessment
-              </button>
-            </form>
-          </div>
-
-          {/* Active Questions bank */}
-          <div className="lg:col-span-7 space-y-4">
-            <h3 className="text-sm font-extrabold text-slate-455 uppercase tracking-widest px-1">Active Questions bank ({quizQuestions.length})</h3>
-            <div className="space-y-3">
-              {quizQuestions.map(q => (
-                <div key={q.id} className={`p-4 rounded-2xl border space-y-2 ${
-                  isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-                }`}>
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-450 font-bold uppercase">{q.scenario}</span>
-                    <span className="text-[9px] text-slate-400 font-bold">Standard MCQ</span>
-                  </div>
-                  <h4 className="font-extrabold text-xs text-slate-800 dark:text-slate-100 leading-normal">{q.question}</h4>
-                  <div className="p-2 bg-slate-50 dark:bg-slate-950/45 rounded-xl border border-slate-100 dark:border-slate-850 text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Correct Answer: <strong className="text-emerald-600 font-extrabold">{q.answer}</strong>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 5. IDE SUBMISSIONS MONITORING VIEW */}
-      {activeTab === 'ide_monitoring' && (
-        <div className="space-y-5 text-left">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            {[
-              ['Submissions', String(visibleSubmissions.length)],
-              ['Pass Rate', `${passRate}%`],
-              ['Average Score', `${avgPracticeScore}%`],
-              ['Not Submitted', String(notSubmittedStudents.length)],
-              ['Failed', String(failedStudents.length)]
-            ].map(([label, value]) => (
-              <div key={label} className={`rounded-xl border p-4 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <span className="block text-[10px] font-black uppercase text-slate-400">{label}</span>
-                <strong className="mt-1 block font-mono text-xl">{value}</strong>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid lg:grid-cols-12 gap-6">
-          {/* Left: Queue List */}
-          <div className={`lg:col-span-7 rounded-2xl border p-5 shadow-sm space-y-4 flex flex-col justify-between min-h-[500px] ${
-            isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-          }`}>
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-4 items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-                <div>
-                  <h3 className="text-sm font-extrabold">IDE Submissions Monitor Panel</h3>
-                  <p className="text-xs text-slate-505">Grade, comment on, and verify student compilation solutions</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                <div className="relative w-44 shrink-0">
-                  <input
-                    type="text"
-                    placeholder="Filter by student..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className={`w-full px-3 py-1.5 border outline-none rounded-xl text-xs transition ${
-                      isDark ? 'bg-slate-950 border-slate-800 text-slate-200 focus:border-emerald-650' : 'bg-slate-50 border-slate-250 text-slate-650 focus:bg-white focus:border-emerald-600'
-                    }`}
-                  />
-                </div>
-                <select value={topicFilter} onChange={e => setTopicFilter(e.target.value)} className={`px-2 py-1.5 border outline-none rounded-xl text-xs ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-250 text-slate-650'}`}>
+                <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className={`h-10 rounded-xl border px-3 text-xs font-bold ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
                   <option>All</option>
-                  {topicOptions.map(topic => <option key={topic}>{topic}</option>)}
-                </select>
-                <select value={sectionFilter} onChange={e => setSectionFilter(e.target.value)} className={`px-2 py-1.5 border outline-none rounded-xl text-xs ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-250 text-slate-650'}`}>
-                  <option>All</option>
-                  {sectionOptions.map(section => <option key={section}>{section}</option>)}
-                </select>
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={`px-2 py-1.5 border outline-none rounded-xl text-xs ${isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-250 text-slate-650'}`}>
-                  <option>All</option>
+                  <option>Pending</option>
                   <option>Passed</option>
                   <option>Failed</option>
                 </select>
-                </div>
               </div>
-
+            </div>
+            <div className="space-y-2">
               {filteredSubmissions.length === 0 ? (
-                <div className="text-center py-20 space-y-2 text-slate-400">
-                  <h4 className="font-bold text-sm">No submissions found</h4>
-                  <p className="text-xs max-w-xs mx-auto">
-                    {activeCount === 0 
-                      ? 'No connected students logs available. Add connections inside Dashboard first.'
-                      : 'All reviews are completed! Fresh submissions will appear as student compilers run coding tasks.'}
-                  </p>
+                <div className={`rounded-2xl border p-12 text-center text-xs text-slate-500 ${mutedPanel}`}>
+                  No visible submissions. Invite and connect students before reviewing their Practice IDE work.
                 </div>
               ) : (
-                <div className="space-y-2.5 overflow-y-auto max-h-[360px] pr-1">
-                  {filteredSubmissions.map((sub) => {
-                    const isSelected = selectedSub?.id === sub.id;
-                    const score = Number(sub.score ?? sub.grade ?? 0);
-                    const isPending = sub.status === 'pending';
-                    return (
-                      <div 
-                        key={sub.id}
-                        onClick={() => handleSelectSubmission(sub)}
-                        className={`p-3.5 rounded-xl border cursor-pointer transition flex justify-between items-center ${
-                          isSelected ? 'bg-emerald-500/10 border-emerald-650 ring-1 ring-emerald-500/20' : isDark ? 'bg-slate-950 border-slate-800 hover:border-slate-700' : 'bg-white border-slate-200 hover:border-slate-350'
-                        }`}
-                      >
-                        <div className="space-y-1 text-left">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-bold text-xs">{sub.studentName}</h4>
-                            <span className="text-[9.5px] text-slate-400 font-mono">{sub.submittedAt}</span>
-                          </div>
-                          <p className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate max-w-[280px]">{sub.challengeName}</p>
-                          <p className="text-[10px] font-mono text-slate-400">{sub.topicTitle || 'Practice IDE'} · {sub.compileStatus || 'manual'} · {sub.section || 'Unassigned'}</p>
+                filteredSubmissions.map(sub => {
+                  const score = Number(sub.score ?? sub.grade ?? 0);
+                  return (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => setSelectedSubId(sub.id)}
+                      className={`w-full rounded-xl border p-4 text-left transition ${
+                        selectedSubmission?.id === sub.id ? 'border-[#6b7f2a] bg-[#f0f4e4]' : isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white hover:border-[#d9e4b8]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-black">{sub.studentName}</p>
+                          <p className="mt-1 text-xs font-bold text-slate-600">{sub.challengeName}</p>
+                          <p className="mt-1 text-[10px] font-mono text-slate-400">{sub.topicTitle || 'Practice IDE'} | {sub.compileStatus || 'not_run'} | {sub.submittedAt}</p>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          {isPending ? (
-                            <span className="text-[9px] font-bold text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-450 px-2 py-0.5 rounded uppercase tracking-wider">
-                              Needs Grading
-                            </span>
-                          ) : (
-                            <div className="text-right">
-                              <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 dark:text-emerald-400 px-1.5 py-0.5 rounded">
-                                {score}% score
-                              </span>
-                              <span className="text-[9px] text-slate-400 block font-medium mt-0.5">Reviewed</span>
-                            </div>
-                          )}
-                        </div>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-black ${score >= 70 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                          {sub.status === 'pending' ? 'Needs Review' : `${score}%`}
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
+                    </button>
+                  );
+                })
               )}
             </div>
           </div>
 
-          {/* Right: Code Inspector */}
-          <div className="lg:col-span-5" id="teacher-grading-panel">
-            {selectedSub ? (
-              <div className="bg-slate-905 border border-slate-800 bg-slate-900 text-slate-200 rounded-2xl p-5 shadow-xl space-y-4 flex flex-col justify-between h-full">
-                <div className="space-y-4">
-                  <div className="border-b border-slate-800 pb-3 flex justify-between items-start gap-4">
-                    <div>
-                      <span className="text-[9px] font-mono bg-slate-800 text-emerald-400 font-bold px-2 py-0.5 rounded uppercase tracking-wide">Reviewing Draft File</span>
-                      <h4 className="text-slate-100 font-bold text-sm mt-1">{selectedSub.studentName}</h4>
-                      <p className="text-[10.5px] text-slate-400 italic truncate max-w-[180px]">{selectedSub.challengeName}</p>
-                      <p className="text-[10px] text-slate-500 font-mono">{selectedSub.topicTitle || 'Practice IDE'} · {selectedSub.section || 'Unassigned'}</p>
-                    </div>
-                    <span className={`text-[9px] font-bold font-mono px-2 py-0.5 rounded ${
-                      selectedSub.status === 'pending' ? 'bg-rose-950/40 text-rose-450 border border-rose-950/60' : 'bg-emerald-950/40 text-emerald-400 border border-emerald-950/60'
-                    }`}>
-                      {selectedSub.status === 'pending' ? 'Pending Approval' : 'Reviewed & Graded'}
-                    </span>
+          <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5 text-slate-100 shadow-xl">
+            {selectedSubmission ? (
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-[#b7cf67]">Submission Inspector</p>
+                    <h3 className="mt-1 text-sm font-black">{selectedSubmission.studentName}</h3>
+                    <p className="text-[11px] text-slate-400">{selectedSubmission.challengeName}</p>
                   </div>
-
-                  <div className="space-y-1.5">
-                    <span className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Student Java Source Code</span>
-                    <pre className="bg-slate-950 text-emerald-450 p-3 rounded-xl font-mono text-[10.5px] leading-relaxed max-h-[160px] overflow-y-auto border border-slate-800">
-                      {selectedSub.code}
-                    </pre>
+                  <Eye className="h-5 w-5 text-[#b7cf67]" />
+                </div>
+                <pre className="max-h-52 overflow-auto rounded-xl border border-slate-800 bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-emerald-300">{selectedSubmission.code}</pre>
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  {[
+                    ['Compile', selectedSubmission.compileStatus || 'not_run'],
+                    ['Runtime', selectedSubmission.runtime ? `${selectedSubmission.runtime} ms` : '--'],
+                    ['Memory', selectedSubmission.memoryUsage ? `${selectedSubmission.memoryUsage} MB` : '--']
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl border border-slate-800 bg-slate-900 p-2">
+                      <span className="block text-[9px] font-black uppercase text-slate-500">{label}</span>
+                      <strong className="mt-1 block text-[10px]">{value}</strong>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <p className="mb-1 text-[9px] font-black uppercase text-slate-500">Program Output</p>
+                    <pre className="min-h-20 rounded-xl border border-slate-800 bg-slate-900 p-3 text-[10px] text-slate-300">{selectedSubmission.programOutput || 'No output captured.'}</pre>
                   </div>
-
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    {[
-                      ['Compile', selectedSub.compileStatus || 'manual'],
-                      ['Runtime', selectedSub.runtime ? `${selectedSub.runtime} ms` : '--'],
-                      ['Memory', selectedSub.memoryUsage ? `${selectedSub.memoryUsage} MB` : '--']
-                    ].map(([label, value]) => (
-                      <div key={label} className="rounded-xl border border-slate-800 bg-slate-950 p-2">
-                        <span className="block text-[9px] font-black uppercase text-slate-500">{label}</span>
-                        <strong className="mt-1 block text-[10px] text-slate-200">{value}</strong>
-                      </div>
-                    ))}
-                  </div>
-
-                  {(selectedSub.programOutput || selectedSub.errorMessage) && (
-                    <div className="space-y-1.5">
-                      <span className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Program Output / Errors</span>
-                      <pre className="max-h-24 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-3 font-mono text-[10px] leading-relaxed text-slate-300">{selectedSub.programOutput || selectedSub.errorMessage}</pre>
-                    </div>
-                  )}
-
-                  {selectedSub.testResults && selectedSub.testResults.length > 0 && (
-                    <div className="space-y-1.5">
-                      <span className="text-[9px] font-mono text-slate-500 font-bold uppercase tracking-widest block">Hidden Test Case Results</span>
-                      <div className="space-y-1">
-                        {selectedSub.testResults.map(test => (
-                          <div key={test.id} className={`flex justify-between rounded-lg border px-2 py-1 text-[10px] font-bold ${test.passed ? 'border-emerald-950 bg-emerald-950/30 text-emerald-300' : 'border-rose-950 bg-rose-950/30 text-rose-300'}`}>
-                            <span>{test.isHidden ? 'Hidden' : 'Sample'}: {test.id}</span>
-                            <span>{test.passed ? 'Passed' : 'Failed'}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-3 pt-2 border-t border-slate-850">
-                    <div className="space-y-1">
-                      <label className="text-[9.5px] font-mono text-slate-400 font-bold uppercase tracking-wider block">Assign Grade (0 - 100%)</label>
-                      <input 
-                        type="number" 
-                        min="0"
-                        max="100"
-                        value={scoreText} 
-                        onChange={(e) => setScoreText(parseInt(e.target.value) || 0)}
-                        className="bg-slate-950 border border-slate-800 outline-none p-2 rounded-xl text-slate-200 text-xs w-24 font-mono font-bold focus:border-emerald-600"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9.5px] font-mono text-slate-400 font-bold uppercase tracking-wider block">Academic Instructor Feedback</label>
-                      <textarea 
-                        placeholder="Provide constructive override, inheritance hierarchy, or polymorphism feedback..."
-                        value={commentText}
-                        onChange={(e) => setCommentText(e.target.value)}
-                        className="bg-slate-950 border border-slate-800 outline-none p-3 rounded-xl text-slate-250 text-xs w-full h-16 resize-none leading-normal focus:border-emerald-600 whitespace-pre-wrap"
-                      />
-                    </div>
+                  <div>
+                    <p className="mb-1 text-[9px] font-black uppercase text-slate-500">Expected / Errors</p>
+                    <pre className="min-h-20 rounded-xl border border-slate-800 bg-slate-900 p-3 text-[10px] text-slate-300">{selectedSubmission.errorMessage || 'Expected output matched by test cases.'}</pre>
                   </div>
                 </div>
-
-                <div className="pt-3 border-t border-slate-800 flex gap-2">
-                  {onReopenSubmission && (
-                    <button
-                      onClick={() => onReopenSubmission(selectedSub.id)}
-                      className="w-40 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold text-xs py-2.5 rounded-xl cursor-pointer transition shadow-md"
-                    >
-                      Reopen
-                    </button>
-                  )}
-                  <button
-                    onClick={handlePostGrade}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl cursor-pointer transition shadow-md"
-                  >
-                    Post Grade & Feedback
-                  </button>
+                <div className="space-y-1">
+                  {(selectedSubmission.testResults ?? []).map(test => (
+                    <div key={test.id} className={`flex justify-between rounded-lg border px-2 py-1 text-[10px] font-bold ${test.passed ? 'border-emerald-900 bg-emerald-950/30 text-emerald-300' : 'border-rose-900 bg-rose-950/30 text-rose-300'}`}>
+                      <span>{test.isHidden ? 'Hidden' : 'Sample'} test {test.id}</span>
+                      <span>{test.passed ? 'Passed' : 'Failed'}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-2 border-t border-slate-800 pt-4">
+                  <input type="number" min="0" max="100" value={scoreText} onChange={event => setScoreText(parseInt(event.target.value) || 0)} className="w-28 rounded-xl border border-slate-800 bg-slate-900 p-2 text-xs font-black outline-none focus:border-[#b7cf67]" />
+                  <textarea value={commentText} onChange={event => setCommentText(event.target.value)} placeholder="Teacher feedback and adaptive remediation notes..." className="h-20 w-full resize-none rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs outline-none focus:border-[#b7cf67]" />
+                  <div className="flex gap-2">
+                    {onReopenSubmission && <button type="button" onClick={() => onReopenSubmission(selectedSubmission.id)} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black">Reopen</button>}
+                    <button type="button" onClick={handlePostGrade} className="flex-1 rounded-xl bg-[#6b7f2a] px-4 py-2 text-xs font-black text-white">Post Grade & Feedback</button>
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className={`rounded-2xl border p-8 text-center text-xs italic py-32 shadow-sm flex flex-col items-center justify-center space-y-3 ${
-                isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-500'
-              }`}>
-                <p>Select a student submission from the queue on the left to inspect source code and submit grades.</p>
-              </div>
+              <div className="flex min-h-[440px] items-center justify-center text-center text-xs text-slate-500">Select a submission to inspect source code and grading details.</div>
             )}
           </div>
-          </div>
         </div>
       )}
 
-      {/* 6. ANALYTICS VIEW */}
       {activeTab === 'analytics' && (
-        <div className="space-y-6 text-left">
-          <div className="grid md:grid-cols-2 gap-6">
-            
-            {/* Student Performance charts mockup */}
-            <div className={`p-6 rounded-2xl border shadow-sm ${
-              isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-            }`}>
-              <h3 className="text-sm font-extrabold mb-1">Average Student Performance</h3>
-              <p className="text-xs text-slate-400 mb-6">Quiz diagnostics average score per module</p>
-              
-              <div className="space-y-4">
-                {[
-                  { label: 'Module 1: Intro to Objects & Classes', pct: 88, color: 'bg-emerald-500' },
-                  { label: 'Module 2: Core Pillar: Inheritance Hierarchy', pct: 82, color: 'bg-emerald-500' },
-                  { label: 'Module 3: Polymorphism & Dynamic Dispatch', pct: 75, color: 'bg-teal-500' },
-                  { label: 'Module 4: Abstract strategy Patterns', pct: 68, color: 'bg-amber-500' },
-                  { label: 'Module 5: V-Table heap Address offsets', pct: 62, color: 'bg-amber-500' }
-                ].map((item, idx) => (
-                  <div key={idx} className="space-y-1">
-                    <div className="flex justify-between text-xs font-semibold">
-                      <span className="truncate max-w-[240px] text-slate-700 dark:text-slate-300">{item.label}</span>
-                      <span className="font-mono text-emerald-600">{item.pct}% avg</span>
-                    </div>
-                    <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                      <div className={`h-full ${item.color} rounded-full`} style={{ width: `${item.pct}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+            <h3 className="text-base font-black">Learning Analytics</h3>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              {[
+                ['Average Quiz Score', `${averageQuiz}%`],
+                ['Average Practice IDE Score', `${averagePractice}%`],
+                ['Video Completion Rate', `${videoCompletionRate}%`],
+                ['Performance Index', `${averagePerformance}%`],
+                ['Most Difficult Topic', mostDifficultTopic?.topic || '--'],
+                ['Most Successful Student', mostSuccessfulStudent?.name || '--'],
+                ['Students At Risk', atRiskStudents.length],
+                ['Learning Completion Rate', `${completionRate}%`],
+                ['Programming Success Rate', `${avg(visibleStudents.map(student => student.practiceScore >= 70 ? 100 : 0))}%`],
+                ['Most Failed Topic', mostDifficultTopic?.topic || '--']
+              ].map(([label, value]) => (
+                <div key={label} className={`rounded-xl border p-3 ${mutedPanel}`}>
+                  <span className="block text-[9px] font-black uppercase text-slate-400">{label}</span>
+                  <strong className="mt-1 block text-sm">{value}</strong>
+                </div>
+              ))}
             </div>
-
-            {/* Quiz Pass/Fail Rate charts mockup */}
-            <div className={`p-6 rounded-2xl border shadow-sm ${
-              isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-            }`}>
-              <h3 className="text-sm font-extrabold mb-1">Quiz Diagnostics pass/fail rates</h3>
-              <p className="text-xs text-slate-400 mb-6">Assessment milestones passing records</p>
-              
-              <div className="space-y-4">
-                {[
-                  { label: 'Classes & objects exam', pass: 92, fail: 8, color: 'bg-emerald-500' },
-                  { label: 'Subclassing constructor diagnostics', pass: 85, fail: 15, color: 'bg-emerald-500' },
-                  { label: 'Polymorphic virtual lookup', pass: 78, fail: 22, color: 'bg-teal-500' },
-                  { label: 'Abstract interfaces Strategy rules', pass: 70, fail: 30, color: 'bg-amber-500' }
-                ].map((item, idx) => (
-                  <div key={idx} className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-semibold">
-                      <span className="text-slate-705 dark:text-slate-305">{item.label}</span>
-                      <span className="font-mono text-slate-500"><strong className="text-emerald-600">{item.pass}% Pass</strong> / {item.fail}% Fail</span>
-                    </div>
-                    <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
-                      <div className="h-full bg-emerald-500" style={{ width: `${item.pass}%` }} />
-                      <div className="h-full bg-rose-500" style={{ width: `${item.fail}%` }} />
-                    </div>
+          </div>
+          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+            <h3 className="text-base font-black">Weekly and Monthly Progress</h3>
+            <div className="mt-5 space-y-4">
+              {[
+                ['Week 1', 54],
+                ['Week 2', 62],
+                ['Week 3', 73],
+                ['Week 4', completionRate],
+                ['Month Target', 88]
+              ].map(([label, value]) => (
+                <div key={label as string}>
+                  <div className="mb-1 flex justify-between text-xs font-bold">
+                    <span>{label as string}</span>
+                    <span>{value}%</span>
                   </div>
-                ))}
-              </div>
+                  <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-[#6b7f2a]" style={{ width: `${value}%` }} />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* 7. PROFILE SETTINGS VIEW */}
-      {activeTab === 'profile' && (
-        <div className="max-w-xl mx-auto text-left space-y-6">
-          <div className={`p-6 rounded-2xl border shadow-sm space-y-4 ${
-            isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-          }`}>
-            <div className="flex items-center gap-4 border-b pb-4 border-slate-100 dark:border-slate-800">
-              <div className="w-16 h-16 bg-[#4CAF50] text-white font-black rounded-2xl flex items-center justify-center text-2xl shadow-md">
-                {currentUser.name.split(/\s+/).slice(0, 2).map(n => n[0]).join('') || 'TC'}
-              </div>
-              <div>
-                <h4 className="font-extrabold text-slate-900 dark:text-white text-base">{currentUser.name}</h4>
-                <span className="px-2 py-0.5 bg-blue-50 text-blue-800 text-[10px] font-bold rounded border border-blue-200 uppercase tracking-wider inline-block mt-1">
-                  Instructor Profile
-                </span>
-              </div>
+      {activeTab === 'architecture' && (
+        <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+            <h3 className="text-base font-black">Event-Driven Workflow</h3>
+            <div className="mt-4 space-y-2">
+              {[
+                'Student activity is saved to PostgreSQL.',
+                'Rule-based adaptive learning algorithm runs immediately.',
+                'Performance index and learning status are recalculated.',
+                'Next lesson, assessment, or Practice IDE activity is locked or unlocked.',
+                'Socket.IO pushes live updates to teacher dashboards.',
+                'Teacher receives a real-time notification.'
+              ].map((step, index) => (
+                <div key={step} className={`flex items-center gap-3 rounded-xl border p-3 ${mutedPanel}`}>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#6b7f2a] text-xs font-black text-white">{index + 1}</span>
+                  <p className="text-xs font-bold">{step}</p>
+                </div>
+              ))}
             </div>
-
-            <div className="space-y-3.5 text-xs">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Employee ID</span>
-                  <span className="font-extrabold text-slate-805 dark:text-slate-200">{currentUser.employeeId || 'EMP-0001'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Active Department</span>
-                  <span className="font-extrabold text-slate-805 dark:text-slate-200">{currentUser.department || 'College of Computer Studies'}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Domain Specialization</span>
-                  <span className="font-extrabold text-slate-805 dark:text-slate-200">{currentUser.specialization || 'Object-Oriented Programming'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Account status</span>
-                  <span className="font-extrabold text-emerald-650 dark:text-emerald-450">Active clearance</span>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider mb-1">Teaching Catalog Subjects</span>
-                <p className="text-slate-655 dark:text-slate-350 font-semibold leading-normal">
-                  {currentUser.assignedCourses || 'OOP 101, Advanced Java, Software Architecture'}
-                </p>
-              </div>
-            </div>
-            
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-              <button 
-                onClick={() => {
-                  const el = document.getElementById('hub-top-navbar');
-                  if (el) {
-                    const btn = el.querySelector('#navbar-profile-trigger') as HTMLButtonElement;
-                    if (btn) btn.click();
-                  }
-                }}
-                className="py-2 px-4 border border-slate-250 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-950 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 transition cursor-pointer"
-              >
-                Open Main Profile settings
-              </button>
+          </div>
+          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+            <h3 className="text-base font-black">Normalized Tables</h3>
+            <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+              {[
+                'teachers',
+                'students',
+                'teacher_students',
+                'invitations',
+                'lesson_progress',
+                'assessments',
+                'practice_ide',
+                'submissions',
+                'notifications',
+                'analytics',
+                'performance_indexes',
+                'adaptive_recommendations'
+              ].map(table => (
+                <div key={table} className={`rounded-xl border p-3 font-mono font-bold ${mutedPanel}`}>{table}</div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
+      {visibleStudents.length === 0 && (
+        <div className={`rounded-2xl border p-10 text-center shadow-sm ${cardClass}`}>
+          <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
+          <h3 className="mt-3 text-base font-black">No Connected Students</h3>
+          <p className="mt-1 text-xs text-slate-500">Generate an invitation code or send an invite before monitoring student progress.</p>
+          <button type="button" onClick={() => setActiveTab('invitations')} className="mt-4 rounded-xl bg-[#6b7f2a] px-4 py-2 text-xs font-black text-white">
+            Open Invitations
+          </button>
+        </div>
+      )}
     </div>
   );
 }
