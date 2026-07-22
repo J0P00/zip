@@ -41,7 +41,7 @@ interface TeacherPortalProps {
   recommendationHistory?: AdaptiveRecommendation[];
 }
 
-type TeacherTab = 'monitoring' | 'invitations' | 'topics' | 'swing' | 'assessments' | 'ide' | 'analytics' | 'architecture';
+type TeacherTab = 'monitoring' | 'invitations' | 'topics' | 'swing' | 'assessments' | 'ide' | 'analytics';
 type LearningStage = 'Lesson' | 'Watch Video' | 'Assessment' | 'Practice IDE' | 'Automatic Grading' | 'Adaptive Recommendation' | 'Unlock Next Topic';
 type LearningStatus = 'In Progress' | 'Completed' | 'Mastered' | 'Needs Improvement' | 'At Risk';
 
@@ -591,8 +591,7 @@ export default function TeacherPortal({
             ['swing', 'Java Swing', PlayCircle],
             ['assessments', 'Assessments', FileQuestion],
             ['ide', 'Practice IDE', Code2],
-            ['analytics', 'Analytics', BarChart3],
-            ['architecture', 'Data Model', Lock]
+            ['analytics', 'Analytics', BarChart3]
           ].map(([id, label, Icon]) => {
             const TabIcon = Icon as typeof Activity;
             return (
@@ -1135,49 +1134,6 @@ export default function TeacherPortal({
         </div>
       )}
 
-      {activeTab === 'architecture' && (
-        <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
-          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
-            <h3 className="text-base font-black">Event-Driven Workflow</h3>
-            <div className="mt-4 space-y-2">
-              {[
-                'Student activity is saved to PostgreSQL.',
-                'Rule-based adaptive learning algorithm runs immediately.',
-                'Performance index and learning status are recalculated.',
-                'Next lesson, assessment, or Practice IDE activity is locked or unlocked.',
-                'Socket.IO pushes live updates to teacher dashboards.',
-                'Teacher receives a real-time notification.'
-              ].map((step, index) => (
-                <div key={step} className={`flex items-center gap-3 rounded-xl border p-3 ${mutedPanel}`}>
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-xs font-black text-white">{index + 1}</span>
-                  <p className="text-xs font-bold">{step}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
-            <h3 className="text-base font-black">Normalized Tables</h3>
-            <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-              {[
-                'teachers',
-                'students',
-                'teacher_students',
-                'invitations',
-                'lesson_progress',
-                'assessments',
-                'practice_ide',
-                'submissions',
-                'notifications',
-                'analytics',
-                'performance_indexes',
-                'adaptive_recommendations'
-              ].map(table => (
-                <div key={table} className={`rounded-xl border p-3 font-mono font-bold ${mutedPanel}`}>{table}</div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {visibleStudents.length === 0 && (
         <div className={`rounded-2xl border p-10 text-center shadow-sm ${cardClass}`}>
