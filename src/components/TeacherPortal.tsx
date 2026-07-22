@@ -26,7 +26,7 @@ import {
   Wifi,
   WifiOff
 } from 'lucide-react';
-import { AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
+import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
 
 interface TeacherPortalProps {
   submissions: PendingSubmission[];
@@ -38,6 +38,7 @@ interface TeacherPortalProps {
   onRemoveConnection: (requestId: string) => void;
   onReopenSubmission?: (id: string) => void;
   theme?: 'light' | 'dark';
+  recommendationHistory?: AdaptiveRecommendation[];
 }
 
 type TeacherTab = 'monitoring' | 'invitations' | 'topics' | 'swing' | 'assessments' | 'ide' | 'analytics' | 'architecture';
@@ -344,7 +345,8 @@ export default function TeacherPortal({
   onSendRequest,
   onRemoveConnection,
   onReopenSubmission,
-  theme
+  theme,
+  recommendationHistory = []
 }: TeacherPortalProps) {
   const isDark = theme === 'dark';
   const [activeTab, setActiveTab] = useState<TeacherTab>('monitoring');
@@ -396,6 +398,19 @@ export default function TeacherPortal({
   const connectedStudents = students.filter(student => acceptedEmails.includes(student.email.toLowerCase()));
   const visibleStudents = connectedStudents.length > 0 ? connectedStudents : students.slice(0, 4);
   const selectedStudent = visibleStudents.find(student => student.id === selectedStudentId) ?? visibleStudents[0];
+  const visibleStudentKeys = visibleStudents.flatMap(student => [student.id, student.email, student.name]);
+  const visibleRecommendations = recommendationHistory.filter(item =>
+    visibleStudentKeys.includes(item.studentId) ||
+    (item.studentName ? visibleStudentKeys.includes(item.studentName) : false)
+  );
+  const remedialCounts = visibleRecommendations
+    .filter(item => item.type === 'Remedial')
+    .reduce<Record<string, number>>((acc, item) => {
+      const key = item.studentName || item.studentId;
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+  const repeatedRemedialStudents = Object.entries(remedialCounts).filter(([, count]) => count >= 2);
 
   const visibleSubmissions = submissions.filter(sub => {
     const studentEmail = sub.studentEmail || getStudentEmailByName(sub.studentName);
@@ -694,6 +709,45 @@ export default function TeacherPortal({
                     {step}
                   </div>
                 ))}
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Recommendation History</p>
+                  <h4 className="mt-1 text-sm font-black text-slate-900">Current Rule-Based Recommendations</h4>
+                </div>
+                <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[10px] font-black text-rose-700">
+                  {repeatedRemedialStudents.length} repeated remedial
+                </span>
+              </div>
+              <div className="mt-4 space-y-2">
+                {visibleRecommendations.slice(0, 4).map(item => (
+                  <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-black text-slate-900">{item.studentName || item.studentId}</p>
+                        <p className="mt-1 text-[11px] font-semibold text-slate-500">{item.lessonTitle} | {item.reason}</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
+                        item.type === 'Remedial' ? 'bg-rose-100 text-rose-700' : item.type === 'Continue' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                      }`}>
+                        {item.type}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid gap-2 text-[10px] font-bold text-slate-500 sm:grid-cols-3">
+                      <span>Trigger: {item.trigger}</span>
+                      <span>Status: {item.status}</span>
+                      <span>Generated: {new Date(item.generatedDate).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))}
+                {visibleRecommendations.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-xs font-semibold text-slate-500">
+                    No generated recommendation records for visible students yet.
+                  </div>
+                )}
               </div>
             </div>
 

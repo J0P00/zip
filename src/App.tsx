@@ -46,7 +46,8 @@ import {
   AdaptiveRule,
   MonitoringRequest,
   NotificationItem,
-  PracticeSubmission
+  PracticeSubmission,
+  AdaptiveRecommendation
 } from './types';
 
 // Import Mock Data
@@ -77,7 +78,8 @@ import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
 import AdminVideoManager from './components/AdminVideoManager';
 import AdminTermsManager from './components/AdminTermsManager';
-import { appApi, authApi, getAuthToken, isDemoEmail, setAuthToken, userApi } from './services/api';
+import { appApi, authApi, getAuthToken, isDemoEmail, recommendationApi, setAuthToken, userApi } from './services/api';
+import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
 
 const DEMO_STUDENT_PROGRESS = {
   streak: 12,
@@ -280,6 +282,22 @@ export default function App() {
     };
   }, [currentUser]);
 
+  useEffect(() => {
+    if (!currentUser || !getAuthToken()) return;
+    recommendationApi.list(currentUser.role === 'student' ? (currentUser.id || currentUser.userId || currentUser.email) : undefined)
+      .then(response => {
+        const localHistory = getRecommendationHistory();
+        const merged = [...response.data, ...localHistory]
+          .filter((item, index, arr) => arr.findIndex(other => other.id === item.id) === index)
+          .slice(0, 100);
+        setRecommendationHistory(merged);
+        setActiveRecommendation(merged[0] || null);
+      })
+      .catch(error => {
+        console.warn('Unable to load adaptive recommendation history from backend:', error);
+      });
+  }, [currentUser?.id, currentUser?.role, currentUser?.userId, currentUser?.email]);
+
   // Student Statistics State
   const [streak, setStreak] = useState<number>(DEMO_STUDENT_PROGRESS.streak);
   const [points, setPoints] = useState<number>(DEMO_STUDENT_PROGRESS.points);
@@ -330,6 +348,8 @@ export default function App() {
   const [curriculumModules, setCurriculumModules] = useState<CurriculumModule[]>(INITIAL_CURRICULUM_MODULES);
   const [lessonItems, setLessonItems] = useState<LessonItem[]>(INITIAL_LESSON_ITEMS);
   const [adaptiveRules, setAdaptiveRules] = useState<AdaptiveRule[]>(INITIAL_ADAPTIVE_RULES);
+  const [recommendationHistory, setRecommendationHistory] = useState<AdaptiveRecommendation[]>(() => getRecommendationHistory());
+  const [activeRecommendation, setActiveRecommendation] = useState<AdaptiveRecommendation | null>(() => getRecommendationHistory()[0] || null);
 
   // Live reviews returned from Dr. Elena Vance
   const [recentStudentGrade, setRecentStudentGrade] = useState<{ grade: number; feedback: string; challenge: string } | null>(
@@ -392,6 +412,15 @@ export default function App() {
     setNotifications(prev => [newNotif, ...prev]);
   };
 
+  const publishRecommendation = (recommendation: AdaptiveRecommendation) => {
+    const next = storeRecommendation(recommendation);
+    setRecommendationHistory(next);
+    setActiveRecommendation(recommendation);
+    recommendationApi.save(recommendation).catch(error => {
+      console.warn('Unable to sync adaptive recommendation with backend:', error);
+    });
+  };
+
   const handleUploadVideo = (video: VideoLesson) => {
     setVideoLessons(prev => {
       const next = [...prev, video];
@@ -424,6 +453,7 @@ export default function App() {
       localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
       return next;
     });
+
   };
 
   const handleDeleteVideo = (id: string) => {
@@ -697,6 +727,19 @@ export default function App() {
       'unlock'
     );
 
+    publishRecommendation(generateRuleBasedRecommendation({
+      studentId: submission.studentId,
+      studentName: submission.studentName,
+      lessonId: submission.challengeId.replace('practice_', 'oop_lesson_'),
+      currentTopic: submission.topicTitle,
+      trigger: 'Coding Score',
+      videoCompleted: true,
+      lessonCompleted: submission.score >= 70,
+      codingScore: submission.score,
+      codingAttempts: 1,
+      progressPercentage: completedLessonsCount ? Math.round((completedLessonsCount / OOP_LESSON_COUNT) * 100) : 0
+    }));
+
     // Unlock next lesson only when both quiz and practice work are passed.
     const completedPracticeSequence = Number(submission.challengeId.replace('practice_', ''));
     if (submission.score >= 70) setVideoLessons(prev => prev.map(l => {
@@ -707,29 +750,49 @@ export default function App() {
     }));
   };
 
-  // 2. When student passes diagnostic MCQ
-  const handleCorrectAnswerAdded = (xpAward: number) => {
-    setPoints(prev => prev + xpAward);
+  // 2. After every diagnostic MCQ attempt, run the rule-based recommendation engine.
+  const handleCorrectAnswerAdded = (xpAward: number, attempt: {
+    assessmentId: string;
+    lessonId: string;
+    percentage: number;
+    passed: boolean;
+    attemptNumber: number;
+  }) => {
+    if (xpAward > 0) setPoints(prev => prev + xpAward);
     setStreak(prev => prev + 1);
 
     // Bump user points row in leaderboard ranking
     setLeaderboardUsers(prev => prev.map(u => {
       if (u.isCurrentUser) {
-        return { ...u, points: u.points + xpAward, streak: u.streak + 1, trend: 'up' };
+        return { ...u, points: u.points + xpAward, streak: u.streak + 1, trend: xpAward > 0 ? 'up' : 'stable' };
       }
       return u;
     }));
 
+    const lesson = OOP_COURSE_LESSONS.find(item => item.id === attempt.lessonId);
+    const recommendation = generateRuleBasedRecommendation({
+      studentId: currentUser?.id || currentUser?.userId || currentUser?.email || 'student-local',
+      studentName: currentUser?.name || 'Student',
+      lessonId: attempt.lessonId,
+      currentTopic: lesson?.topic || lesson?.title || 'OOP Topic',
+      trigger: 'Quiz Score',
+      videoCompleted: true,
+      quizScore: attempt.percentage,
+      quizAttempts: attempt.attemptNumber,
+      progressPercentage: completedLessonsCount ? Math.round((completedLessonsCount / OOP_LESSON_COUNT) * 100) : 0
+    });
+    publishRecommendation(recommendation);
+
     // Post mock success grading notification immediately to Student Dashboard reviews
     setRecentStudentGrade({
-      grade: 100,
-      feedback: `Correct diagnosis! You parsed the JVM late binding dynamic dispatch table layout perfectly. Option B was correct. Keep up this momentum${currentUser ? `, ${currentUser.name.split(/\s+/)[0]}` : ''}!`,
-      challenge: "Scenario 04: The Fleet Manager"
+      grade: attempt.percentage,
+      feedback: recommendation.summary,
+      challenge: lesson ? `${lesson.title} Assessment` : 'OOP Assessment'
     });
 
     addNotification(
       `Coding Exercises Unlocked! 🔓`,
-      `You passed the assessment. Sandbox IDE exercises are now unlocked.`,
+      recommendation.summary,
       'unlock'
     );
   };
@@ -1256,6 +1319,12 @@ export default function App() {
                 theme={theme}
                 notifications={notifications}
                 onMarkNotificationRead={(id) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n))}
+                activeRecommendation={activeRecommendation}
+                recommendationHistory={recommendationHistory.filter(item =>
+                  item.studentId === (displayUser.id || displayUser.userId || displayUser.email) ||
+                  item.studentId === displayUser.email ||
+                  item.studentName === displayUser.name
+                )}
               />
             )}
 
@@ -1264,6 +1333,7 @@ export default function App() {
                 currentUser={displayUser}
                 onSubmitCompleted={handleStudentSubmitCode}
                 theme={theme}
+                activeRecommendation={activeRecommendation}
               />
             )}
 
@@ -1280,6 +1350,7 @@ export default function App() {
                 onNavigateTo={(view) => setStudentTab(view as any)}
                 onCorrectAnswerAdded={handleCorrectAnswerAdded}
                 lessons={videoLessons}
+                activeRecommendation={activeRecommendation}
               />
             )}
 
@@ -1301,6 +1372,7 @@ export default function App() {
                 onRemoveConnection={handleRemoveMonitoringConnection}
                 onReopenSubmission={handleReopenPracticeSubmission}
                 theme={theme}
+                recommendationHistory={recommendationHistory}
               />
             )}
 

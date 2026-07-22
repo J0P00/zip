@@ -91,6 +91,32 @@ const toClientUser = (row) => ({
     accessLevel: row.access_level || ""
 });
 
+const toClientRecommendation = (row) => ({
+    id: row.id,
+    studentId: row.student_id,
+    studentName: row.student_name || "",
+    lessonId: row.lesson_id,
+    lessonTitle: row.lesson_title || "",
+    currentTopic: row.current_topic || "",
+    type: row.recommendation_type,
+    trigger: row.trigger_event,
+    reason: row.reason,
+    generatedDate: row.generated_at,
+    status: row.status,
+    title: row.title,
+    summary: row.summary,
+    actions: row.actions || [],
+    primaryActionLabel: row.primary_action_label || "",
+    targetView: row.target_view || "dashboard",
+    quizScore: row.quiz_score === null ? undefined : Number(row.quiz_score),
+    codingScore: row.coding_score === null ? undefined : Number(row.coding_score),
+    videoCompleted: row.video_completed,
+    lessonCompleted: row.lesson_completed,
+    quizAttempts: row.quiz_attempts,
+    codingAttempts: row.coding_attempts,
+    progressPercentage: row.progress_percentage === null ? undefined : Number(row.progress_percentage)
+});
+
 const findUserByEmail = async (email) => {
     const result = await pool.query(`
         SELECT u.*, s.student_number, s.course, s.year_level, s.section, s.program_status,
@@ -362,6 +388,34 @@ const initializeDatabase = async () => {
           is_locked BOOLEAN NOT NULL DEFAULT TRUE,
           UNIQUE(student_id, challenge_id)
         );
+        CREATE TABLE IF NOT EXISTS recommendation_history (
+          id TEXT PRIMARY KEY,
+          student_id TEXT NOT NULL,
+          student_name TEXT DEFAULT '',
+          lesson_id TEXT NOT NULL,
+          lesson_title TEXT DEFAULT '',
+          current_topic TEXT DEFAULT '',
+          recommendation_type TEXT NOT NULL CHECK (recommendation_type IN ('Remedial', 'Continue', 'Advanced')),
+          trigger_event TEXT NOT NULL CHECK (trigger_event IN ('Video Completion', 'Quiz Score', 'Coding Score', 'Lesson Completion')),
+          reason TEXT NOT NULL,
+          title TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          actions JSONB NOT NULL DEFAULT '[]'::jsonb,
+          primary_action_label TEXT DEFAULT '',
+          target_view TEXT DEFAULT 'dashboard',
+          quiz_score NUMERIC,
+          coding_score NUMERIC,
+          video_completed BOOLEAN NOT NULL DEFAULT FALSE,
+          lesson_completed BOOLEAN NOT NULL DEFAULT FALSE,
+          quiz_attempts INTEGER,
+          coding_attempts INTEGER,
+          progress_percentage NUMERIC,
+          status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Completed')),
+          generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          completed_at TIMESTAMPTZ
+        );
+        CREATE INDEX IF NOT EXISTS idx_recommendation_history_student ON recommendation_history(student_id, generated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_recommendation_history_type ON recommendation_history(recommendation_type, status);
     `);
 };
 
@@ -785,6 +839,114 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
             dateCompleted || null
         ]);
         res.status(201).json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/recommendations", requireAuth, async (req, res, next) => {
+    try {
+        const requestedStudentId = cleanText(req.query.studentId || "", 120);
+        const params = [];
+        let where = "";
+
+        if (req.authUser.role === "student") {
+            params.push(req.authUser.id, req.authUser.userId, req.authUser.email);
+            where = "WHERE student_id IN ($1, $2, $3)";
+        } else if (requestedStudentId) {
+            params.push(requestedStudentId);
+            where = "WHERE student_id = $1";
+        }
+
+        const result = await pool.query(`
+            SELECT *
+            FROM recommendation_history
+            ${where}
+            ORDER BY generated_at DESC
+            LIMIT 200
+        `, params);
+        res.json({ success: true, data: result.rows.map(toClientRecommendation) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/recommendations", requireAuth, async (req, res, next) => {
+    try {
+        const recommendation = req.body || {};
+        if (req.authUser.role !== "student") {
+            return res.status(403).json({ success: false, message: "Only students can generate adaptive recommendations." });
+        }
+
+        const type = recommendation.type;
+        const trigger = recommendation.trigger;
+        if (!["Remedial", "Continue", "Advanced"].includes(type)) {
+            return res.status(400).json({ success: false, message: "Invalid recommendation type." });
+        }
+        if (!["Video Completion", "Quiz Score", "Coding Score", "Lesson Completion"].includes(trigger)) {
+            return res.status(400).json({ success: false, message: "Invalid recommendation trigger." });
+        }
+
+        const result = await pool.query(`
+            INSERT INTO recommendation_history (
+              id, student_id, student_name, lesson_id, lesson_title, current_topic,
+              recommendation_type, trigger_event, reason, title, summary, actions,
+              primary_action_label, target_view, quiz_score, coding_score,
+              video_completed, lesson_completed, quiz_attempts, coding_attempts,
+              progress_percentage, status, generated_at
+            )
+            VALUES (
+              $1, $2, $3, $4, $5, $6,
+              $7, $8, $9, $10, $11, $12::jsonb,
+              $13, $14, $15, $16,
+              $17, $18, $19, $20,
+              $21, $22, COALESCE($23::timestamptz, NOW())
+            )
+            ON CONFLICT (id) DO UPDATE SET
+              status = EXCLUDED.status,
+              summary = EXCLUDED.summary
+            RETURNING *
+        `, [
+            cleanText(recommendation.id || `rec_${Date.now()}`, 160),
+            cleanText(recommendation.studentId || req.authUser.id, 160),
+            cleanText(recommendation.studentName || "", 255),
+            cleanText(recommendation.lessonId || "", 120),
+            cleanText(recommendation.lessonTitle || "", 255),
+            cleanText(recommendation.currentTopic || "", 255),
+            type,
+            trigger,
+            cleanText(recommendation.reason || "", 500),
+            cleanText(recommendation.title || "", 255),
+            cleanText(recommendation.summary || "", 1000),
+            JSON.stringify(Array.isArray(recommendation.actions) ? recommendation.actions.slice(0, 10) : []),
+            cleanText(recommendation.primaryActionLabel || "", 120),
+            cleanText(recommendation.targetView || "dashboard", 40),
+            recommendation.quizScore === undefined ? null : clampNumber(recommendation.quizScore, 0, 100),
+            recommendation.codingScore === undefined ? null : clampNumber(recommendation.codingScore, 0, 100),
+            Boolean(recommendation.videoCompleted),
+            Boolean(recommendation.lessonCompleted),
+            recommendation.quizAttempts === undefined ? null : Math.floor(clampNumber(recommendation.quizAttempts, 0, 1000)),
+            recommendation.codingAttempts === undefined ? null : Math.floor(clampNumber(recommendation.codingAttempts, 0, 1000)),
+            recommendation.progressPercentage === undefined ? null : clampNumber(recommendation.progressPercentage, 0, 100),
+            ["Pending", "Completed"].includes(recommendation.status) ? recommendation.status : "Pending",
+            recommendation.generatedDate || null
+        ]);
+        res.status(201).json({ success: true, data: toClientRecommendation(result.rows[0]) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.patch("/api/recommendations/:id/complete", requireAuth, async (req, res, next) => {
+    try {
+        const result = await pool.query(`
+            UPDATE recommendation_history
+            SET status = 'Completed', completed_at = NOW()
+            WHERE id = $1
+            RETURNING *
+        `, [req.params.id]);
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Recommendation not found." });
+        res.json({ success: true, data: toClientRecommendation(result.rows[0]) });
     } catch (error) {
         next(error);
     }

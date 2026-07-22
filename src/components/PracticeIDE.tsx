@@ -1,13 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, Code2, Lock, Play, RotateCcw, Send, Terminal } from 'lucide-react';
-import { AuthenticatedUser, PracticeSubmission } from '../types';
+import { AdaptiveRecommendation, AuthenticatedUser, PracticeSubmission } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson } from '../data/oopCourse';
 import { getPracticeChallengeForLesson, gradePracticeSource, PRACTICE_CHALLENGES } from '../data/practiceChallenges';
+import RecommendationCard from './RecommendationCard';
 
 interface PracticeIDEProps {
   currentUser: AuthenticatedUser;
   onSubmitCompleted: (submission: PracticeSubmission) => void;
   theme?: 'light' | 'dark';
+  activeRecommendation?: AdaptiveRecommendation | null;
 }
 
 interface WatchRecord {
@@ -36,7 +38,7 @@ type DraftDb = Record<string, string>;
 const formatDateTime = (value: string) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
-export default function PracticeIDE({ currentUser, onSubmitCompleted, theme }: PracticeIDEProps) {
+export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, activeRecommendation }: PracticeIDEProps) {
   const isDark = theme === 'dark';
   const [watchDb] = useState<WatchDb>(() => getStoredJson(WATCH_KEY, {}));
   const [quizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
@@ -282,6 +284,8 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme }: P
           </button>
           {!passedRun && lastResult && !submitted && <p className="mt-2 text-center text-[10px] font-bold text-amber-300">You may submit now, but failed tests will be recorded in the final grade.</p>}
         </section>
+
+        <RecommendationCard recommendation={activeRecommendation || null} compact />
       </aside>
     </div>
   );

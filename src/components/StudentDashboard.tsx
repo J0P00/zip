@@ -20,9 +20,10 @@ import {
   MailOpen,
   Check
 } from 'lucide-react';
-import { AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
+import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
 import { PRACTICE_CHALLENGES } from '../data/practiceChallenges';
+import RecommendationCard from './RecommendationCard';
 
 interface StudentDashboardProps {
   userName: string;
@@ -38,6 +39,8 @@ interface StudentDashboardProps {
   theme?: 'light' | 'dark';
   notifications?: NotificationItem[];
   onMarkNotificationRead?: (id: string) => void;
+  activeRecommendation?: AdaptiveRecommendation | null;
+  recommendationHistory?: AdaptiveRecommendation[];
 }
 
 export default function StudentDashboard({
@@ -53,7 +56,9 @@ export default function StudentDashboard({
   onRejectRequest,
   theme,
   notifications = [],
-  onMarkNotificationRead
+  onMarkNotificationRead,
+  activeRecommendation,
+  recommendationHistory = []
 }: StudentDashboardProps) {
   const firstName = userName.trim().split(/\s+/)[0] || 'Student';
   const hasProgress = streak > 0 || points > 0 || completedLessonsCount > 0 || Boolean(recentGrade);
@@ -332,37 +337,48 @@ export default function StudentDashboard({
             </div>
           </div>
 
-          {/* REAL-TIME ADAPTIVE LEARNING GUIDANCE BANNER */}
-          <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent p-5 rounded-2xl border border-emerald-500/20 flex flex-wrap sm:flex-nowrap items-center justify-between gap-4" id="bento-adaptive-recommendation">
-            <div className="flex items-start gap-3">
-              <div className="p-2 sm:p-3 bg-white rounded-xl text-emerald-600 border border-emerald-100 shadow-sm shrink-0">
-                <Sparkles className="w-5 h-5 text-emerald-600 animate-pulse" />
+          <RecommendationCard recommendation={activeRecommendation || null} onNavigateTo={onNavigateTo} />
+
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm" id="student-recommendation-history">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight">Recommended For You</h3>
+                <p className="text-xs text-slate-500 font-medium">Rule-based recommendations update after every video, quiz, and coding activity.</p>
               </div>
-              <div className="space-y-1">
-                <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-                  Adaptive Logic Recommendation <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[9px] font-bold font-mono rounded uppercase tracking-wider border border-emerald-200">REAL-TIME</span>
-                </h4>
-                <p className="text-xs text-slate-600 leading-relaxed max-w-xl">
-                  {hasProgress ? (
-                    <>
-                      Static analysis detected inheritance Constructor Override anomalies inside your Practice IDE Car draft code. We suggest completing <strong>"Super Constructor Chaining" (Lesson Lecture 3)</strong> to level up before continuing.
-                    </>
-                  ) : (
-                    <>
-                      Start with the first OOP foundation lesson, then open the Practice IDE to submit your first practice activity.
-                    </>
-                  )}
-                </p>
-              </div>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase text-slate-500">
+                {recommendationHistory.length} Records
+              </span>
             </div>
-            
-            <button
-              id="student-bento-video-cta"
-              onClick={() => onNavigateTo('videos')}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition whitespace-nowrap active:scale-95"
-            >
-              Watch Lecture
-            </button>
+            <div className="space-y-3">
+              {recommendationHistory.slice(0, 4).map(item => (
+                <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
+                        item.type === 'Remedial' ? 'bg-rose-100 text-rose-700' : item.type === 'Continue' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                      }`}>
+                        {item.type}
+                      </span>
+                      <h4 className="mt-2 text-xs font-black text-slate-900">{item.type === 'Remedial' ? 'Review' : item.type}: {item.currentTopic}</h4>
+                      <p className="mt-1 text-[11px] font-semibold text-slate-500">Reason: {item.reason}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onNavigateTo(item.targetView)}
+                      className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700"
+                    >
+                      {item.primaryActionLabel}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {recommendationHistory.length === 0 && (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                  <h4 className="text-xs font-extrabold text-slate-900">No recommendation history yet</h4>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">Complete a lesson video, quiz, or coding activity to generate your first adaptive recommendation.</p>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm" id="practice-ide-progress-card">

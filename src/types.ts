@@ -335,3 +335,33 @@ export interface PracticeSubmission {
   errorMessage?: string;
   testResults: ChallengeTestResult[];
 }
+
+export type RecommendationType = 'Remedial' | 'Continue' | 'Advanced';
+export type RecommendationTrigger = 'Video Completion' | 'Quiz Score' | 'Coding Score' | 'Lesson Completion';
+export type RecommendationStatus = 'Pending' | 'Completed';
+
+export interface AdaptiveRecommendation {
+  id: string;
+  studentId: string;
+  studentName?: string;
+  lessonId: string;
+  lessonTitle: string;
+  currentTopic: string;
+  type: RecommendationType;
+  trigger: RecommendationTrigger;
+  reason: string;
+  generatedDate: string;
+  status: RecommendationStatus;
+  title: string;
+  summary: string;
+  actions: string[];
+  primaryActionLabel: string;
+  targetView: StudentSubView;
+  quizScore?: number;
+  codingScore?: number;
+  videoCompleted?: boolean;
+  lessonCompleted?: boolean;
+  quizAttempts?: number;
+  codingAttempts?: number;
+  progressPercentage?: number;
+}

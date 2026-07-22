@@ -1,4 +1,4 @@
-import { AuthenticatedUser, Persona } from '../types';
+import { AdaptiveRecommendation, AuthenticatedUser, Persona } from '../types';
 
 export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://oop-backend-j0oj.onrender.com')
@@ -102,6 +102,22 @@ export const progressApi = {
     apiRequest<{ success: boolean; data: any }>('/api/quiz-attempts', {
       method: 'POST',
       body: JSON.stringify(body)
+    })
+};
+
+export const recommendationApi = {
+  list: (studentId?: string, token?: string) => {
+    const query = studentId ? `?studentId=${encodeURIComponent(studentId)}` : '';
+    return apiRequest<{ success: boolean; data: AdaptiveRecommendation[] }>(`/api/recommendations${query}`, { token });
+  },
+  save: (recommendation: AdaptiveRecommendation) =>
+    apiRequest<{ success: boolean; data: AdaptiveRecommendation }>('/api/recommendations', {
+      method: 'POST',
+      body: JSON.stringify(recommendation)
+    }),
+  complete: (id: string) =>
+    apiRequest<{ success: boolean; data: AdaptiveRecommendation }>(`/api/recommendations/${id}/complete`, {
+      method: 'PATCH'
     })
 };
 

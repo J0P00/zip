@@ -245,6 +245,33 @@ CREATE TABLE IF NOT EXISTS adaptive_recommendations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS recommendation_history (
+  id TEXT PRIMARY KEY,
+  student_id TEXT NOT NULL,
+  student_name TEXT DEFAULT '',
+  lesson_id TEXT NOT NULL,
+  lesson_title TEXT DEFAULT '',
+  current_topic TEXT DEFAULT '',
+  recommendation_type TEXT NOT NULL CHECK (recommendation_type IN ('Remedial', 'Continue', 'Advanced')),
+  trigger_event TEXT NOT NULL CHECK (trigger_event IN ('Video Completion', 'Quiz Score', 'Coding Score', 'Lesson Completion')),
+  reason TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  actions JSONB NOT NULL DEFAULT '[]'::jsonb,
+  primary_action_label TEXT DEFAULT '',
+  target_view TEXT DEFAULT 'dashboard',
+  quiz_score NUMERIC,
+  coding_score NUMERIC,
+  video_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  lesson_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  quiz_attempts INTEGER,
+  coding_attempts INTEGER,
+  progress_percentage NUMERIC,
+  status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Completed')),
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS teacher_notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   teacher_id TEXT NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
@@ -289,6 +316,8 @@ CREATE INDEX IF NOT EXISTS idx_teacher_students_student ON teacher_students(stud
 CREATE INDEX IF NOT EXISTS idx_invitations_code ON invitations(invitation_code);
 CREATE INDEX IF NOT EXISTS idx_teacher_notifications_teacher ON teacher_notifications(teacher_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_realtime_learning_events_teacher ON realtime_learning_events(teacher_id, processed);
+CREATE INDEX IF NOT EXISTS idx_recommendation_history_student ON recommendation_history(student_id, generated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_recommendation_history_type ON recommendation_history(recommendation_type, status);
 
 INSERT INTO oop_courses (id, name, description)
 VALUES ('oop_fundamentals', 'OOP Fundamentals', 'Local-video Java OOP fundamentals course.')

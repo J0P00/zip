@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Award, Check, CheckCircle, ChevronLeft, ChevronRight, Lock, RotateCcw, X } from 'lucide-react';
-import { StudentSubView, VideoLesson } from '../types';
+import { AdaptiveRecommendation, StudentSubView, VideoLesson } from '../types';
 import { CourseQuestion, getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson, shuffleArray } from '../data/oopCourse';
 import { progressApi } from '../services/api';
+import RecommendationCard from './RecommendationCard';
 
 interface AssessmentsProps {
-  onCorrectAnswerAdded: (xp: number) => void;
+  onCorrectAnswerAdded: (xp: number, attempt: QuizAttempt) => void;
   onNavigateTo?: (view: StudentSubView) => void;
   lessons: VideoLesson[];
+  activeRecommendation?: AdaptiveRecommendation | null;
 }
 
 interface WatchRecord {
@@ -54,7 +56,7 @@ const getAssessmentLockedReason = (lessonId: string, watchDb: WatchDb, quizDb: Q
   return '';
 };
 
-export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: AssessmentsProps) {
+export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, activeRecommendation }: AssessmentsProps) {
   const [watchDb] = useState<WatchDb>(() => getStoredJson(WATCH_KEY, {}));
   const [quizDb, setQuizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
   const [activeAssessmentId, setActiveAssessmentId] = useState<string | null>(null);
@@ -169,7 +171,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: Asse
     setLatestAttempt(attempt);
     setView('result');
 
-    if (attempt.passed) onCorrectAnswerAdded(150);
+    onCorrectAnswerAdded(attempt.passed ? 150 : 0, attempt);
   };
 
   const renderDashboard = () => (
@@ -347,6 +349,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo }: Asse
             <button onClick={() => onNavigateTo?.('videos')} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white">Continue Learning</button>
           </div>
         </section>
+        <RecommendationCard recommendation={activeRecommendation || null} onNavigateTo={onNavigateTo} />
       </div>
     );
   };
