@@ -33,7 +33,7 @@ const renderPolicyContent = (content: string) => {
     if (value.startsWith('- ')) {
       return (
         <p key={`${value}-${index}`} className="flex gap-2 text-sm font-medium leading-6 text-slate-600">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#6b7f2a]" />
+          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600" />
           <span>{value.slice(2)}</span>
         </p>
       );
@@ -117,7 +117,7 @@ export default function TermsAgreementModal({
             <header className="border-b border-slate-100 bg-white px-5 py-4 sm:px-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="inline-flex items-center gap-2 rounded-md border border-[#dfe8c5] bg-[#f6f8ee] px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-[#5f6f24]">
+                  <div className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50/20 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-emerald-700">
                     <ShieldCheck className="h-3.5 w-3.5" />
                     Version {policy.version}
                   </div>
@@ -153,7 +153,7 @@ export default function TermsAgreementModal({
                     onClick={() => setActiveTab(tab.id)}
                     className={`flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-xs font-extrabold transition ${
                       activeTab === tab.id
-                        ? 'bg-[#6b7f2a] text-white shadow-sm'
+                        ? 'bg-emerald-600 text-white shadow-sm'
                         : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
                     }`}
                   >
@@ -195,7 +195,7 @@ export default function TermsAgreementModal({
                     type="button"
                     onClick={onAccept}
                     disabled={!canAccept}
-                    className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#6b7f2a] px-4 text-sm font-extrabold text-white shadow-lg shadow-[#6b7f2a]/15 transition hover:-translate-y-0.5 hover:bg-[#5f6f24] focus:outline-none focus:ring-4 focus:ring-[#dfe8c5] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:translate-y-0"
+                    className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-extrabold text-white shadow-lg shadow-emerald-600/15 transition hover:-translate-y-0.5 hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:translate-y-0"
                   >
                     <CheckCircle2 className="h-4 w-4" />
                     I have read and agree to the Terms and Agreement

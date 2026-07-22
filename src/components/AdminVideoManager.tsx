@@ -1062,10 +1062,10 @@ export default function AdminVideoManager({
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-[#dfe8c5] bg-[#f8faf2] p-4 space-y-4">
-                <div className="flex items-start justify-between gap-3 border-b border-[#dfe8c5] pb-3">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/20 p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3 border-b border-emerald-200 pb-3">
                   <div>
-                    <div className="flex items-center gap-2 text-[#5f6f24]">
+                    <div className="flex items-center gap-2 text-emerald-750">
                       <FileText className="w-4 h-4" />
                       <h3 className="text-xs font-extrabold uppercase tracking-wider">Video Citation & Copyright</h3>
                     </div>
@@ -1073,7 +1073,7 @@ export default function AdminVideoManager({
                       Required attribution details are saved with the video record and shown to students.
                     </p>
                   </div>
-                  <span className="rounded-md border border-[#dfe8c5] bg-white px-2 py-1 text-[10px] font-black uppercase tracking-wide text-[#5f6f24]">
+                  <span className="rounded-md border border-emerald-200 bg-white px-2 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-750">
                     Required
                   </span>
                 </div>
@@ -1081,7 +1081,7 @@ export default function AdminVideoManager({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1">
                     <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      <UserRound className="w-3.5 h-3.5 text-[#6b7f2a]" />
+                      <UserRound className="w-3.5 h-3.5 text-emerald-600" />
                       Author / Creator
                     </label>
                     <input
@@ -1089,14 +1089,14 @@ export default function AdminVideoManager({
                       value={formCreatorName}
                       onChange={e => setFormCreatorName(e.target.value)}
                       placeholder="e.g. John Smith"
-                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                       required
                     />
                   </div>
 
                   <div className="space-y-1">
                     <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      <Building2 className="w-3.5 h-3.5 text-[#6b7f2a]" />
+                      <Building2 className="w-3.5 h-3.5 text-emerald-600" />
                       Publisher / Channel
                     </label>
                     <input
@@ -1104,14 +1104,14 @@ export default function AdminVideoManager({
                       value={formPublisherName}
                       onChange={e => setFormPublisherName(e.target.value)}
                       placeholder="e.g. Programming Academy"
-                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1">
                   <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    <Link2 className="w-3.5 h-3.5 text-[#6b7f2a]" />
+                    <Link2 className="w-3.5 h-3.5 text-emerald-600" />
                     Original Source URL {isCitationSourceRequired ? '(Required for external embed)' : '(Optional for original upload)'}
                   </label>
                   <input
@@ -1119,7 +1119,7 @@ export default function AdminVideoManager({
                     value={formSourceUrl}
                     onChange={e => setFormSourceUrl(e.target.value)}
                     placeholder="https://example.com/video"
-                    className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                    className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                     required={isCitationSourceRequired}
                   />
                 </div>
@@ -1127,20 +1127,20 @@ export default function AdminVideoManager({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1">
                     <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      <CalendarDays className="w-3.5 h-3.5 text-[#6b7f2a]" />
+                      <CalendarDays className="w-3.5 h-3.5 text-emerald-600" />
                       Publication Date
                     </label>
                     <input
                       type="date"
                       value={formPublicationDate}
                       onChange={e => setFormPublicationDate(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      <Copyright className="w-3.5 h-3.5 text-[#6b7f2a]" />
+                      <Copyright className="w-3.5 h-3.5 text-emerald-600" />
                       Copyright / License
                     </label>
                     <input
@@ -1148,7 +1148,7 @@ export default function AdminVideoManager({
                       value={formLicenseType}
                       onChange={e => setFormLicenseType(e.target.value)}
                       placeholder="e.g. Creative Commons, Educational Use"
-                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-700 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                     />
                   </div>
                 </div>

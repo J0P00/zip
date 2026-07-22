@@ -324,7 +324,7 @@ const withTopicProgress = (student: LiveStudent, studentIndex: number): LiveStud
 const initialStudents = baseStudents.map(withTopicProgress);
 
 const statusClass = (status: LearningStatus) => {
-  if (status === 'Mastered') return 'bg-[#eef7dd] text-[#4f6f12] border-[#d7e8b1]';
+  if (status === 'Mastered') return 'bg-emerald-100 text-emerald-800 border-emerald-300';
   if (status === 'Completed') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
   if (status === 'Needs Improvement') return 'bg-amber-50 text-amber-700 border-amber-200';
   if (status === 'At Risk') return 'bg-rose-50 text-rose-700 border-rose-200';
@@ -538,14 +538,14 @@ export default function TeacherPortal({
   })).sort((a, b) => a.avg - b.avg)[0];
 
   const cardClass = isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900';
-  const mutedPanel = isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-[#f8faf5] border-[#e5ead8]';
+  const mutedPanel = isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-emerald-50/20 border-emerald-100/50';
 
   return (
     <div className={`space-y-5 ${isDark ? 'text-slate-100' : 'text-slate-800'}`} id="teacher-portal-root">
       <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#6b7f2a]">Teacher Account Module</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-600">Teacher Account Module</p>
             <h2 className="mt-1 text-xl font-black tracking-tight">Real-Time OOP Learning Command Center</h2>
             <p className="mt-1 max-w-3xl text-xs font-medium leading-relaxed text-slate-500">
               Monitor invited students only, track adaptive learning events, review Practice IDE evidence, and follow each learner from lesson to unlock.
@@ -587,10 +587,10 @@ export default function TeacherPortal({
                 onClick={() => setActiveTab(id as TeacherTab)}
                 className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-extrabold transition ${
                   activeTab === id
-                    ? 'bg-[#6b7f2a] text-white shadow-sm'
+                    ? 'bg-emerald-600 text-white shadow-sm'
                     : isDark
                       ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
-                      : 'text-slate-500 hover:bg-[#f0f4e4] hover:text-[#4f611f]'
+                      : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-700'
                 }`}
               >
                 <TabIcon className="h-3.5 w-3.5" />
@@ -609,7 +609,7 @@ export default function TeacherPortal({
                 <h3 className="text-sm font-black">Connected Students</h3>
                 <p className="text-[11px] text-slate-500">Teacher-scoped live roster</p>
               </div>
-              <span className="rounded-full bg-[#eef7dd] px-2 py-1 text-[10px] font-black text-[#4f6f12]">{visibleStudents.length} visible</span>
+              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">{visibleStudents.length} visible</span>
             </div>
             <div className="space-y-2">
               {visibleStudents.map(student => (
@@ -619,10 +619,10 @@ export default function TeacherPortal({
                   onClick={() => setSelectedStudentId(student.id)}
                   className={`w-full rounded-xl border p-3 text-left transition ${
                     selectedStudent.id === student.id
-                      ? 'border-[#6b7f2a] bg-[#f0f4e4]'
+                      ? 'border-emerald-500 bg-emerald-50/40'
                       : isDark
                         ? 'border-slate-800 bg-slate-950 hover:border-slate-700'
-                        : 'border-slate-200 bg-white hover:border-[#d9e4b8]'
+                        : 'border-slate-200 bg-white hover:border-emerald-300'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -633,7 +633,7 @@ export default function TeacherPortal({
                     {student.online ? <Wifi className="h-4 w-4 text-emerald-600" /> : <WifiOff className="h-4 w-4 text-slate-400" />}
                   </div>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-[#6b7f2a]" style={{ width: `${student.overallProgress}%` }} />
+                    <div className="h-full rounded-full bg-emerald-600" style={{ width: `${student.overallProgress}%` }} />
                   </div>
                   <div className="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-500">
                     <span>{student.activity}</span>
@@ -655,7 +655,7 @@ export default function TeacherPortal({
                 </div>
                 <p className="mt-1 text-xs text-slate-500">{selectedStudent.currentLesson} | {selectedStudent.currentTopic}</p>
               </div>
-              <div className="flex items-center gap-2 rounded-xl border border-[#dfe8c5] bg-[#f8faf5] px-3 py-2 text-xs font-black text-[#4f611f]">
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/30 px-3 py-2 text-xs font-black text-emerald-700">
                 <Sparkles className="h-4 w-4" />
                 {selectedStudent.stage}
               </div>
@@ -678,19 +678,19 @@ export default function TeacherPortal({
                     <span>{value}%</span>
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80">
-                    <div className="h-full rounded-full bg-[#6b7f2a]" style={{ width: `${value}%` }} />
+                    <div className="h-full rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="mt-5 rounded-2xl border border-[#dfe8c5] bg-[#fbfcf7] p-4">
-              <p className="text-[10px] font-black uppercase tracking-wider text-[#6b7f2a]">Rule-Based Adaptive Learning</p>
+            <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/15 p-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">Rule-Based Adaptive Learning</p>
               <p className="mt-1 text-sm font-bold text-slate-800">{selectedStudent.recommendation}</p>
               <div className="mt-4 grid gap-2 text-xs sm:grid-cols-4">
                 {['Save activity', 'Run adaptive rules', 'Update PI', 'Push live dashboard'].map(step => (
                   <div key={step} className="flex items-center gap-2 rounded-xl bg-white p-2 font-bold text-slate-600 shadow-sm">
-                    <CheckCircle2 className="h-4 w-4 text-[#6b7f2a]" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                     {step}
                   </div>
                 ))}
@@ -698,12 +698,12 @@ export default function TeacherPortal({
             </div>
 
             <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
-              <div className="grid grid-cols-7 bg-[#f8faf5] px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+              <div className="grid grid-cols-7 bg-emerald-50/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
                 {STAGE_ROTATION.map(stage => <span key={stage} className="text-center">{stage}</span>)}
               </div>
               <div className="grid grid-cols-7 gap-1 p-3">
                 {STAGE_ROTATION.map(stage => (
-                  <div key={stage} className={`h-2 rounded-full ${stage === selectedStudent.stage ? 'bg-[#6b7f2a]' : 'bg-slate-200'}`} />
+                  <div key={stage} className={`h-2 rounded-full ${stage === selectedStudent.stage ? 'bg-emerald-600' : 'bg-slate-200'}`} />
                 ))}
               </div>
             </div>
@@ -712,7 +712,7 @@ export default function TeacherPortal({
           <div className={`rounded-2xl border p-4 shadow-sm ${cardClass}`}>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-sm font-black">Real-Time Notifications</h3>
-              <Bell className="h-4 w-4 text-[#6b7f2a]" />
+              <Bell className="h-4 w-4 text-emerald-600" />
             </div>
             <div className="space-y-2">
               {notifications.map(note => (
@@ -735,8 +735,8 @@ export default function TeacherPortal({
             <div className={`mt-5 rounded-2xl border p-4 ${mutedPanel}`}>
               <p className="text-[10px] font-black uppercase text-slate-400">Invitation Code</p>
               <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-white p-3 shadow-sm">
-                <span className="font-mono text-lg font-black text-[#4f611f]">{teacherScopedCode(currentUser.email)}</span>
-                <button type="button" onClick={handleCopyInvitation} className="rounded-lg bg-[#6b7f2a] p-2 text-white">
+                <span className="font-mono text-lg font-black text-emerald-700">{teacherScopedCode(currentUser.email)}</span>
+                <button type="button" onClick={handleCopyInvitation} className="rounded-lg bg-emerald-600 p-2 text-white">
                   <Copy className="h-4 w-4" />
                 </button>
               </div>
@@ -749,9 +749,9 @@ export default function TeacherPortal({
                   value={studentInput}
                   onChange={event => setStudentInput(event.target.value)}
                   placeholder="student@oophub.edu or STU-0001"
-                  className={`min-h-11 flex-1 rounded-xl border px-3 text-sm outline-none focus:border-[#6b7f2a] ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}
+                  className={`min-h-11 flex-1 rounded-xl border px-3 text-sm outline-none focus:border-emerald-600 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}
                 />
-                <button type="submit" disabled={isSendingInvite} className="rounded-xl bg-[#6b7f2a] px-4 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-60">
+                <button type="submit" disabled={isSendingInvite} className="rounded-xl bg-emerald-600 px-4 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-60">
                   {isSendingInvite ? 'Checking...' : 'Invite'}
                 </button>
               </div>
@@ -808,7 +808,7 @@ export default function TeacherPortal({
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-left text-xs">
-              <thead className="bg-[#f8faf5] text-[10px] uppercase tracking-wider text-slate-500">
+              <thead className="bg-emerald-50/20 text-[10px] uppercase tracking-wider text-slate-500">
                 <tr>
                   <th className="px-3 py-3">Topic</th>
                   <th className="px-3 py-3">Video</th>
@@ -829,7 +829,7 @@ export default function TeacherPortal({
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-2">
                         <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100">
-                          <div className="h-full rounded-full bg-[#6b7f2a]" style={{ width: `${topic.completion}%` }} />
+                          <div className="h-full rounded-full bg-emerald-600" style={{ width: `${topic.completion}%` }} />
                         </div>
                         <span className="font-mono font-bold">{topic.completion}%</span>
                       </div>
@@ -853,7 +853,7 @@ export default function TeacherPortal({
                   <h3 className="text-sm font-black">{student.name}</h3>
                   <p className="mt-1 text-xs text-slate-500">Current Swing Lesson: {student.swingLesson}</p>
                 </div>
-                <span className="rounded-full bg-[#eef7dd] px-2 py-1 text-[10px] font-black text-[#4f6f12]">Swing Track</span>
+                <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">Swing Track</span>
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {[
@@ -868,7 +868,7 @@ export default function TeacherPortal({
                       <span>{value}%</span>
                     </div>
                     <div className="mt-2 h-2 rounded-full bg-white">
-                      <div className="h-2 rounded-full bg-[#6b7f2a]" style={{ width: `${value}%` }} />
+                      <div className="h-2 rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
                     </div>
                   </div>
                 ))}
@@ -893,7 +893,7 @@ export default function TeacherPortal({
                       <p className="text-sm font-black">{student.name}</p>
                       <p className="text-[11px] text-slate-500">{student.currentTopic} assessment history</p>
                     </div>
-                    <ClipboardCheck className="h-5 w-5 text-[#6b7f2a]" />
+                    <ClipboardCheck className="h-5 w-5 text-emerald-600" />
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
                     {[
@@ -954,7 +954,7 @@ export default function TeacherPortal({
                       type="button"
                       onClick={() => setSelectedSubId(sub.id)}
                       className={`w-full rounded-xl border p-4 text-left transition ${
-                        selectedSubmission?.id === sub.id ? 'border-[#6b7f2a] bg-[#f0f4e4]' : isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white hover:border-[#d9e4b8]'
+                        selectedSubmission?.id === sub.id ? 'border-emerald-650 bg-emerald-50/40' : isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white hover:border-emerald-300'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-4">
@@ -979,11 +979,11 @@ export default function TeacherPortal({
               <div className="space-y-4">
                 <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-wider text-[#b7cf67]">Submission Inspector</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-550">Submission Inspector</p>
                     <h3 className="mt-1 text-sm font-black">{selectedSubmission.studentName}</h3>
                     <p className="text-[11px] text-slate-400">{selectedSubmission.challengeName}</p>
                   </div>
-                  <Eye className="h-5 w-5 text-[#b7cf67]" />
+                  <Eye className="h-5 w-5 text-emerald-500" />
                 </div>
                 <pre className="max-h-52 overflow-auto rounded-xl border border-slate-800 bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-emerald-300">{selectedSubmission.code}</pre>
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
@@ -1017,11 +1017,11 @@ export default function TeacherPortal({
                   ))}
                 </div>
                 <div className="space-y-2 border-t border-slate-800 pt-4">
-                  <input type="number" min="0" max="100" value={scoreText} onChange={event => setScoreText(parseInt(event.target.value) || 0)} className="w-28 rounded-xl border border-slate-800 bg-slate-900 p-2 text-xs font-black outline-none focus:border-[#b7cf67]" />
-                  <textarea value={commentText} onChange={event => setCommentText(event.target.value)} placeholder="Teacher feedback and adaptive remediation notes..." className="h-20 w-full resize-none rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs outline-none focus:border-[#b7cf67]" />
+                  <input type="number" min="0" max="100" value={scoreText} onChange={event => setScoreText(parseInt(event.target.value) || 0)} className="w-28 rounded-xl border border-slate-800 bg-slate-900 p-2 text-xs font-black outline-none focus:border-emerald-500" />
+                  <textarea value={commentText} onChange={event => setCommentText(event.target.value)} placeholder="Teacher feedback and adaptive remediation notes..." className="h-20 w-full resize-none rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs outline-none focus:border-emerald-500" />
                   <div className="flex gap-2">
                     {onReopenSubmission && <button type="button" onClick={() => onReopenSubmission(selectedSubmission.id)} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black">Reopen</button>}
-                    <button type="button" onClick={handlePostGrade} className="flex-1 rounded-xl bg-[#6b7f2a] px-4 py-2 text-xs font-black text-white">Post Grade & Feedback</button>
+                    <button type="button" onClick={handlePostGrade} className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white">Post Grade & Feedback</button>
                   </div>
                 </div>
               </div>
@@ -1072,7 +1072,7 @@ export default function TeacherPortal({
                     <span>{value}%</span>
                   </div>
                   <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-[#6b7f2a]" style={{ width: `${value}%` }} />
+                    <div className="h-full rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
                   </div>
                 </div>
               ))}
@@ -1095,7 +1095,7 @@ export default function TeacherPortal({
                 'Teacher receives a real-time notification.'
               ].map((step, index) => (
                 <div key={step} className={`flex items-center gap-3 rounded-xl border p-3 ${mutedPanel}`}>
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#6b7f2a] text-xs font-black text-white">{index + 1}</span>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-xs font-black text-white">{index + 1}</span>
                   <p className="text-xs font-bold">{step}</p>
                 </div>
               ))}
@@ -1130,7 +1130,7 @@ export default function TeacherPortal({
           <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
           <h3 className="mt-3 text-base font-black">No Connected Students</h3>
           <p className="mt-1 text-xs text-slate-500">Generate an invitation code or send an invite before monitoring student progress.</p>
-          <button type="button" onClick={() => setActiveTab('invitations')} className="mt-4 rounded-xl bg-[#6b7f2a] px-4 py-2 text-xs font-black text-white">
+          <button type="button" onClick={() => setActiveTab('invitations')} className="mt-4 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white">
             Open Invitations
           </button>
         </div>

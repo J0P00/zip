@@ -206,7 +206,7 @@ export default function AdminTermsManager() {
             className="rounded-lg border border-slate-100 bg-white p-5 shadow-sm"
           >
             <div className="flex items-start justify-between gap-4">
-              <div className="rounded-lg border border-[#dfe8c5] bg-[#f6f8ee] p-2 text-[#5f6f24]">
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2 text-emerald-700">
                 {metric.icon}
               </div>
               <span className="rounded-md border border-emerald-100 bg-emerald-50 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wide text-emerald-700">
@@ -225,7 +225,7 @@ export default function AdminTermsManager() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-[#5f6f24]" />
+                <FileText className="h-5 w-5 text-emerald-600" />
                 <h2 className="text-base font-extrabold text-slate-950">Terms and Privacy Editor</h2>
               </div>
               <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
@@ -259,7 +259,7 @@ export default function AdminTermsManager() {
                 <input
                   value={draft.version}
                   onChange={event => setDraft(prev => ({ ...prev, version: event.target.value }))}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                 />
               </label>
 
@@ -268,7 +268,7 @@ export default function AdminTermsManager() {
                 <input
                   value={draft.title}
                   onChange={event => setDraft(prev => ({ ...prev, title: event.target.value }))}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                 />
               </label>
 
@@ -277,7 +277,7 @@ export default function AdminTermsManager() {
                 <select
                   value={draft.status}
                   onChange={event => setDraft(prev => ({ ...prev, status: event.target.value as TermsPolicyVersion['status'] }))}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                 >
                   <option value="Draft">Draft</option>
                   <option value="Published">Published</option>
@@ -285,15 +285,15 @@ export default function AdminTermsManager() {
                 </select>
               </label>
 
-              <label className="flex items-start gap-3 rounded-lg border border-[#dfe8c5] bg-[#f6f8ee] p-3">
+              <label className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50/20 p-3">
                 <input
                   type="checkbox"
                   checked={draft.forceReacceptance}
                   onChange={event => setDraft(prev => ({ ...prev, forceReacceptance: event.target.checked }))}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#6b7f2a] focus:ring-[#6b7f2a]"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
                 />
                 <span>
-                  <span className="block text-xs font-extrabold text-[#5f6f24]">Require re-acceptance</span>
+                  <span className="block text-xs font-extrabold text-emerald-700">Require re-acceptance</span>
                   <span className="block text-xs font-medium leading-5 text-slate-500">Publishing a new version makes users review it on next login.</span>
                 </span>
               </label>
@@ -310,7 +310,7 @@ export default function AdminTermsManager() {
                 <button
                   type="button"
                   onClick={handlePublish}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#6b7f2a] px-3 text-xs font-extrabold text-white shadow-sm transition hover:bg-[#5f6f24]"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-extrabold text-white shadow-sm transition hover:bg-emerald-700"
                 >
                   <Rocket className="h-4 w-4" />
                   Publish
@@ -331,7 +331,7 @@ export default function AdminTermsManager() {
                 <textarea
                   value={draft.termsContent}
                   onChange={event => setDraft(prev => ({ ...prev, termsContent: event.target.value }))}
-                  className="mt-1 h-72 w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-medium leading-6 text-slate-800 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                  className="mt-1 h-72 w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-medium leading-6 text-slate-800 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                 />
               </label>
               <label className="block">
@@ -339,7 +339,7 @@ export default function AdminTermsManager() {
                 <textarea
                   value={draft.privacyContent}
                   onChange={event => setDraft(prev => ({ ...prev, privacyContent: event.target.value }))}
-                  className="mt-1 h-48 w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-medium leading-6 text-slate-800 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5]"
+                  className="mt-1 h-48 w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-medium leading-6 text-slate-800 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
                 />
               </label>
             </div>
@@ -348,7 +348,7 @@ export default function AdminTermsManager() {
 
         <article className="rounded-lg border border-slate-100 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2">
-            <History className="h-5 w-5 text-[#5f6f24]" />
+            <History className="h-5 w-5 text-emerald-600" />
             <h2 className="text-base font-extrabold text-slate-950">Version History</h2>
           </div>
           <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
@@ -363,7 +363,7 @@ export default function AdminTermsManager() {
                 onClick={() => setSelectedPolicyId(policy.id)}
                 className={`w-full rounded-lg border p-4 text-left transition ${
                   selectedPolicyId === policy.id
-                    ? 'border-[#6b7f2a] bg-[#f6f8ee] shadow-sm'
+                    ? 'border-emerald-500 bg-emerald-50/20 shadow-sm'
                     : 'border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50'
                 }`}
               >
@@ -389,7 +389,7 @@ export default function AdminTermsManager() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-[#5f6f24]" />
+              <ShieldCheck className="h-5 w-5 text-emerald-600" />
               <h2 className="text-base font-extrabold text-slate-950">Acceptance Records</h2>
             </div>
             <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">
@@ -402,7 +402,7 @@ export default function AdminTermsManager() {
               value={query}
               onChange={event => setQuery(event.target.value)}
               placeholder="Search user, role, or version"
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium text-slate-900 outline-none transition focus:border-[#6b7f2a] focus:ring-4 focus:ring-[#dfe8c5] sm:w-72"
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100 sm:w-72"
             />
           </label>
         </div>
@@ -423,11 +423,11 @@ export default function AdminTermsManager() {
             <tbody className="divide-y divide-slate-100">
               {filteredRecords.length > 0 ? (
                 filteredRecords.map(record => (
-                  <tr key={record.agreement_id} className="transition hover:bg-[#f6f8ee]">
+                  <tr key={record.agreement_id} className="transition hover:bg-emerald-50/20">
                     <td className="py-4 font-mono text-[11px] text-slate-500">{record.agreement_id}</td>
                     <td className="py-4 font-extrabold text-slate-900">{record.user_id}</td>
                     <td className="py-4 font-bold capitalize text-slate-600">{record.user_role}</td>
-                    <td className="py-4 font-bold text-[#5f6f24]">{record.version}</td>
+                    <td className="py-4 font-bold text-emerald-700">{record.version}</td>
                     <td className="py-4">
                       <span className="inline-flex items-center gap-1 rounded-md border border-emerald-100 bg-emerald-50 px-2 py-1 text-[11px] font-extrabold text-emerald-700">
                         <CheckCircle2 className="h-3.5 w-3.5" />

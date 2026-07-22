@@ -325,7 +325,7 @@ export default function ProfilePage({ user, metrics, onUpdateProfile }: ProfileP
               )}
               {user.role === 'teacher' && (
                 <>
-                  <span className="px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg">
+                  <span className="px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg">
                     Teacher ID: {form.employeeId || 'EMP-0001'}
                   </span>
                   <span className="px-3 py-1 bg-slate-100 border border-slate-200 text-slate-700 rounded-lg">
