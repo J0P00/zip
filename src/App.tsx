@@ -107,7 +107,7 @@ const SESSION_VIEW_KEY = 'oophub_workspace_view';
 const PERSONAS: Persona[] = ['public', 'student', 'teacher', 'admin'];
 const STUDENT_TABS: StudentSubView[] = ['dashboard', 'ide', 'videos', 'assessments', 'leaderboard', 'profile'];
 const TEACHER_TABS: TeacherSubView[] = ['dashboard', 'students', 'submission-review', 'analytics', 'profile'];
-const ADMIN_TABS: AdminSubView[] = ['dashboard', 'users', 'courses', 'library', 'assessments', 'analytics', 'reports', 'settings', 'terms', 'profile', 'videos'];
+const ADMIN_TABS: AdminSubView[] = ['dashboard', 'videos', 'assessments', 'practice', 'monitoring', 'reports', 'settings'];
 
 const isPersona = (value: unknown): value is Persona =>
   typeof value === 'string' && PERSONAS.includes(value as Persona);
@@ -980,21 +980,18 @@ export default function App() {
   const isDark = theme === 'dark';
   const adminNavItems: Array<{ id: AdminSubView; label: string; icon: React.ReactNode }> = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'users', label: 'User Management', icon: <Users className="w-4 h-4" /> },
-    { id: 'courses', label: 'Courses', icon: <BookOpen className="w-4 h-4" /> },
-    { id: 'library', label: 'Content Library', icon: <Library className="w-4 h-4" /> },
     { id: 'videos', label: 'Video Tutorials', icon: <Film className="w-4 h-4" /> },
-    { id: 'assessments', label: 'Assessments', icon: <ClipboardCheck className="w-4 h-4" /> },
-    { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" /> },
+    { id: 'assessments', label: 'Quiz Management', icon: <ClipboardCheck className="w-4 h-4" /> },
+    { id: 'practice', label: 'Practice Activities', icon: <Code2 className="w-4 h-4" /> },
+    { id: 'monitoring', label: 'Monitoring', icon: <Users className="w-4 h-4" /> },
     { id: 'reports', label: 'Reports', icon: <FileBarChart className="w-4 h-4" /> },
-    { id: 'terms', label: 'Terms & Policies', icon: <FileText className="w-4 h-4" /> },
     { id: 'settings', label: 'Settings', icon: <SlidersHorizontal className="w-4 h-4" /> }
   ];
 
   const adminViewMeta: Record<AdminSubView, { title: string; description: string }> = {
     dashboard: {
       title: 'Admin Dashboard',
-      description: 'Monitor students, teachers, courses, mastery gaps, and platform health in one workspace.'
+      description: 'Simple learning-content overview for the OOP Pedagogical Hub.'
     },
     users: {
       title: 'User Management',
@@ -1009,12 +1006,20 @@ export default function App() {
       description: 'Organize videos, labs, quizzes, and reusable OOP learning materials.'
     },
     videos: {
-      title: 'Video Tutorials Management',
-      description: 'Upload, edit, organize, and manage tutorial videos and sync with Cloudinary storage.'
+      title: 'Video Tutorial Management',
+      description: 'Upload, edit, arrange, preview, and assign OOP lesson videos to modules.'
     },
     assessments: {
-      title: 'Assessments',
-      description: 'Review adaptive assessment rules, remediation triggers, and challenge logic.'
+      title: 'Quiz Management',
+      description: 'Create and manage lesson quizzes, passing scores, attempts, and answer keys.'
+    },
+    practice: {
+      title: 'Programming Practice Activities',
+      description: 'Create and manage IDE coding exercises, starter code, expected output, and test cases.'
+    },
+    monitoring: {
+      title: 'User Monitoring',
+      description: 'Monitor student lesson progress, quiz averages, programming scores, and completion status.'
     },
     analytics: {
       title: 'Analytics',
@@ -1022,7 +1027,7 @@ export default function App() {
     },
     reports: {
       title: 'Reports',
-      description: 'Track institutional summaries, weekly learning outcomes, and operational signals.'
+      description: 'Generate student progress, quiz performance, programming performance, and lesson completion reports.'
     },
     terms: {
       title: 'Terms & Policies',
@@ -1030,7 +1035,7 @@ export default function App() {
     },
     settings: {
       title: 'Settings',
-      description: 'Adjust recommendation rules, system automation, and platform preferences.'
+      description: 'Manage admin profile, password, and simple system information.'
     },
     profile: {
       title: 'User Profile & Credentials',
@@ -1377,13 +1382,14 @@ export default function App() {
             )}
 
             {/* ADMIN CONSOLES */}
-            {persona === 'admin' && ['dashboard', 'users', 'analytics', 'reports'].includes(adminTab) && (
+            {persona === 'admin' && ['dashboard', 'videos', 'assessments', 'practice', 'monitoring', 'reports', 'settings'].includes(adminTab) && (
               <AdminDashboard
                 modules={curriculumModules}
                 lessons={lessonItems}
                 rules={adaptiveRules}
                 submissions={pendingSubmissions}
                 leaderboardUsers={leaderboardUsers}
+                videoLessons={videoLessons}
                 activeView={adminTab}
               />
             )}
@@ -1401,26 +1407,6 @@ export default function App() {
                 onArchiveVideo={handleArchiveVideo}
                 onDeleteVideo={handleDeleteVideo}
                 onUpdateVideoSequence={handleUpdateVideoSequence}
-              />
-            )}
-
-            {persona === 'admin' && ['assessments', 'settings'].includes(adminTab) && (
-              <AdminEngine 
-                rules={adaptiveRules}
-                onAddRule={handleAddAdaptiveRule}
-                onDeleteRule={handleDeleteAdaptiveRule}
-                onToggleRule={handleToggleAdaptiveRule}
-              />
-            )}
-
-            {persona === 'admin' && adminTab === 'videos' && (
-              <AdminVideoManager
-                lessons={videoLessons}
-                onAddVideo={handleUploadVideo}
-                onEditVideo={handleEditVideo}
-                onArchiveVideo={handleArchiveVideo}
-                onDeleteVideo={handleDeleteVideo}
-                onUpdateSequence={handleUpdateVideoSequence}
               />
             )}
 
@@ -1482,7 +1468,7 @@ export default function App() {
             : 'bg-white/95 border-slate-200 shadow-slate-200/50 text-slate-500'
         }`}>
           {adminNavItems
-            .filter(item => ['dashboard', 'users', 'courses', 'terms', 'settings'].includes(item.id))
+            .filter(item => ['dashboard', 'videos', 'assessments', 'monitoring', 'reports'].includes(item.id))
             .map(item => (
               <button
                 key={item.id}

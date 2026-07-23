@@ -52,6 +52,8 @@ export type AdminSubView =
   | 'courses'
   | 'library'
   | 'assessments'
+  | 'practice'
+  | 'monitoring'
   | 'analytics'
   | 'reports'
   | 'settings'
