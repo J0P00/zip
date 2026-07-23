@@ -207,6 +207,11 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Global theme state
+  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(savedUser);
+  const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isRestoringSession, setIsRestoringSession] = useState(() => Boolean(getAuthToken()) && !savedUser);
+
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
       const saved = localStorage.getItem('oophub_theme');
@@ -299,13 +304,6 @@ export default function App() {
       // Navigation still works for this render when persistence is unavailable.
     }
   }, [adminTab, persona, studentTab, teacherTab]);
-
-  // Authenticated user profile and state triggers
-  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(savedUser);
-  const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [isRestoringSession, setIsRestoringSession] = useState(() => Boolean(getAuthToken()) && !savedUser);
-
   useEffect(() => {
     if (currentUser) {
       persistSessionUser(currentUser);
