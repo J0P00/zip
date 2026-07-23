@@ -14,7 +14,7 @@ import {
   VolumeX
 } from 'lucide-react';
 import { StudentSubView, VideoLesson } from '../types';
-import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson } from '../data/oopCourse';
+import { getStoredJson, OOP_ASSESSMENTS, setStoredJson } from '../data/oopCourse';
 import { progressApi } from '../services/api';
 
 interface VideoTutorialsProps {
@@ -44,9 +44,9 @@ const formatTime = (seconds: number) => {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-const getLessonAccess = (lesson: VideoLesson, watchDb: WatchDb, quizDb: QuizDb) => {
+const getLessonAccess = (lesson: VideoLesson, allLessons: VideoLesson[], watchDb: WatchDb, quizDb: QuizDb) => {
   if (lesson.sequence === 1) return 'active';
-  const previous = OOP_COURSE_LESSONS.find(item => item.sequence === lesson.sequence - 1);
+  const previous = allLessons.find(item => item.sequence === lesson.sequence - 1);
   if (!previous) return 'locked';
 
   const previousWatch = watchDb[previous.id];
@@ -56,35 +56,39 @@ const getLessonAccess = (lesson: VideoLesson, watchDb: WatchDb, quizDb: QuizDb) 
   return previousWatch?.completed && previousQuiz?.passed ? 'active' : 'locked';
 };
 
-export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: VideoTutorialsProps) {
+export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress }: VideoTutorialsProps) {
   const [watchDb, setWatchDb] = useState<WatchDb>(() => getStoredJson(WATCH_KEY, {}));
   const [quizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
-  const lessons = useMemo(() => OOP_COURSE_LESSONS.map(lesson => {
+  const lessons = useMemo(() => sourceLessons.map(lesson => {
     const watch = watchDb[lesson.id];
-    const access = getLessonAccess(lesson, watchDb, quizDb);
+    const access = getLessonAccess(lesson, sourceLessons, watchDb, quizDb);
     return {
       ...lesson,
       status: watch?.completed ? 'completed' as const : access as VideoLesson['status'],
       progressPercent: watch?.completionPercentage || 0
     };
-  }), [watchDb, quizDb]);
+  }), [sourceLessons, watchDb, quizDb]);
 
   const firstAvailable = lessons.find(lesson => lesson.status === 'active') || lessons[0];
-  const [activeLessonId, setActiveLessonId] = useState(firstAvailable.id);
+  const [activeLessonId, setActiveLessonId] = useState(firstAvailable?.id || '');
   const activeLesson = lessons.find(lesson => lesson.id === activeLessonId) || firstAvailable;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(watchDb[activeLesson.id]?.lastPosition || 0);
-  const [maxWatchedTime, setMaxWatchedTime] = useState(watchDb[activeLesson.id]?.lastPosition || 0);
+  const [currentTime, setCurrentTime] = useState(activeLesson ? watchDb[activeLesson.id]?.lastPosition || 0 : 0);
+  const [maxWatchedTime, setMaxWatchedTime] = useState(activeLesson ? watchDb[activeLesson.id]?.lastPosition || 0 : 0);
   const [volume, setVolume] = useState(0.9);
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
 
   const completedLessons = lessons.filter(lesson => watchDb[lesson.id]?.completed).length;
   const passedAssessments = OOP_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
-  const courseProgress = Math.round(((completedLessons + passedAssessments) / (lessons.length * 2)) * 100);
+  const courseProgress = lessons.length ? Math.round(((completedLessons + passedAssessments) / (lessons.length * 2)) * 100) : 0;
+
+  useEffect(() => {
+    if (!activeLesson && lessons[0]) setActiveLessonId(lessons[0].id);
+  }, [activeLesson, lessons]);
 
   useEffect(() => {
     let isMounted = true;
@@ -119,18 +123,19 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
   }, []);
 
   useEffect(() => {
+    if (!activeLesson) return;
     const watch = watchDb[activeLesson.id];
     setCurrentTime(watch?.lastPosition || 0);
     setMaxWatchedTime(watch?.lastPosition || 0);
     setIsPlaying(false);
-  }, [activeLesson.id]);
+  }, [activeLesson?.id, watchDb]);
 
   useEffect(() => {
     if (!videoRef.current) return;
     videoRef.current.volume = volume;
     videoRef.current.muted = isMuted;
     videoRef.current.playbackRate = playbackRate;
-  }, [volume, isMuted, playbackRate, activeLesson.id]);
+  }, [volume, isMuted, playbackRate, activeLesson?.id]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -142,6 +147,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
   }, [isPlaying]);
 
   const persistProgress = (position: number, nextDuration = duration) => {
+    if (!activeLesson) return;
     const percentage = nextDuration > 0 ? Math.min(100, Math.round((position / nextDuration) * 100)) : 0;
     const completed = percentage >= 95;
     const nextDb = {
@@ -168,7 +174,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
 
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !activeLesson) return;
     setDuration(video.duration || 0);
     const resumeAt = watchDb[activeLesson.id]?.lastPosition || 0;
     if (resumeAt > 0 && resumeAt < video.duration) {
@@ -202,6 +208,14 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
     setActiveLessonId(lesson.id);
   };
 
+  if (!activeLesson) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm font-bold text-slate-500 shadow-sm">
+        No lectures are available from the database yet.
+      </div>
+    );
+  }
+
   const assessment = OOP_ASSESSMENTS.find(item => item.lessonId === activeLesson.id);
   const activeQuiz = assessment ? quizDb[assessment.id] : undefined;
 
@@ -215,7 +229,7 @@ export default function VideoTutorials({ onNavigateTo, onUpdateVideoProgress }: 
             </span>
             <h2 className="mt-3 text-xl font-extrabold text-slate-900 sm:text-2xl dark:text-white">OOP Fundamentals</h2>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-              {OOP_COURSE_LESSONS.length} local Java OOP lessons using the MP4 files in <span className="font-mono">public/videos</span>. Lessons unlock only after video completion and a passed assessment.
+              {lessons.length} Java OOP lectures loaded from the shared database. Lessons unlock only after video completion and a passed assessment.
             </p>
           </div>
           <div className="w-full rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 sm:min-w-[220px] lg:w-auto">

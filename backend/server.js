@@ -117,6 +117,52 @@ const toClientRecommendation = (row) => ({
     progressPercentage: row.progress_percentage === null ? undefined : Number(row.progress_percentage)
 });
 
+const toClientLesson = (row) => ({
+    id: row.id,
+    title: row.title,
+    module: row.module || "",
+    sequence: Number(row.sequence || 0),
+    duration: row.duration || "",
+    videoUrl: row.video_url || "",
+    description: row.description || "",
+    learningObjectives: row.learning_objectives || [],
+    status: row.status || "Draft",
+    metadata: row.metadata || {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+});
+
+const toClientAssessment = (row) => ({
+    id: row.id,
+    lessonId: row.lesson_id,
+    title: row.title,
+    quizType: row.quiz_type,
+    passingScore: Number(row.passing_score || 0),
+    attempts: Number(row.attempts || 0),
+    questions: row.questions || [],
+    status: row.status || "Draft",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+});
+
+const toClientPracticeChallenge = (row) => ({
+    id: row.id,
+    topicId: row.topic_id,
+    lessonId: row.lesson_id || "",
+    title: row.title,
+    description: row.description,
+    learningObjectives: row.learning_objectives || [],
+    requirements: row.requirements || [],
+    starterCode: row.starter_code || "",
+    sampleInput: row.sample_input || "",
+    sampleOutput: row.sample_output || "",
+    passingScore: Number(row.passing_score || 70),
+    status: row.status || "Draft",
+    testCases: row.test_cases || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+});
+
 const findUserByEmail = async (email) => {
     const result = await pool.query(`
         SELECT u.*, s.student_number, s.course, s.year_level, s.section, s.program_status,
@@ -317,7 +363,24 @@ const initializeDatabase = async () => {
           duration TEXT DEFAULT '',
           video_url TEXT DEFAULT '',
           description TEXT DEFAULT '',
+          learning_objectives JSONB NOT NULL DEFAULT '[]'::jsonb,
+          status TEXT NOT NULL DEFAULT 'Draft',
           metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS learning_objectives JSONB NOT NULL DEFAULT '[]'::jsonb;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Draft';
+        CREATE TABLE IF NOT EXISTS assessments (
+          id TEXT PRIMARY KEY,
+          lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          quiz_type TEXT NOT NULL DEFAULT 'Multiple Choice',
+          passing_score NUMERIC NOT NULL DEFAULT 70,
+          attempts INTEGER NOT NULL DEFAULT 1,
+          questions JSONB NOT NULL DEFAULT '[]'::jsonb,
+          status TEXT NOT NULL DEFAULT 'Draft',
+          created_by UUID REFERENCES users(id) ON DELETE SET NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
@@ -361,8 +424,14 @@ const initializeDatabase = async () => {
           sample_input TEXT DEFAULT '',
           sample_output TEXT DEFAULT '',
           passing_score NUMERIC NOT NULL DEFAULT 70,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          status TEXT NOT NULL DEFAULT 'Draft',
+          created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        ALTER TABLE programming_challenges ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Draft';
+        ALTER TABLE programming_challenges ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE SET NULL;
+        ALTER TABLE programming_challenges ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
         CREATE TABLE IF NOT EXISTS challenge_test_cases (
           id TEXT PRIMARY KEY,
           challenge_id TEXT NOT NULL REFERENCES programming_challenges(id) ON DELETE CASCADE,
@@ -702,10 +771,218 @@ app.put("/api/users/:id", requireAuth, async (req, res, next) => {
     }
 });
 
+app.get("/api/admin/overview", requireAuth, requireRole(["admin"]), async (_req, res, next) => {
+    try {
+        const [students, teachers, lectures, assessments, activities, recent] = await Promise.all([
+            pool.query("SELECT COUNT(*)::int AS count FROM users WHERE role = 'student'"),
+            pool.query("SELECT COUNT(*)::int AS count FROM users WHERE role = 'teacher'"),
+            pool.query("SELECT COUNT(*)::int AS count FROM lessons"),
+            pool.query("SELECT COUNT(*)::int AS count FROM assessments"),
+            pool.query("SELECT COUNT(*)::int AS count FROM programming_challenges"),
+            pool.query(`
+                SELECT activity, created_at FROM (
+                  SELECT name || ' registered as ' || role::text AS activity, created_at FROM users
+                  UNION ALL
+                  SELECT 'Lecture updated: ' || title AS activity, updated_at AS created_at FROM lessons
+                  UNION ALL
+                  SELECT 'Quiz updated: ' || title AS activity, updated_at AS created_at FROM assessments
+                  UNION ALL
+                  SELECT 'Practice activity updated: ' || title AS activity, updated_at AS created_at FROM programming_challenges
+                  UNION ALL
+                  SELECT 'Quiz attempt submitted for ' || assessment_id AS activity, date_completed AS created_at FROM quiz_attempts
+                  UNION ALL
+                  SELECT 'Practice submission received for ' || challenge_id AS activity, submitted_at AS created_at FROM practice_submissions
+                ) events
+                ORDER BY created_at DESC
+                LIMIT 10
+            `)
+        ]);
+
+        res.json({
+            success: true,
+            data: {
+                stats: {
+                    totalStudents: students.rows[0].count,
+                    totalTeachers: teachers.rows[0].count,
+                    totalLectures: lectures.rows[0].count,
+                    totalAssessments: assessments.rows[0].count,
+                    totalPracticeActivities: activities.rows[0].count
+                },
+                recentActivities: recent.rows
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.get("/api/lessons", async (_req, res, next) => {
     try {
         const result = await pool.query("SELECT * FROM lessons ORDER BY sequence, title");
-        res.json({ success: true, data: result.rows });
+        res.json({ success: true, data: result.rows.map(toClientLesson) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/lessons", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+    try {
+        const body = req.body || {};
+        const id = cleanText(body.id || `lesson_${Date.now()}`, 120);
+        const title = cleanText(body.title || body.lessonTitle || "", 255);
+        if (!title) return res.status(400).json({ success: false, message: "Lesson title is required." });
+        const objectives = Array.isArray(body.learningObjectives)
+            ? body.learningObjectives.slice(0, 20)
+            : String(body.learningObjectives || "").split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
+
+        const result = await pool.query(`
+            INSERT INTO lessons (id, title, module, sequence, duration, video_url, description, learning_objectives, status, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb)
+            RETURNING *
+        `, [
+            id,
+            title,
+            cleanText(body.module || "", 255),
+            Math.floor(clampNumber(body.sequence ?? body.lessonOrder ?? 0, 0, 10000)),
+            cleanText(body.duration || "", 40),
+            cleanText(body.videoUrl || body.video_url || "", 2000),
+            cleanText(body.description || "", 5000),
+            JSON.stringify(objectives),
+            cleanText(body.status || "Draft", 40),
+            JSON.stringify(body.metadata && typeof body.metadata === "object" ? body.metadata : {})
+        ]);
+        res.status(201).json({ success: true, data: toClientLesson(result.rows[0]) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.put("/api/lessons/:id", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+    try {
+        const body = req.body || {};
+        const objectives = Array.isArray(body.learningObjectives)
+            ? body.learningObjectives.slice(0, 20)
+            : body.learningObjectives === undefined
+                ? undefined
+                : String(body.learningObjectives || "").split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
+
+        const result = await pool.query(`
+            UPDATE lessons SET
+              title = COALESCE($2, title),
+              module = COALESCE($3, module),
+              sequence = COALESCE($4, sequence),
+              duration = COALESCE($5, duration),
+              video_url = COALESCE($6, video_url),
+              description = COALESCE($7, description),
+              learning_objectives = COALESCE($8::jsonb, learning_objectives),
+              status = COALESCE($9, status),
+              metadata = COALESCE($10::jsonb, metadata),
+              updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+        `, [
+            req.params.id,
+            body.title === undefined && body.lessonTitle === undefined ? null : cleanText(body.title || body.lessonTitle || "", 255),
+            body.module === undefined ? null : cleanText(body.module || "", 255),
+            body.sequence === undefined && body.lessonOrder === undefined ? null : Math.floor(clampNumber(body.sequence ?? body.lessonOrder, 0, 10000)),
+            body.duration === undefined ? null : cleanText(body.duration || "", 40),
+            body.videoUrl === undefined && body.video_url === undefined ? null : cleanText(body.videoUrl || body.video_url || "", 2000),
+            body.description === undefined ? null : cleanText(body.description || "", 5000),
+            objectives === undefined ? null : JSON.stringify(objectives),
+            body.status === undefined ? null : cleanText(body.status || "Draft", 40),
+            body.metadata === undefined ? null : JSON.stringify(body.metadata && typeof body.metadata === "object" ? body.metadata : {})
+        ]);
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Lecture not found." });
+        res.json({ success: true, data: toClientLesson(result.rows[0]) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.delete("/api/lessons/:id", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+    try {
+        const result = await pool.query("DELETE FROM lessons WHERE id = $1 RETURNING id", [req.params.id]);
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Lecture not found." });
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/assessments", requireAuth, async (_req, res, next) => {
+    try {
+        const result = await pool.query("SELECT * FROM assessments ORDER BY updated_at DESC, title");
+        res.json({ success: true, data: result.rows.map(toClientAssessment) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/assessments", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+    try {
+        const body = req.body || {};
+        const id = cleanText(body.id || `quiz_${Date.now()}`, 120);
+        const title = cleanText(body.title || "", 255);
+        const lessonId = cleanText(body.lessonId || body.lesson_id || "", 120);
+        if (!title || !lessonId) return res.status(400).json({ success: false, message: "Quiz title and lesson are required." });
+        const result = await pool.query(`
+            INSERT INTO assessments (id, lesson_id, title, quiz_type, passing_score, attempts, questions, status, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+            RETURNING *
+        `, [
+            id,
+            lessonId,
+            title,
+            cleanText(body.quizType || "Multiple Choice", 80),
+            clampNumber(body.passingScore ?? body.passing_score ?? 70, 0, 100),
+            Math.floor(clampNumber(body.attempts ?? 1, 1, 100)),
+            JSON.stringify(Array.isArray(body.questions) ? body.questions : []),
+            cleanText(body.status || "Draft", 40),
+            req.authUser.id
+        ]);
+        res.status(201).json({ success: true, data: toClientAssessment(result.rows[0]) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.put("/api/assessments/:id", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+    try {
+        const body = req.body || {};
+        const result = await pool.query(`
+            UPDATE assessments SET
+              lesson_id = COALESCE($2, lesson_id),
+              title = COALESCE($3, title),
+              quiz_type = COALESCE($4, quiz_type),
+              passing_score = COALESCE($5, passing_score),
+              attempts = COALESCE($6, attempts),
+              questions = COALESCE($7::jsonb, questions),
+              status = COALESCE($8, status),
+              updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+        `, [
+            req.params.id,
+            body.lessonId === undefined && body.lesson_id === undefined ? null : cleanText(body.lessonId || body.lesson_id || "", 120),
+            body.title === undefined ? null : cleanText(body.title || "", 255),
+            body.quizType === undefined ? null : cleanText(body.quizType || "", 80),
+            body.passingScore === undefined && body.passing_score === undefined ? null : clampNumber(body.passingScore ?? body.passing_score, 0, 100),
+            body.attempts === undefined ? null : Math.floor(clampNumber(body.attempts, 1, 100)),
+            body.questions === undefined ? null : JSON.stringify(Array.isArray(body.questions) ? body.questions : []),
+            body.status === undefined ? null : cleanText(body.status || "Draft", 40)
+        ]);
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Quiz not found." });
+        res.json({ success: true, data: toClientAssessment(result.rows[0]) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.delete("/api/assessments/:id", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+    try {
+        const result = await pool.query("DELETE FROM assessments WHERE id = $1 RETURNING id", [req.params.id]);
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Quiz not found." });
+        res.json({ success: true, data: result.rows[0] });
     } catch (error) {
         next(error);
     }
@@ -961,7 +1238,222 @@ app.get("/api/practice-challenges", requireAuth, async (_req, res, next) => {
             GROUP BY c.id
             ORDER BY c.id
         `);
-        res.json({ success: true, data: result.rows });
+        res.json({ success: true, data: result.rows.map(toClientPracticeChallenge) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/practice-challenges", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+    const client = await pool.connect();
+    try {
+        const body = req.body || {};
+        const id = cleanText(body.id || `practice_${Date.now()}`, 120);
+        const title = cleanText(body.title || "", 255);
+        if (!title) return res.status(400).json({ success: false, message: "Activity title is required." });
+        await client.query("BEGIN");
+        const result = await client.query(`
+            INSERT INTO programming_challenges (
+              id, topic_id, lesson_id, title, description, learning_objectives,
+              requirements, starter_code, sample_input, sample_output, passing_score, status, created_by
+            )
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12, $13)
+            RETURNING *
+        `, [
+            id,
+            cleanText(body.topicId || body.topic_id || "oop", 120),
+            cleanText(body.lessonId || body.lesson_id || "", 120),
+            title,
+            cleanText(body.description || body.instructions || "", 5000),
+            JSON.stringify(Array.isArray(body.learningObjectives) ? body.learningObjectives : []),
+            JSON.stringify(Array.isArray(body.requirements) ? body.requirements : []),
+            String(body.starterCode || body.starter_code || "").slice(0, 50000),
+            String(body.sampleInput || body.sample_input || "").slice(0, 10000),
+            String(body.sampleOutput || body.expectedOutput || body.sample_output || "").slice(0, 10000),
+            clampNumber(body.passingScore ?? body.passing_score ?? 70, 0, 100),
+            cleanText(body.status || "Draft", 40),
+            req.authUser.id
+        ]);
+
+        const testCases = Array.isArray(body.testCases) ? body.testCases : [];
+        for (const testCase of testCases.slice(0, 100)) {
+            await client.query(`
+                INSERT INTO challenge_test_cases (id, challenge_id, input, expected_output, is_hidden, matcher)
+                VALUES ($1, $2, $3, $4, $5, $6)
+            `, [
+                cleanText(testCase.id || `case_${Date.now()}_${Math.random().toString(36).slice(2)}`, 120),
+                id,
+                String(testCase.input || "").slice(0, 10000),
+                String(testCase.expectedOutput || testCase.expected_output || "").slice(0, 10000),
+                testCase.isHidden !== undefined ? Boolean(testCase.isHidden) : true,
+                cleanText(testCase.matcher || "", 120)
+            ]);
+        }
+
+        await client.query("COMMIT");
+        res.status(201).json({ success: true, data: toClientPracticeChallenge({ ...result.rows[0], test_cases: testCases }) });
+    } catch (error) {
+        await client.query("ROLLBACK");
+        next(error);
+    } finally {
+        client.release();
+    }
+});
+
+app.put("/api/practice-challenges/:id", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+    const client = await pool.connect();
+    try {
+        const body = req.body || {};
+        await client.query("BEGIN");
+        const result = await client.query(`
+            UPDATE programming_challenges SET
+              topic_id = COALESCE($2, topic_id),
+              lesson_id = COALESCE($3, lesson_id),
+              title = COALESCE($4, title),
+              description = COALESCE($5, description),
+              learning_objectives = COALESCE($6::jsonb, learning_objectives),
+              requirements = COALESCE($7::jsonb, requirements),
+              starter_code = COALESCE($8, starter_code),
+              sample_input = COALESCE($9, sample_input),
+              sample_output = COALESCE($10, sample_output),
+              passing_score = COALESCE($11, passing_score),
+              status = COALESCE($12, status),
+              updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+        `, [
+            req.params.id,
+            body.topicId === undefined && body.topic_id === undefined ? null : cleanText(body.topicId || body.topic_id || "", 120),
+            body.lessonId === undefined && body.lesson_id === undefined ? null : cleanText(body.lessonId || body.lesson_id || "", 120),
+            body.title === undefined ? null : cleanText(body.title || "", 255),
+            body.description === undefined && body.instructions === undefined ? null : cleanText(body.description || body.instructions || "", 5000),
+            body.learningObjectives === undefined ? null : JSON.stringify(Array.isArray(body.learningObjectives) ? body.learningObjectives : []),
+            body.requirements === undefined ? null : JSON.stringify(Array.isArray(body.requirements) ? body.requirements : []),
+            body.starterCode === undefined && body.starter_code === undefined ? null : String(body.starterCode || body.starter_code || "").slice(0, 50000),
+            body.sampleInput === undefined && body.sample_input === undefined ? null : String(body.sampleInput || body.sample_input || "").slice(0, 10000),
+            body.sampleOutput === undefined && body.expectedOutput === undefined && body.sample_output === undefined ? null : String(body.sampleOutput || body.expectedOutput || body.sample_output || "").slice(0, 10000),
+            body.passingScore === undefined && body.passing_score === undefined ? null : clampNumber(body.passingScore ?? body.passing_score, 0, 100),
+            body.status === undefined ? null : cleanText(body.status || "Draft", 40)
+        ]);
+        if (!result.rowCount) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ success: false, message: "Practice activity not found." });
+        }
+        if (Array.isArray(body.testCases)) {
+            await client.query("DELETE FROM challenge_test_cases WHERE challenge_id = $1", [req.params.id]);
+            for (const testCase of body.testCases.slice(0, 100)) {
+                await client.query(`
+                    INSERT INTO challenge_test_cases (id, challenge_id, input, expected_output, is_hidden, matcher)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                `, [
+                    cleanText(testCase.id || `case_${Date.now()}_${Math.random().toString(36).slice(2)}`, 120),
+                    req.params.id,
+                    String(testCase.input || "").slice(0, 10000),
+                    String(testCase.expectedOutput || testCase.expected_output || "").slice(0, 10000),
+                    testCase.isHidden !== undefined ? Boolean(testCase.isHidden) : true,
+                    cleanText(testCase.matcher || "", 120)
+                ]);
+            }
+        }
+        await client.query("COMMIT");
+        res.json({ success: true, data: toClientPracticeChallenge({ ...result.rows[0], test_cases: body.testCases || [] }) });
+    } catch (error) {
+        await client.query("ROLLBACK");
+        next(error);
+    } finally {
+        client.release();
+    }
+});
+
+app.delete("/api/practice-challenges/:id", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+    try {
+        const result = await pool.query("DELETE FROM programming_challenges WHERE id = $1 RETURNING id", [req.params.id]);
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Practice activity not found." });
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]), async (_req, res, next) => {
+    try {
+        const [students, teachers] = await Promise.all([
+            pool.query(`
+                SELECT
+                  u.id, u.name, u.email, u.account_status, s.student_number, s.course, s.year_level,
+                  COALESCE(ROUND(AVG(sp.completion_percentage)), 0) AS progress,
+                  COALESCE(ROUND(AVG(qa.percentage)), 0) AS quiz_average,
+                  COALESCE(ROUND(AVG(ps.score)), 0) AS programming_score
+                FROM users u
+                JOIN students s ON s.user_id = u.id
+                LEFT JOIN student_progress sp ON sp.student_user_id = u.id
+                LEFT JOIN quiz_attempts qa ON qa.student_user_id = u.id
+                LEFT JOIN practice_submissions ps ON ps.student_id IN (u.id::text, u.user_id, u.email)
+                WHERE u.role = 'student'
+                GROUP BY u.id, s.student_number, s.course, s.year_level
+                ORDER BY u.created_at DESC
+            `),
+            pool.query(`
+                SELECT u.id, u.name, u.email, u.account_status, t.employee_id, t.department
+                FROM users u
+                JOIN teachers t ON t.user_id = u.id
+                WHERE u.role = 'teacher'
+                ORDER BY u.created_at DESC
+            `)
+        ]);
+        res.json({ success: true, data: { students: students.rows, teachers: teachers.rows } });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/admin/reports", requireAuth, requireRole(["admin"]), async (_req, res, next) => {
+    try {
+        const [studentProgress, quizReport, practiceReport, completionReport] = await Promise.all([
+            pool.query(`
+                SELECT u.name, u.email, s.student_number, s.course, s.year_level,
+                       COALESCE(ROUND(AVG(sp.completion_percentage)), 0) AS progress
+                FROM users u
+                JOIN students s ON s.user_id = u.id
+                LEFT JOIN student_progress sp ON sp.student_user_id = u.id
+                WHERE u.role = 'student'
+                GROUP BY u.id, s.student_number, s.course, s.year_level
+                ORDER BY u.name
+            `),
+            pool.query(`
+                SELECT assessment_id, lesson_id, COUNT(*)::int AS attempts,
+                       COALESCE(ROUND(AVG(percentage)), 0) AS average_score,
+                       COALESCE(MAX(percentage), 0) AS highest_score
+                FROM quiz_attempts
+                GROUP BY assessment_id, lesson_id
+                ORDER BY assessment_id
+            `),
+            pool.query(`
+                SELECT pc.title, COUNT(ps.id)::int AS submissions,
+                       COALESCE(ROUND(AVG(ps.score)), 0) AS average_score
+                FROM programming_challenges pc
+                LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id
+                GROUP BY pc.id
+                ORDER BY pc.title
+            `),
+            pool.query(`
+                SELECT l.id, l.title, l.module, COUNT(sp.id)::int AS started,
+                       COUNT(*) FILTER (WHERE sp.completed)::int AS completed
+                FROM lessons l
+                LEFT JOIN student_progress sp ON sp.video_id = l.id
+                GROUP BY l.id
+                ORDER BY l.sequence, l.title
+            `)
+        ]);
+        res.json({
+            success: true,
+            data: {
+                studentProgress: studentProgress.rows,
+                quizReport: quizReport.rows,
+                practiceReport: practiceReport.rows,
+                lessonCompletionReport: completionReport.rows
+            }
+        });
     } catch (error) {
         next(error);
     }
@@ -1088,9 +1580,6 @@ app.use((err, _req, res, _next) => {
 const PORT = process.env.PORT || 5000;
 
 initializeDatabase()
-    .then(seedDemoUsers)
-    .then(seedLessons)
-    .then(seedPracticeChallenges)
     .then(() => {
         app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);

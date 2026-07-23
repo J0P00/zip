@@ -78,7 +78,7 @@ import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
 import AdminVideoManager from './components/AdminVideoManager';
 import AdminTermsManager from './components/AdminTermsManager';
-import { appApi, authApi, getAuthToken, isDemoEmail, recommendationApi, setAuthToken, userApi } from './services/api';
+import { appApi, authApi, getAuthToken, isDemoEmail, practiceApi, recommendationApi, setAuthToken, userApi } from './services/api';
 import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
 
 const DEMO_STUDENT_PROGRESS = {
@@ -111,6 +111,25 @@ const ADMIN_TABS: AdminSubView[] = ['dashboard', 'videos', 'assessments', 'pract
 
 const isPersona = (value: unknown): value is Persona =>
   typeof value === 'string' && PERSONAS.includes(value as Persona);
+
+const mapDatabaseLessonToVideoLesson = (lesson: any): VideoLesson => ({
+  id: String(lesson.id),
+  title: lesson.title || 'Untitled Lecture',
+  duration: lesson.duration || '',
+  sequence: Number(lesson.sequence || 0),
+  status: lesson.status === 'Published' || lesson.status === 'active' ? 'active' : 'locked',
+  videoUrl: lesson.videoUrl || lesson.video_url || '',
+  description: lesson.description || '',
+  concepts: Array.isArray(lesson.learningObjectives) ? lesson.learningObjectives : [],
+  module: lesson.module || '',
+  difficulty: lesson.metadata?.difficulty || 'Beginner',
+  language: lesson.metadata?.language || 'Java',
+  category: lesson.metadata?.category || '',
+  courseId: lesson.metadata?.courseId || 'oop',
+  thumbnailUrl: lesson.metadata?.thumbnailUrl || '',
+  createdAt: lesson.createdAt || lesson.created_at,
+  createdBy: lesson.metadata?.createdBy || ''
+});
 
 const sanitizeUser = (value: unknown): AuthenticatedUser | null => {
   if (!value || typeof value !== 'object') return null;
@@ -210,10 +229,61 @@ export default function App() {
     appApi.health().catch(error => {
       console.warn('Backend health check failed:', error);
     });
-    appApi.getLessons().catch(error => {
+    appApi.getLessons().then(response => {
+      const lessons = response.data.map(mapDatabaseLessonToVideoLesson);
+      setVideoLessons(lessons);
+      setLessonItems(lessons.map(lesson => ({
+        id: lesson.id,
+        title: lesson.title,
+        module: lesson.module || '',
+        type: 'Video',
+        difficulty: lesson.difficulty || 'Beginner'
+      })));
+      const moduleCounts = lessons.reduce<Record<string, number>>((acc, lesson) => {
+        const moduleName = lesson.module || 'Unassigned Module';
+        acc[moduleName] = (acc[moduleName] || 0) + 1;
+        return acc;
+      }, {});
+      setCurriculumModules(Object.entries(moduleCounts).map(([title, lessonsCount], index) => ({
+        id: `module_${index + 1}`,
+        title,
+        status: 'Published',
+        lessonsCount,
+        lastUpdated: new Date().toISOString(),
+        category: 'OOP'
+      })));
+    }).catch(error => {
       console.warn('Backend lessons check failed:', error);
     });
   }, []);
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token || persona === 'public') return;
+
+    userApi.listUsers(token)
+      .then(response => {
+        const students = response.data.filter(user => user.role === 'student');
+        setLeaderboardUsers(students.map((user, index) => ({
+          rank: index + 1,
+          name: user.name,
+          points: 0,
+          badges: [],
+          streak: 0,
+          isCurrentUser: currentUser ? user.id === currentUser.id || user.email === currentUser.email : false,
+          avatar: user.avatar,
+          trend: 'stable'
+        })));
+      })
+      .catch(error => {
+        console.warn('Unable to load registered users from backend:', error);
+      });
+
+    if (persona === 'teacher' || persona === 'admin') {
+      practiceApi.listChallenges()
+        .catch(error => console.warn('Unable to load practice activities from backend:', error));
+    }
+  }, [currentUser?.email, currentUser?.id, persona]);
 
   useEffect(() => {
     if (persona === 'public') return;
@@ -304,22 +374,7 @@ export default function App() {
   const [completedLessonsCount, setCompletedLessonsCount] = useState<number>(DEMO_STUDENT_PROGRESS.completedLessonsCount);
 
   // Dynamic shared database states
-  const [videoLessons, setVideoLessons] = useState<VideoLesson[]>(() => {
-    try {
-      const APP_VERSION = '1.0.7';
-      const version = localStorage.getItem('app_version');
-
-      if (version !== APP_VERSION) {
-        localStorage.removeItem('oophub_video_lessons');
-        localStorage.setItem('app_version', APP_VERSION);
-      }
-
-      const saved = localStorage.getItem('oophub_video_lessons');
-      return saved ? JSON.parse(saved) : OOP_COURSE_LESSONS;
-    } catch {
-      return OOP_COURSE_LESSONS;
-    }
-  });
+  const [videoLessons, setVideoLessons] = useState<VideoLesson[]>([]);
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     try {
@@ -343,17 +398,17 @@ export default function App() {
     localStorage.setItem('oophub_notifications', JSON.stringify(notifications));
   }, [notifications]);
 
-  const [leaderboardUsers, setLeaderboardUsers] = useState<LeaderboardUser[]>(INITIAL_LEADERBOARD_USERS);
-  const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>(INITIAL_SUBMISSIONS);
-  const [curriculumModules, setCurriculumModules] = useState<CurriculumModule[]>(INITIAL_CURRICULUM_MODULES);
-  const [lessonItems, setLessonItems] = useState<LessonItem[]>(INITIAL_LESSON_ITEMS);
-  const [adaptiveRules, setAdaptiveRules] = useState<AdaptiveRule[]>(INITIAL_ADAPTIVE_RULES);
+  const [leaderboardUsers, setLeaderboardUsers] = useState<LeaderboardUser[]>([]);
+  const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>([]);
+  const [curriculumModules, setCurriculumModules] = useState<CurriculumModule[]>([]);
+  const [lessonItems, setLessonItems] = useState<LessonItem[]>([]);
+  const [adaptiveRules, setAdaptiveRules] = useState<AdaptiveRule[]>([]);
   const [recommendationHistory, setRecommendationHistory] = useState<AdaptiveRecommendation[]>(() => getRecommendationHistory());
   const [activeRecommendation, setActiveRecommendation] = useState<AdaptiveRecommendation | null>(() => getRecommendationHistory()[0] || null);
 
   // Live reviews returned from Dr. Elena Vance
   const [recentStudentGrade, setRecentStudentGrade] = useState<{ grade: number; feedback: string; challenge: string } | null>(
-    DEMO_STUDENT_GRADE
+    null
   );
 
   // Monitoring Connection System State

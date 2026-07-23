@@ -105,6 +105,66 @@ export const progressApi = {
     })
 };
 
+export const lessonApi = {
+  list: () => apiRequest<{ success: boolean; data: any[] }>('/api/lessons'),
+  create: (body: Record<string, unknown>) =>
+    apiRequest<{ success: boolean; data: any }>('/api/lessons', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  update: (id: string, body: Record<string, unknown>) =>
+    apiRequest<{ success: boolean; data: any }>(`/api/lessons/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    }),
+  remove: (id: string) =>
+    apiRequest<{ success: boolean; data: any }>(`/api/lessons/${id}`, {
+      method: 'DELETE'
+    })
+};
+
+export const assessmentApi = {
+  list: () => apiRequest<{ success: boolean; data: any[] }>('/api/assessments'),
+  create: (body: Record<string, unknown>) =>
+    apiRequest<{ success: boolean; data: any }>('/api/assessments', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  update: (id: string, body: Record<string, unknown>) =>
+    apiRequest<{ success: boolean; data: any }>(`/api/assessments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    }),
+  remove: (id: string) =>
+    apiRequest<{ success: boolean; data: any }>(`/api/assessments/${id}`, {
+      method: 'DELETE'
+    })
+};
+
+export const practiceApi = {
+  listChallenges: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-challenges'),
+  createChallenge: (body: Record<string, unknown>) =>
+    apiRequest<{ success: boolean; data: any }>('/api/practice-challenges', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  updateChallenge: (id: string, body: Record<string, unknown>) =>
+    apiRequest<{ success: boolean; data: any }>(`/api/practice-challenges/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    }),
+  removeChallenge: (id: string) =>
+    apiRequest<{ success: boolean; data: any }>(`/api/practice-challenges/${id}`, {
+      method: 'DELETE'
+    })
+};
+
+export const adminApi = {
+  overview: () => apiRequest<{ success: boolean; data: any }>('/api/admin/overview'),
+  monitoring: () => apiRequest<{ success: boolean; data: any }>('/api/admin/monitoring'),
+  reports: () => apiRequest<{ success: boolean; data: any }>('/api/admin/reports')
+};
+
 export const recommendationApi = {
   list: (studentId?: string, token?: string) => {
     const query = studentId ? `?studentId=${encodeURIComponent(studentId)}` : '';
@@ -131,7 +191,6 @@ export const isDemoEmail = (email: string, role?: Persona) => {
   return (
     normalized === 'dmitry@oophub.edu' ||
     normalized === 'elena@oophub.edu' ||
-    normalized === 'jericokunn@gmail.com' ||
-    role === 'admin'
+    normalized === 'jericokunn@gmail.com'
   );
 };
