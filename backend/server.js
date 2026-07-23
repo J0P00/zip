@@ -485,6 +485,86 @@ const initializeDatabase = async () => {
         );
         CREATE INDEX IF NOT EXISTS idx_recommendation_history_student ON recommendation_history(student_id, generated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_recommendation_history_type ON recommendation_history(recommendation_type, status);
+
+        CREATE TABLE IF NOT EXISTS login_history (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          login_date DATE NOT NULL DEFAULT CURRENT_DATE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(student_id, login_date)
+        );
+
+        CREATE TABLE IF NOT EXISTS lesson_progress (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+          video_completed BOOLEAN NOT NULL DEFAULT FALSE,
+          quiz_passed BOOLEAN NOT NULL DEFAULT FALSE,
+          practice_completed BOOLEAN NOT NULL DEFAULT FALSE,
+          completed BOOLEAN NOT NULL DEFAULT FALSE,
+          completed_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(student_id, lesson_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS video_progress (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+          current_time NUMERIC NOT NULL DEFAULT 0,
+          duration NUMERIC NOT NULL DEFAULT 0,
+          watch_percentage NUMERIC NOT NULL DEFAULT 0,
+          completed BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(student_id, lesson_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS practice_results (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          challenge_id TEXT NOT NULL REFERENCES programming_challenges(id) ON DELETE CASCADE,
+          started BOOLEAN NOT NULL DEFAULT TRUE,
+          completed BOOLEAN NOT NULL DEFAULT FALSE,
+          score NUMERIC NOT NULL DEFAULT 0,
+          source_code TEXT,
+          submission_count INTEGER NOT NULL DEFAULT 1,
+          completion_time_seconds INTEGER,
+          completed_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(student_id, challenge_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS student_xp (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          xp_amount INTEGER NOT NULL,
+          source_activity TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS student_badges (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          badge_name TEXT NOT NULL,
+          badge_title TEXT NOT NULL,
+          badge_desc TEXT NOT NULL,
+          badge_icon TEXT NOT NULL,
+          badge_color TEXT NOT NULL,
+          awarded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(student_id, badge_name)
+        );
+
+        CREATE TABLE IF NOT EXISTS activity_logs (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          activity_type TEXT NOT NULL,
+          activity_detail TEXT NOT NULL,
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
     `);
 };
 
@@ -717,6 +797,249 @@ const seedPracticeChallenges = async () => {
             VALUES ($1, $2, $3, FALSE, 'class\\s+Main')
             ON CONFLICT (id) DO UPDATE SET expected_output = EXCLUDED.expected_output, matcher = EXCLUDED.matcher
         `, [`${id}_sample`, id, "Expected output depends on the published challenge."]);
+    }
+// --- Student Analytics Tracking Engine Helpers ---
+const logActivity = async (studentId, type, detail, metadata = {}) => {
+    try {
+        await pool.query(
+            "INSERT INTO activity_logs (student_id, activity_type, activity_detail, metadata) VALUES ($1, $2, $3, $4::jsonb)",
+            [studentId, type, detail, JSON.stringify(metadata)]
+        );
+    } catch (err) {
+        console.error("Error logging student activity:", err);
+    }
+};
+
+const awardXP = async (studentId, amount, activityType) => {
+    if (amount <= 0) return 0;
+    try {
+        const exists = await pool.query(
+            "SELECT id FROM student_xp WHERE student_id = $1 AND source_activity = $2",
+            [studentId, activityType]
+        );
+        if (exists.rowCount > 0) {
+            return 0; // Already awarded
+        }
+        await pool.query(
+            "INSERT INTO student_xp (student_id, xp_amount, source_activity) VALUES ($1, $2, $3)",
+            [studentId, amount, activityType]
+        );
+        await logActivity(studentId, "xp_gain", `Gained ${amount} XP from: ${activityType}`, { amount, activityType });
+        return amount;
+    } catch (err) {
+        console.error("Error awarding XP:", err);
+        return 0;
+    }
+};
+
+const recordLogin = async (studentId) => {
+    try {
+        await pool.query(
+            "INSERT INTO login_history (student_id, login_date) VALUES ($1, CURRENT_DATE) ON CONFLICT (student_id, login_date) DO NOTHING",
+            [studentId]
+        );
+        await logActivity(studentId, "login", "Logged in to the OOP hub");
+        await checkAndAwardBadges(studentId);
+    } catch (err) {
+        console.error("Error recording student login:", err);
+    }
+};
+
+const calculateStreak = async (studentId) => {
+    try {
+        const result = await pool.query(
+            "SELECT DISTINCT login_date::text FROM login_history WHERE student_id = $1 ORDER BY login_date DESC",
+            [studentId]
+        );
+        const dates = result.rows.map(r => r.login_date);
+        if (dates.length === 0) return 0;
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        const yesterday = new Date(Date.now() - 86400000);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        if (!dates.includes(todayStr) && !dates.includes(yesterdayStr)) {
+            return 0;
+        }
+
+        let currentStreak = 0;
+        let checkDate = new Date();
+        let checkDateStr = checkDate.toISOString().split('T')[0];
+
+        if (!dates.includes(checkDateStr)) {
+            checkDate = yesterday;
+            checkDateStr = yesterdayStr;
+        }
+
+        while (dates.includes(checkDateStr)) {
+            currentStreak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+            checkDateStr = checkDate.toISOString().split('T')[0];
+        }
+        return currentStreak;
+    } catch (err) {
+        console.error("Error calculating streak:", err);
+        return 0;
+    }
+};
+
+const checkModuleCompletion = async (studentId, moduleName) => {
+    if (!moduleName) return;
+    try {
+        const totalLessonsRes = await pool.query("SELECT COUNT(*)::int FROM lessons WHERE module = $1", [moduleName]);
+        const totalLessons = totalLessonsRes.rows[0].count;
+        if (totalLessons === 0) return;
+
+        const completedLessonsRes = await pool.query(
+            "SELECT COUNT(*)::int FROM lesson_progress WHERE student_id = $1 AND completed = TRUE AND lesson_id IN (SELECT id FROM lessons WHERE module = $2)",
+            [studentId, moduleName]
+        );
+        const completedLessons = completedLessonsRes.rows[0].count;
+
+        if (completedLessons === totalLessons) {
+            await awardXP(studentId, 100, `Module Completion: ${moduleName}`);
+        }
+    } catch (err) {
+        console.error("Error checking module completion:", err);
+    }
+};
+
+const checkAndAwardBadges = async (studentId) => {
+    const awardBadge = async (name, title, desc, icon, color) => {
+        try {
+            await pool.query(`
+                INSERT INTO student_badges (student_id, badge_name, badge_title, badge_desc, badge_icon, badge_color)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (student_id, badge_name) DO NOTHING
+            `, [studentId, name, title, desc, icon, color]);
+        } catch (err) {
+            console.error("Error inserting student badge:", err);
+        }
+    };
+
+    try {
+        // 1. First Login Badge
+        const loginCountRes = await pool.query("SELECT COUNT(*)::int FROM login_history WHERE student_id = $1", [studentId]);
+        if (loginCountRes.rows[0].count > 0) {
+            await awardBadge(
+                'first_login', 'First Steps', 'Started the OOP learning path', '🔑',
+                'bg-sky-50 text-sky-700 border border-sky-100'
+            );
+        }
+
+        // 2. Complete 5 Lessons Badge
+        const completedCountRes = await pool.query("SELECT COUNT(*)::int FROM lesson_progress WHERE student_id = $1 AND completed = TRUE", [studentId]);
+        const completedCount = completedCountRes.rows[0].count;
+        if (completedCount >= 5) {
+            await awardBadge(
+                'lessons_5', 'OOP Apprentice', 'Completed 5 Java OOP lessons', '📚',
+                'bg-emerald-50 text-emerald-805 border border-emerald-100'
+            );
+        }
+
+        // 3. Complete All Lessons Badge
+        if (completedCount >= 11) {
+            await awardBadge(
+                'lessons_all', 'OOP Master', 'Completed all 11 Java OOP lessons', '🎓',
+                'bg-purple-50 text-purple-700 border border-purple-100'
+            );
+        }
+
+        // 4. Pass 3 quizzes on first attempt
+        const quizAttemptsRes = await pool.query(`
+            SELECT COUNT(*)::int FROM quiz_attempts
+            WHERE student_user_id = $1 AND attempt_number = 1 AND passed = TRUE
+        `, [studentId]);
+        if (quizAttemptsRes.rows[0].count >= 3) {
+            await awardBadge(
+                'quiz_first_3', 'Quick Thinker', 'Passed 3 quiz assessments on first attempt', '⚡',
+                'bg-amber-50 text-amber-700 border border-amber-100'
+            );
+        }
+
+        // 5. Perfect score on any quiz
+        const perfectQuizRes = await pool.query(`
+            SELECT COUNT(*)::int FROM quiz_attempts
+            WHERE student_user_id = $1 AND score = total
+        `, [studentId]);
+        if (perfectQuizRes.rows[0].count > 0) {
+            await awardBadge(
+                'quiz_perfect', 'Perfect Score', 'Got 100% on any quiz assessment', '🎯',
+                'bg-rose-50 text-rose-700 border border-rose-100'
+            );
+        }
+
+        // 6. Complete a practice activity in less than 2 minutes
+        const fastPracticeRes = await pool.query(`
+            SELECT COUNT(*)::int FROM practice_results
+            WHERE student_id = $1 AND completion_time_seconds <= 120 AND score >= 70
+        `, [studentId]);
+        if (fastPracticeRes.rows[0].count > 0) {
+            await awardBadge(
+                'speed_coder', 'Speed Coder', 'Completed a coding challenge in under 2 minutes', '🏎️',
+                'bg-cyan-50 text-cyan-700 border border-cyan-100'
+            );
+        }
+    } catch (err) {
+        console.error("Error executing auto-badge checker:", err);
+    }
+};
+
+const verifyLessonCompletion = async (studentId, lessonId) => {
+    try {
+        const videoRes = await pool.query(
+            "SELECT completed FROM student_progress WHERE student_user_id = $1 AND video_id = $2",
+            [studentId, lessonId]
+        );
+        const videoCompleted = videoRes.rows[0]?.completed || false;
+
+        const quizRes = await pool.query(
+            "SELECT passed FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 AND passed = TRUE LIMIT 1",
+            [studentId, lessonId]
+        );
+        const quizPassed = quizRes.rowCount > 0;
+
+        const challengeRes = await pool.query(
+            "SELECT id FROM programming_challenges WHERE lesson_id = $1 LIMIT 1",
+            [lessonId]
+        );
+        let practiceCompleted = true;
+        if (challengeRes.rowCount > 0) {
+            const challengeId = challengeRes.rows[0].id;
+            const practiceRes = await pool.query(
+                "SELECT score FROM practice_submissions WHERE student_id = $1::text AND challenge_id = $2",
+                [studentId, challengeId]
+            );
+            const score = Number(practiceRes.rows[0]?.score || 0);
+            practiceCompleted = score >= 70;
+        }
+
+        const completed = videoCompleted && quizPassed && practiceCompleted;
+        await pool.query(`
+            INSERT INTO lesson_progress (student_id, lesson_id, video_completed, quiz_passed, practice_completed, completed, completed_at)
+            VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 THEN NOW() ELSE NULL END)
+            ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+              video_completed = EXCLUDED.video_completed,
+              quiz_passed = EXCLUDED.quiz_passed,
+              practice_completed = EXCLUDED.practice_completed,
+              completed = EXCLUDED.completed,
+              completed_at = CASE WHEN EXCLUDED.completed THEN NOW() ELSE lesson_progress.completed_at END,
+              updated_at = NOW()
+        `, [studentId, lessonId, videoCompleted, quizPassed, practiceCompleted, completed]);
+
+        if (completed) {
+            await logActivity(studentId, "lesson_complete", `Completed OOP Lesson: ${lessonId}`, { lessonId });
+
+            const lessonInfo = await pool.query("SELECT module FROM lessons WHERE id = $1", [lessonId]);
+            if (lessonInfo.rowCount > 0) {
+                const moduleName = lessonInfo.rows[0].module;
+                await checkModuleCompletion(studentId, moduleName);
+            }
+
+            await checkAndAwardBadges(studentId);
+        }
+    } catch (err) {
+        console.error("Error verifying lesson completion:", err);
     }
 };
 
@@ -1161,6 +1484,33 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
               updated_at = NOW()
             RETURNING *
         `, [req.authUser.id, safeVideoId, safeLastPosition, safeCompletionPercentage, safeCompleted, safeNotes]);
+
+        // Get lesson duration
+        const durationRes = await pool.query("SELECT duration FROM lessons WHERE id = $1", [safeVideoId]);
+        let durationSeconds = 0;
+        if (durationRes.rowCount > 0 && durationRes.rows[0].duration) {
+            const parts = durationRes.rows[0].duration.split(':').map(Number);
+            if (parts.length === 2) durationSeconds = parts[0] * 60 + parts[1];
+            else if (parts.length === 3) durationSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+
+        // Insert into video_progress
+        await pool.query(`
+            INSERT INTO video_progress (student_id, lesson_id, current_time, duration, watch_percentage, completed)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+              current_time = EXCLUDED.current_time,
+              duration = EXCLUDED.duration,
+              watch_percentage = GREATEST(video_progress.watch_percentage, EXCLUDED.watch_percentage),
+              completed = video_progress.completed OR EXCLUDED.completed,
+              updated_at = NOW()
+        `, [req.authUser.id, safeVideoId, safeLastPosition, durationSeconds, safeCompletionPercentage, safeCompleted]);
+
+        if (safeCompleted) {
+            await awardXP(req.authUser.id, 20, `Video Completion: ${safeVideoId}`);
+        }
+        await verifyLessonCompletion(req.authUser.id, safeVideoId);
+
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
         next(error);
@@ -1234,6 +1584,35 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
             JSON.stringify(safeAnswers),
             dateCompleted || null
         ]);
+
+        const safeAssessmentId = cleanText(assessmentId, 120);
+        const safeLessonId = cleanText(lessonId, 120);
+        const isPassedNow = Boolean(passed) && computedPercentage >= 70;
+
+        // Award completion and pass XP
+        await awardXP(req.authUser.id, 30, `Quiz Completion: ${safeAssessmentId}`);
+        if (isPassedNow) {
+            await awardXP(req.authUser.id, 50, `Quiz Pass: ${safeAssessmentId}`);
+        }
+
+        // Log activity
+        await logActivity(req.authUser.id, "quiz_attempt", `Submitted quiz for ${safeLessonId || safeAssessmentId} with score ${safeScore}/${safeTotal}`, {
+            assessmentId: safeAssessmentId,
+            lessonId: safeLessonId,
+            score: safeScore,
+            total: safeTotal,
+            passed: isPassedNow,
+            attemptNumber: safeAttemptNumber
+        });
+
+        // Verify lesson completion
+        if (safeLessonId) {
+            await verifyLessonCompletion(req.authUser.id, safeLessonId);
+        }
+
+        // Check badges
+        await checkAndAwardBadges(req.authUser.id);
+
         res.status(201).json({ success: true, data: result.rows[0] });
     } catch (error) {
         next(error);
