@@ -329,7 +329,13 @@ VALUES
   ('oop_lesson_2', 'oop_fundamentals', 2, 'Constructors', '/videos/lesson2.mp4', '17:29', 'oop_assessment_2'),
   ('oop_lesson_3', 'oop_fundamentals', 3, 'Object Methods', '/videos/lesson3.mp4', '18:15', 'oop_assessment_3'),
   ('oop_lesson_4', 'oop_fundamentals', 4, 'Encapsulation', '/videos/lesson4.mp4', '12:05', 'oop_assessment_4'),
-  ('oop_lesson_5', 'oop_fundamentals', 5, 'Constructor Overloading', '/videos/lesson5.mp4', '10:42', 'oop_assessment_5')
+  ('oop_lesson_5', 'oop_fundamentals', 5, 'Constructor Overloading', '/videos/lesson5.mp4', '10:42', 'oop_assessment_5'),
+  ('oop_lesson_6', 'oop_fundamentals', 6, 'Inheritance', '/videos/lesson6.mp4', '16:10', 'oop_assessment_6'),
+  ('oop_lesson_7', 'oop_fundamentals', 7, 'Polymorphism', '/videos/lesson7.mp4', '14:20', 'oop_assessment_7'),
+  ('oop_lesson_8', 'oop_fundamentals', 8, 'Abstract Classes', '/videos/lesson8.mp4', '11:55', 'oop_assessment_8'),
+  ('oop_lesson_9', 'oop_fundamentals', 9, 'Interfaces / Abstraction', '/videos/lesson9.mp4', '13:35', 'oop_assessment_9'),
+  ('oop_lesson_10', 'oop_fundamentals', 10, 'Array of Objects', '/videos/lesson10.mp4', '18:40', 'oop_assessment_10'),
+  ('oop_lesson_11', 'oop_fundamentals', 11, 'Enum', '/videos/lesson11.mp4', '15:25', 'oop_assessment_11')
 ON CONFLICT (id) DO UPDATE
 SET title = EXCLUDED.title,
     video_source = EXCLUDED.video_source,
@@ -342,7 +348,13 @@ VALUES
   ('oop_assessment_2', 'oop_lesson_2', 70, 25),
   ('oop_assessment_3', 'oop_lesson_3', 70, 25),
   ('oop_assessment_4', 'oop_lesson_4', 70, 25),
-  ('oop_assessment_5', 'oop_lesson_5', 70, 25)
+  ('oop_assessment_5', 'oop_lesson_5', 70, 25),
+  ('oop_assessment_6', 'oop_lesson_6', 70, 25),
+  ('oop_assessment_7', 'oop_lesson_7', 70, 25),
+  ('oop_assessment_8', 'oop_lesson_8', 70, 25),
+  ('oop_assessment_9', 'oop_lesson_9', 70, 25),
+  ('oop_assessment_10', 'oop_lesson_10', 70, 25),
+  ('oop_assessment_11', 'oop_lesson_11', 70, 25)
 ON CONFLICT (id) DO UPDATE
 SET passing_percentage = EXCLUDED.passing_percentage,
     questions_count = EXCLUDED.questions_count;

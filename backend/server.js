@@ -528,23 +528,142 @@ const seedDemoUsers = async () => {
 
 const seedLessons = async () => {
     const lessons = [
-        ["oop_lesson_1", "Classes & Objects", "Intro to Java & Classes", 1, "13:50", "/videos/lesson1.mp4"],
-        ["oop_lesson_2", "Constructors", "Inheritance vs Composition", 2, "17:29", "/videos/lesson2.mp4"],
-        ["oop_lesson_3", "Object Methods", "Polymorphism & Dynamic Binding", 3, "18:15", "/videos/lesson3.mp4"],
-        ["oop_lesson_4", "Encapsulation", "Design Patterns Core", 4, "12:05", "/videos/lesson4.mp4"],
-        ["oop_lesson_5", "Constructor Overloading", "Polymorphism & Dynamic Binding", 5, "10:42", "/videos/lesson5.mp4"]
+        [
+            "oop_lesson_1",
+            "Classes & Objects",
+            "OOP Fundamentals",
+            1,
+            "13:50",
+            "/videos/lesson1.mp4",
+            "Introduces Java classes as blueprints and objects as instances with fields, methods, state, and behavior.",
+            JSON.stringify(["Class blueprint", "Object instance", "Fields and methods", "new keyword", "State and behavior"]),
+            "Published"
+        ],
+        [
+            "oop_lesson_2",
+            "Constructors",
+            "OOP Fundamentals",
+            2,
+            "17:29",
+            "/videos/lesson2.mp4",
+            "Explains Java constructors, object initialization, constructor names, parameters, and default constructor behavior.",
+            JSON.stringify(["Constructor purpose", "Same name as class", "No return type", "Parameterized constructor", "Default constructor"]),
+            "Published"
+        ],
+        [
+            "oop_lesson_3",
+            "Object Methods",
+            "OOP Fundamentals",
+            3,
+            "18:15",
+            "/videos/lesson3.mp4",
+            "Covers object methods as class-defined behaviors, calling methods through objects, parameters, returns, and field access.",
+            JSON.stringify(["Object behavior", "Method call", "Parameters", "Return values", "Instance field access"]),
+            "Published"
+        ],
+        [
+            "oop_lesson_4",
+            "Encapsulation",
+            "OOP Fundamentals",
+            4,
+            "12:05",
+            "/videos/lesson4.mp4",
+            "Explains data hiding with private fields and controlled access through getter and setter methods.",
+            JSON.stringify(["Data hiding", "private fields", "getters", "setters", "validation"]),
+            "Published"
+        ],
+        [
+            "oop_lesson_5",
+            "Constructor Overloading",
+            "OOP Fundamentals",
+            5,
+            "10:42",
+            "/videos/lesson5.mp4",
+            "Shows how one class can define multiple constructors with different parameter lists for flexible object creation.",
+            JSON.stringify(["Constructor overload", "Different parameters", "this()", "Initialization paths", "Compile-time selection"]),
+            "Published"
+        ],
+        [
+            "oop_lesson_6",
+            "Inheritance",
+            "Core OOP",
+            6,
+            "16:10",
+            "/videos/lesson6.mp4",
+            "Introduces inheritance in Java, showing how child classes reuse and extend parent class fields and methods.",
+            JSON.stringify(["Parent class", "Child class", "extends keyword", "is-a relationship", "Code reuse"]),
+            "Published"
+        ],
+        [
+            "oop_lesson_7",
+            "Polymorphism",
+            "Core OOP",
+            7,
+            "14:20",
+            "/videos/lesson7.mp4",
+            "Covers polymorphism through overloaded methods, overridden behavior, parent references, and dynamic method dispatch.",
+            JSON.stringify(["Many forms", "Method overloading", "Method overriding", "Parent reference", "Runtime dispatch"]),
+            "Published"
+        ],
+        [
+            "oop_lesson_8",
+            "Abstract Classes",
+            "Advanced OOP",
+            8,
+            "11:55",
+            "/videos/lesson8.mp4",
+            "Explains abstract classes as shared base definitions that can declare required behavior and provide reusable concrete methods.",
+            JSON.stringify(["abstract class", "Abstract method", "Concrete method", "Shared base class", "Subclass responsibility"]),
+            "Published"
+        ],
+        [
+            "oop_lesson_9",
+            "Interfaces / Abstraction",
+            "Advanced OOP",
+            9,
+            "13:35",
+            "/videos/lesson9.mp4",
+            "Introduces interfaces and abstraction as ways to expose essential behavior while hiding implementation details.",
+            JSON.stringify(["interface keyword", "implements keyword", "Behavior contract", "Implementation hiding", "Default methods"]),
+            "Published"
+        ],
+        [
+            "oop_lesson_10",
+            "Array of Objects",
+            "Advanced OOP",
+            10,
+            "18:40",
+            "/videos/lesson10.mp4",
+            "Shows how arrays can store object references, how each element must be initialized, and how loops process object collections.",
+            JSON.stringify(["Object reference array", "Element initialization", "Null elements", "Array traversal", "Object state per element"]),
+            "Published"
+        ],
+        [
+            "oop_lesson_11",
+            "Enum",
+            "Advanced OOP",
+            11,
+            "15:25",
+            "/videos/lesson11.mp4",
+            "Explains Java enums as type-safe named constants that can also contain fields, constructors, and methods.",
+            JSON.stringify(["enum keyword", "Named constants", "Type safety", "switch with enum", "Enum fields and methods"]),
+            "Published"
+        ]
     ];
 
     for (const lesson of lessons) {
         await pool.query(`
-            INSERT INTO lessons (id, title, module, sequence, duration, video_url)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO lessons (id, title, module, sequence, duration, video_url, description, learning_objectives, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
             ON CONFLICT (id) DO UPDATE SET
               title = EXCLUDED.title,
               module = EXCLUDED.module,
               sequence = EXCLUDED.sequence,
               duration = EXCLUDED.duration,
               video_url = EXCLUDED.video_url,
+              description = EXCLUDED.description,
+              learning_objectives = EXCLUDED.learning_objectives,
+              status = EXCLUDED.status,
               updated_at = NOW()
         `, lesson);
     }
@@ -1580,7 +1699,16 @@ app.use((err, _req, res, _next) => {
 const PORT = process.env.PORT || 5000;
 
 initializeDatabase()
-    .then(() => {
+    .then(async () => {
+        try {
+            await seedDemoUsers();
+            await seedLessons();
+            await seedPracticeChallenges();
+            console.log("Database seeded successfully.");
+        } catch (seedErr) {
+            console.error("Database seeding failed:", seedErr);
+        }
+
         app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
         });
