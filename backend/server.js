@@ -512,7 +512,7 @@ const initializeDatabase = async () => {
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
-          current_time NUMERIC NOT NULL DEFAULT 0,
+          "current_time" NUMERIC NOT NULL DEFAULT 0,
           duration NUMERIC NOT NULL DEFAULT 0,
           watch_percentage NUMERIC NOT NULL DEFAULT 0,
           completed BOOLEAN NOT NULL DEFAULT FALSE,
@@ -1498,10 +1498,10 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
 
         // Insert into video_progress
         await pool.query(`
-            INSERT INTO video_progress (student_id, lesson_id, current_time, duration, watch_percentage, completed)
+            INSERT INTO video_progress (student_id, lesson_id, "current_time", duration, watch_percentage, completed)
             VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT (student_id, lesson_id) DO UPDATE SET
-              current_time = EXCLUDED.current_time,
+              "current_time" = EXCLUDED."current_time",
               duration = EXCLUDED.duration,
               watch_percentage = GREATEST(video_progress.watch_percentage, EXCLUDED.watch_percentage),
               completed = video_progress.completed OR EXCLUDED.completed,

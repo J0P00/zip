@@ -1,0 +1,1 @@
+E:/Program Files/PostgreSQL/18/bin/postgres.exe "-D" "E:/Projects/zip/.codex-pg-audit-serverjs-2/data" "-p" "55433"
