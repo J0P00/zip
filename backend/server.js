@@ -798,6 +798,8 @@ const seedPracticeChallenges = async () => {
             ON CONFLICT (id) DO UPDATE SET expected_output = EXCLUDED.expected_output, matcher = EXCLUDED.matcher
         `, [`${id}_sample`, id, "Expected output depends on the published challenge."]);
     }
+};
+
 // --- Student Analytics Tracking Engine Helpers ---
 const logActivity = async (studentId, type, detail, metadata = {}) => {
     try {
