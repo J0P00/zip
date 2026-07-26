@@ -647,7 +647,7 @@ const seedLessons = async () => {
             "OOP Fundamentals",
             4,
             "12:05",
-            "/videos/lesson4.mp4",
+            "/OOP%20Lesson/Topic4-Inheritance.mp4",
             "Explains data hiding with private fields and controlled access through getter and setter methods.",
             JSON.stringify(["Data hiding", "private fields", "getters", "setters", "validation"]),
             "Published"
@@ -658,7 +658,7 @@ const seedLessons = async () => {
             "OOP Fundamentals",
             5,
             "10:42",
-            "/videos/lesson5.mp4",
+            "/OOP%20Lesson/Topic5-MethodOveriding.mp4",
             "Shows how one class can define multiple constructors with different parameter lists for flexible object creation.",
             JSON.stringify(["Constructor overload", "Different parameters", "this()", "Initialization paths", "Compile-time selection"]),
             "Published"
@@ -691,7 +691,7 @@ const seedLessons = async () => {
             "Advanced OOP",
             8,
             "11:55",
-            "/videos/lesson8.mp4",
+            "/OOP%20Lesson/Topic8%20abstraction%20.mp4?v=compressed-20260726",
             "Explains abstract classes as shared base definitions that can declare required behavior and provide reusable concrete methods.",
             JSON.stringify(["abstract class", "Abstract method", "Concrete method", "Shared base class", "Subclass responsibility"]),
             "Published"
@@ -702,7 +702,7 @@ const seedLessons = async () => {
             "Advanced OOP",
             9,
             "13:35",
-            "/videos/lesson9.mp4",
+            "/OOP%20Lesson/topic9-INTERFACE.mp4?v=compressed-20260726-2124",
             "Introduces interfaces and abstraction as ways to expose essential behavior while hiding implementation details.",
             JSON.stringify(["interface keyword", "implements keyword", "Behavior contract", "Implementation hiding", "Default methods"]),
             "Published"
