@@ -3,7 +3,6 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
-  BriefcaseBusiness,
   CheckCircle2,
   Code2,
   ExternalLink,
@@ -576,10 +575,6 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     }
   };
 
-  const socialNotice = (provider: string) => {
-    showNotice('error', `${provider} sign-in is not connected yet.`);
-  };
-
   const inputBase =
     'w-full rounded-xl border bg-white px-10 py-2.5 text-sm text-slate-905 outline-none transition-all placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 shadow-xs';
   const inputNormal = 'border-slate-200 hover:border-slate-300';
@@ -833,33 +828,6 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                     </>
                   )}
                 </button>
-
-                <div className="flex items-center gap-3 py-2">
-                  <div className="h-px flex-1 bg-slate-150" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">OR</span>
-                  <div className="h-px flex-1 bg-slate-150" />
-                </div>
-
-                <div className="grid gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => socialNotice('Google')}
-                    className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-350 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100"
-                    aria-label="Continue with Google"
-                  >
-                    <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-slate-900 text-[9px] font-black text-white">G</span>
-                    Continue with Google
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => socialNotice('Microsoft')}
-                    className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-350 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100"
-                    aria-label="Continue with Microsoft"
-                  >
-                    <BriefcaseBusiness className="h-3.5 w-3.5 text-slate-650" />
-                    Continue with Microsoft
-                  </button>
-                </div>
 
                 <p className="text-center text-xs text-slate-500 pt-1">
                   Don't have an account?{' '}
