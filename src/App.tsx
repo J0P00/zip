@@ -55,7 +55,6 @@ import {
 import { 
   INITIAL_JAVA_FILES, 
   INITIAL_QUESTIONS, 
-  INITIAL_LEADERBOARD_USERS, 
   INITIAL_SUBMISSIONS, 
   INITIAL_CURRICULUM_MODULES, 
   INITIAL_LESSON_ITEMS, 
@@ -101,9 +100,55 @@ const DEMO_STUDENT_GRADE = {
   challenge: "Inheritance Constraints with Vehicle/Car Override"
 };
 
-const DEMO_STUDENT_BADGES = INITIAL_LEADERBOARD_USERS.find(user => user.isCurrentUser)?.badges ?? [];
 const OOP_LESSON_COUNT = OOP_COURSE_LESSONS.length;
 const clampCompletedLessons = (count: number) => Math.min(Math.max(count, 0), OOP_LESSON_COUNT);
+const rankLeaderboard = (users: LeaderboardUser[]) =>
+  [...users]
+    .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name))
+    .map((user, index) => ({ ...user, rank: index + 1 }));
+
+const upsertCurrentRegisteredStudent = (
+  users: LeaderboardUser[],
+  currentUser: AuthenticatedUser | null,
+  progress = NEW_STUDENT_PROGRESS
+) => {
+  if (!currentUser || currentUser.role !== 'student' || currentUser.accountSource !== 'custom') {
+    return rankLeaderboard(users);
+  }
+
+  const displayName = `${currentUser.name} (You)`;
+  const matchesCurrentUser = (entry: LeaderboardUser) =>
+    entry.isCurrentUser || entry.name === currentUser.name || entry.name === displayName;
+  const hasCurrentUser = users.some(matchesCurrentUser);
+  const nextUsers = hasCurrentUser
+    ? users.map(entry => matchesCurrentUser(entry)
+      ? {
+          ...entry,
+          name: displayName,
+          points: progress.points,
+          streak: progress.streak,
+          badges: [],
+          isCurrentUser: true,
+          avatar: entry.avatar || currentUser.avatar,
+          trend: entry.trend || 'stable'
+        }
+      : { ...entry, isCurrentUser: false })
+    : [
+        ...users.map(entry => ({ ...entry, isCurrentUser: false })),
+        {
+          rank: users.length + 1,
+          name: displayName,
+          points: progress.points,
+          badges: [],
+          streak: progress.streak,
+          isCurrentUser: true,
+          avatar: currentUser.avatar,
+          trend: 'stable' as const
+        }
+      ];
+
+  return rankLeaderboard(nextUsers);
+};
 const SESSION_USER_KEY = 'oophub_current_user';
 const SESSION_VIEW_KEY = 'oophub_workspace_view';
 const PERSONAS: Persona[] = ['public', 'student', 'teacher', 'admin'];
