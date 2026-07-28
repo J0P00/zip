@@ -545,6 +545,13 @@ export default function TeacherPortal({
   const averagePerformance = avg(visibleStudents.map(student => student.performanceIndex));
   const videoCompletionRate = avg(visibleStudents.map(student => student.videoCompletion));
   const completionRate = avg(visibleStudents.map(student => student.overallProgress));
+  const swingSubmissions = submissions.filter(submission =>
+    submission.topicId === 'swing' || submission.challengeName.toLowerCase().includes('swing')
+  );
+  const swingQuizAverage = avg(visibleStudents.map(student => student.swing.assessment));
+  const swingVideoAverage = avg(visibleStudents.map(student => student.swing.video));
+  const swingPracticeAverage = avg(visibleStudents.map(student => student.swing.ide));
+  const swingProjectAverage = avg(visibleStudents.map(student => student.swing.miniProject));
   const atRiskStudents = visibleStudents.filter(student => student.learningStatus === 'At Risk' || student.learningStatus === 'Needs Improvement');
   const mostSuccessfulStudent = [...visibleStudents].sort((a, b) => b.performanceIndex - a.performanceIndex)[0];
   const mostDifficultTopic = OOP_TOPICS.map(topic => ({
@@ -898,36 +905,81 @@ export default function TeacherPortal({
       )}
 
       {activeTab === 'swing' && (
-        <div className="grid gap-5 lg:grid-cols-2">
-          {visibleStudents.map(student => (
-            <div key={student.id} className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-sm font-black">{student.name}</h3>
-                  <p className="mt-1 text-xs text-slate-500">Current Swing Lesson: {student.swingLesson}</p>
-                </div>
-                <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">Swing Track</span>
+        <div className="space-y-5">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {[
+              ['Enrolled Students', visibleStudents.length],
+              ['Avg Video Completion', `${swingVideoAverage}%`],
+              ['Average Quiz Score', `${swingQuizAverage}%`],
+              ['Practice Completion', `${swingPracticeAverage}%`],
+              ['Swing Submissions', swingSubmissions.length]
+            ].map(([label, value]) => (
+              <div key={label as string} className={`rounded-2xl border p-4 shadow-sm ${cardClass}`}>
+                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">{label as string}</span>
+                <strong className="mt-2 block font-mono text-lg">{value}</strong>
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {[
-                  ['Video Completion', student.swing.video],
-                  ['Swing Assessment', student.swing.assessment],
-                  ['Swing IDE Progress', student.swing.ide],
-                  ['Mini Project Completion', student.swing.miniProject]
-                ].map(([label, value]) => (
-                  <div key={label as string} className={`rounded-xl border p-3 ${mutedPanel}`}>
-                    <div className="flex justify-between text-[10px] font-black uppercase text-slate-400">
-                      <span>{label as string}</span>
-                      <span>{value}%</span>
-                    </div>
-                    <div className="mt-2 h-2 rounded-full bg-white">
-                      <div className="h-2 rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
-                    </div>
-                  </div>
-                ))}
+            ))}
+          </div>
+
+          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-black">Java Swing Cohort Analytics</h3>
+                <p className="mt-1 text-xs text-slate-500">Lesson completion, quiz mastery, programming submissions, and mini-app readiness for connected students.</p>
               </div>
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase text-emerald-700">80% Quiz Pass Mark</span>
             </div>
-          ))}
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              {[
+                ['Lesson Completion', swingVideoAverage],
+                ['Quiz Analytics', swingQuizAverage],
+                ['Programming Progress', swingPracticeAverage],
+                ['Mini App Readiness', swingProjectAverage]
+              ].map(([label, value]) => (
+                <div key={label as string} className={`rounded-xl border p-3 ${mutedPanel}`}>
+                  <div className="flex justify-between text-[10px] font-black uppercase text-slate-400">
+                    <span>{label as string}</span>
+                    <span>{value}%</span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-white">
+                    <div className="h-2 rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            {visibleStudents.map(student => (
+              <div key={student.id} className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-sm font-black">{student.name}</h3>
+                    <p className="mt-1 text-xs text-slate-500">Current Swing Lesson: {student.swingLesson}</p>
+                  </div>
+                  <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">Swing Track</span>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {[
+                    ['Video Completion', student.swing.video],
+                    ['Swing Assessment', student.swing.assessment],
+                    ['Swing IDE Progress', student.swing.ide],
+                    ['Mini Project Completion', student.swing.miniProject]
+                  ].map(([label, value]) => (
+                    <div key={label as string} className={`rounded-xl border p-3 ${mutedPanel}`}>
+                      <div className="flex justify-between text-[10px] font-black uppercase text-slate-400">
+                        <span>{label as string}</span>
+                        <span>{value}%</span>
+                      </div>
+                      <div className="mt-2 h-2 rounded-full bg-white">
+                        <div className="h-2 rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

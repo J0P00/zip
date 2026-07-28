@@ -27,7 +27,8 @@ import {
   SlidersHorizontal,
   ChevronLeft,
   ChevronRight,
-  Film
+  Film,
+  PanelTop
 } from 'lucide-react';
 
 // Import Types
@@ -68,6 +69,7 @@ import StudentDashboard from './components/StudentDashboard';
 import PracticeIDE from './components/PracticeIDE';
 import VideoTutorials from './components/VideoTutorials';
 import Assessments from './components/Assessments';
+import JavaSwingModule from './components/JavaSwingModule';
 import Leaderboard from './components/Leaderboard';
 import TeacherPortal from './components/TeacherPortal';
 import AdminCurriculum from './components/AdminCurriculum';
@@ -105,7 +107,7 @@ const clampCompletedLessons = (count: number) => Math.min(Math.max(count, 0), OO
 const SESSION_USER_KEY = 'oophub_current_user';
 const SESSION_VIEW_KEY = 'oophub_workspace_view';
 const PERSONAS: Persona[] = ['public', 'student', 'teacher', 'admin'];
-const STUDENT_TABS: StudentSubView[] = ['dashboard', 'ide', 'videos', 'assessments', 'leaderboard', 'profile'];
+const STUDENT_TABS: StudentSubView[] = ['dashboard', 'ide', 'videos', 'assessments', 'swing', 'leaderboard', 'profile'];
 const TEACHER_TABS: TeacherSubView[] = ['dashboard', 'students', 'submission-review', 'analytics', 'profile'];
 const ADMIN_TABS: AdminSubView[] = ['dashboard', 'videos', 'assessments', 'practice', 'monitoring', 'reports', 'settings'];
 
@@ -1216,6 +1218,7 @@ export default function App() {
                 { id: 'ide', label: 'Practice IDE', icon: <Code2 className="w-4 h-4" /> },
                 { id: 'videos', label: 'Video Tutorial', icon: <BookOpen className="w-4 h-4" /> },
                 { id: 'assessments', label: 'Assessment/Quiz', icon: <TrendingUp className="w-4 h-4" /> },
+                { id: 'swing', label: 'Java Swing', icon: <PanelTop className="w-4 h-4" /> },
                 { id: 'leaderboard', label: 'Rankings', icon: <Award className="w-4 h-4" /> },
               ].map((tab) => (
                 <button
@@ -1312,6 +1315,7 @@ export default function App() {
                   {persona === 'student' && studentTab === 'ide' && 'Dynamic Java Compiler Sandbox'}
                   {persona === 'student' && studentTab === 'videos' && 'Syllabus Playlist & Lesson Lectures'}
                   {persona === 'student' && studentTab === 'assessments' && 'Interactive MCQ Scenario Simulator'}
+                  {persona === 'student' && studentTab === 'swing' && 'Java Swing Programming Module'}
                   {persona === 'student' && studentTab === 'leaderboard' && 'Active CS Cohort Rankings'}
                   {persona === 'teacher' && teacherTab === 'dashboard' && 'Instructor Cohort Evaluation Dashboard'}
                   {persona === 'admin' && adminViewMeta[adminTab].title}
@@ -1323,6 +1327,7 @@ export default function App() {
                   {persona === 'student' && studentTab === 'ide' && 'Extend base Java classes, call super constructors, and run simulated tests instantly.'}
                   {persona === 'student' && studentTab === 'videos' && 'View loop animations of dispatch lookups and write synchronized local study notes.'}
                   {persona === 'student' && studentTab === 'assessments' && 'Diagnose Company Fleet dispatch hierarchies to earn high achievement points.'}
+                  {persona === 'student' && studentTab === 'swing' && 'Unlock desktop GUI development after completing the OOP lesson path and assessments.'}
                   {persona === 'student' && studentTab === 'leaderboard' && 'Observe podium standings, select students profiles, and fast-track metrics.'}
                   {persona === 'teacher' && teacherTab === 'dashboard' && 'Review sandbox compiler drafts, enter academic feedbacks, and submit final grades.'}
                   {persona === 'admin' && adminViewMeta[adminTab].description}
@@ -1412,6 +1417,15 @@ export default function App() {
               />
             )}
 
+            {persona === 'student' && studentTab === 'swing' && (
+              <JavaSwingModule
+                currentUser={displayUser}
+                onSubmitCompleted={handleStudentSubmitCode}
+                onUnlocked={() => addNotification('Java Swing Unlocked', 'Java Swing Programming is now available after completing OOP.', 'unlock')}
+                theme={theme}
+              />
+            )}
+
             {persona === 'student' && studentTab === 'leaderboard' && (
               <Leaderboard 
                 users={leaderboardUsers}
@@ -1485,7 +1499,7 @@ export default function App() {
       )}
 
       {persona === 'student' && !authMode && (
-        <nav className={`fixed inset-x-3 bottom-3 z-[95] grid grid-cols-5 rounded-lg border p-1 shadow-2xl backdrop-blur md:hidden transition-colors ${
+        <nav className={`fixed inset-x-3 bottom-3 z-[95] grid grid-cols-6 rounded-lg border p-1 shadow-2xl backdrop-blur md:hidden transition-colors ${
           isDark 
             ? 'bg-slate-900/95 border-slate-800 shadow-black/40 text-slate-355' 
             : 'bg-white/95 border-slate-200 shadow-slate-200/50 text-slate-500'
@@ -1495,6 +1509,7 @@ export default function App() {
             { id: 'ide', label: 'Sandbox', icon: <Code2 className="w-4 h-4" /> },
             { id: 'videos', label: 'Syllabus', icon: <BookOpen className="w-4 h-4" /> },
             { id: 'assessments', label: 'Quiz', icon: <TrendingUp className="w-4 h-4" /> },
+            { id: 'swing', label: 'Swing', icon: <PanelTop className="w-4 h-4" /> },
             { id: 'leaderboard', label: 'Rankings', icon: <Award className="w-4 h-4" /> },
           ].map(item => (
             <button

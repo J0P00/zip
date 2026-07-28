@@ -44,7 +44,7 @@ export interface AuthenticatedUser {
   termsVersion?: string;
 }
 
-export type StudentSubView = 'dashboard' | 'ide' | 'videos' | 'assessments' | 'leaderboard' | 'profile';
+export type StudentSubView = 'dashboard' | 'ide' | 'videos' | 'assessments' | 'swing' | 'leaderboard' | 'profile';
 export type TeacherSubView = 'dashboard' | 'students' | 'submission-review' | 'analytics' | 'profile';
 export type AdminSubView =
   | 'dashboard'

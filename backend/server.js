@@ -565,6 +565,90 @@ const initializeDatabase = async () => {
           metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+
+        CREATE TABLE IF NOT EXISTS swing_lessons (
+          id TEXT PRIMARY KEY,
+          sequence INTEGER NOT NULL UNIQUE,
+          title TEXT NOT NULL,
+          topics JSONB NOT NULL DEFAULT '[]'::jsonb,
+          objectives JSONB NOT NULL DEFAULT '[]'::jsonb,
+          content JSONB NOT NULL DEFAULT '[]'::jsonb,
+          code_example TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS swing_videos (
+          id TEXT PRIMARY KEY,
+          lesson_id TEXT NOT NULL REFERENCES swing_lessons(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          duration TEXT NOT NULL DEFAULT '',
+          description TEXT NOT NULL DEFAULT '',
+          embed_url TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS swing_quizzes (
+          id TEXT PRIMARY KEY,
+          lesson_id TEXT NOT NULL REFERENCES swing_lessons(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          passing_percentage INTEGER NOT NULL DEFAULT 80,
+          question_count INTEGER NOT NULL DEFAULT 10,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS swing_questions (
+          id TEXT PRIMARY KEY,
+          quiz_id TEXT NOT NULL REFERENCES swing_quizzes(id) ON DELETE CASCADE,
+          prompt TEXT NOT NULL,
+          choices JSONB NOT NULL DEFAULT '[]'::jsonb,
+          correct_answer TEXT NOT NULL,
+          explanation TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS swing_programming_exercises (
+          id TEXT PRIMARY KEY,
+          lesson_id TEXT NOT NULL REFERENCES swing_lessons(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          difficulty TEXT NOT NULL DEFAULT 'Beginner',
+          instructions TEXT NOT NULL,
+          starter_code TEXT NOT NULL DEFAULT '',
+          test_cases JSONB NOT NULL DEFAULT '[]'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS swing_submissions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id TEXT NOT NULL,
+          exercise_id TEXT NOT NULL REFERENCES swing_programming_exercises(id) ON DELETE CASCADE,
+          source_code TEXT NOT NULL,
+          program_output TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'submitted',
+          score NUMERIC NOT NULL DEFAULT 0,
+          feedback TEXT NOT NULL DEFAULT '',
+          submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          graded_at TIMESTAMPTZ
+        );
+
+        CREATE TABLE IF NOT EXISTS swing_progress (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id TEXT NOT NULL,
+          lesson_id TEXT NOT NULL REFERENCES swing_lessons(id) ON DELETE CASCADE,
+          content_completed BOOLEAN NOT NULL DEFAULT FALSE,
+          video_completed BOOLEAN NOT NULL DEFAULT FALSE,
+          quiz_passed BOOLEAN NOT NULL DEFAULT FALSE,
+          exercise_completed BOOLEAN NOT NULL DEFAULT FALSE,
+          overall_percentage NUMERIC NOT NULL DEFAULT 0,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(student_id, lesson_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_swing_videos_lesson ON swing_videos(lesson_id);
+        CREATE INDEX IF NOT EXISTS idx_swing_questions_quiz ON swing_questions(quiz_id);
+        CREATE INDEX IF NOT EXISTS idx_swing_submissions_student ON swing_submissions(student_id, submitted_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_swing_progress_student ON swing_progress(student_id, lesson_id);
     `);
 };
 
