@@ -74,6 +74,7 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
   const activeLesson = lessons.find(lesson => lesson.id === activeLessonId) || firstAvailable;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const previousLessonIdRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(activeLesson ? watchDb[activeLesson.id]?.lastPosition || 0 : 0);
@@ -125,10 +126,15 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
   useEffect(() => {
     if (!activeLesson) return;
     const watch = watchDb[activeLesson.id];
-    setCurrentTime(watch?.lastPosition || 0);
-    setMaxWatchedTime(watch?.lastPosition || 0);
-    setIsPlaying(false);
-  }, [activeLesson?.id, watchDb]);
+    const nextPosition = watch?.lastPosition || 0;
+    setCurrentTime(nextPosition);
+    setMaxWatchedTime(nextPosition);
+
+    if (previousLessonIdRef.current !== activeLesson.id) {
+      setIsPlaying(false);
+      previousLessonIdRef.current = activeLesson.id;
+    }
+  }, [activeLesson, watchDb]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -352,37 +358,53 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
 
         <aside className="space-y-4 lg:col-span-4">
           <div className="rounded-xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur-md sm:rounded-2xl sm:p-5 dark:border-slate-800 dark:bg-slate-950/80">
-            <h3 className="mb-4 flex items-center gap-2 text-sm font-extrabold uppercase tracking-tight text-slate-900 dark:text-white">
-              <BookOpen className="h-4 w-4 text-emerald-600" />
-              Lesson Queue
-            </h3>
-            <div className="space-y-2">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-tight text-slate-900 dark:text-white">
+                <BookOpen className="h-4 w-4 text-emerald-600" />
+                Lesson Queue
+              </h3>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">
+                11 Lessons
+              </span>
+            </div>
+            <div className="max-h-[620px] space-y-2 overflow-y-auto pr-1">
               {lessons.map(lesson => {
                 const isActive = lesson.id === activeLesson.id;
                 const isLocked = lesson.status === 'locked';
                 const progress = lesson.progressPercent || 0;
                 const quiz = OOP_ASSESSMENTS.find(item => item.lessonId === lesson.id);
                 const quizPassed = quiz ? quizDb[quiz.id]?.passed : false;
+                const statusLabel = isLocked ? 'Locked' : quizPassed ? 'Passed' : progress > 0 ? 'In progress' : 'Ready';
 
                 return (
                   <button
                     key={lesson.id}
                     onClick={() => selectLesson(lesson)}
-                    className={`w-full rounded-xl border p-3 text-left transition ${isActive ? 'border-emerald-500 bg-emerald-50/40' : 'border-slate-100 bg-white hover:border-slate-300'} ${isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                    className={`w-full rounded-2xl border p-3 text-left transition-all ${isActive ? 'border-emerald-500 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-200' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'} ${isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <span className="font-mono text-[10px] font-black uppercase text-slate-400">Lesson {lesson.sequence}</span>
-                        <h4 className="truncate text-xs font-extrabold text-slate-900">{lesson.title}</h4>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-1 flex items-center gap-2">
+                          <span className="inline-flex min-w-[2.2rem] items-center justify-center rounded-md bg-slate-100 px-1.5 py-1 font-mono text-[10px] font-black uppercase text-slate-700">
+                            {lesson.sequence}
+                          </span>
+                          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{lesson.topic}</span>
+                        </div>
+                        <h4 className="truncate text-sm font-extrabold text-slate-900 dark:text-white">{lesson.title}</h4>
                       </div>
-                      {isLocked ? <Lock className="h-4 w-4 text-slate-400" /> : watchDb[lesson.id]?.completed && quizPassed ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <Gauge className="h-4 w-4 text-slate-400" />}
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${isLocked ? 'bg-slate-100 text-slate-500' : quizPassed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {statusLabel}
+                        </span>
+                        {isLocked ? <Lock className="h-4 w-4 text-slate-400" /> : watchDb[lesson.id]?.completed && quizPassed ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <Play className="h-4 w-4 text-slate-500" />}
+                      </div>
                     </div>
-                    <div className="mt-3 h-1.5 rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress}%` }} />
-                    </div>
-                    <div className="mt-2 flex flex-wrap justify-between gap-2 text-[10px] font-bold text-slate-400">
+                    <div className="mt-3 flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
+                      <span>{lesson.duration}</span>
                       <span>{progress}% watched</span>
-                      <span>{quizPassed ? 'Assessment passed' : 'Assessment pending'}</span>
+                    </div>
+                    <div className="mt-2 h-1.5 rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress}%` }} />
                     </div>
                   </button>
                 );

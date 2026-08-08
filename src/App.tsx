@@ -278,11 +278,7 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    appApi.health().catch(error => {
-      console.warn('Backend health check failed:', error);
-    });
-    appApi.getLessons().then(response => {
-      const lessons = response.data.map(mapDatabaseLessonToVideoLesson);
+    const applyLessons = (lessons: VideoLesson[]) => {
       setVideoLessons(lessons);
       setLessonItems(lessons.map(lesson => ({
         id: lesson.id,
@@ -304,9 +300,41 @@ export default function App() {
         lastUpdated: new Date().toISOString(),
         category: 'OOP'
       })));
-    }).catch(error => {
-      console.warn('Backend lessons check failed:', error);
+    };
+
+    const loadFallbackLessons = () => {
+      try {
+        const saved = localStorage.getItem('oophub_video_lessons');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            applyLessons(parsed as VideoLesson[]);
+            return;
+          }
+        }
+      } catch {
+        // Fall back to the built-in course data when local storage is unavailable.
+      }
+      applyLessons(OOP_COURSE_LESSONS);
+    };
+
+    appApi.health().catch(error => {
+      console.warn('Backend health check failed:', error);
     });
+
+    appApi.getLessons()
+      .then(response => {
+        const lessons = response.data.map(mapDatabaseLessonToVideoLesson);
+        if (lessons.length > 0) {
+          applyLessons(lessons);
+          return;
+        }
+        loadFallbackLessons();
+      })
+      .catch(error => {
+        console.warn('Backend lessons check failed:', error);
+        loadFallbackLessons();
+      });
   }, []);
 
   useEffect(() => {
