@@ -23,7 +23,7 @@ import {
 import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
 import { getSwingCourseProgress } from '../data/javaSwingCourse';
-import { PRACTICE_CHALLENGES } from '../data/practiceChallenges';
+import { getCurrentPracticeChallenge, PRACTICE_CHALLENGES } from '../data/practiceChallenges';
 import RecommendationCard from './RecommendationCard';
 
 interface StudentDashboardProps {
@@ -109,7 +109,9 @@ export default function StudentDashboard({
   const watchDb = getStoredJson<Record<string, any>>('oophub_oop_video_progress', {});
   const quizDb = getStoredJson<Record<string, any>>('oophub_oop_quiz_attempts', {});
   const submissionDb = getStoredJson<Record<string, any>>('oophub_practice_submissions', {});
-  const activePractice = PRACTICE_CHALLENGES[0];
+  const activePractice = getCurrentPracticeChallenge();
+  const activeLesson = OOP_COURSE_LESSONS.find(lesson => lesson.id === activePractice.lessonId) || OOP_COURSE_LESSONS[0];
+  const activeAssessment = OOP_ASSESSMENTS.find(assessment => assessment.id === activePractice.assessmentId) || OOP_ASSESSMENTS[0];
   const practiceKey = `${currentUser.id || currentUser.userId || currentUser.email}:${activePractice.id}`;
   const practiceSubmission = submissionDb[practiceKey];
   const practiceWatch = watchDb[activePractice.lessonId];
@@ -310,30 +312,30 @@ export default function StudentDashboard({
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex flex-col justify-between shadow-sm">
                 <div>
                   <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block">Recommended Lab Unit</span>
-                  <h4 className="font-extrabold text-slate-900 text-sm mt-1">Car Vehicle Subclass Override</h4>
-                  <p className="text-[11px] text-slate-500 mt-1 leading-normal">Write Java inheritance hierarchies and call super constructors securely inside our Practice IDE debugger.</p>
+                <h4 className="font-extrabold text-slate-900 text-sm mt-1">{activePractice.title}</h4>
+                <p className="text-[11px] text-slate-500 mt-1 leading-normal">{activePractice.description}</p>
                 </div>
                 <button
                   id="student-bento-lab-cta"
                   onClick={() => onNavigateTo('ide')}
                   className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer max-w-max transition shadow-sm hover:shadow active:scale-95"
                 >
-                  <Code2 className="w-3.5 h-3.5" /> Open IDE
+                <Code2 className="w-3.5 h-3.5" /> Open {activePractice.title}
                 </button>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex flex-col justify-between shadow-sm">
                 <div>
                   <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block">Diagnostic Milestones</span>
-                  <h4 className="font-extrabold text-slate-900 text-sm mt-1">Scenario 04: The Fleet Manager</h4>
-                  <p className="text-[11px] text-slate-500 mt-1 leading-normal">Analyze how the JVM invokes methods dynamically using virtual methods and reference types.</p>
+                <h4 className="font-extrabold text-slate-900 text-sm mt-1">{activeAssessment.title}</h4>
+                <p className="text-[11px] text-slate-500 mt-1 leading-normal">Assess {activeLesson.title.toLowerCase()} concepts with {activeAssessment.questions.length || 0} quiz checks tied to this week’s programming problem.</p>
                 </div>
                 <button
                   id="student-bento-quiz-cta"
                   onClick={() => onNavigateTo('assessments')}
                   className="mt-4 bg-white border border-slate-300 hover:bg-emerald-50 hover:border-emerald-500 text-slate-700 hover:text-emerald-800 font-bold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer max-w-max transition shadow-sm"
                 >
-                  <BookOpen className="w-3.5 h-3.5 text-slate-500" /> Start Assessment Quiz
+                <BookOpen className="w-3.5 h-3.5 text-slate-500" /> Start {activeAssessment.title}
                 </button>
               </div>
             </div>
