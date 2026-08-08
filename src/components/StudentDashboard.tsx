@@ -297,35 +297,6 @@ export default function StudentDashboard({
           
           {/* Curriculum Target Milestone Card with emerald themes */}
           <div className="bg-white/70 backdrop-blur-md p-6 rounded-2xl border border-slate-200/80 relative overflow-hidden" id="bento-curriculum-milestone">
-            <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <span className="text-[9px] font-bold font-mono tracking-wider uppercase text-emerald-700 bg-white border border-emerald-200 rounded-full px-2 py-1">Next Up</span>
-                  <h3 className="mt-2 text-base font-extrabold text-slate-900">{nextLesson.title}</h3>
-                </div>
-                <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-emerald-700 border border-emerald-200">{watchDb[nextLesson.id]?.completed ? 'Practice ready' : 'Continue learning'}</span>
-              </div>
-              <p className="mt-2 text-[11px] font-semibold text-slate-600">
-                Recommended next step: {nextPractice.title} plus the {nextAssessment.title} check for {nextLesson.topic.toLowerCase()}.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => onNavigateTo('ide')}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-[10px] font-black text-white hover:bg-emerald-700"
-                >
-                  <Code2 className="h-3.5 w-3.5" /> Open Lab
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onNavigateTo('assessments')}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-[10px] font-black text-slate-700 hover:border-emerald-500 hover:text-emerald-800"
-                >
-                  <BookOpen className="h-3.5 w-3.5" /> Start Quiz
-                </button>
-              </div>
-            </div>
-
             <div className="flex justify-between items-start mb-4 flex-wrap gap-4">
               <div className="space-y-1">
                 <span className="text-[9px] font-bold font-mono tracking-wider bg-emerald-50 border border-emerald-200 px-2 py-0.5 uppercase rounded text-emerald-700">{hasProgress ? 'Currently Studying' : 'Ready to Start'}</span>
