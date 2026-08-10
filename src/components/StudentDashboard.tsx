@@ -122,6 +122,8 @@ export default function StudentDashboard({
   const practiceUnlocked = Boolean(practiceWatch?.completed && practiceQuiz?.passed && practiceQuiz?.percentage >= 70);
   const practiceScore = Number(practiceSubmission?.score || 0);
   const performanceIndex = Math.round((0.4 * Number(practiceQuiz?.percentage || 0)) + (0.5 * practiceScore) + (0.1 * moduleProgress));
+  const learningState = performanceIndex >= 85 ? 'Mastered' : performanceIndex >= 60 ? 'Developing' : 'Beginner';
+  const learningStateClass = performanceIndex >= 85 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : performanceIndex >= 60 ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-sky-100 text-sky-800 border border-sky-200';
   const performanceClass = performanceIndex >= 85 ? 'Mastered' : performanceIndex >= 70 ? 'Completed' : 'In Progress';
   const swingProgress = getSwingCourseProgress();
   const pendingAssessments = OOP_ASSESSMENTS
@@ -214,8 +216,8 @@ export default function StudentDashboard({
           <div className="space-y-2 relative z-10">
             <div className="flex items-center gap-2">
               <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold rounded">Student Workspace</span>
-              <span className="text-[10px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded flex items-center gap-1">
-                <Zap className="w-3 h-3 fill-white" /> Live syncing
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 ${learningStateClass}`}>
+                <Zap className="w-3 h-3 fill-current" /> {learningState}
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-2">Welcome back, {firstName}! 👋</h1>

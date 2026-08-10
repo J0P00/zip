@@ -102,10 +102,73 @@ const DEMO_STUDENT_GRADE = {
 
 const OOP_LESSON_COUNT = OOP_COURSE_LESSONS.length;
 const clampCompletedLessons = (count: number) => Math.min(Math.max(count, 0), OOP_LESSON_COUNT);
+const normalizeRosterName = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
 const rankLeaderboard = (users: LeaderboardUser[]) =>
   [...users]
     .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name))
     .map((user, index) => ({ ...user, rank: index + 1 }));
+
+const getTeacherScopedLeaderboard = (
+  users: LeaderboardUser[],
+  currentUser: AuthenticatedUser | null,
+  monitoringRequests: MonitoringRequest[]
+) => {
+  if (!currentUser) return users;
+
+  const acceptedRequests = monitoringRequests.filter(req => req.status === 'accepted');
+
+  const teacherRosterNames = (teacherEmail: string) =>
+    acceptedRequests
+      .filter(req => req.teacherEmail.toLowerCase() === teacherEmail.toLowerCase())
+      .map(req => normalizeRosterName(req.studentName));
+
+  const normalizeUser = (user: LeaderboardUser) => normalizeRosterName(user.name);
+
+  if (currentUser.role === 'teacher') {
+    const teacherAcceptedNames = teacherRosterNames(currentUser.email);
+    if (!teacherAcceptedNames.length) return users;
+
+    return users.filter(user => {
+      const candidate = normalizeUser(user);
+      return teacherAcceptedNames.some(accepted => {
+        if (!accepted || !candidate) return false;
+        return accepted === candidate || candidate.includes(accepted) || accepted.includes(candidate);
+      });
+    });
+  }
+
+  if (currentUser.role === 'student') {
+    const acceptedTeachers = acceptedRequests
+      .filter(req => req.studentEmail.toLowerCase() === currentUser.email.toLowerCase())
+      .map(req => req.teacherEmail.toLowerCase());
+
+    if (!acceptedTeachers.length) return users;
+
+    const invitedNames = acceptedRequests
+      .filter(req => acceptedTeachers.includes(req.teacherEmail.toLowerCase()))
+      .map(req => normalizeRosterName(req.studentName));
+
+    if (!invitedNames.length) return users;
+
+    return users.filter(user => {
+      const candidate = normalizeUser(user);
+      if (user.isCurrentUser) return true;
+      return invitedNames.some(accepted => {
+        if (!accepted || !candidate) return false;
+        return accepted === candidate || candidate.includes(accepted) || accepted.includes(candidate);
+      });
+    });
+  }
+
+  return users;
+};
 
 const upsertCurrentRegisteredStudent = (
   users: LeaderboardUser[],
@@ -1054,11 +1117,14 @@ export default function App() {
     avatar: ''
   };
 
+  const studentVisibleLeaderboardUsers = getTeacherScopedLeaderboard(leaderboardUsers, currentUser, monitoringRequests);
+  const teacherVisibleLeaderboardUsers = getTeacherScopedLeaderboard(leaderboardUsers, displayUser, monitoringRequests);
+
   const learningProgress = Math.min(100, Math.round((completedLessonsCount / OOP_LESSON_COUNT) * 100));
   const profileMetrics = displayUser.role === 'teacher'
     ? [
         { label: 'Courses Created', value: String(lessonItems.length), helper: 'Lessons and catalog items prepared for students' },
-        { label: 'Total Students', value: String(leaderboardUsers.length), helper: 'Students currently visible in the active cohort' },
+        { label: 'Total Students', value: String(teacherVisibleLeaderboardUsers.length), helper: 'Students currently visible in the active cohort' },
         { label: 'Assessments Managed', value: String(INITIAL_QUESTIONS.length + pendingSubmissions.length), helper: 'Question banks and submissions under review' }
       ]
     : displayUser.role === 'admin'
@@ -1411,17 +1477,6 @@ export default function App() {
 
               {/* Status Pill indicators */}
               <div className="flex gap-2 items-center text-xs shrink-0 font-medium select-none">
-                {persona === 'student' && (
-                  <>
-                    <span className="flex items-center gap-1 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-xl border border-amber-200">
-                      <Flame className="w-3.5 h-3.5 fill-amber-500 font-bold" /> {streak} {streak === 1 ? 'Day' : 'Days'} Streak
-                    </span>
-                    <span className="flex items-center gap-1 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl border border-indigo-200">
-                      <Award className="w-3.5 h-3.5 text-indigo-600" /> {points} XP
-                    </span>
-                  </>
-                )}
-
                 {persona === 'teacher' && (
                   <span className="flex items-center gap-1.5 bg-rose-50 text-rose-700 px-3 py-1.5 rounded-xl border border-rose-200 font-bold">
                     <span className="w-2 h-2 bg-rose-500 rounded-full animate-ping"></span>
@@ -1501,7 +1556,7 @@ export default function App() {
 
             {persona === 'student' && studentTab === 'leaderboard' && (
               <Leaderboard 
-                users={leaderboardUsers}
+                users={studentVisibleLeaderboardUsers}
               />
             )}
 

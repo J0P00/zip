@@ -665,6 +665,35 @@ export default function TeacherPortal({
             </div>
           </div>
 
+          <div className={`rounded-2xl border p-4 shadow-sm ${cardClass}`}>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black">Overall Student Ranking</h3>
+                <p className="text-[11px] text-slate-500">Accepted invite roster sorted by performance index.</p>
+              </div>
+              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">{visibleStudents.length} invited</span>
+            </div>
+            <div className="space-y-2">
+              {[...visibleStudents]
+                .sort((a, b) => b.performanceIndex - a.performanceIndex || b.quizScore - a.quizScore)
+                .map((student, index) => (
+                  <div key={student.id} className={`flex items-center justify-between rounded-xl border p-3 ${selectedStudent.id === student.id ? 'border-emerald-300 bg-emerald-50/30' : mutedPanel}`}>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[10px] font-black text-white">#{index + 1}</span>
+                      <div>
+                        <p className="text-xs font-black text-slate-900">{student.name}</p>
+                        <p className="text-[10px] text-slate-500">{student.currentTopic} · {student.learningStatus}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-mono text-sm font-black text-emerald-700">{student.performanceIndex}%</p>
+                      <p className="text-[10px] text-slate-500">PI</p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+
           <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
