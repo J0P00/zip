@@ -233,27 +233,7 @@ export default function StudentDashboard({
           </div>
 
           <div className="flex flex-wrap items-center gap-6 pt-4 border-t border-slate-200/80 mt-4 relative z-10">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center">
-                <Flame className="w-4.5 h-4.5 text-amber-500 fill-amber-500" />
-              </div>
-              <div>
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider font-mono">Streak</div>
-                <div className="text-xs sm:text-sm font-extrabold text-slate-800 font-mono">{streak} {streak === 1 ? 'Day' : 'Days'}</div>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-2 border-l border-slate-200 pl-6">
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center">
-                <Award className="w-4.5 h-4.5 text-emerald-600" />
-              </div>
-              <div>
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider font-mono">My Points</div>
-                <div className="text-xs sm:text-sm font-extrabold text-slate-800 font-mono">{points} XP</div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 border-l border-slate-200 pl-6">
+            <div className="flex items-center gap-2 border-l border-slate-200 pl-6 first:border-l-0 first:pl-0">
               <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center">
                 <Clock className="w-4.5 h-4.5 text-sky-600" />
               </div>
