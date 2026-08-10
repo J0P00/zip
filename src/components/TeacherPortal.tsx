@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -27,6 +27,8 @@ import {
   WifiOff
 } from 'lucide-react';
 import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
+import { LeaderboardUser } from '../types';
+import Leaderboard from './Leaderboard';
 
 interface TeacherPortalProps {
   submissions: PendingSubmission[];
@@ -39,6 +41,7 @@ interface TeacherPortalProps {
   onReopenSubmission?: (id: string) => void;
   theme?: 'light' | 'dark';
   recommendationHistory?: AdaptiveRecommendation[];
+  leaderboardUsers?: LeaderboardUser[];
 }
 
 type TeacherTab = 'monitoring' | 'invitations' | 'topics' | 'swing' | 'assessments' | 'ide' | 'analytics';
@@ -346,7 +349,8 @@ export default function TeacherPortal({
   onRemoveConnection,
   onReopenSubmission,
   theme,
-  recommendationHistory = []
+  recommendationHistory = [],
+  leaderboardUsers = []
 }: TeacherPortalProps) {
   const isDark = theme === 'dark';
   const [activeTab, setActiveTab] = useState<TeacherTab>('monitoring');
@@ -360,6 +364,7 @@ export default function TeacherPortal({
   const [selectedSubId, setSelectedSubId] = useState<string>('');
   const [commentText, setCommentText] = useState('');
   const [scoreText, setScoreText] = useState(90);
+  const notifiedSubmissionIds = useRef<Set<string>>(new Set());
   const [notifications, setNotifications] = useState<TeacherNotification[]>([
     {
       id: 'n1',
@@ -384,19 +389,63 @@ export default function TeacherPortal({
     }
   ]);
 
-  const acceptedEmails = useMemo(
+  const acceptedRequests = useMemo(
     () =>
       monitoringRequests
-        .filter(req => req.teacherEmail.toLowerCase() === currentUser.email.toLowerCase() && req.status === 'accepted')
-        .map(req => req.studentEmail.toLowerCase()),
+        .filter(req => req.teacherEmail.toLowerCase() === currentUser.email.toLowerCase() && req.status === 'accepted'),
     [currentUser.email, monitoringRequests]
   );
+  const acceptedEmails = useMemo(() => acceptedRequests.map(req => req.studentEmail.toLowerCase()), [acceptedRequests]);
 
   const teacherRequests = monitoringRequests.filter(req => req.teacherEmail.toLowerCase() === currentUser.email.toLowerCase());
   const pendingRequests = teacherRequests.filter(req => req.status === 'pending');
 
-  const connectedStudents = students.filter(student => acceptedEmails.includes(student.email.toLowerCase()));
-  const visibleStudents = connectedStudents.length > 0 ? connectedStudents : students.slice(0, 4);
+  const connectedStudents = acceptedRequests.map((request, index) => {
+    const existing = students.find(student =>
+      student.email.toLowerCase() === request.studentEmail.toLowerCase() ||
+      student.id === request.studentId
+    );
+    if (existing) return existing;
+
+    const latestSubmission = submissions.find(sub =>
+      (sub.studentEmail || '').toLowerCase() === request.studentEmail.toLowerCase() ||
+      sub.studentId === request.studentId
+    );
+    const score = Number(latestSubmission?.score ?? latestSubmission?.grade ?? 0);
+    const quizScore = score || 80;
+    const practiceScore = score || 70;
+    const overallProgress = score >= 70 ? 72 : 45;
+    const performanceIndex = Math.round(quizScore * 0.35 + practiceScore * 0.4 + overallProgress * 0.25);
+
+    return withTopicProgress({
+      id: request.studentId || request.studentEmail,
+      name: request.studentName,
+      email: request.studentEmail,
+      section: latestSubmission?.section || 'Unassigned',
+      online: true,
+      activity: latestSubmission ? 'Submitted Practice IDE' : 'Connected by invite',
+      currentLesson: latestSubmission?.challengeName || 'OOP learning path',
+      currentTopic: latestSubmission?.topicTitle || 'Object-Oriented Programming',
+      swingLesson: 'Not started',
+      stage: latestSubmission ? 'Automatic Grading' : 'Lesson',
+      overallProgress,
+      moduleProgress: overallProgress,
+      topicProgress: overallProgress,
+      videoCompletion: Math.max(0, Math.min(100, overallProgress + 10)),
+      quizScore,
+      practiceScore,
+      challengesCompleted: latestSubmission ? 1 : 0,
+      performanceIndex,
+      learningStatus: performanceIndex >= 80 ? 'Completed' : performanceIndex >= 70 ? 'In Progress' : 'Needs Improvement',
+      lastActivity: latestSubmission ? 'just now' : 'connected',
+      moduleCompletion: overallProgress,
+      topicCompletion: overallProgress,
+      recommendation: latestSubmission?.feedback || 'Monitor the next video, assessment, and Practice IDE submission.',
+      topics: [],
+      swing: { video: 0, assessment: 0, ide: 0, miniProject: 0 }
+    }, index);
+  });
+  const visibleStudents = connectedStudents;
   const selectedStudent = visibleStudents.find(student => student.id === selectedStudentId) ?? visibleStudents[0];
   const visibleStudentKeys = visibleStudents.flatMap(student => [student.id, student.email, student.name]);
   const visibleRecommendations = recommendationHistory.filter(item =>
@@ -434,6 +483,18 @@ export default function TeacherPortal({
     filteredSubmissions.find(sub => sub.id === selectedSubId) ??
     filteredSubmissions.find(sub => sub.status === 'pending') ??
     filteredSubmissions[0];
+
+  const visibleLeaderboardUsers = leaderboardUsers.length > 0
+    ? leaderboardUsers
+    : visibleStudents.map((student, index) => ({
+        rank: index + 1,
+        name: student.name,
+        points: student.performanceIndex,
+        badges: student.learningStatus === 'Completed' || student.learningStatus === 'Mastered' ? ['Passed Practice IDE'] : [],
+        streak: Math.max(1, student.challengesCompleted),
+        avatar: '',
+        trend: student.performanceIndex >= 70 ? 'up' as const : 'stable' as const
+      }));
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -493,6 +554,22 @@ export default function TeacherPortal({
     setCommentText(selectedSubmission.feedback || '');
     setScoreText(Number(selectedSubmission.grade ?? selectedSubmission.score ?? 90));
   }, [selectedSubmission?.id]);
+
+  useEffect(() => {
+    const unseen = visibleSubmissions.filter(submission => !notifiedSubmissionIds.current.has(submission.id));
+    if (unseen.length === 0) return;
+
+    unseen.forEach(submission => notifiedSubmissionIds.current.add(submission.id));
+    const nextNotifications = unseen.map((submission): TeacherNotification => ({
+      id: `submission-${submission.id}`,
+      title: 'Practice IDE submission received',
+      message: `${submission.studentName} submitted ${submission.challengeName} with an automated score of ${submission.score ?? submission.grade ?? 0}%.`,
+      timestamp: 'now',
+      type: 'ide'
+    }));
+
+    setNotifications(prev => [...nextNotifications, ...prev].slice(0, 8));
+  }, [visibleSubmissions]);
 
   const handleSendRequestSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -623,7 +700,7 @@ export default function TeacherPortal({
       </div>
 
       {activeTab === 'monitoring' && selectedStudent && (
-        <div className="grid gap-5 xl:grid-cols-[360px_1fr_320px]">
+        <div className="grid gap-5 xl:grid-cols-[320px_1fr]">
           <div className={`rounded-2xl border p-4 shadow-sm ${cardClass}`}>
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -665,36 +742,11 @@ export default function TeacherPortal({
             </div>
           </div>
 
-          <div className={`rounded-2xl border p-4 shadow-sm ${cardClass}`}>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-black">Overall Student Ranking</h3>
-                <p className="text-[11px] text-slate-500">Accepted invite roster sorted by performance index.</p>
-              </div>
-              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">{visibleStudents.length} invited</span>
-            </div>
-            <div className="space-y-2">
-              {[...visibleStudents]
-                .sort((a, b) => b.performanceIndex - a.performanceIndex || b.quizScore - a.quizScore)
-                .map((student, index) => (
-                  <div key={student.id} className={`flex items-center justify-between rounded-xl border p-3 ${selectedStudent.id === student.id ? 'border-emerald-300 bg-emerald-50/30' : mutedPanel}`}>
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[10px] font-black text-white">#{index + 1}</span>
-                      <div>
-                        <p className="text-xs font-black text-slate-900">{student.name}</p>
-                        <p className="text-[10px] text-slate-500">{student.currentTopic} · {student.learningStatus}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-mono text-sm font-black text-emerald-700">{student.performanceIndex}%</p>
-                      <p className="text-[10px] text-slate-500">PI</p>
-                    </div>
-                  </div>
-                ))}
-            </div>
+          <div className="min-w-0">
+            <Leaderboard users={visibleLeaderboardUsers} />
           </div>
 
-          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+          <div className={`rounded-2xl border p-5 shadow-sm xl:col-span-2 ${cardClass}`}>
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="flex items-center gap-2">
@@ -798,7 +850,7 @@ export default function TeacherPortal({
             </div>
           </div>
 
-          <div className={`rounded-2xl border p-4 shadow-sm ${cardClass}`}>
+          <div className={`rounded-2xl border p-4 shadow-sm xl:col-span-2 ${cardClass}`}>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-sm font-black">Real-Time Notifications</h3>
               <Bell className="h-4 w-4 text-emerald-600" />

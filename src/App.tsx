@@ -214,6 +214,9 @@ const upsertCurrentRegisteredStudent = (
 };
 const SESSION_USER_KEY = 'oophub_current_user';
 const SESSION_VIEW_KEY = 'oophub_workspace_view';
+const PRACTICE_SUBMISSIONS_KEY = 'oophub_practice_submissions';
+const PENDING_SUBMISSIONS_KEY = 'oophub_teacher_pending_submissions';
+const LEADERBOARD_KEY = 'oophub_leaderboard_users';
 const PERSONAS: Persona[] = ['public', 'student', 'teacher', 'admin'];
 const STUDENT_TABS: StudentSubView[] = ['dashboard', 'ide', 'videos', 'assessments', 'swing', 'leaderboard', 'profile'];
 const TEACHER_TABS: TeacherSubView[] = ['dashboard', 'students', 'submission-review', 'analytics', 'profile'];
@@ -302,6 +305,57 @@ const clearSessionUser = () => {
   } catch {
     // Logout should still complete even if storage cleanup is blocked.
   }
+};
+
+const readStoredJson = <T,>(key: string, fallback: T): T => {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const saveStoredJson = (key: string, value: unknown) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // The current React state is still the source of truth for this render.
+  }
+};
+
+const practiceSubmissionToPending = (submission: PracticeSubmission): PendingSubmission => ({
+  id: submission.id,
+  studentId: submission.studentId,
+  studentEmail: submission.studentEmail,
+  studentName: submission.studentName,
+  section: submission.section,
+  challengeName: submission.challengeTitle,
+  submittedAt: 'Just Now',
+  status: 'pending',
+  code: submission.sourceCode,
+  grade: submission.score,
+  score: submission.score,
+  topicId: submission.topicId,
+  topicTitle: submission.topicTitle,
+  compileStatus: submission.compileStatus,
+  runtime: submission.runtime,
+  memoryUsage: submission.memoryUsage,
+  programOutput: submission.programOutput,
+  errorMessage: submission.errorMessage,
+  isLocked: submission.isLocked,
+  testResults: submission.testResults,
+  feedback: submission.score >= 70
+    ? 'Automated grader: passed hidden test cases and practice requirements. Teacher review is pending.'
+    : 'Automated grader: submission recorded, but one or more hidden tests failed. Teacher review is pending.'
+});
+
+const readPracticePendingSubmissions = (): PendingSubmission[] => {
+  const savedPending = readStoredJson<PendingSubmission[]>(PENDING_SUBMISSIONS_KEY, []);
+  const practiceDb = readStoredJson<Record<string, PracticeSubmission>>(PRACTICE_SUBMISSIONS_KEY, {});
+  const practicePending = Object.values(practiceDb).map(practiceSubmissionToPending);
+  const merged = [...savedPending, ...practicePending];
+  return merged.filter((submission, index, list) => list.findIndex(item => item.id === submission.id) === index);
 };
 
 export default function App() {
@@ -407,16 +461,25 @@ export default function App() {
     userApi.listUsers(token)
       .then(response => {
         const students = response.data.filter(user => user.role === 'student');
-        setLeaderboardUsers(students.map((user, index) => ({
-          rank: index + 1,
-          name: user.name,
-          points: 0,
-          badges: [],
-          streak: 0,
-          isCurrentUser: currentUser ? user.id === currentUser.id || user.email === currentUser.email : false,
-          avatar: user.avatar,
-          trend: 'stable'
-        })));
+        setLeaderboardUsers(prev => {
+          const registered = students.map((user, index) => {
+            const saved = prev.find(entry => normalizeRosterName(entry.name) === normalizeRosterName(user.name));
+            return {
+              rank: index + 1,
+              name: currentUser && (user.id === currentUser.id || user.email === currentUser.email) ? `${user.name} (You)` : user.name,
+              points: saved?.points ?? 0,
+              badges: saved?.badges ?? [],
+              streak: saved?.streak ?? 0,
+              isCurrentUser: currentUser ? user.id === currentUser.id || user.email === currentUser.email : false,
+              avatar: user.avatar || saved?.avatar,
+              trend: saved?.trend || 'stable'
+            };
+          });
+          const missingSaved = prev.filter(entry =>
+            !registered.some(user => normalizeRosterName(user.name) === normalizeRosterName(entry.name))
+          );
+          return rankLeaderboard([...registered, ...missingSaved]);
+        });
       })
       .catch(error => {
         console.warn('Unable to load registered users from backend:', error);
@@ -534,13 +597,40 @@ export default function App() {
     localStorage.setItem('oophub_notifications', JSON.stringify(notifications));
   }, [notifications]);
 
-  const [leaderboardUsers, setLeaderboardUsers] = useState<LeaderboardUser[]>([]);
-  const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>([]);
+  const [leaderboardUsers, setLeaderboardUsers] = useState<LeaderboardUser[]>(() =>
+    rankLeaderboard(readStoredJson<LeaderboardUser[]>(LEADERBOARD_KEY, []))
+  );
+  const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>(() => readPracticePendingSubmissions());
   const [curriculumModules, setCurriculumModules] = useState<CurriculumModule[]>([]);
   const [lessonItems, setLessonItems] = useState<LessonItem[]>([]);
   const [adaptiveRules, setAdaptiveRules] = useState<AdaptiveRule[]>([]);
   const [recommendationHistory, setRecommendationHistory] = useState<AdaptiveRecommendation[]>(() => getRecommendationHistory());
   const [activeRecommendation, setActiveRecommendation] = useState<AdaptiveRecommendation | null>(() => getRecommendationHistory()[0] || null);
+
+  useEffect(() => {
+    if (leaderboardUsers.length > 0) saveStoredJson(LEADERBOARD_KEY, leaderboardUsers);
+  }, [leaderboardUsers]);
+
+  useEffect(() => {
+    saveStoredJson(PENDING_SUBMISSIONS_KEY, pendingSubmissions);
+  }, [pendingSubmissions]);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === PRACTICE_SUBMISSIONS_KEY || event.key === PENDING_SUBMISSIONS_KEY) {
+        setPendingSubmissions(readPracticePendingSubmissions());
+      }
+      if (event.key === LEADERBOARD_KEY) {
+        setLeaderboardUsers(rankLeaderboard(readStoredJson<LeaderboardUser[]>(LEADERBOARD_KEY, [])));
+      }
+      if (event.key === 'oophub_monitoring_requests') {
+        setMonitoringRequests(readStoredJson<MonitoringRequest[]>('oophub_monitoring_requests', []));
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   // Live reviews returned from Dr. Elena Vance
   const [recentStudentGrade, setRecentStudentGrade] = useState<{ grade: number; feedback: string; challenge: string } | null>(
@@ -870,41 +960,20 @@ export default function App() {
     if (submission.score >= 70) setCompletedLessonsCount(prev => clampCompletedLessons(prev + 1));
 
     // Append new active row inside Instructor queue review pending
-    const newSub: PendingSubmission = {
-      id: submission.id,
-      studentId: submission.studentId,
-      studentEmail: submission.studentEmail,
-      studentName: `${submission.studentName} (You)`,
-      section: submission.section,
-      challengeName: submission.challengeTitle,
-      submittedAt: 'Just Now',
-      status: 'reviewed',
-      code: submission.sourceCode,
-      grade: submission.score,
-      score: submission.score,
-      topicId: submission.topicId,
-      topicTitle: submission.topicTitle,
-      compileStatus: submission.compileStatus,
-      runtime: submission.runtime,
-      memoryUsage: submission.memoryUsage,
-      programOutput: submission.programOutput,
-      errorMessage: submission.errorMessage,
-      isLocked: submission.isLocked,
-      testResults: submission.testResults,
-      feedback: submission.score >= 70
-        ? 'Automated grader: passed hidden test cases and practice requirements.'
-        : 'Automated grader: submission recorded, but one or more hidden tests failed.'
-    };
+    const newSub = practiceSubmissionToPending(submission);
 
-    setPendingSubmissions(prev => [newSub, ...prev]);
+    setPendingSubmissions(prev => [newSub, ...prev.filter(item => item.id !== newSub.id)]);
 
     // Lift leaderboard rankings score dynamically on the current student row
-    setLeaderboardUsers(prev => prev.map(u => {
-      if (u.isCurrentUser) {
-        return { ...u, points: u.points + xpAward, streak: u.streak + 1 };
-      }
-      return u;
-    }));
+    setLeaderboardUsers(prev => {
+      const nextProgress = {
+        points: points + xpAward,
+        streak: streak + 1,
+        completedLessonsCount: submission.score >= 70 ? clampCompletedLessons(completedLessonsCount + 1) : completedLessonsCount
+      };
+      const nextUsers = upsertCurrentRegisteredStudent(prev, currentUser, nextProgress);
+      return rankLeaderboard(nextUsers.map(u => u.isCurrentUser ? { ...u, trend: 'up' } : u));
+    });
 
     setRecentStudentGrade({
       grade: submission.score,
@@ -953,12 +1022,15 @@ export default function App() {
     setStreak(prev => prev + 1);
 
     // Bump user points row in leaderboard ranking
-    setLeaderboardUsers(prev => prev.map(u => {
-      if (u.isCurrentUser) {
-        return { ...u, points: u.points + xpAward, streak: u.streak + 1, trend: xpAward > 0 ? 'up' : 'stable' };
-      }
-      return u;
-    }));
+    setLeaderboardUsers(prev => {
+      const nextProgress = {
+        points: points + xpAward,
+        streak: streak + 1,
+        completedLessonsCount
+      };
+      const nextUsers = upsertCurrentRegisteredStudent(prev, currentUser, nextProgress);
+      return rankLeaderboard(nextUsers.map(u => u.isCurrentUser ? { ...u, trend: xpAward > 0 ? 'up' : 'stable' } : u));
+    });
 
     const lesson = OOP_COURSE_LESSONS.find(item => item.id === attempt.lessonId);
     const recommendation = generateRuleBasedRecommendation({
@@ -1573,6 +1645,7 @@ export default function App() {
                 onReopenSubmission={handleReopenPracticeSubmission}
                 theme={theme}
                 recommendationHistory={recommendationHistory}
+                leaderboardUsers={teacherVisibleLeaderboardUsers}
               />
             )}
 
