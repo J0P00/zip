@@ -484,17 +484,27 @@ export default function TeacherPortal({
     filteredSubmissions.find(sub => sub.status === 'pending') ??
     filteredSubmissions[0];
 
-  const visibleLeaderboardUsers = leaderboardUsers.length > 0
-    ? leaderboardUsers
-    : visibleStudents.map((student, index) => ({
-        rank: index + 1,
-        name: student.name,
-        points: student.performanceIndex,
-        badges: student.learningStatus === 'Completed' || student.learningStatus === 'Mastered' ? ['Passed Practice IDE'] : [],
-        streak: Math.max(1, student.challengesCompleted),
-        avatar: '',
-        trend: student.performanceIndex >= 70 ? 'up' as const : 'stable' as const
-      }));
+  const visibleLeaderboardUsers = [...visibleStudents]
+    .sort((a, b) => b.performanceIndex - a.performanceIndex || b.practiceScore - a.practiceScore)
+    .map((student, index) => ({
+      rank: index + 1,
+      name: student.name,
+      points: student.performanceIndex,
+      progress: student.performanceIndex,
+      videoProgress: student.videoCompletion,
+      quizScore: student.quizScore,
+      practiceScore: student.practiceScore,
+      status: student.learningStatus,
+      currentTopic: student.currentTopic,
+      badges: [
+        `${student.videoCompletion}% Video`,
+        `${student.quizScore}% Quiz`,
+        `${student.practiceScore}% Practice IDE`
+      ],
+      streak: 0,
+      avatar: '',
+      trend: student.performanceIndex >= 70 ? 'up' as const : 'stable' as const
+    }));
 
   useEffect(() => {
     const interval = window.setInterval(() => {

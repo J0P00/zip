@@ -1,18 +1,12 @@
 import React, { useState } from 'react';
-import { 
-  Award, 
-  Flame, 
-  Search, 
-  ChevronRight, 
-  UserPlus, 
-  TrendingUp, 
-  TrendingDown, 
-  Minus, 
-  Sparkles, 
-  Trophy, 
-  Code, 
-  Bookmark,
-  Activity
+import {
+  Activity,
+  Minus,
+  Search,
+  Sparkles,
+  TrendingDown,
+  TrendingUp,
+  Trophy
 } from 'lucide-react';
 import { LeaderboardUser } from '../types';
 
@@ -36,6 +30,20 @@ export default function Leaderboard({ users }: LeaderboardProps) {
     u.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
   const selectedFirstName = selectedUser?.name.replace(/\s+\(You\)$/, '').split(/\s+/)[0] || 'This student';
+  const getProgress = (user: LeaderboardUser) => user.progress ?? user.points ?? 0;
+  const getStatus = (user: LeaderboardUser) => user.status || (getProgress(user) >= 70 ? 'Passed' : 'In Progress');
+  const renderAvatar = (user: LeaderboardUser, className: string) => {
+    if (user.avatar) {
+      return <img src={user.avatar} alt={user.name} referrerPolicy="no-referrer" className={className} />;
+    }
+
+    const initial = user.name.replace(/\s+\(You\)$/, '').trim().charAt(0) || 'S';
+    return (
+      <div className={`${className} flex items-center justify-center bg-emerald-600 font-black uppercase text-white`}>
+        {initial}
+      </div>
+    );
+  };
 
   return (
     <div className="grid lg:grid-cols-12 gap-6 text-slate-800" id="leaderboard-workspace">
@@ -50,7 +58,7 @@ export default function Leaderboard({ users }: LeaderboardProps) {
           <div className="text-center max-w-md mx-auto mb-6 space-y-1">
             <span className="text-[10px] uppercase font-mono font-bold tracking-widest text-indigo-400">Student Standings</span>
             <h2 className="text-xl font-bold font-sans">OOP Course Hall of Fame</h2>
-            <p className="text-xs text-slate-400">Top-performing software architects in the active cohort</p>
+            <p className="text-xs text-slate-400">Students enrolled in the active OOP subject</p>
           </div>
 
           <div className="grid grid-cols-3 gap-2 sm:gap-4 pt-4 items-end max-w-lg mx-auto min-h-[170px]" id="podium-cols">
@@ -72,7 +80,7 @@ export default function Leaderboard({ users }: LeaderboardProps) {
                 </div>
                 <div className="text-center mt-3 w-full bg-slate-800/60 p-2 rounded-t-xl border-t border-slate-700">
                   <span className="font-bold text-slate-200 text-xs truncate block">{top2.name.split(' ')[0]}</span>
-                  <span className="text-[10px] text-slate-400 font-mono font-semibold block mt-0.5">{top2.points} XP</span>
+                  <span className="text-[10px] text-slate-400 font-mono font-semibold block mt-0.5">{getProgress(top2)}% progress</span>
                 </div>
               </div>
             )}
@@ -95,7 +103,7 @@ export default function Leaderboard({ users }: LeaderboardProps) {
                 </div>
                 <div className="text-center mt-3 w-full bg-slate-850 p-2.5 rounded-t-xl border-t-2 border-amber-400 shadow-md">
                   <span className="font-bold text-amber-300 text-xs sm:text-sm truncate block">{top1.name}</span>
-                  <span className="text-[10.5px] text-amber-250 font-mono font-bold block mt-0.5">{top1.points} XP</span>
+                  <span className="text-[10.5px] text-amber-250 font-mono font-bold block mt-0.5">{getProgress(top1)}% progress</span>
                 </div>
               </div>
             )}
@@ -117,7 +125,7 @@ export default function Leaderboard({ users }: LeaderboardProps) {
                 </div>
                 <div className="text-center mt-3 w-full bg-slate-800/60 p-2 rounded-t-xl border-t border-slate-700">
                   <span className="font-bold text-slate-200 text-xs truncate block">{top3.name.split(' ')[0]}</span>
-                  <span className="text-[10px] text-slate-400 font-mono font-semibold block mt-0.5">{top3.points} XP</span>
+                  <span className="text-[10px] text-slate-400 font-mono font-semibold block mt-0.5">{getProgress(top3)}% progress</span>
                 </div>
               </div>
             )}
@@ -129,8 +137,8 @@ export default function Leaderboard({ users }: LeaderboardProps) {
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
           <div className="flex flex-wrap gap-4 justify-between items-center pb-2 border-b border-slate-100">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Global Class Rankings</h3>
-              <p className="text-xs text-slate-500">Search student ratings or click rows to examine logs</p>
+              <h3 className="text-sm font-bold text-slate-900">OOP Subject Rankings</h3>
+              <p className="text-xs text-slate-500">Search enrolled OOP students or click rows to examine progress</p>
             </div>
             
             {/* Search Input bar */}
@@ -153,9 +161,10 @@ export default function Leaderboard({ users }: LeaderboardProps) {
                 <tr className="border-b border-slate-200 text-slate-500 font-semibold tracking-wider uppercase text-[10px]">
                   <th className="py-3 px-4">Rank</th>
                   <th className="py-3 px-4">Name</th>
-                  <th className="py-3 px-4">OOP Score</th>
-                  <th className="py-3 px-4">Earned Badges</th>
-                  <th className="py-3 px-4">Streak</th>
+                  <th className="py-3 px-4">OOP Progress</th>
+                  <th className="py-3 px-4">Quiz</th>
+                  <th className="py-3 px-4">Practice IDE</th>
+                  <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4 text-right">Trend</th>
                 </tr>
               </thead>
@@ -192,20 +201,23 @@ export default function Leaderboard({ users }: LeaderboardProps) {
                       </td>
 
                       <td className="py-3 px-4 font-mono font-bold text-slate-900">
-                        {item.points} XP
+                        {getProgress(item)}%
+                      </td>
+
+                      <td className="py-3 px-4 font-mono font-bold text-slate-700">
+                        {item.quizScore ?? 0}%
+                      </td>
+
+                      <td className="py-3 px-4 font-mono font-bold text-slate-700">
+                        {item.practiceScore ?? 0}%
                       </td>
 
                       <td className="py-3 px-4">
-                        <div className="flex flex-wrap gap-1 max-w-[200px]">
-                          {item.badges.slice(0, 2).map((badge, idx) => (
-                            <span key={idx} className="bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[9px] block whitespace-nowrap">{badge}</span>
-                          ))}
-                          {item.badges.length > 2 && <span className="text-[9px] text-slate-400 font-semibold px-1">+ {item.badges.length - 2} more</span>}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4 font-mono font-semibold text-amber-600">
-                        🔥 {item.streak} days
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-black ${
+                          getProgress(item) >= 70 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                        }`}>
+                          {getStatus(item)}
+                        </span>
                       </td>
 
                       <td className="py-3 px-4 text-right pr-6 shrink-0">
@@ -248,28 +260,28 @@ export default function Leaderboard({ users }: LeaderboardProps) {
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-950 text-base">{selectedUser.name}</h3>
-                  <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider font-mono mt-0.5">Cohort Rank #{selectedUser.rank}</span>
+                  <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider font-mono mt-0.5">OOP Subject Rank #{selectedUser.rank}</span>
                 </div>
               </div>
 
               {/* Stats dashboard details */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-0.5 text-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold font-mono tracking-wide">Aggregate XP</span>
-                  <div className="text-sm font-extrabold text-[#059669] font-mono leading-tight">{selectedUser.points} XP</div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold font-mono tracking-wide">OOP Progress</span>
+                  <div className="text-sm font-extrabold text-[#059669] font-mono leading-tight">{getProgress(selectedUser)}%</div>
                 </div>
 
                 <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-0.5 text-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold font-mono tracking-wide">Active Streak</span>
-                  <div className="text-sm font-extrabold text-amber-600 font-mono leading-tight">🔥 {selectedUser.streak} Days</div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold font-mono tracking-wide">Practice IDE</span>
+                  <div className="text-sm font-extrabold text-amber-600 font-mono leading-tight">{selectedUser.practiceScore ?? 0}%</div>
                 </div>
               </div>
 
               {/* Achievements collection */}
               <div className="space-y-2.5">
-                <h4 className="text-[10px] uppercase font-bold tracking-widest text-slate-400 font-mono">Earned Badges</h4>
+                <h4 className="text-[10px] uppercase font-bold tracking-widest text-slate-400 font-mono">OOP Milestones</h4>
                 <div className="flex flex-wrap gap-2">
-                  {selectedUser.badges.map((badge, idx) => (
+                  {(selectedUser.badges.length ? selectedUser.badges : [getStatus(selectedUser)]).map((badge, idx) => (
                     <span 
                       key={idx}
                       className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-100 text-indigo-700 px-3 py-1 rounded-lg text-xs font-semibold"
@@ -282,7 +294,7 @@ export default function Leaderboard({ users }: LeaderboardProps) {
 
               {/* Academic activity milestones list */}
               <div className="space-y-3">
-                <h4 className="text-[10px] uppercase font-bold tracking-widest text-[#475569] font-mono">Syllabus Active States</h4>
+                <h4 className="text-[10px] uppercase font-bold tracking-widest text-[#475569] font-mono">Realtime OOP Progress</h4>
                 
                 <div className="space-y-2.5 font-sans">
                   {[
@@ -304,9 +316,9 @@ export default function Leaderboard({ users }: LeaderboardProps) {
             <div className="p-4 bg-gradient-to-br from-indigo-50 to-indigo-100/50 rounded-xl border border-indigo-100 flex gap-2.5 items-start mt-6 text-left">
               <Activity className="w-5 h-5 text-indigo-600 mt-0.5 shrink-0" />
               <div>
-                <h4 className="text-[11px] font-bold text-indigo-900">Rising Star Accelerator</h4>
+                <h4 className="text-[11px] font-bold text-indigo-900">OOP Progress Monitor</h4>
                 <p className="text-[10.5px] text-indigo-700/80 leading-normal mt-0.5">
-                  {selectedFirstName} completed 2 separate Java VM sandbox iterations today, keeping an active streak acceleration multiplier. Solve current assessments daily to optimize course placement thresholds!
+                  {selectedFirstName} is ranked from enrolled-subject progress across video completion, assessment scores, and Practice IDE submissions.
                 </p>
               </div>
             </div>

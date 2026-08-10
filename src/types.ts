@@ -180,6 +180,12 @@ export interface LeaderboardUser {
   isCurrentUser?: boolean;
   avatar?: string;
   trend?: 'up' | 'down' | 'stable';
+  progress?: number;
+  videoProgress?: number;
+  quizScore?: number;
+  practiceScore?: number;
+  status?: string;
+  currentTopic?: string;
 }
 
 export interface PendingSubmission {
