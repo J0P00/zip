@@ -401,6 +401,47 @@ export default function TeacherPortal({
   const pendingRequests = teacherRequests.filter(req => req.status === 'pending');
 
   const connectedStudents = acceptedRequests.map((request, index) => {
+    const progressUser = leaderboardUsers.find(user =>
+      user.name.replace(/\s+\(You\)$/i, '').toLowerCase() === request.studentName.toLowerCase()
+    );
+    if (progressUser) {
+      const overallProgress = progressUser.progress ?? progressUser.points ?? 0;
+      const videoCompletion = progressUser.videoProgress ?? 0;
+      const quizScore = progressUser.quizScore ?? 0;
+      const practiceScore = progressUser.practiceScore ?? 0;
+      const performanceIndex = overallProgress;
+      const learningStatus: LearningStatus =
+        overallProgress >= 100 ? 'Completed' : overallProgress > 0 ? 'In Progress' : 'At Risk';
+
+      return withTopicProgress({
+        id: request.studentId || request.studentEmail,
+        name: request.studentName,
+        email: request.studentEmail,
+        section: 'Unassigned',
+        online: true,
+        activity: progressUser.currentTopic || 'OOP learning path',
+        currentLesson: progressUser.currentTopic || 'OOP learning path',
+        currentTopic: progressUser.currentTopic || 'Object-Oriented Programming',
+        swingLesson: 'Not started',
+        stage: overallProgress > 0 ? 'Lesson' : 'Watch Video',
+        overallProgress,
+        moduleProgress: overallProgress,
+        topicProgress: overallProgress,
+        videoCompletion,
+        quizScore,
+        practiceScore,
+        challengesCompleted: practiceScore > 0 ? 1 : 0,
+        performanceIndex,
+        learningStatus,
+        lastActivity: 'synced',
+        moduleCompletion: overallProgress,
+        topicCompletion: overallProgress,
+        recommendation: 'Progress is synced from the student account activity.',
+        topics: [],
+        swing: { video: 0, assessment: 0, ide: 0, miniProject: 0 }
+      }, index);
+    }
+
     const existing = students.find(student =>
       student.email.toLowerCase() === request.studentEmail.toLowerCase() ||
       student.id === request.studentId
@@ -484,27 +525,29 @@ export default function TeacherPortal({
     filteredSubmissions.find(sub => sub.status === 'pending') ??
     filteredSubmissions[0];
 
-  const visibleLeaderboardUsers = [...visibleStudents]
-    .sort((a, b) => b.performanceIndex - a.performanceIndex || b.practiceScore - a.practiceScore)
-    .map((student, index) => ({
-      rank: index + 1,
-      name: student.name,
-      points: student.performanceIndex,
-      progress: student.performanceIndex,
-      videoProgress: student.videoCompletion,
-      quizScore: student.quizScore,
-      practiceScore: student.practiceScore,
-      status: student.learningStatus,
-      currentTopic: student.currentTopic,
-      badges: [
-        `${student.videoCompletion}% Video`,
-        `${student.quizScore}% Quiz`,
-        `${student.practiceScore}% Practice IDE`
-      ],
-      streak: 0,
-      avatar: '',
-      trend: student.performanceIndex >= 70 ? 'up' as const : 'stable' as const
-    }));
+  const visibleLeaderboardUsers = leaderboardUsers.length
+    ? leaderboardUsers.map((user, index) => ({ ...user, rank: index + 1 }))
+    : [...visibleStudents]
+        .sort((a, b) => b.performanceIndex - a.performanceIndex || b.practiceScore - a.practiceScore)
+        .map((student, index) => ({
+          rank: index + 1,
+          name: student.name,
+          points: student.performanceIndex,
+          progress: student.performanceIndex,
+          videoProgress: student.videoCompletion,
+          quizScore: student.quizScore,
+          practiceScore: student.practiceScore,
+          status: student.learningStatus,
+          currentTopic: student.currentTopic,
+          badges: [
+            `${student.videoCompletion}% Video`,
+            `${student.quizScore}% Quiz`,
+            `${student.practiceScore}% Practice IDE`
+          ],
+          streak: 0,
+          avatar: '',
+          trend: student.performanceIndex >= 70 ? 'up' as const : 'stable' as const
+        }));
 
   useEffect(() => {
     const interval = window.setInterval(() => {

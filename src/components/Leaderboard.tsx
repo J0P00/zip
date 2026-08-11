@@ -32,6 +32,11 @@ export default function Leaderboard({ users }: LeaderboardProps) {
   const selectedFirstName = selectedUser?.name.replace(/\s+\(You\)$/, '').split(/\s+/)[0] || 'This student';
   const getProgress = (user: LeaderboardUser) => user.progress ?? user.points ?? 0;
   const getStatus = (user: LeaderboardUser) => user.status || (getProgress(user) >= 70 ? 'Passed' : 'In Progress');
+  const getRealtimeProgress = (user: LeaderboardUser) =>
+    user.realtimeOopProgress?.length
+      ? user.realtimeOopProgress
+      : [{ id: 'not-started', label: 'OOP learning path', status: 'Not Started' as const }];
+  const isCompletedActivity = (status: string) => ['Completed', 'Passed', 'Submitted'].includes(status);
   const renderAvatar = (user: LeaderboardUser, className: string) => {
     if (user.avatar) {
       return <img src={user.avatar} alt={user.name} referrerPolicy="no-referrer" className={className} />;
@@ -70,12 +75,7 @@ export default function Leaderboard({ users }: LeaderboardProps) {
                 onClick={() => setSelectedUser(top2)}
               >
                 <div className="relative">
-                  <img 
-                    src={top2.avatar} 
-                    alt={top2.name} 
-                    referrerPolicy="no-referrer"
-                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-slate-300 object-cover group-hover:scale-105 transition shadow-lg" 
-                  />
+                  {renderAvatar(top2, 'w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-slate-300 object-cover group-hover:scale-105 transition shadow-lg')}
                   <span className="absolute -bottom-1.5 -right-1.5 w-5 h-5 bg-slate-300 text-slate-900 text-[10px] font-bold rounded-full flex items-center justify-center font-mono">2</span>
                 </div>
                 <div className="text-center mt-3 w-full bg-slate-800/60 p-2 rounded-t-xl border-t border-slate-700">
@@ -93,12 +93,7 @@ export default function Leaderboard({ users }: LeaderboardProps) {
               >
                 <div className="relative">
                   <div className="absolute -top-6 -left-1 text-amber-400 animate-pulse"><Trophy className="w-5 h-5 fill-amber-400 text-amber-400 rotate-12" /></div>
-                  <img 
-                    src={top1.avatar} 
-                    alt={top1.name} 
-                    referrerPolicy="no-referrer"
-                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 border-amber-400 object-cover group-hover:scale-105 transition shadow-2xl shadow-indigo-500/20" 
-                  />
+                  {renderAvatar(top1, 'w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 border-amber-400 object-cover group-hover:scale-105 transition shadow-2xl shadow-indigo-500/20')}
                   <span className="absolute -bottom-1.5 -right-1.5 w-6 h-6 bg-amber-450 bg-amber-400 text-slate-900 text-xs font-bold rounded-full flex items-center justify-center font-mono shadow-md">1</span>
                 </div>
                 <div className="text-center mt-3 w-full bg-slate-850 p-2.5 rounded-t-xl border-t-2 border-amber-400 shadow-md">
@@ -115,12 +110,7 @@ export default function Leaderboard({ users }: LeaderboardProps) {
                 onClick={() => setSelectedUser(top3)}
               >
                 <div className="relative">
-                  <img 
-                    src={top3.avatar} 
-                    alt={top3.name} 
-                    referrerPolicy="no-referrer"
-                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-amber-600 object-cover group-hover:scale-105 transition shadow-lg" 
-                  />
+                  {renderAvatar(top3, 'w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-amber-600 object-cover group-hover:scale-105 transition shadow-lg')}
                   <span className="absolute -bottom-1.5 -right-1.5 w-5 h-5 bg-amber-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center font-mono">3</span>
                 </div>
                 <div className="text-center mt-3 w-full bg-slate-800/60 p-2 rounded-t-xl border-t border-slate-700">
@@ -187,12 +177,7 @@ export default function Leaderboard({ users }: LeaderboardProps) {
 
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
-                          <img 
-                            src={item.avatar} 
-                            alt={item.name} 
-                            referrerPolicy="no-referrer"
-                            className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0" 
-                          />
+                          {renderAvatar(item, 'w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0')}
                           <div>
                             <span className={`font-bold block text-slate-850 ${isUser && 'text-indigo-900'}`}>{item.name}</span>
                             {isUser && <span className="text-[9px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Current User</span>}
@@ -248,12 +233,7 @@ export default function Leaderboard({ users }: LeaderboardProps) {
               {/* Profile banner metadata */}
               <div className="text-center border-b border-slate-100 pb-4 space-y-3">
                 <div className="relative inline-block">
-                  <img 
-                    src={selectedUser.avatar} 
-                    alt={selectedUser.name} 
-                    referrerPolicy="no-referrer"
-                    className="w-20 h-20 rounded-full mx-auto border-2 border-indigo-100 object-cover" 
-                  />
+                  {renderAvatar(selectedUser, 'w-20 h-20 rounded-full mx-auto border-2 border-indigo-100 object-cover')}
                   {selectedUser.rank <= 3 && (
                     <span className="absolute bottom-0 right-1 w-6 h-6 bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold rounded-full flex items-center justify-center">🏆</span>
                   )}
@@ -297,16 +277,15 @@ export default function Leaderboard({ users }: LeaderboardProps) {
                 <h4 className="text-[10px] uppercase font-bold tracking-widest text-[#475569] font-mono">Realtime OOP Progress</h4>
                 
                 <div className="space-y-2.5 font-sans">
-                  {[
-                    { label: 'Inheritance Constraints with Base classes', time: 'Completed', success: true },
-                    { label: 'Polymorphic Dynamic binding dispatch Quiz', time: 'Completed', success: true },
-                    { label: 'Abstract Factories Advanced pattern exercise', time: 'In Progress', success: false },
-                  ].map((act, id) => (
-                    <div key={id} className="flex justify-between items-center p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
+                  {getRealtimeProgress(selectedUser).map((act) => {
+                    const success = isCompletedActivity(act.status);
+                    return (
+                    <div key={act.id} className="flex justify-between items-center p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
                       <span className="font-bold text-slate-900 truncate max-w-[190px]">{act.label}</span>
-                      <span className={`text-[10.5px] font-mono font-bold shrink-0 ${act.success ? 'text-[#10b981] bg-emerald-50 px-1.5 py-0.5 rounded' : 'text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded animate-pulse'}`}>{act.time}</span>
+                      <span className={`text-[10.5px] font-mono font-bold shrink-0 ${success ? 'text-[#10b981] bg-emerald-50 px-1.5 py-0.5 rounded' : 'text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded animate-pulse'}`}>{act.status}</span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

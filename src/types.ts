@@ -188,6 +188,11 @@ export interface LeaderboardUser {
   practiceScore?: number;
   status?: string;
   currentTopic?: string;
+  realtimeOopProgress?: {
+    id: string;
+    label: string;
+    status: 'Completed' | 'Passed' | 'Submitted' | 'In Progress' | 'Not Started';
+  }[];
 }
 
 export interface PendingSubmission {

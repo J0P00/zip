@@ -61,6 +61,15 @@ import {
   INITIAL_ADAPTIVE_RULES 
 } from './data/mockData';
 import { OOP_COURSE_LESSONS, applyOopLessonCitation } from './data/oopCourse';
+import {
+  ensureStudentProgress,
+  progressToLeaderboardUser,
+  readStudentProgress,
+  recordPracticeSubmission,
+  recordQuizAttempt,
+  recordVideoProgress,
+  STUDENT_PROGRESS_KEY
+} from './data/studentProgress';
 
 // Import Sub Components
 import LandingPage from './components/LandingPage';
@@ -168,6 +177,20 @@ const getTeacherScopedLeaderboard = (
   }
 
   return users;
+};
+
+const getProgressSnapshotForRequest = (request: MonitoringRequest) => {
+  const candidates = [request.studentId, request.studentEmail].filter(Boolean);
+  return candidates
+    .map(candidate => readStudentProgress(candidate))
+    .find(Boolean);
+};
+
+const recommendationBelongsToUser = (recommendation: AdaptiveRecommendation, user?: AuthenticatedUser | null) => {
+  if (!user) return false;
+  const keys = [user.id, user.userId, user.email, user.name].filter(Boolean).map(value => String(value).toLowerCase());
+  return keys.includes(String(recommendation.studentId).toLowerCase()) ||
+    (recommendation.studentName ? keys.includes(recommendation.studentName.toLowerCase()) : false);
 };
 
 const upsertCurrentRegisteredStudent = (
@@ -563,18 +586,30 @@ export default function App() {
   }, [currentUser]);
 
   useEffect(() => {
-    if (!currentUser || !getAuthToken()) return;
+    if (!currentUser || !getAuthToken()) {
+      setActiveRecommendation(null);
+      return;
+    }
     recommendationApi.list(currentUser.role === 'student' ? (currentUser.id || currentUser.userId || currentUser.email) : undefined)
       .then(response => {
         const localHistory = getRecommendationHistory();
         const merged = [...response.data, ...localHistory]
           .filter((item, index, arr) => arr.findIndex(other => other.id === item.id) === index)
           .slice(0, 100);
+        const currentUserHistory = currentUser.role === 'student'
+          ? merged.filter(item => recommendationBelongsToUser(item, currentUser))
+          : merged;
         setRecommendationHistory(merged);
-        setActiveRecommendation(merged[0] || null);
+        setActiveRecommendation(currentUserHistory[0] || null);
       })
       .catch(error => {
         console.warn('Unable to load adaptive recommendation history from backend:', error);
+        const localHistory = getRecommendationHistory();
+        const currentUserHistory = currentUser.role === 'student'
+          ? localHistory.filter(item => recommendationBelongsToUser(item, currentUser))
+          : localHistory;
+        setRecommendationHistory(localHistory);
+        setActiveRecommendation(currentUserHistory[0] || null);
       });
   }, [currentUser?.id, currentUser?.role, currentUser?.userId, currentUser?.email]);
 
@@ -615,8 +650,8 @@ export default function App() {
   const [curriculumModules, setCurriculumModules] = useState<CurriculumModule[]>([]);
   const [lessonItems, setLessonItems] = useState<LessonItem[]>([]);
   const [adaptiveRules, setAdaptiveRules] = useState<AdaptiveRule[]>([]);
-  const [recommendationHistory, setRecommendationHistory] = useState<AdaptiveRecommendation[]>(() => getRecommendationHistory());
-  const [activeRecommendation, setActiveRecommendation] = useState<AdaptiveRecommendation | null>(() => getRecommendationHistory()[0] || null);
+  const [recommendationHistory, setRecommendationHistory] = useState<AdaptiveRecommendation[]>([]);
+  const [activeRecommendation, setActiveRecommendation] = useState<AdaptiveRecommendation | null>(null);
 
   useEffect(() => {
     if (leaderboardUsers.length > 0) saveStoredJson(LEADERBOARD_KEY, leaderboardUsers);
@@ -633,6 +668,9 @@ export default function App() {
       }
       if (event.key === LEADERBOARD_KEY) {
         setLeaderboardUsers(rankLeaderboard(readStoredJson<LeaderboardUser[]>(LEADERBOARD_KEY, [])));
+      }
+      if (event.key === STUDENT_PROGRESS_KEY) {
+        setLeaderboardUsers(prev => [...prev]);
       }
       if (event.key === 'oophub_monitoring_requests') {
         setMonitoringRequests(readStoredJson<MonitoringRequest[]>('oophub_monitoring_requests', []));
@@ -766,6 +804,20 @@ export default function App() {
 
   const handleUpdateVideoProgress = (videoId: string, progress: number) => {
     const userEmail = currentUser?.email || 'student@oophub.edu';
+    const studentProgress = recordVideoProgress(currentUser, videoId, progress);
+    setLeaderboardUsers(prev => {
+      const next = upsertCurrentRegisteredStudent(prev, currentUser, {
+        points: studentProgress.overallProgress,
+        streak,
+        completedLessonsCount: studentProgress.completedVideos
+      });
+      return rankLeaderboard(next.map(user => user.isCurrentUser ? {
+        ...user,
+        ...progressToLeaderboardUser(studentProgress, user.rank),
+        name: `${currentUser?.name || studentProgress.studentName} (You)`,
+        isCurrentUser: true
+      } : user));
+    });
     setVideoLessons(prev => {
       const next = prev.map(video => {
         if (video.id !== videoId) return video;
@@ -942,10 +994,11 @@ export default function App() {
     }
 
     const progress = currentUser.accountSource === 'demo' ? DEMO_STUDENT_PROGRESS : NEW_STUDENT_PROGRESS;
+    const studentProgress = ensureStudentProgress(currentUser);
 
     setStreak(progress.streak);
     setPoints(progress.points);
-    setCompletedLessonsCount(progress.completedLessonsCount);
+    setCompletedLessonsCount(currentUser.accountSource === 'demo' ? progress.completedLessonsCount : studentProgress.completedVideos);
     setRecentStudentGrade(currentUser.accountSource === 'demo' ? DEMO_STUDENT_GRADE : null);
     setLeaderboardUsers(prev => prev.map(entry => (
       entry.isCurrentUser
@@ -964,11 +1017,12 @@ export default function App() {
   
   // 1. When student compiles and submits vehicle code
   const handleStudentSubmitCode = (submission: PracticeSubmission) => {
+    const studentProgress = recordPracticeSubmission(currentUser, submission);
     // Increment points & complete lessons count
     const xpAward = Math.max(25, Math.round(submission.score * 1.5));
     setPoints(prev => prev + xpAward);
     setStreak(prev => prev + 1);
-    if (submission.score >= 70) setCompletedLessonsCount(prev => clampCompletedLessons(prev + 1));
+    setCompletedLessonsCount(studentProgress.completedVideos);
 
     // Append new active row inside Instructor queue review pending
     const newSub = practiceSubmissionToPending(submission);
@@ -977,13 +1031,17 @@ export default function App() {
 
     // Lift leaderboard rankings score dynamically on the current student row
     setLeaderboardUsers(prev => {
-      const nextProgress = {
-        points: points + xpAward,
+      const nextUsers = upsertCurrentRegisteredStudent(prev, currentUser, {
+        points: studentProgress.overallProgress,
         streak: streak + 1,
-        completedLessonsCount: submission.score >= 70 ? clampCompletedLessons(completedLessonsCount + 1) : completedLessonsCount
-      };
-      const nextUsers = upsertCurrentRegisteredStudent(prev, currentUser, nextProgress);
-      return rankLeaderboard(nextUsers.map(u => u.isCurrentUser ? { ...u, trend: 'up' } : u));
+        completedLessonsCount: studentProgress.completedVideos
+      });
+      return rankLeaderboard(nextUsers.map(u => u.isCurrentUser ? {
+        ...u,
+        ...progressToLeaderboardUser(studentProgress, u.rank),
+        name: `${currentUser?.name || studentProgress.studentName} (You)`,
+        isCurrentUser: true
+      } : u));
     });
 
     setRecentStudentGrade({
@@ -1029,18 +1087,24 @@ export default function App() {
     passed: boolean;
     attemptNumber: number;
   }) => {
+    const studentProgress = recordQuizAttempt(currentUser, attempt.lessonId, attempt.percentage, attempt.passed);
     if (xpAward > 0) setPoints(prev => prev + xpAward);
     setStreak(prev => prev + 1);
 
     // Bump user points row in leaderboard ranking
     setLeaderboardUsers(prev => {
-      const nextProgress = {
-        points: points + xpAward,
+      const nextUsers = upsertCurrentRegisteredStudent(prev, currentUser, {
+        points: studentProgress.overallProgress,
         streak: streak + 1,
-        completedLessonsCount
-      };
-      const nextUsers = upsertCurrentRegisteredStudent(prev, currentUser, nextProgress);
-      return rankLeaderboard(nextUsers.map(u => u.isCurrentUser ? { ...u, trend: xpAward > 0 ? 'up' : 'stable' } : u));
+        completedLessonsCount: studentProgress.completedVideos
+      });
+      return rankLeaderboard(nextUsers.map(u => u.isCurrentUser ? {
+        ...u,
+        ...progressToLeaderboardUser(studentProgress, u.rank),
+        name: `${currentUser?.name || studentProgress.studentName} (You)`,
+        isCurrentUser: true,
+        trend: xpAward > 0 ? 'up' : 'stable'
+      } : u));
     });
 
     const lesson = OOP_COURSE_LESSONS.find(item => item.id === attempt.lessonId);
@@ -1201,7 +1265,23 @@ export default function App() {
   };
 
   const studentVisibleLeaderboardUsers = getTeacherScopedLeaderboard(leaderboardUsers, currentUser, monitoringRequests);
-  const teacherVisibleLeaderboardUsers = getTeacherScopedLeaderboard(leaderboardUsers, displayUser, monitoringRequests);
+  const teacherVisibleLeaderboardUsers = displayUser.role === 'teacher'
+    ? rankLeaderboard(
+        monitoringRequests
+          .filter(req => req.teacherEmail.toLowerCase() === displayUser.email.toLowerCase() && req.status === 'accepted')
+          .map(req => {
+            const snapshot = getProgressSnapshotForRequest(req);
+            return snapshot
+              ? progressToLeaderboardUser({ ...snapshot, studentName: req.studentName }, 1)
+              : progressToLeaderboardUser(ensureStudentProgress({
+                  id: req.studentId,
+                  userId: req.studentId,
+                  email: req.studentEmail,
+                  name: req.studentName
+                }), 1);
+          })
+      )
+    : getTeacherScopedLeaderboard(leaderboardUsers, displayUser, monitoringRequests);
 
   const learningProgress = Math.min(100, Math.round((completedLessonsCount / OOP_LESSON_COUNT) * 100));
   const profileMetrics = displayUser.role === 'teacher'
