@@ -118,6 +118,86 @@ const SDPT_VIDEO_CITATIONS: Record<number, Pick<VideoLesson, 'video_title' | 'cr
   }
 };
 
+const OOP_TOPIC_CITATIONS: Record<number, Pick<VideoLesson, 'citation_text' | 'citation_url'>> = {
+  1: {
+    citation_text: 'Classes (The Java Tutorials > Learning the Java Language > Classes and Objects). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/javaOO/classes.html'
+  },
+  2: {
+    citation_text: 'Providing constructors for your classes (The Java Tutorials > Learning the Java Language > Classes and Objects). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/javaOO/constructors.html'
+  },
+  3: {
+    citation_text: 'Defining Methods (The Java Tutorials > Learning the Java Language > Classes and Objects). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/javaOO/methods.html'
+  },
+  4: {
+    citation_text: 'Controlling access to members of a class (The Java Tutorials > Learning the Java Language > Classes and Objects). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/javaOO/accesscontrol.html'
+  },
+  5: {
+    citation_text: 'Defining Methods (The Java Tutorials > Learning the Java Language > Classes and Objects). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/javaOO/methods.html'
+  },
+  6: {
+    citation_text: 'Inheritance (The Java Tutorials > Learning the Java Language > Interfaces and Inheritance). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/IandI/subclasses.html'
+  },
+  7: {
+    citation_text: 'Polymorphism (The Java Tutorials > Learning the Java Language > Interfaces and Inheritance). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/IandI/polymorphism.html'
+  },
+  8: {
+    citation_text: 'Abstract Methods and Classes (The Java Tutorials > Learning the Java Language > Interfaces and Inheritance). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/IandI/abstract.html'
+  },
+  9: {
+    citation_text: 'Interfaces (The Java Tutorials > Learning the Java Language > Interfaces and Inheritance). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/IandI/createinterface.html'
+  },
+  10: {
+    citation_text: 'Arrays (The Java Tutorials > Learning the Java Language > Language Basics). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/nutsandbolts/arrays.html'
+  },
+  11: {
+    citation_text: 'Enum Types (The Java Tutorials > Learning the Java Language > Classes and Objects). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/javaOO/enum.html'
+  }
+};
+
+const normalizeTitle = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const OOP_CITATION_TITLE_MAP = new Map(
+  [
+    ['Classes and Objects', 1],
+    ['Constructors', 2],
+    ['Object Methods', 3],
+    ['Encapsulation', 4],
+    ['Constructor Overloading', 5],
+    ['Inheritance', 6],
+    ['Polymorphism', 7],
+    ['Abstract Classes', 8],
+    ['Interfaces Abstraction', 9],
+    ['Array of Objects', 10],
+    ['Enum', 11]
+  ].map(([title, sequence]) => [normalizeTitle(String(title)), Number(sequence)])
+);
+
+export const applyOopLessonCitation = (lesson: VideoLesson): VideoLesson => {
+  const matchedTitleCitation = OOP_CITATION_TITLE_MAP.get(normalizeTitle(lesson.title));
+  const isOopLesson = lesson.courseId === 'oop' || lesson.id.startsWith('oop_lesson_');
+  const citationIndex = matchedTitleCitation || (isOopLesson ? lesson.sequence : undefined);
+  const citation = OOP_TOPIC_CITATIONS[citationIndex];
+
+  return citation ? { ...lesson, ...citation } : lesson;
+};
+
 const optionSet = (correctAnswer: string, distractors: string[]) => {
   const unique = [correctAnswer, ...distractors].filter((item, index, arr) => arr.indexOf(item) === index);
   return unique.slice(0, 4);
@@ -393,7 +473,7 @@ class Account {
 export const OOP_COURSE_LESSONS: VideoLesson[] = OOP_LESSON_BLUEPRINTS.map((lesson, index) => {
   const citation = SDPT_VIDEO_CITATIONS[lesson.sequence];
 
-  return {
+  return applyOopLessonCitation({
     id: lesson.id,
     sequence: lesson.sequence,
     title: lesson.title,
@@ -422,7 +502,7 @@ export const OOP_COURSE_LESSONS: VideoLesson[] = OOP_LESSON_BLUEPRINTS.map((less
     source_url: citation.source_url,
     accessed_date: citation.accessed_date,
     citation_created_at: citation.accessed_date
-  };
+  });
 });
 
 export const OOP_ASSESSMENTS: LessonAssessment[] = OOP_LESSON_BLUEPRINTS.map(lesson => ({

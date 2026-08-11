@@ -60,7 +60,7 @@ import {
   INITIAL_LESSON_ITEMS, 
   INITIAL_ADAPTIVE_RULES 
 } from './data/mockData';
-import { OOP_COURSE_LESSONS } from './data/oopCourse';
+import { OOP_COURSE_LESSONS, applyOopLessonCitation } from './data/oopCourse';
 
 // Import Sub Components
 import LandingPage from './components/LandingPage';
@@ -241,7 +241,17 @@ const mapDatabaseLessonToVideoLesson = (lesson: any): VideoLesson => ({
   courseId: lesson.metadata?.courseId || 'oop',
   thumbnailUrl: lesson.metadata?.thumbnailUrl || '',
   createdAt: lesson.createdAt || lesson.created_at,
-  createdBy: lesson.metadata?.createdBy || ''
+  createdBy: lesson.metadata?.createdBy || '',
+  video_title: lesson.video_title || lesson.metadata?.video_title,
+  creator_name: lesson.creator_name || lesson.metadata?.creator_name,
+  publisher_name: lesson.publisher_name || lesson.metadata?.publisher_name,
+  source_url: lesson.source_url || lesson.metadata?.source_url,
+  publication_date: lesson.publication_date || lesson.metadata?.publication_date,
+  accessed_date: lesson.accessed_date || lesson.metadata?.accessed_date,
+  license_type: lesson.license_type || lesson.metadata?.license_type,
+  citation_created_at: lesson.citation_created_at || lesson.metadata?.citation_created_at,
+  citation_text: lesson.citation_text || lesson.metadata?.citation_text,
+  citation_url: lesson.citation_url || lesson.metadata?.citation_url
 });
 
 const sanitizeUser = (value: unknown): AuthenticatedUser | null => {
@@ -396,15 +406,16 @@ export default function App() {
 
   useEffect(() => {
     const applyLessons = (lessons: VideoLesson[]) => {
-      setVideoLessons(lessons);
-      setLessonItems(lessons.map(lesson => ({
+      const lessonsWithCitations = lessons.map(applyOopLessonCitation);
+      setVideoLessons(lessonsWithCitations);
+      setLessonItems(lessonsWithCitations.map(lesson => ({
         id: lesson.id,
         title: lesson.title,
         module: lesson.module || '',
         type: 'Video',
         difficulty: lesson.difficulty || 'Beginner'
       })));
-      const moduleCounts = lessons.reduce<Record<string, number>>((acc, lesson) => {
+      const moduleCounts = lessonsWithCitations.reduce<Record<string, number>>((acc, lesson) => {
         const moduleName = lesson.module || 'Unassigned Module';
         acc[moduleName] = (acc[moduleName] || 0) + 1;
         return acc;

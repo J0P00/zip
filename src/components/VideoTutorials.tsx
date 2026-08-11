@@ -224,6 +224,12 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
 
   const assessment = OOP_ASSESSMENTS.find(item => item.lessonId === activeLesson.id);
   const activeQuiz = assessment ? quizDb[assessment.id] : undefined;
+  const citationText = activeLesson.citation_text || (
+    activeLesson.creator_name && activeLesson.source_url
+      ? `${activeLesson.creator_name}. ${activeLesson.video_title || activeLesson.title}. ${activeLesson.publisher_name || 'Video source'}.${activeLesson.accessed_date ? ` Accessed ${activeLesson.accessed_date}.` : ''}`
+      : ''
+  );
+  const citationUrl = activeLesson.citation_url || activeLesson.source_url;
 
   return (
     <div className="space-y-4 overflow-x-hidden sm:space-y-6 animate-fade-in" id="oop-course-syllabus">
@@ -327,28 +333,29 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
                   </div>
                 ))}
               </div>
-              {activeLesson.creator_name && activeLesson.source_url && (
+              {citationText && (
                 <div className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
                   <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
                       <h4 className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wide text-slate-900">
                         <FileText className="h-4 w-4 text-emerald-700" />
-                        Video Citation
+                        Citation
                       </h4>
                       <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
-                        {activeLesson.creator_name}. {activeLesson.video_title || activeLesson.title}. {activeLesson.publisher_name || 'Video source'}.
-                        {activeLesson.accessed_date ? ` Accessed ${activeLesson.accessed_date}.` : ''}
+                        {citationText}
                       </p>
                     </div>
-                    <a
-                      href={activeLesson.source_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50 sm:w-auto"
-                    >
-                      <Link2 className="h-4 w-4" />
-                      Source
-                    </a>
+                    {citationUrl && (
+                      <a
+                        href={citationUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50 sm:w-auto"
+                      >
+                        <Link2 className="h-4 w-4" />
+                        Source
+                      </a>
+                    )}
                   </div>
                 </div>
               )}

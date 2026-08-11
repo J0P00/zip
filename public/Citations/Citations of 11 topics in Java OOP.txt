@@ -1,0 +1,11 @@
+[1]. Classes (The JavaTM Tutorials > Learning the Java Language > Classes and Objects). (n.d.-b). https://docs.oracle.com/javase/tutorial/java/javaOO/classes.html
+[2]. Providing constructors for your classes (The JavaTM Tutorials > Learning the Java Language > Classes and Objects). (n.d.). https://docs.oracle.com/javase/tutorial/java/javaOO/constructors.html
+[3]. Defining Methods (The JavaTM Tutorials > Learning the Java Language > Classes and Objects). (n.d.). https://docs.oracle.com/javase/tutorial/java/javaOO/methods.html
+[4]. “Controlling access to members of a class (The JavaTM Tutorials > Learning the Java Language > Classes and Objects).” https://docs.oracle.com/javase/tutorial/java/javaOO/accesscontrol.html
+[5]. “Defining Methods (The JavaTM Tutorials > Learning the Java Language > Classes and Objects).” https://docs.oracle.com/javase/tutorial/java/javaOO/methods.html  
+[6]. “Inheritance (The JavaTM Tutorials > Learning the Java Language > Interfaces and Inheritance).” https://docs.oracle.com/javase/tutorial/java/IandI/subclasses.html
+[7]. “Polymorphism (The JavaTM Tutorials > Learning the Java Language > Interfaces and Inheritance).” https://docs.oracle.com/javase/tutorial/java/IandI/polymorphism.html
+[8]. “Abstract Methods and Classes (The JavaTM Tutorials > Learning the Java Language > Interfaces and Inheritance).” https://docs.oracle.com/javase/tutorial/java/IandI/abstract.html
+[9]. “Interfaces (The JavaTM Tutorials > Learning the Java Language > Interfaces and Inheritance).” https://docs.oracle.com/javase/tutorial/java/IandI/createinterface.html
+[10]. “Arrays (The JavaTM Tutorials > Learning the Java Language > Language Basics).” https://docs.oracle.com/javase/tutorial/java/nutsandbolts/arrays.html
+[11]. “Enum Types (The JavaTM Tutorials > Learning the Java Language > Classes and Objects).” https://docs.oracle.com/javase/tutorial/java/javaOO/enum.html

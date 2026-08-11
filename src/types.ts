@@ -145,6 +145,8 @@ export interface VideoLesson {
   accessed_date?: string;
   license_type?: string;
   citation_created_at?: string;
+  citation_text?: string;
+  citation_url?: string;
 }
 
 export interface NotificationItem {
