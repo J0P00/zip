@@ -188,6 +188,16 @@ export interface LeaderboardUser {
   practiceScore?: number;
   status?: string;
   currentTopic?: string;
+  lessonProgress?: {
+    lessonId: string;
+    title: string;
+    sequence: number;
+    videoProgress: number;
+    quizScore: number;
+    practiceScore: number;
+    lessonProgress: number;
+    status: string;
+  }[];
   realtimeOopProgress?: {
     id: string;
     label: string;

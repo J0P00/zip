@@ -831,6 +831,34 @@ const seedLessons = async () => {
               updated_at = NOW()
         `, lesson);
     }
+
+    // Create monitoring_requests table
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS monitoring_requests (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(teacher_id, student_id)
+        )
+    `);
+
+    // Create teacher_feedback table
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS teacher_feedback (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          course_id TEXT NOT NULL DEFAULT 'java-oop',
+          lesson_id TEXT NOT NULL,
+          message TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          read_at TIMESTAMPTZ
+        )
+    `);
 };
 
 const seedPracticeChallenges = async () => {
@@ -966,6 +994,212 @@ const calculateStreak = async (studentId) => {
     } catch (err) {
         console.error("Error calculating streak:", err);
         return 0;
+    }
+};
+
+const getStudentPoints = async (studentId) => {
+    try {
+        const res = await pool.query("SELECT COALESCE(SUM(xp_amount), 0)::int AS points FROM student_xp WHERE student_id = $1", [studentId]);
+        return res.rows[0].points;
+    } catch (err) {
+        console.error("Error getting student points:", err);
+        return 0;
+    }
+};
+
+const getStudentProgressSummary = async (studentId) => {
+    try {
+        // 1. Get all published lessons
+        const lessonsRes = await pool.query("SELECT * FROM lessons ORDER BY sequence, title");
+        const lessons = lessonsRes.rows;
+
+        // 2. Get user info
+        const userRes = await pool.query("SELECT email, name FROM users WHERE id = $1", [studentId]);
+        const user = userRes.rows[0] || { email: '', name: 'Student' };
+
+        // 3. Get video progress
+        const videoRes = await pool.query("SELECT * FROM student_progress WHERE student_user_id = $1", [studentId]);
+        const videoMap = {};
+        videoRes.rows.forEach(v => {
+            videoMap[v.video_id] = v;
+        });
+
+        // 4. Get quiz attempts
+        const quizRes = await pool.query("SELECT * FROM quiz_attempts WHERE student_user_id = $1", [studentId]);
+        const quizMap = {};
+        quizRes.rows.forEach(q => {
+            const lid = q.lesson_id || q.assessment_id;
+            if (!quizMap[lid] || q.percentage > quizMap[lid].percentage) {
+                quizMap[lid] = q;
+            }
+        });
+
+        // 5. Get practice submissions
+        const practiceRes = await pool.query(`
+            SELECT ps.*, pc.lesson_id 
+            FROM practice_submissions ps
+            JOIN programming_challenges pc ON pc.id = ps.challenge_id
+            WHERE ps.student_id = $1::text OR ps.student_id = $1
+        `, [studentId]);
+        const practiceMap = {};
+        practiceRes.rows.forEach(p => {
+            const lid = p.lesson_id;
+            if (!practiceMap[lid] || Number(p.score) > Number(practiceMap[lid].score)) {
+                practiceMap[lid] = p;
+            }
+        });
+
+        // 6. Get challenges list to check if a lesson has challenges
+        const challengeRes = await pool.query("SELECT id, lesson_id FROM programming_challenges");
+        const challenges = challengeRes.rows;
+
+        // 7. Calculate per-lesson progress
+        let totalLessonProgressSum = 0;
+        let completedVideos = 0;
+        let passedQuizzes = 0;
+        let passedPractices = 0;
+
+        const lessonProgresses = lessons.map(lesson => {
+            const video = videoMap[lesson.id];
+            const quiz = quizMap[lesson.id];
+            const practice = practiceMap[lesson.id];
+
+            const videoCompleted = video?.completed || false;
+            const videoPercent = Number(video?.completion_percentage || 0);
+            const videoCompletedAt = video?.date_completed || null;
+
+            const quizPassed = quiz?.passed || false;
+            const quizPercent = Number(quiz?.percentage || 0);
+            const quizCompletedAt = quiz?.date_completed || null;
+
+            const hasChallenge = challenges.some(c => c.lesson_id === lesson.id);
+            const practicePassed = hasChallenge ? (practice?.score >= 70) : true;
+            const practiceScore = hasChallenge ? Number(practice?.score || 0) : 100;
+            const practiceSubmittedAt = practice?.submitted_at || null;
+
+            if (videoCompleted) completedVideos++;
+            if (quizPassed) passedQuizzes++;
+            if (practicePassed && hasChallenge) passedPractices++;
+
+            // Weight calculation
+            let overallLessonProgress = 0;
+            if (videoCompleted) overallLessonProgress += 33.33;
+            if (quizPassed) overallLessonProgress += 33.33;
+            if (practicePassed) overallLessonProgress += 33.34;
+            overallLessonProgress = Math.min(100, Math.round(overallLessonProgress * 100) / 100);
+
+            totalLessonProgressSum += overallLessonProgress;
+
+            return {
+                lessonId: lesson.id,
+                sequence: lesson.sequence,
+                title: lesson.title,
+                videoCompleted,
+                videoPercent,
+                videoCompletedAt,
+                quizPassed,
+                quizPercent,
+                quizCompletedAt,
+                practicePassed,
+                practiceScore,
+                practiceSubmittedAt,
+                overallLessonProgress
+            };
+        });
+
+        // Overall progress: Average of all lessons progress
+        const overallCourseProgress = lessons.length > 0
+            ? Math.min(100, Math.round((totalLessonProgressSum / lessons.length) * 100) / 100)
+            : 0;
+
+        // Points, Streak, Badges
+        const points = await getStudentPoints(studentId);
+        const streak = await calculateStreak(studentId);
+        const badgesRes = await pool.query("SELECT * FROM student_badges WHERE student_id = $1", [studentId]);
+        const badges = badgesRes.rows;
+
+        // Last activity date
+        let lastActivityAt = null;
+        const allDates = [];
+        videoRes.rows.forEach(v => { if (v.updated_at) allDates.push(new Date(v.updated_at)); });
+        quizRes.rows.forEach(q => { if (q.date_completed) allDates.push(new Date(q.date_completed)); });
+        practiceRes.rows.forEach(p => { if (p.submitted_at) allDates.push(new Date(p.submitted_at)); });
+        if (allDates.length > 0) {
+            lastActivityAt = new Date(Math.max(...allDates)).toISOString();
+        }
+
+        // Status rule
+        let status = 'Not Started';
+        if (overallCourseProgress >= 100) {
+            status = 'Completed';
+        } else if (overallCourseProgress > 0) {
+            // At Risk: no activity for > 7 days
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            if (lastActivityAt && new Date(lastActivityAt) < sevenDaysAgo) {
+                status = 'At Risk';
+            } else {
+                status = 'In Progress';
+            }
+        }
+
+        // Build realtime activity logs
+        const realtime = [];
+        lessonProgresses.forEach(lp => {
+            if (lp.videoCompleted) {
+                realtime.push({ id: `${lp.lessonId}-video`, label: `${lp.title} video`, status: 'Completed' });
+            } else if (lp.videoPercent > 0) {
+                realtime.push({ id: `${lp.lessonId}-video`, label: `${lp.title} video`, status: 'In Progress' });
+            }
+            if (lp.quizPassed) {
+                realtime.push({ id: `${lp.lessonId}-quiz`, label: `${lp.title} assessment`, status: 'Passed' });
+            } else if (lp.quizPercent > 0) {
+                realtime.push({ id: `${lp.lessonId}-quiz`, label: `${lp.title} assessment`, status: 'In Progress' });
+            }
+            if (lp.practicePassed && challenges.some(c => c.lesson_id === lp.lessonId)) {
+                realtime.push({ id: `${lp.lessonId}-practice`, label: `${lp.title} Practice IDE`, status: 'Submitted' });
+            } else if (lp.practiceScore > 0 && challenges.some(c => c.lesson_id === lp.lessonId)) {
+                realtime.push({ id: `${lp.lessonId}-practice`, label: `${lp.title} Practice IDE`, status: 'In Progress' });
+            }
+        });
+        // Sort/filter realtime list to get latest 5 actions
+        const sortedRealtime = realtime.slice(-5).reverse();
+        if (sortedRealtime.length === 0) {
+            sortedRealtime.push({ id: 'not-started', label: 'OOP learning path', status: 'Not Started' });
+        }
+
+        // Calculate averages for video, quiz, practice
+        const totalVideos = lessons.length;
+        const totalQuizzes = lessons.length;
+        const totalPractices = challenges.length || 1;
+
+        const videoProgressAvg = Math.round((completedVideos / totalVideos) * 100);
+        const quizScoreAvg = Math.round((passedQuizzes / totalQuizzes) * 100);
+        const practiceScoreAvg = Math.round((passedPractices / totalPractices) * 100);
+
+        return {
+            studentId,
+            studentEmail: user.email,
+            studentName: user.name,
+            points,
+            streak,
+            videoProgress: videoProgressAvg,
+            quizScore: quizScoreAvg,
+            practiceScore: practiceScoreAvg,
+            overallProgress: overallCourseProgress,
+            completedVideos,
+            passedQuizzes,
+            passedPractices,
+            status,
+            lessons: lessonProgresses,
+            realtime: sortedRealtime,
+            badges,
+            lastActivityAt,
+            updatedAt: new Date().toISOString()
+        };
+    } catch (err) {
+        console.error("Error generating student progress summary:", err);
+        throw err;
     }
 };
 

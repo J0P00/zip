@@ -63,8 +63,8 @@ import {
 import { OOP_COURSE_LESSONS, applyOopLessonCitation } from './data/oopCourse';
 import {
   ensureStudentProgress,
+  findStudentProgress,
   progressToLeaderboardUser,
-  readStudentProgress,
   recordPracticeSubmission,
   recordQuizAttempt,
   recordVideoProgress,
@@ -108,6 +108,8 @@ const DEMO_STUDENT_GRADE = {
   feedback: "Your constructor works fine. However, displayInfo() still needs to print the doors parameter. Please check the remediation challenge and resubmit.",
   challenge: "Inheritance Constraints with Vehicle/Car Override"
 };
+
+const DEMO_STUDENT_BADGES = ['Inheritance Lab', 'Quiz Streak', 'Practice IDE'];
 
 const OOP_LESSON_COUNT = OOP_COURSE_LESSONS.length;
 const clampCompletedLessons = (count: number) => Math.min(Math.max(count, 0), OOP_LESSON_COUNT);
@@ -180,10 +182,7 @@ const getTeacherScopedLeaderboard = (
 };
 
 const getProgressSnapshotForRequest = (request: MonitoringRequest) => {
-  const candidates = [request.studentId, request.studentEmail].filter(Boolean);
-  return candidates
-    .map(candidate => readStudentProgress(candidate))
-    .find(Boolean);
+  return findStudentProgress(request.studentId, request.studentEmail, request.studentName);
 };
 
 const recommendationBelongsToUser = (recommendation: AdaptiveRecommendation, user?: AuthenticatedUser | null) => {
@@ -234,6 +233,27 @@ const upsertCurrentRegisteredStudent = (
       ];
 
   return rankLeaderboard(nextUsers);
+};
+
+const mergeCurrentProgressIntoLeaderboard = (
+  users: LeaderboardUser[],
+  currentUser: AuthenticatedUser | null,
+  studentProgress: ReturnType<typeof ensureStudentProgress>,
+  streak: number
+) => {
+  const nextUsers = upsertCurrentRegisteredStudent(users, currentUser, {
+    points: studentProgress.overallProgress,
+    streak,
+    completedLessonsCount: studentProgress.completedLessons
+  });
+
+  return rankLeaderboard(nextUsers.map(user => user.isCurrentUser ? {
+    ...user,
+    ...progressToLeaderboardUser(studentProgress, user.rank),
+    name: `${currentUser?.name || studentProgress.studentName} (You)`,
+    isCurrentUser: true,
+    streak
+  } : user));
 };
 const SESSION_USER_KEY = 'oophub_current_user';
 const SESSION_VIEW_KEY = 'oophub_workspace_view';
@@ -805,19 +825,7 @@ export default function App() {
   const handleUpdateVideoProgress = (videoId: string, progress: number) => {
     const userEmail = currentUser?.email || 'student@oophub.edu';
     const studentProgress = recordVideoProgress(currentUser, videoId, progress);
-    setLeaderboardUsers(prev => {
-      const next = upsertCurrentRegisteredStudent(prev, currentUser, {
-        points: studentProgress.overallProgress,
-        streak,
-        completedLessonsCount: studentProgress.completedVideos
-      });
-      return rankLeaderboard(next.map(user => user.isCurrentUser ? {
-        ...user,
-        ...progressToLeaderboardUser(studentProgress, user.rank),
-        name: `${currentUser?.name || studentProgress.studentName} (You)`,
-        isCurrentUser: true
-      } : user));
-    });
+    setLeaderboardUsers(prev => mergeCurrentProgressIntoLeaderboard(prev, currentUser, studentProgress, streak));
     setVideoLessons(prev => {
       const next = prev.map(video => {
         if (video.id !== videoId) return video;
@@ -852,7 +860,7 @@ export default function App() {
 
         if (isCompletedNow) {
           setPoints(p => p + 100);
-          setCompletedLessonsCount(c => clampCompletedLessons(c + 1));
+          setCompletedLessonsCount(studentProgress.completedLessons);
           
           addNotification(
             `Lesson Completed! 🎉`,
@@ -995,22 +1003,26 @@ export default function App() {
 
     const progress = currentUser.accountSource === 'demo' ? DEMO_STUDENT_PROGRESS : NEW_STUDENT_PROGRESS;
     const studentProgress = ensureStudentProgress(currentUser);
+    const visibleProgress = currentUser.accountSource === 'demo' ? progress.completedLessonsCount : studentProgress.completedLessons;
 
     setStreak(progress.streak);
-    setPoints(progress.points);
-    setCompletedLessonsCount(currentUser.accountSource === 'demo' ? progress.completedLessonsCount : studentProgress.completedVideos);
+    setPoints(currentUser.accountSource === 'demo' ? progress.points : studentProgress.overallProgress);
+    setCompletedLessonsCount(visibleProgress);
     setRecentStudentGrade(currentUser.accountSource === 'demo' ? DEMO_STUDENT_GRADE : null);
-    setLeaderboardUsers(prev => prev.map(entry => (
-      entry.isCurrentUser
-        ? {
-            ...entry,
-            name: `${currentUser.name} (You)`,
-            points: progress.points,
-            streak: progress.streak,
-            badges: currentUser.accountSource === 'demo' ? DEMO_STUDENT_BADGES : []
-          }
-        : entry
-    )));
+    setLeaderboardUsers(prev => currentUser.accountSource === 'demo'
+      ? prev.map(entry => (
+          entry.isCurrentUser
+            ? {
+                ...entry,
+                name: `${currentUser.name} (You)`,
+                points: progress.points,
+                streak: progress.streak,
+                badges: DEMO_STUDENT_BADGES
+              }
+            : entry
+        ))
+      : mergeCurrentProgressIntoLeaderboard(prev, currentUser, studentProgress, progress.streak)
+    );
   }, [currentUser?.accountSource, currentUser?.email, currentUser?.name, currentUser?.role]);
 
   // Core functions to interactively link dashboards together
@@ -1022,7 +1034,7 @@ export default function App() {
     const xpAward = Math.max(25, Math.round(submission.score * 1.5));
     setPoints(prev => prev + xpAward);
     setStreak(prev => prev + 1);
-    setCompletedLessonsCount(studentProgress.completedVideos);
+    setCompletedLessonsCount(studentProgress.completedLessons);
 
     // Append new active row inside Instructor queue review pending
     const newSub = practiceSubmissionToPending(submission);
@@ -1030,19 +1042,7 @@ export default function App() {
     setPendingSubmissions(prev => [newSub, ...prev.filter(item => item.id !== newSub.id)]);
 
     // Lift leaderboard rankings score dynamically on the current student row
-    setLeaderboardUsers(prev => {
-      const nextUsers = upsertCurrentRegisteredStudent(prev, currentUser, {
-        points: studentProgress.overallProgress,
-        streak: streak + 1,
-        completedLessonsCount: studentProgress.completedVideos
-      });
-      return rankLeaderboard(nextUsers.map(u => u.isCurrentUser ? {
-        ...u,
-        ...progressToLeaderboardUser(studentProgress, u.rank),
-        name: `${currentUser?.name || studentProgress.studentName} (You)`,
-        isCurrentUser: true
-      } : u));
-    });
+    setLeaderboardUsers(prev => mergeCurrentProgressIntoLeaderboard(prev, currentUser, studentProgress, streak + 1));
 
     setRecentStudentGrade({
       grade: submission.score,
@@ -1066,7 +1066,7 @@ export default function App() {
       lessonCompleted: submission.score >= 70,
       codingScore: submission.score,
       codingAttempts: 1,
-      progressPercentage: completedLessonsCount ? Math.round((completedLessonsCount / OOP_LESSON_COUNT) * 100) : 0
+      progressPercentage: studentProgress.overallProgress
     }));
 
     // Unlock next lesson only when both quiz and practice work are passed.
@@ -1090,22 +1090,10 @@ export default function App() {
     const studentProgress = recordQuizAttempt(currentUser, attempt.lessonId, attempt.percentage, attempt.passed);
     if (xpAward > 0) setPoints(prev => prev + xpAward);
     setStreak(prev => prev + 1);
+    setCompletedLessonsCount(studentProgress.completedLessons);
 
     // Bump user points row in leaderboard ranking
-    setLeaderboardUsers(prev => {
-      const nextUsers = upsertCurrentRegisteredStudent(prev, currentUser, {
-        points: studentProgress.overallProgress,
-        streak: streak + 1,
-        completedLessonsCount: studentProgress.completedVideos
-      });
-      return rankLeaderboard(nextUsers.map(u => u.isCurrentUser ? {
-        ...u,
-        ...progressToLeaderboardUser(studentProgress, u.rank),
-        name: `${currentUser?.name || studentProgress.studentName} (You)`,
-        isCurrentUser: true,
-        trend: xpAward > 0 ? 'up' : 'stable'
-      } : u));
-    });
+    setLeaderboardUsers(prev => mergeCurrentProgressIntoLeaderboard(prev, currentUser, studentProgress, streak + 1));
 
     const lesson = OOP_COURSE_LESSONS.find(item => item.id === attempt.lessonId);
     const recommendation = generateRuleBasedRecommendation({
@@ -1117,7 +1105,7 @@ export default function App() {
       videoCompleted: true,
       quizScore: attempt.percentage,
       quizAttempts: attempt.attemptNumber,
-      progressPercentage: completedLessonsCount ? Math.round((completedLessonsCount / OOP_LESSON_COUNT) * 100) : 0
+      progressPercentage: studentProgress.overallProgress
     });
     publishRecommendation(recommendation);
 

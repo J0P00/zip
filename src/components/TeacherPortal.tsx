@@ -325,6 +325,22 @@ const withTopicProgress = (student: LiveStudent, studentIndex: number): LiveStud
   })
 });
 
+const progressUserTopics = (progressUser: LeaderboardUser): TopicProgress[] | null => {
+  if (!progressUser.lessonProgress?.length) return null;
+
+  return [...progressUser.lessonProgress]
+    .sort((a, b) => a.sequence - b.sequence)
+    .map(lesson => ({
+      topic: lesson.title,
+      video: lesson.videoProgress,
+      assessment: lesson.quizScore,
+      ideStatus: lesson.practiceScore >= 70 ? 'Passed' : lesson.practiceScore > 0 ? 'Submitted' : lesson.lessonProgress > 0 ? 'Pending' : 'Not Started',
+      completion: lesson.lessonProgress,
+      unlocked: lesson.sequence === 1 || lesson.lessonProgress > 0,
+      timeSpent: lesson.lessonProgress > 0 ? 'synced' : '--'
+    }));
+};
+
 const initialStudents = baseStudents.map(withTopicProgress);
 
 const statusClass = (status: LearningStatus) => {
@@ -412,8 +428,9 @@ export default function TeacherPortal({
       const performanceIndex = overallProgress;
       const learningStatus: LearningStatus =
         overallProgress >= 100 ? 'Completed' : overallProgress > 0 ? 'In Progress' : 'At Risk';
+      const syncedTopics = progressUserTopics(progressUser);
 
-      return withTopicProgress({
+      const student: LiveStudent = {
         id: request.studentId || request.studentEmail,
         name: request.studentName,
         email: request.studentEmail,
@@ -437,9 +454,11 @@ export default function TeacherPortal({
         moduleCompletion: overallProgress,
         topicCompletion: overallProgress,
         recommendation: 'Progress is synced from the student account activity.',
-        topics: [],
+        topics: syncedTopics || [],
         swing: { video: 0, assessment: 0, ide: 0, miniProject: 0 }
-      }, index);
+      };
+
+      return syncedTopics ? student : withTopicProgress(student, index);
     }
 
     const existing = students.find(student =>
