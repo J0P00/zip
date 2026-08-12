@@ -23,7 +23,6 @@ import {
   FileText,
   UserCheck,
   Search,
-  MessageSquare,
   SlidersHorizontal,
   ClipboardList,
   MonitorCog
@@ -50,13 +49,11 @@ export default function Navbar({
 }: NavbarProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
-  const [isMessagesOpen, setIsMessagesOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
   const [activeModal, setActiveModal] = useState<string | null>(null);
   
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
-  const messagesRef = useRef<HTMLDivElement>(null);
 
   // Mock Notifications
   const [notifications, setNotifications] = useState([
@@ -64,12 +61,6 @@ export default function Navbar({
     { id: 2, title: 'New Adaptive Challenge', desc: 'Recommendation engine suggested Polymorphism Diagnostics Quiz based on compiler practice results.', read: false, time: '1h ago' },
     { id: 3, title: 'Streak Milestone!', desc: 'You reached a 12-day coding consistency streak! Keep up the momentum.', read: true, time: '1d ago' }
   ]);
-
-  const messages = [
-    { id: 1, name: 'Dr. Elena Vance', subject: 'Assessment rubric update', time: '5m ago' },
-    { id: 2, name: 'System Monitor', subject: 'Nightly course sync completed', time: '31m ago' },
-    { id: 3, name: 'Sofia Rodriguez', subject: 'Question about encapsulation lab', time: '2h ago' }
-  ];
 
   // Dynamic Profile Completion calculation
   const calculateCompletion = (u: AuthenticatedUser): number => {
@@ -102,9 +93,6 @@ export default function Navbar({
       }
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
         setIsNotifOpen(false);
-      }
-      if (messagesRef.current && !messagesRef.current.contains(event.target as Node)) {
-        setIsMessagesOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -598,56 +586,6 @@ export default function Navbar({
                           </div>
                         ))
                       )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Messages Menu */}
-            <div className="relative" ref={messagesRef}>
-              <button
-                type="button"
-                onClick={() => setIsMessagesOpen(!isMessagesOpen)}
-                className={`relative p-2 rounded-xl border transition-all cursor-pointer ${isDark ? 'border-slate-800 text-slate-350 hover:bg-slate-909 hover:text-white' : 'border-slate-100 text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
-                aria-label="Toggle messages menu"
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-950" />
-              </button>
-
-              <AnimatePresence>
-                {isMessagesOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    transition={{ duration: 0.15 }}
-                    className={`absolute right-0 mt-2 w-80 max-sm:fixed max-sm:inset-x-4 max-sm:mx-auto max-sm:w-auto max-sm:max-w-md max-sm:top-18 rounded-2xl border shadow-2xl z-[100] overflow-hidden backdrop-blur-md ${isDark ? 'bg-slate-900/95 border-slate-800/80 shadow-black/40 text-slate-200' : 'bg-white/95 border-slate-200/80 shadow-slate-200/50 text-slate-800'}`}
-                  >
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20">
-                      <span className="font-extrabold text-xs uppercase tracking-wider text-slate-400">Messages</span>
-                    </div>
-                    <div className="divide-y divide-slate-100 dark:divide-slate-850">
-                      {messages.map(message => (
-                        <button
-                          type="button"
-                          key={message.id}
-                          onClick={() => setIsMessagesOpen(false)}
-                          className="flex w-full items-start gap-3 p-4 text-left transition hover:bg-emerald-50/40 dark:hover:bg-emerald-950/10"
-                        >
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-black text-emerald-700">
-                            {getInitials(message.name)}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="truncate text-xs font-extrabold text-slate-800 dark:text-slate-200">{message.name}</span>
-                              <span className="shrink-0 text-[9px] font-bold text-slate-400">{message.time}</span>
-                            </div>
-                            <p className="mt-1 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">{message.subject}</p>
-                          </div>
-                        </button>
-                      ))}
                     </div>
                   </motion.div>
                 )}

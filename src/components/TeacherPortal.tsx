@@ -1232,10 +1232,10 @@ export default function TeacherPortal({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5 text-slate-100 shadow-xl">
+          <div className="flex max-h-[calc(100vh-8rem)] flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 p-5 text-slate-100 shadow-xl xl:sticky xl:top-4">
             {selectedSubmission ? (
-              <div className="space-y-4">
-                <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 pb-4">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-wider text-emerald-550">Submission Inspector</p>
                     <h3 className="mt-1 text-sm font-black">{selectedSubmission.studentName}</h3>
@@ -1243,43 +1243,45 @@ export default function TeacherPortal({
                   </div>
                   <Eye className="h-5 w-5 text-emerald-500" />
                 </div>
-                <pre className="max-h-52 overflow-auto rounded-xl border border-slate-800 bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-emerald-300">{selectedSubmission.code}</pre>
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  {[
-                    ['Compile', selectedSubmission.compileStatus || 'not_run'],
-                    ['Runtime', selectedSubmission.runtime ? `${selectedSubmission.runtime} ms` : '--'],
-                    ['Memory', selectedSubmission.memoryUsage ? `${selectedSubmission.memoryUsage} MB` : '--']
-                  ].map(([label, value]) => (
-                    <div key={label} className="rounded-xl border border-slate-800 bg-slate-900 p-2">
-                      <span className="block text-[9px] font-black uppercase text-slate-500">{label}</span>
-                      <strong className="mt-1 block text-[10px]">{value}</strong>
-                    </div>
-                  ))}
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div>
-                    <p className="mb-1 text-[9px] font-black uppercase text-slate-500">Program Output</p>
-                    <pre className="min-h-20 rounded-xl border border-slate-800 bg-slate-900 p-3 text-[10px] text-slate-300">{selectedSubmission.programOutput || 'No output captured.'}</pre>
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-1">
+                  <pre className="max-h-48 overflow-auto rounded-xl border border-slate-800 bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-emerald-300">{selectedSubmission.code}</pre>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    {[
+                      ['Compile', selectedSubmission.compileStatus || 'not_run'],
+                      ['Runtime', selectedSubmission.runtime ? `${selectedSubmission.runtime} ms` : '--'],
+                      ['Memory', selectedSubmission.memoryUsage ? `${selectedSubmission.memoryUsage} MB` : '--']
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-xl border border-slate-800 bg-slate-900 p-2">
+                        <span className="block text-[9px] font-black uppercase text-slate-500">{label}</span>
+                        <strong className="mt-1 block text-[10px]">{value}</strong>
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <p className="mb-1 text-[9px] font-black uppercase text-slate-500">Expected / Errors</p>
-                    <pre className="min-h-20 rounded-xl border border-slate-800 bg-slate-900 p-3 text-[10px] text-slate-300">{selectedSubmission.errorMessage || 'Expected output matched by test cases.'}</pre>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <p className="mb-1 text-[9px] font-black uppercase text-slate-500">Program Output</p>
+                      <pre className="min-h-20 rounded-xl border border-slate-800 bg-slate-900 p-3 text-[10px] text-slate-300">{selectedSubmission.programOutput || 'No output captured.'}</pre>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-[9px] font-black uppercase text-slate-500">Expected / Errors</p>
+                      <pre className="min-h-20 rounded-xl border border-slate-800 bg-slate-900 p-3 text-[10px] text-slate-300">{selectedSubmission.errorMessage || 'Expected output matched by test cases.'}</pre>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    {(selectedSubmission.testResults ?? []).map(test => (
+                      <div key={test.id} className={`flex justify-between rounded-lg border px-2 py-1 text-[10px] font-bold ${test.passed ? 'border-emerald-900 bg-emerald-950/30 text-emerald-300' : 'border-rose-900 bg-rose-950/30 text-rose-300'}`}>
+                        <span>{test.isHidden ? 'Hidden' : 'Sample'} test {test.id}</span>
+                        <span>{test.passed ? 'Passed' : 'Failed'}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <div className="space-y-1">
-                  {(selectedSubmission.testResults ?? []).map(test => (
-                    <div key={test.id} className={`flex justify-between rounded-lg border px-2 py-1 text-[10px] font-bold ${test.passed ? 'border-emerald-900 bg-emerald-950/30 text-emerald-300' : 'border-rose-900 bg-rose-950/30 text-rose-300'}`}>
-                      <span>{test.isHidden ? 'Hidden' : 'Sample'} test {test.id}</span>
-                      <span>{test.passed ? 'Passed' : 'Failed'}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="space-y-2 border-t border-slate-800 pt-4">
+                <div className="shrink-0 space-y-3 border-t border-slate-800 pt-4">
                   <input type="number" min="0" max="100" value={scoreText} onChange={event => setScoreText(parseInt(event.target.value) || 0)} className="w-28 rounded-xl border border-slate-800 bg-slate-900 p-2 text-xs font-black outline-none focus:border-emerald-500" />
                   <textarea value={commentText} onChange={event => setCommentText(event.target.value)} placeholder="Teacher feedback and adaptive remediation notes..." className="h-20 w-full resize-none rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs outline-none focus:border-emerald-500" />
-                  <div className="flex gap-2">
-                    {onReopenSubmission && <button type="button" onClick={() => onReopenSubmission(selectedSubmission.id)} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black">Reopen</button>}
-                    <button type="button" onClick={handlePostGrade} className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white">Post Grade & Feedback</button>
+                  <div className="grid grid-cols-[auto_1fr] gap-2">
+                    {onReopenSubmission && <button type="button" onClick={() => onReopenSubmission(selectedSubmission.id)} className="min-h-11 rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700">Reopen</button>}
+                    <button type="button" onClick={handlePostGrade} className="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white transition hover:bg-emerald-500 active:scale-[0.99]">Post Grade & Feedback</button>
                   </div>
                 </div>
               </div>
