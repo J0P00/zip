@@ -4,17 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "fbae93da599e3f62",
+        "id": "67fb07fd27460778",
         "type": "tabs",
         "children": [
           {
-            "id": "b6043138b314771d",
+            "id": "132f28faafba3526",
             "type": "leaf",
             "state": {
-              "type": "graph",
+              "type": "empty",
               "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
+              "icon": "lucide-file",
+              "title": "New tab"
             }
           }
         ]
@@ -181,6 +181,16 @@
       "bases:Create new base": false
     }
   },
-  "active": "b6043138b314771d",
-  "lastOpenFiles": []
+  "active": "2da6f6bfc1790cc1",
+  "lastOpenFiles": [
+    "Untitled.canvas",
+    "Untitled.base",
+    "Untitled 1.base",
+    "2026-08-15.md",
+    "README.md",
+    "Untitled.md",
+    "Untitled",
+    "lesson1-classes-objects-assessment.md",
+    "node_modules/ms/license.md"
+  ]
 }
