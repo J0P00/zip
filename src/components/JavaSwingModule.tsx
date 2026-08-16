@@ -441,13 +441,21 @@ export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlo
         {JAVA_SWING_VIDEOS.map(video => (
           <article key={video.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="aspect-video bg-slate-950">
-              <iframe
-                src={video.embedUrl}
-                title={video.title}
-                className="h-full w-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
+              {video.embedUrl.endsWith('.mp4') ? (
+                <video
+                  src={video.embedUrl}
+                  controls
+                  className="h-full w-full"
+                />
+              ) : (
+                <iframe
+                  src={video.embedUrl}
+                  title={video.title}
+                  className="h-full w-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              )}
             </div>
             <div className="p-5">
               <div className="flex items-start justify-between gap-3">
@@ -455,9 +463,11 @@ export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlo
                 <span className="rounded-lg bg-slate-100 px-2 py-1 font-mono text-[10px] font-black text-slate-500">{video.duration}</span>
               </div>
               <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{video.description}</p>
-              <a href={video.embedUrl.replace('/embed/', '/watch?v=')} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-[11px] font-black text-emerald-700">
-                Open on YouTube <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+              {!video.embedUrl.endsWith('.mp4') && (
+                <a href={video.embedUrl.replace('/embed/', '/watch?v=')} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-[11px] font-black text-emerald-700">
+                  Open on YouTube <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
             </div>
           </article>
         ))}

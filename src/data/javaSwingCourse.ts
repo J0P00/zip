@@ -1,5 +1,6 @@
 import { ChallengeTestResult, ProgrammingChallenge } from '../types';
 import { CourseQuestion, getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from './oopCourse';
+import { SWING_QUESTION_BANKS } from './javaSwingQuestions';
 
 export const SWING_WATCH_KEY = 'oophub_swing_lesson_progress';
 export const SWING_QUIZ_KEY = 'oophub_swing_quiz_attempts';
@@ -55,211 +56,255 @@ export interface SwingLessonProgress {
 export type SwingProgressDb = Record<string, SwingLessonProgress>;
 export type SwingQuizDb = Record<string, SwingQuizAttempt>;
 
-const swingQuestion = (
-  lessonId: string,
-  number: number,
-  questionText: string,
-  correctAnswer: string,
-  distractors: string[],
-  explanation: string
-): CourseQuestion => ({
-  id: `${lessonId}_q${number.toString().padStart(2, '0')}`,
-  lessonId,
-  question: questionText,
-  options: [correctAnswer, ...distractors].slice(0, 4),
-  correctAnswer,
-  explanation,
-  difficulty: number <= 4 ? 'Easy' : number <= 8 ? 'Medium' : 'Hard'
-});
-
 export const JAVA_SWING_LESSONS: SwingLesson[] = [
   {
     id: 'swing_lesson_1',
     sequence: 1,
-    title: 'Introduction to Java Swing',
-    topics: ['What is Swing?', 'Difference between AWT and Swing', 'JFrame', 'JPanel', 'JLabel', 'JButton'],
+    title: 'Creating a Simple Window (JFrame)',
+    topics: ['JFrame', 'Importing Swing', 'extends JFrame', 'setTitle()', 'setSize()', 'setVisible()', 'setDefaultCloseOperation()'],
     objectives: [
-      'Explain what Swing is and why it is used for Java desktop interfaces.',
-      'Compare AWT heavyweight components with Swing lightweight components.',
-      'Build a basic JFrame with labels, panels, and buttons.'
+      'Understand what GUI and Java Swing are.',
+      'Import the javax.swing package.',
+      'Create and configure a basic JFrame window with a title, size, and close operation.'
     ],
-    introduction: 'Swing is Java standard toolkit for building desktop graphical user interfaces using reusable components.',
+    introduction: 'JFrame is the fundamental component in Java Swing used to create a main application window.',
     content: [
-      'Swing is built on top of AWT but supplies richer, lightweight components rendered by Java.',
-      'A JFrame is the top-level window. JPanel groups controls. JLabel displays text or images. JButton triggers actions.',
-      'Most Swing work follows a pattern: create components, configure layout, add components, attach listeners, then show the frame.'
+      'A graphical user interface (GUI) allows users to interact with programs visually.',
+      'To build a window in Swing, we import javax.swing.JFrame and write a class that extends JFrame.',
+      'Inside the class constructor, we configure the window properties like setTitle(), setSize(), setDefaultCloseOperation(EXIT_ON_CLOSE), and setVisible(true).'
     ],
     diagram: [
-      { label: 'JFrame', detail: 'Application window' },
-      { label: 'JPanel', detail: 'Content container' },
-      { label: 'JLabel', detail: 'Text display' },
-      { label: 'JButton', detail: 'User command' }
+      { label: 'Import', detail: 'import javax.swing.JFrame' },
+      { label: 'Inherit', detail: 'extends JFrame' },
+      { label: 'Configure', detail: 'setSize(), setTitle()' },
+      { label: 'Show', detail: 'setVisible(true)' }
     ],
-    codeExample: `import javax.swing.*;
+    codeExample: `import javax.swing.JFrame;
 
-public class Main {
+public class Tutorial extends JFrame {
+    public Tutorial() {
+        setTitle("My First Window");
+        setSize(400, 400);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setVisible(true);
+    }
     public static void main(String[] args) {
-        JFrame frame = new JFrame("Hello Swing");
-        JPanel panel = new JPanel();
-        panel.add(new JLabel("Welcome to Java Swing"));
-        panel.add(new JButton("Start"));
-        frame.add(panel);
-        frame.setSize(320, 160);
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setVisible(true);
+        new Tutorial();
     }
 }`,
     bestPractices: [
-      'Create and update Swing UI on the Event Dispatch Thread in production apps.',
-      'Set an explicit close operation for top-level frames.',
-      'Group related controls inside panels instead of adding everything directly to the frame.'
+      'Always set setDefaultCloseOperation(EXIT_ON_CLOSE) so the program terminates fully when closed.',
+      'Set the visibility of the window at the very end of the configuration steps.',
+      'Use a constructor to initialize and set up your GUI window.'
     ],
-    summary: 'A Swing interface starts with a window, containers, visual components, and events.',
-    keyTakeaways: ['JFrame owns the window.', 'JPanel organizes controls.', 'Swing components are lightweight and flexible.']
+    summary: 'Building a simple window involves extending JFrame, setting properties in a constructor, and calling setVisible(true).',
+    keyTakeaways: ['JFrame creates windows.', 'setSize() configures dimensions.', 'setVisible(true) makes the window appear.']
   },
   {
     id: 'swing_lesson_2',
     sequence: 2,
-    title: 'Swing Components',
-    topics: ['JTextField', 'JTextArea', 'JCheckBox', 'JRadioButton', 'JComboBox', 'JTable', 'JScrollPane'],
+    title: 'JLabel, JTextField, & JTextArea',
+    topics: ['JLabel', 'JTextField', 'JTextArea', 'JPanel', 'add() method'],
     objectives: [
-      'Choose the correct input component for a user interaction.',
-      'Use JScrollPane for components that can overflow.',
-      'Represent tabular data with JTable.'
+      'Display non-editable text using JLabel.',
+      'Accept single-line input using JTextField.',
+      'Accept multi-line input using JTextArea.',
+      'Organize text components using a JPanel container.'
     ],
-    introduction: 'Swing components convert user intent into structured values that your program can read and process.',
+    introduction: 'Swing provides components to display text and accept text input from the user.',
     content: [
-      'JTextField captures one-line input, while JTextArea supports multiple lines.',
-      'JCheckBox represents independent yes/no choices. JRadioButton is best used in a ButtonGroup for one-of-many choices.',
-      'JComboBox presents a compact option list. JTable displays rows and columns, usually inside JScrollPane.'
+      'JLabel is used to display static, non-editable text or messages on the screen.',
+      'JTextField is a single-line input field, and JTextArea is a multi-line input box suitable for paragraphs.',
+      'These components are typically grouped in a JPanel container using the add() method before being added to the main JFrame.'
     ],
     diagram: [
-      { label: 'Input', detail: 'JTextField / JTextArea' },
-      { label: 'Choice', detail: 'JCheckBox / JRadioButton' },
-      { label: 'List', detail: 'JComboBox' },
-      { label: 'Data', detail: 'JTable + JScrollPane' }
+      { label: 'JLabel', detail: 'Displays text/messages' },
+      { label: 'JTextField', detail: 'Single-line text input' },
+      { label: 'JTextArea', detail: 'Multi-line text input' },
+      { label: 'JPanel', detail: 'Holds and groups them' }
     ],
-    codeExample: `JPanel form = new JPanel();
-JTextField nameField = new JTextField(16);
-JCheckBox active = new JCheckBox("Active");
-JComboBox<String> course = new JComboBox<>(new String[] {"CS", "IT"});
-form.add(new JLabel("Name"));
-form.add(nameField);
-form.add(active);
-form.add(course);`,
+    codeExample: `import javax.swing.*;
+
+public class TextDemo extends JFrame {
+    public TextDemo() {
+        JPanel panel = new JPanel();
+        JLabel label = new JLabel("Enter name:");
+        JTextField textField = new JTextField(20);
+        JTextArea textArea = new JTextArea(5, 20);
+        
+        panel.add(label);
+        panel.add(textField);
+        panel.add(textArea);
+        add(panel);
+        
+        setSize(300, 200);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setVisible(true);
+    }
+}`,
     bestPractices: [
-      'Use labels beside inputs so users understand what each field expects.',
-      'Use ButtonGroup when radio buttons are mutually exclusive.',
-      'Wrap tables and long text areas in JScrollPane.'
+      'Use JTextField for short single-line inputs like names or emails.',
+      'Use JTextArea for long inputs and specify the rows and columns (e.g., 5 rows, 20 columns).',
+      'Always add controls to a panel first to organize the layout.'
     ],
-    summary: 'Swing supplies specialized components for text, choices, lists, and tabular data.',
-    keyTakeaways: ['Pick components by user task.', 'Group radio buttons.', 'Scrollable content needs JScrollPane.']
+    summary: 'Displaying and inputting text is accomplished using JLabel, JTextField, JTextArea, and JPanel.',
+    keyTakeaways: ['JLabel shows text.', 'JTextField is for single-line input.', 'JTextArea is for multi-line paragraphs.']
   },
   {
     id: 'swing_lesson_3',
     sequence: 3,
-    title: 'Layout Managers',
-    topics: ['FlowLayout', 'BorderLayout', 'GridLayout', 'BoxLayout', 'Absolute Layout'],
+    title: 'JButton & ActionListener',
+    topics: ['JButton', 'ActionListener', 'addActionListener()', 'actionPerformed', 'Event Handling'],
     objectives: [
-      'Explain why layout managers are preferred over fixed positions.',
-      'Select an appropriate layout for common UI structures.',
-      'Combine panels to build responsive desktop screens.'
+      'Create interactive buttons with JButton.',
+      'Register event listeners using addActionListener().',
+      'Implement response logic when a button is clicked using lambdas.'
     ],
-    introduction: 'Layout managers decide how components resize and arrange themselves inside containers.',
+    introduction: 'JButton and ActionListener are used to make Java Swing applications interactive by responding to clicks.',
     content: [
-      'FlowLayout places components left to right and wraps as needed.',
-      'BorderLayout divides a container into North, South, East, West, and Center regions.',
-      'GridLayout creates equal-size cells. BoxLayout stacks components on one axis. Absolute layout uses fixed bounds and is brittle.'
+      'JButton creates a clickable button that triggers a command when clicked.',
+      'An ActionListener is registered using addActionListener() to detect and respond to these click events.',
+      'We write the response code inside the action handler, often using a Java lambda expression for concise code.'
     ],
     diagram: [
-      { label: 'FlowLayout', detail: 'Simple rows' },
-      { label: 'BorderLayout', detail: 'App shell' },
-      { label: 'GridLayout', detail: 'Uniform cells' },
-      { label: 'BoxLayout', detail: 'Vertical or horizontal stack' }
+      { label: 'JButton', detail: 'Creates clickable button' },
+      { label: 'Listener', detail: 'addActionListener()' },
+      { label: 'Event', detail: 'Triggered on button click' },
+      { label: 'Action', detail: 'Runs inside lambda callback' }
     ],
-    codeExample: `JFrame frame = new JFrame("Layouts");
-frame.setLayout(new BorderLayout());
-frame.add(new JLabel("Header"), BorderLayout.NORTH);
-frame.add(new JTextArea(), BorderLayout.CENTER);
-frame.add(new JButton("Save"), BorderLayout.SOUTH);`,
+    codeExample: `import javax.swing.*;
+
+public class ClickDemo extends JFrame {
+    public ClickDemo() {
+        JPanel panel = new JPanel();
+        JButton button = new JButton("Click Me");
+        JLabel label = new JLabel("Waiting...");
+        
+        button.addActionListener(e -> {
+            label.setText("Button was clicked!");
+            System.out.println("Button clicked!");
+        });
+        
+        panel.add(button);
+        panel.add(label);
+        add(panel);
+        
+        setSize(300, 150);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setVisible(true);
+    }
+}`,
     bestPractices: [
-      'Compose complex screens using multiple nested panels.',
-      'Avoid absolute layout unless building a controlled prototype.',
-      'Let layouts handle resizing instead of hard-coding positions.'
+      'Provide clear, action-oriented text labels on your buttons.',
+      'Use lambda expressions `e -> { ... }` for concise and readable event handlers.',
+      'Keep event handler methods short by delegating heavy tasks.'
     ],
-    summary: 'Good Swing interfaces rely on layout managers to stay usable as windows resize.',
-    keyTakeaways: ['BorderLayout is useful for app shells.', 'GridLayout creates uniform controls.', 'Absolute layout is fragile.']
+    summary: 'Make interfaces interactive by creating JButtons, attaching ActionListeners, and implementing click logic.',
+    keyTakeaways: ['JButton represents commands.', 'ActionListener detects click events.', 'Lambdas implement action logic.']
   },
   {
     id: 'swing_lesson_4',
     sequence: 4,
-    title: 'Event Handling',
-    topics: ['ActionListener', 'MouseListener', 'KeyListener', 'WindowListener'],
+    title: 'JPanel & Layout Managers',
+    topics: ['JPanel', 'Layout Managers', 'FlowLayout', 'BorderLayout', 'GridLayout'],
     objectives: [
-      'Attach listeners to Swing components.',
-      'Choose the correct listener for click, key, mouse, and window events.',
-      'Update UI state in response to user actions.'
+      'Group GUI components together using JPanel.',
+      'Arrange components in left-to-right rows using FlowLayout.',
+      'Arrange components in five specific regions using BorderLayout.',
+      'Arrange components in rows and columns using GridLayout.'
     ],
-    introduction: 'Event handling lets Swing programs react to what the user does.',
+    introduction: 'Layout managers control the positioning and resizing behavior of components inside panels and frames.',
     content: [
-      'ActionListener handles button clicks and command-style actions.',
-      'MouseListener handles mouse enter, exit, press, release, and click events.',
-      'KeyListener observes keyboard input. WindowListener observes frame lifecycle events.'
+      'JPanel is a lightweight container used to group components. It uses FlowLayout by default.',
+      'BorderLayout divides a panel into five areas: North, South, East, West, and Center. Center usually holds the main expanding component.',
+      'GridLayout places components in a table-like grid of equal-sized rows and columns.'
     ],
     diagram: [
-      { label: 'User Action', detail: 'Click / key / window close' },
-      { label: 'Listener', detail: 'Receives event object' },
-      { label: 'Handler', detail: 'Updates app state' },
-      { label: 'UI Refresh', detail: 'User sees feedback' }
+      { label: 'FlowLayout', detail: 'Left-to-right rows' },
+      { label: 'BorderLayout', detail: '5 areas (N, S, E, W, C)' },
+      { label: 'GridLayout', detail: 'Rows and columns grid' },
+      { label: 'Nesting', detail: 'Combine panels for complex designs' }
     ],
-    codeExample: `JButton button = new JButton("Greet");
-JLabel label = new JLabel("Waiting...");
-button.addActionListener(event -> {
-    label.setText("Hello, Swing!");
-});`,
+    codeExample: `import javax.swing.*;
+import java.awt.*;
+
+public class LayoutDemo extends JFrame {
+    public LayoutDemo() {
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        JPanel topPanel = new JPanel(new FlowLayout());
+        JPanel gridPanel = new JPanel(new GridLayout(2, 2));
+        
+        gridPanel.add(new JButton("1"));
+        gridPanel.add(new JButton("2"));
+        gridPanel.add(new JButton("3"));
+        gridPanel.add(new JButton("4"));
+        
+        topPanel.add(new JLabel("Control Panel"));
+        
+        mainPanel.add(topPanel, BorderLayout.NORTH);
+        mainPanel.add(gridPanel, BorderLayout.CENTER);
+        add(mainPanel);
+        
+        setSize(400, 300);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setVisible(true);
+    }
+}`,
     bestPractices: [
-      'Keep listener code short and delegate larger tasks to helper methods.',
-      'Validate input before updating state.',
-      'Give immediate visual feedback after a user action.'
+      'Avoid hardcoding component positions; let Layout Managers handle responsiveness.',
+      'Nest multiple JPanels with different layouts to build complex screen layouts.',
+      'Remember that JPanel uses FlowLayout by default, while JFrame uses BorderLayout.'
     ],
-    summary: 'Listeners connect UI events to application behavior.',
-    keyTakeaways: ['ActionListener is the common button handler.', 'Listeners receive event objects.', 'Handlers should stay focused.']
+    summary: 'JPanel and Layout Managers (FlowLayout, BorderLayout, GridLayout) handle responsive arrangement of controls.',
+    keyTakeaways: ['FlowLayout arranges left-to-right.', 'BorderLayout utilizes five regions.', 'GridLayout structures uniform cells.']
   },
   {
     id: 'swing_lesson_5',
     sequence: 5,
-    title: 'Mini Swing Application',
-    topics: ['JFrame', 'JLabel', 'JButton', 'JTextField', 'Event Handling'],
+    title: 'JOptionPane Dialogs',
+    topics: ['JOptionPane', 'showMessageDialog()', 'showInputDialog()', 'showConfirmDialog()', 'Integer.parseInt()', '\\n Escape Sequence'],
     objectives: [
-      'Plan a complete Swing screen from requirements.',
-      'Combine layout, components, and listeners in one mini application.',
-      'Submit maintainable Swing code for review.'
+      'Show informational dialogs with showMessageDialog().',
+      'Prompt user inputs with showInputDialog().',
+      'Collect confirmation selections with showConfirmDialog().',
+      'Convert and parse dialog text inputs into integers.',
+      'Format multi-line dialog content with the newline escape sequence.'
     ],
-    introduction: 'A complete Swing app combines windows, layout, inputs, commands, validation, and feedback.',
+    introduction: 'JOptionPane provides simple, pre-built dialog boxes for displaying messages, prompting inputs, and getting confirmations.',
     content: [
-      'Start by sketching the data the user must enter and the action they need to perform.',
-      'Create labels and input fields, place them with a layout manager, and attach listeners to buttons.',
-      'A mini app should validate input, update labels or tables, and keep code readable.'
+      'JOptionPane is a helper class for quickly opening small popup windows.',
+      'showMessageDialog() displays information, showInputDialog() prompts for a text input (returning a String), and showConfirmDialog() asks for confirmation.',
+      'To use inputs for arithmetic, convert the string using Integer.parseInt(). Use the \\n escape sequence to print text on a new line.'
     ],
     diagram: [
-      { label: 'Requirements', detail: 'Fields and actions' },
-      { label: 'UI Layout', detail: 'Frame and panels' },
-      { label: 'Events', detail: 'Button listeners' },
-      { label: 'Feedback', detail: 'Result label or table' }
+      { label: 'Message Dialog', detail: 'Displays an alert or info' },
+      { label: 'Input Dialog', detail: 'Prompts input string' },
+      { label: 'Confirm Dialog', detail: 'Collects Yes/No choice' },
+      { label: 'String parsing', detail: 'Integer.parseInt()' }
     ],
-    codeExample: `JTextField nameField = new JTextField(12);
-JButton saveButton = new JButton("Save");
-JLabel status = new JLabel("Enter a name");
-saveButton.addActionListener(e -> {
-    status.setText("Saved: " + nameField.getText());
-});`,
+    codeExample: `import javax.swing.JOptionPane;
+
+public class DialogDemo {
+    public static void main(String[] args) {
+        JOptionPane.showMessageDialog(null, "Welcome to Java Swing!");
+        String name = JOptionPane.showInputDialog(null, "Enter your name:");
+        String ageStr = JOptionPane.showInputDialog(null, "Enter age:");
+        
+        int age = Integer.parseInt(ageStr);
+        int confirm = JOptionPane.showConfirmDialog(null, "Save information?", "Confirm", JOptionPane.YES_NO_OPTION);
+        
+        if (confirm == JOptionPane.YES_OPTION) {
+            JOptionPane.showMessageDialog(null, "Name: " + name + "\\nAge: " + age, "Saved", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+}`,
     bestPractices: [
-      'Name variables after their UI purpose.',
-      'Validate required fields before saving.',
-      'Separate UI construction from event behavior as the app grows.'
+      'Pass null as the first argument to center the dialog on the computer screen.',
+      'Validate dialog inputs before trying to parse them to prevent runtime NumberFormatExceptions.',
+      'Use YES_NO_OPTION in confirmation dialogs to explicitly ask for simple user confirmation.'
     ],
-    summary: 'The final Swing lesson turns individual components into a small working interface.',
-    keyTakeaways: ['Combine components intentionally.', 'Events drive behavior.', 'Readable code matters in UI projects.']
+    summary: 'JOptionPane is used to show popups: showMessageDialog() for notifications, showInputDialog() for text inputs, and showConfirmDialog() for questions.',
+    keyTakeaways: ['JOptionPane displays simple popups.', 'showInputDialog() returns text input.', 'Integer.parseInt() converts text to numbers.']
   }
 ];
 
@@ -267,42 +312,42 @@ export const JAVA_SWING_VIDEOS: SwingVideo[] = [
   {
     id: 'swing_video_1',
     lessonId: 'swing_lesson_1',
-    title: 'Java Swing Tutorial for Beginners',
-    duration: '28:46',
-    description: 'A beginner-friendly overview of Swing windows, panels, labels, and buttons.',
-    embedUrl: 'https://www.youtube.com/embed/5o3fMLPY7qY'
+    title: 'Topic 1 JFrame Video Lesson',
+    duration: '15:00',
+    description: 'Learn how to create and configure a simple window using JFrame.',
+    embedUrl: '/Java Swing/Video Lesson/Topic 1 JFRAME.mp4'
   },
   {
     id: 'swing_video_2',
-    lessonId: 'swing_lesson_1',
-    title: 'JFrame and JPanel Basics',
-    duration: '17:22',
-    description: 'Shows how top-level windows and containers work together in Swing.',
-    embedUrl: 'https://www.youtube.com/embed/Kmgo00avvEw'
+    lessonId: 'swing_lesson_2',
+    title: 'Topic 2 JLabel, JTextField, & JTextArea Video Lesson',
+    duration: '15:00',
+    description: 'Learn how to add static labels, single-line text fields, and multi-line text areas.',
+    embedUrl: '/Java Swing/Video Lesson/Topic 2 Jlabel,JTextField,JtextArea.mp4'
   },
   {
     id: 'swing_video_3',
-    lessonId: 'swing_lesson_2',
-    title: 'Swing Components Explained',
-    duration: '31:10',
-    description: 'Covers text fields, buttons, check boxes, combo boxes, and tables.',
-    embedUrl: 'https://www.youtube.com/embed/HuTs8S0rLpw'
+    lessonId: 'swing_lesson_3',
+    title: 'Topic 3 JButton & ActionListener Video Lesson',
+    duration: '15:00',
+    description: 'Learn how to create buttons and handle click events with ActionListeners.',
+    embedUrl: '/Java Swing/Video Lesson/Topic 3 JButton&ActionListener.mp4'
   },
   {
     id: 'swing_video_4',
     lessonId: 'swing_lesson_4',
-    title: 'Java Swing Event Handling',
-    duration: '24:18',
-    description: 'Explains listeners and how buttons trigger application behavior.',
-    embedUrl: 'https://www.youtube.com/embed/8ZcEYv2ezWc'
+    title: 'Topic 4 JPanel & Layout Managers Video Lesson',
+    duration: '15:00',
+    description: 'Learn how to arrange controls using FlowLayout, BorderLayout, and GridLayout.',
+    embedUrl: '/Java Swing/Video Lesson/Topic 4 JPanel&LayoutManagers.mp4'
   },
   {
     id: 'swing_video_5',
     lessonId: 'swing_lesson_5',
-    title: 'Build a Java Swing Login System',
-    duration: '36:04',
-    description: 'Walkthrough of a practical login interface using fields and event handling.',
-    embedUrl: 'https://www.youtube.com/embed/iE8tZ0hn2Ws'
+    title: 'Topic 5 JOptionPane Video Lesson',
+    duration: '15:00',
+    description: 'Learn how to display dialog popups, collect input, and handle confirmation boxes.',
+    embedUrl: '/Java Swing/Video Lesson/Topic 5 JOptionPane.mp4'
   }
 ];
 
@@ -311,75 +356,8 @@ export const JAVA_SWING_ASSESSMENTS = JAVA_SWING_LESSONS.map(lesson => ({
   lessonId: lesson.id,
   title: `${lesson.title} Quiz`,
   passingPercentage: SWING_PASSING_PERCENTAGE,
-  questions: buildSwingQuestions(lesson.id, lesson.sequence)
+  questions: SWING_QUESTION_BANKS[lesson.sequence] || []
 }));
-
-function buildSwingQuestions(lessonId: string, sequence: number): CourseQuestion[] {
-  const banks: Record<number, CourseQuestion[]> = {
-    1: [
-      swingQuestion(lessonId, 1, 'What is Java Swing primarily used for?', 'Building desktop graphical user interfaces', ['Managing database indexes', 'Compiling Java bytecode', 'Writing server routes'], 'Swing is a Java GUI toolkit for desktop applications.'),
-      swingQuestion(lessonId, 2, 'Which Swing class represents a top-level window?', 'JFrame', ['JLabel', 'JButton', 'JTable'], 'JFrame is the main top-level window container.'),
-      swingQuestion(lessonId, 3, 'Which component displays non-editable text?', 'JLabel', ['JTextField', 'JComboBox', 'JPanel'], 'JLabel displays text or images.'),
-      swingQuestion(lessonId, 4, 'What is a JPanel commonly used for?', 'Grouping and organizing components', ['Encrypting passwords', 'Starting the JVM', 'Creating SQL tables'], 'JPanel is a general-purpose container.'),
-      swingQuestion(lessonId, 5, 'How is Swing different from AWT in common teaching terms?', 'Swing components are lightweight and richer', ['Swing cannot create buttons', 'AWT requires no Java runtime', 'AWT is only for web apps'], 'Swing offers lightweight components built on AWT foundations.'),
-      swingQuestion(lessonId, 6, 'Which method makes a JFrame visible?', 'setVisible(true)', ['showWindow(false)', 'displayFrame()', 'render(true)'], 'Calling setVisible(true) displays the frame.'),
-      swingQuestion(lessonId, 7, 'Which component should trigger a command when clicked?', 'JButton', ['JLabel', 'JPanel', 'JScrollPane'], 'JButton is designed for click commands.'),
-      swingQuestion(lessonId, 8, 'Why should controls be added to containers?', 'Containers organize and hold UI components', ['Containers delete events', 'Containers replace Java classes', 'Containers compile code'], 'Containers such as JPanel organize UI structure.'),
-      swingQuestion(lessonId, 9, 'What package contains common Swing classes?', 'javax.swing', ['java.sql', 'java.net', 'java.time'], 'Swing classes live in javax.swing.'),
-      swingQuestion(lessonId, 10, 'What should be set so closing a JFrame exits a simple app?', 'Default close operation', ['Database URL', 'Thread priority', 'Mouse speed'], 'setDefaultCloseOperation controls frame close behavior.')
-    ],
-    2: [
-      swingQuestion(lessonId, 1, 'Which component captures one-line text input?', 'JTextField', ['JTextArea', 'JTable', 'JScrollPane'], 'JTextField is for single-line text.'),
-      swingQuestion(lessonId, 2, 'Which component captures multi-line text?', 'JTextArea', ['JPasswordField', 'JButton', 'JLabel'], 'JTextArea supports multiple lines.'),
-      swingQuestion(lessonId, 3, 'What should wrap a JTable for scrolling?', 'JScrollPane', ['ButtonGroup', 'JFrame only', 'ActionListener'], 'JScrollPane provides scrollbars for large content.'),
-      swingQuestion(lessonId, 4, 'Which component represents an independent true/false choice?', 'JCheckBox', ['JRadioButton', 'JTable', 'JPanel'], 'JCheckBox is best for independent toggles.'),
-      swingQuestion(lessonId, 5, 'Which component is commonly grouped for one-of-many selection?', 'JRadioButton', ['JTextArea', 'JLabel', 'JScrollPane'], 'Radio buttons are grouped for mutually exclusive choices.'),
-      swingQuestion(lessonId, 6, 'Which component provides a dropdown list?', 'JComboBox', ['JTable', 'JLabel', 'JTextArea'], 'JComboBox shows selectable options in compact form.'),
-      swingQuestion(lessonId, 7, 'Which component displays rows and columns?', 'JTable', ['JButton', 'JCheckBox', 'JFrame'], 'JTable is Swing tabular display component.'),
-      swingQuestion(lessonId, 8, 'What does ButtonGroup do for radio buttons?', 'Ensures only one grouped option is selected', ['Adds scrollbars', 'Saves files', 'Changes window size'], 'ButtonGroup coordinates radio-button selection.'),
-      swingQuestion(lessonId, 9, 'What should labels do in a form?', 'Clarify what each input means', ['Replace all buttons', 'Stop events', 'Remove validation'], 'Labels make inputs understandable.'),
-      swingQuestion(lessonId, 10, 'Which field hides typed password characters?', 'JPasswordField', ['JTextArea', 'JComboBox', 'JTable'], 'JPasswordField masks password input.')
-    ],
-    3: [
-      swingQuestion(lessonId, 1, 'Why use layout managers?', 'To arrange and resize components predictably', ['To hash passwords', 'To query PostgreSQL', 'To delete frames'], 'Layouts handle component positioning and resizing.'),
-      swingQuestion(lessonId, 2, 'Which layout has North, South, East, West, and Center?', 'BorderLayout', ['FlowLayout', 'GridLayout', 'Absolute Layout'], 'BorderLayout divides a container into five regions.'),
-      swingQuestion(lessonId, 3, 'Which layout places components left to right?', 'FlowLayout', ['BoxLayout only', 'BorderLayout', 'NoLayout'], 'FlowLayout flows controls in row order.'),
-      swingQuestion(lessonId, 4, 'Which layout creates equal-sized rows and columns?', 'GridLayout', ['FlowLayout', 'BorderLayout', 'CardLayout'], 'GridLayout uses uniform cells.'),
-      swingQuestion(lessonId, 5, 'Which layout stacks components along an axis?', 'BoxLayout', ['JTableLayout', 'SQLLayout', 'WindowLayout'], 'BoxLayout arranges along X or Y axis.'),
-      swingQuestion(lessonId, 6, 'Why is absolute layout discouraged?', 'It breaks easily when size or platform changes', ['It makes buttons impossible', 'It requires no coordinates', 'It disables labels'], 'Fixed bounds are not responsive.'),
-      swingQuestion(lessonId, 7, 'What is a good strategy for complex forms?', 'Nest panels with different layouts', ['Use one giant absolute panel', 'Avoid all containers', 'Put SQL in labels'], 'Nested panels keep layout manageable.'),
-      swingQuestion(lessonId, 8, 'Where does BorderLayout.CENTER usually go?', 'The main expanding content area', ['Only a menu item', 'A database password', 'A hidden listener'], 'Center receives remaining available space.'),
-      swingQuestion(lessonId, 9, 'What happens when a FlowLayout row is full?', 'Components wrap to the next line', ['The JVM exits', 'Labels are deleted', 'Events stop'], 'FlowLayout wraps components as space changes.'),
-      swingQuestion(lessonId, 10, 'Which layout is useful for calculator-like buttons?', 'GridLayout', ['BorderLayout only', 'JLabel', 'MouseListener'], 'GridLayout works well for uniform calculator buttons.')
-    ],
-    4: [
-      swingQuestion(lessonId, 1, 'Which listener handles JButton clicks?', 'ActionListener', ['MouseWheelOnly', 'WindowPainter', 'TableModel'], 'Buttons commonly use ActionListener.'),
-      swingQuestion(lessonId, 2, 'What does MouseListener observe?', 'Mouse press, release, enter, exit, and click events', ['SQL inserts', 'Compilation phases', 'JVM startup only'], 'MouseListener receives mouse lifecycle events.'),
-      swingQuestion(lessonId, 3, 'Which listener observes keyboard input?', 'KeyListener', ['ActionListener', 'GridListener', 'FrameLayout'], 'KeyListener handles key events.'),
-      swingQuestion(lessonId, 4, 'Which listener observes a window closing?', 'WindowListener', ['JComboBox', 'JTable', 'ButtonGroup'], 'WindowListener handles frame lifecycle events.'),
-      swingQuestion(lessonId, 5, 'What object is passed to an ActionListener callback?', 'An event object', ['A database table', 'A CSS file', 'A package lock'], 'Listeners receive event data.'),
-      swingQuestion(lessonId, 6, 'Why keep listener code short?', 'It improves readability and maintainability', ['It removes all validation', 'It blocks UI updates', 'It prevents buttons'], 'Handlers should delegate complex work.'),
-      swingQuestion(lessonId, 7, 'What should happen after a successful action?', 'The UI should give feedback', ['The frame should always crash', 'The code should delete labels', 'The app should ignore input'], 'Feedback confirms the action.'),
-      swingQuestion(lessonId, 8, 'What is a lambda often used for in Swing?', 'Concise listener implementation', ['Storing video files', 'Creating database schemas', 'Replacing JFrame'], 'Lambdas make simple listeners compact.'),
-      swingQuestion(lessonId, 9, 'What should be done before processing form input?', 'Validate the input', ['Hide every component', 'Disable the JVM', 'Delete the listener'], 'Validation protects behavior and user experience.'),
-      swingQuestion(lessonId, 10, 'Which method registers a button action handler?', 'addActionListener', ['setSQLListener', 'onClickOnly', 'addFrameTable'], 'addActionListener attaches ActionListener to a button.')
-    ],
-    5: [
-      swingQuestion(lessonId, 1, 'What should a mini Swing app start with?', 'A clear set of fields and actions', ['Random components only', 'A database backup', 'A package install'], 'UI work starts from requirements.'),
-      swingQuestion(lessonId, 2, 'Which component is useful for entering a name?', 'JTextField', ['JLabel', 'JScrollPane only', 'JFrame'], 'JTextField captures short text.'),
-      swingQuestion(lessonId, 3, 'Which component should show save status?', 'JLabel', ['JPasswordField', 'GridLayout', 'ButtonGroup'], 'A label can show feedback text.'),
-      swingQuestion(lessonId, 4, 'Which component triggers save behavior?', 'JButton', ['JPanel', 'JTable header', 'JScrollPane'], 'Buttons trigger commands.'),
-      swingQuestion(lessonId, 5, 'What should code do before accepting a submitted field?', 'Validate required input', ['Ignore empty values', 'Close every window', 'Remove event handling'], 'Validation is part of a complete UI.'),
-      swingQuestion(lessonId, 6, 'Why separate UI construction from behavior?', 'The code is easier to maintain as it grows', ['It prevents compilation', 'It removes Swing components', 'It hides all listeners'], 'Separation keeps complex screens readable.'),
-      swingQuestion(lessonId, 7, 'What combines components into one screen?', 'A container with a layout manager', ['A JWT token', 'A package lock', 'A SQL index'], 'Containers and layouts create screen structure.'),
-      swingQuestion(lessonId, 8, 'What is an example of immediate feedback?', 'Changing a status label after clicking Save', ['Doing nothing', 'Deleting the field', 'Ignoring the action'], 'Feedback tells users the result.'),
-      swingQuestion(lessonId, 9, 'What kind of app uses JFrame, JLabel, JButton, JTextField, and events together?', 'A complete interactive Swing application', ['A CSS stylesheet', 'A PostgreSQL function', 'A package manager'], 'Those elements form a desktop UI workflow.'),
-      swingQuestion(lessonId, 10, 'What should teachers review in a submitted Swing exercise?', 'Source code, requirements, output, and completion status', ['Only the file name', 'Only the package version', 'Only the browser URL'], 'Teacher review needs code evidence and results.')
-    ]
-  };
-
-  return banks[sequence] || [];
-}
 
 const starter = (body: string) => `import javax.swing.*;
 
@@ -413,81 +391,86 @@ export const JAVA_SWING_EXERCISES: ProgrammingChallenge[] = [
   },
   {
     id: 'swing_exercise_2',
-    topicId: 'swing-login-form',
+    topicId: 'swing-text-fields',
     lessonId: 'swing_lesson_2',
     assessmentId: 'swing_assessment_2',
-    title: 'Create a Login Form',
-    description: 'Create a login interface using labels, username/password fields, and a button.',
-    learningObjectives: ['Use text and password fields.', 'Add a submit button.', 'Organize form components.'],
-    requirements: ['Use JLabel', 'Use JTextField', 'Use JPasswordField', 'Use JButton'],
-    starterCode: starter('JFrame frame = new JFrame("Login");\n        // Build the login form controls here.'),
+    title: 'Create a Text Input Form',
+    description: 'Create an input interface containing a JTextField for a short input and a JTextArea for a long input, added to a JPanel.',
+    learningObjectives: ['Use JTextField.', 'Use JTextArea.', 'Organize components on a JPanel.'],
+    requirements: ['Use JTextField', 'Use JTextArea', 'Use JPanel'],
+    starterCode: starter('JPanel panel = new JPanel();\n        // Create JTextField and JTextArea, then add them to the panel.'),
     sampleInput: 'No stdin required',
-    sampleOutput: 'Login form UI created',
+    sampleOutput: 'Text inputs form created',
     passingScore: 80,
     testCases: [
       { id: 'textfield', input: '', expectedOutput: 'JTextField found', isHidden: false, matcher: 'new\\s+JTextField' },
-      { id: 'password', input: '', expectedOutput: 'JPasswordField found', isHidden: true, matcher: 'new\\s+JPasswordField' },
-      { id: 'button', input: '', expectedOutput: 'JButton found', isHidden: true, matcher: 'new\\s+JButton' }
+      { id: 'textarea', input: '', expectedOutput: 'JTextArea found', isHidden: true, matcher: 'new\\s+JTextArea' },
+      { id: 'panel', input: '', expectedOutput: 'JPanel found', isHidden: true, matcher: 'new\\s+JPanel' }
     ],
     createdAt: '2026-07-28T00:00:00.000Z'
   },
   {
     id: 'swing_exercise_3',
-    topicId: 'swing-calculator-ui',
+    topicId: 'swing-buttons',
     lessonId: 'swing_lesson_3',
     assessmentId: 'swing_assessment_3',
-    title: 'Create a Calculator UI',
-    description: 'Design a calculator screen with a display field and grid-style buttons.',
-    learningObjectives: ['Use a layout manager.', 'Create repeated buttons.', 'Structure a calculator interface.'],
-    requirements: ['Use GridLayout', 'Use JTextField', 'Use multiple JButtons'],
-    starterCode: starter('JFrame frame = new JFrame("Calculator");\n        // Create a display and calculator buttons.'),
+    title: 'Create a Click Counter Button',
+    description: 'Design a button that increments a counter and displays the count when clicked.',
+    learningObjectives: ['Create a JButton.', 'Attach an ActionListener.', 'Handle button click events.'],
+    requirements: ['Use JButton', 'Use addActionListener'],
+    starterCode: starter('JButton button = new JButton("Click Me");\n        // Register an ActionListener using a lambda expression to listen for clicks.'),
     sampleInput: 'No stdin required',
-    sampleOutput: 'Calculator UI created',
+    sampleOutput: 'Interactive click button created',
     passingScore: 80,
     testCases: [
-      { id: 'grid', input: '', expectedOutput: 'GridLayout found', isHidden: false, matcher: 'new\\s+GridLayout|GridLayout\\s*\\(' },
-      { id: 'display', input: '', expectedOutput: 'JTextField found', isHidden: true, matcher: 'new\\s+JTextField' },
-      { id: 'buttons', input: '', expectedOutput: 'JButton found', isHidden: true, matcher: 'new\\s+JButton' }
+      { id: 'button', input: '', expectedOutput: 'JButton found', isHidden: false, matcher: 'new\\s+JButton' },
+      { id: 'listener', input: '', expectedOutput: 'ActionListener found', isHidden: true, matcher: 'addActionListener' }
     ],
     createdAt: '2026-07-28T00:00:00.000Z'
   },
   {
     id: 'swing_exercise_4',
-    topicId: 'swing-registration-form',
+    topicId: 'swing-layouts',
     lessonId: 'swing_lesson_4',
     assessmentId: 'swing_assessment_4',
-    title: 'Create a Student Registration Form',
-    description: 'Build a form with text fields, choices, and submit event handling.',
-    learningObjectives: ['Create form controls.', 'Attach an ActionListener.', 'Display validation feedback.'],
-    requirements: ['Use JTextField', 'Use JComboBox or JRadioButton', 'Use addActionListener'],
-    starterCode: starter('JFrame frame = new JFrame("Student Registration");\n        // Add fields and handle the submit button.'),
+    title: 'Create a Grid Layout Panel',
+    description: 'Design a panel using GridLayout with 2 rows and 2 columns to arrange components.',
+    learningObjectives: ['Use a layout manager.', 'Create a GridLayout.', 'Structure a grid panel.'],
+    requirements: ['Use JPanel', 'Use GridLayout'],
+    starterCode: starter('JPanel panel = new JPanel();\n        // Set layout to GridLayout and add components.'),
     sampleInput: 'No stdin required',
-    sampleOutput: 'Registration form created',
+    sampleOutput: 'GridLayout panel created',
     passingScore: 80,
     testCases: [
-      { id: 'field', input: '', expectedOutput: 'JTextField found', isHidden: false, matcher: 'new\\s+JTextField' },
-      { id: 'choice', input: '', expectedOutput: 'Choice found', isHidden: true, matcher: 'new\\s+JComboBox|new\\s+JRadioButton|new\\s+JCheckBox' },
-      { id: 'listener', input: '', expectedOutput: 'Listener found', isHidden: true, matcher: 'addActionListener' }
+      { id: 'panel', input: '', expectedOutput: 'JPanel found', isHidden: false, matcher: 'new\\s+JPanel' },
+      { id: 'layout', input: '', expectedOutput: 'GridLayout found', isHidden: true, matcher: 'new\\s+GridLayout|GridLayout\\s*\\(' }
     ],
     createdAt: '2026-07-28T00:00:00.000Z'
   },
   {
     id: 'swing_exercise_5',
-    topicId: 'swing-library-interface',
+    topicId: 'swing-dialogs',
     lessonId: 'swing_lesson_5',
     assessmentId: 'swing_assessment_5',
-    title: 'Build a Mini Library Management Interface',
-    description: 'Create a small interface for entering books and displaying a library list.',
-    learningObjectives: ['Combine fields, buttons, and tabular or list output.', 'Use event handling.', 'Create a complete mini UI.'],
-    requirements: ['Use JFrame', 'Use JTextField', 'Use JButton', 'Use JTable or JTextArea', 'Use addActionListener'],
-    starterCode: starter('JFrame frame = new JFrame("Mini Library");\n        // Build the library management interface.'),
+    title: 'JOptionPane Input and Output',
+    description: 'Build a popup workflow that asks the user for their name and age using showInputDialog, converts the age to an integer, and shows a welcome message using showMessageDialog.',
+    learningObjectives: ['Prompt user inputs with JOptionPane.', 'Show messages using JOptionPane.', 'Convert string to integer.'],
+    requirements: ['Use JOptionPane.showInputDialog', 'Use JOptionPane.showMessageDialog', 'Use Integer.parseInt'],
+    starterCode: `import javax.swing.JOptionPane;
+
+public class Main {
+    public static void main(String[] args) {
+        // Prompt for name and age, parse the age, and show message dialog.
+    }
+}
+`,
     sampleInput: 'No stdin required',
-    sampleOutput: 'Mini library interface created',
+    sampleOutput: 'JOptionPane popups created',
     passingScore: 80,
     testCases: [
-      { id: 'frame', input: '', expectedOutput: 'JFrame found', isHidden: false, matcher: 'new\\s+JFrame' },
-      { id: 'output', input: '', expectedOutput: 'Output component found', isHidden: true, matcher: 'new\\s+JTable|new\\s+JTextArea' },
-      { id: 'listener', input: '', expectedOutput: 'Listener found', isHidden: true, matcher: 'addActionListener' }
+      { id: 'input', input: '', expectedOutput: 'showInputDialog found', isHidden: false, matcher: 'JOptionPane\\s*\\.\\s*showInputDialog' },
+      { id: 'message', input: '', expectedOutput: 'showMessageDialog found', isHidden: true, matcher: 'JOptionPane\\s*\\.\\s*showMessageDialog' },
+      { id: 'parse', input: '', expectedOutput: 'Integer.parseInt found', isHidden: true, matcher: 'Integer\\s*\\.\\s*parseInt' }
     ],
     createdAt: '2026-07-28T00:00:00.000Z'
   }

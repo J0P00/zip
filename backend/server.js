@@ -1491,7 +1491,7 @@ app.get("/api/auth/me", requireAuth, async (req, res, next) => {
     }
 });
 
-app.get("/api/users", requireAuth, requireRole(["admin", "teacher"]), async (_req, res, next) => {
+app.get("/api/users", requireAuth, requireRole(["admin", "teacher", "student"]), async (req, res, next) => {
     try {
         const result = await pool.query(`
             SELECT u.*, s.student_number, s.course, s.year_level, s.section, s.program_status,
@@ -1503,7 +1503,29 @@ app.get("/api/users", requireAuth, requireRole(["admin", "teacher"]), async (_re
             LEFT JOIN admins a ON a.user_id = u.id
             ORDER BY u.created_at DESC
         `);
-        res.json({ success: true, data: result.rows.map(toClientUser) });
+        
+        let users = result.rows.map(toClientUser);
+        
+        if (req.authUser.role === "student") {
+            users = users
+                .filter(u => u.role === "student")
+                .map(u => ({
+                    id: u.id,
+                    userId: u.userId,
+                    name: u.name,
+                    role: u.role,
+                    email: u.id === req.authUser.id ? u.email : undefined,
+                    registrationDate: u.registrationDate,
+                    onlineStatus: u.onlineStatus,
+                    avatar: u.avatar,
+                    course: u.course,
+                    yearLevel: u.yearLevel,
+                    section: u.section,
+                    programStatus: u.programStatus
+                }));
+        }
+        
+        res.json({ success: true, data: users });
     } catch (error) {
         next(error);
     }
