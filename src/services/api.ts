@@ -189,8 +189,6 @@ export const appApi = {
 export const isDemoEmail = (email: string, role?: Persona) => {
   const normalized = email.toLowerCase();
   return (
-    normalized === 'dmitry@oophub.edu' ||
-    normalized === 'elena@oophub.edu' ||
     normalized === 'jericokunn@gmail.com'
   );
 };
