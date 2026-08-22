@@ -58,6 +58,16 @@ type TopicProgress = {
   timeSpent: string;
 };
 
+type SwingTopicProgress = {
+  topic: string;
+  video: number;
+  assessment: number;
+  ideStatus: string;
+  completion: number;
+  unlocked: boolean;
+  timeSpent: string;
+};
+
 type LiveStudent = {
   id: string;
   name: string;
@@ -83,6 +93,7 @@ type LiveStudent = {
   topicCompletion: number;
   recommendation: string;
   topics: TopicProgress[];
+  swingTopics: SwingTopicProgress[];
   swing: {
     video: number;
     assessment: number;
@@ -111,6 +122,14 @@ const OOP_TOPICS = [
   'Exception Handling',
   'Collections and Generics',
   'File I/O and Serialization'
+];
+
+const SWING_TOPICS = [
+  'JFrame',
+  'JPanel',
+  'JLabel',
+  'JButton',
+  'JOptionPane'
 ];
 
 const ACTIVITY_ROTATION = [
@@ -322,6 +341,20 @@ const withTopicProgress = (student: LiveStudent, studentIndex: number): LiveStud
       unlocked,
       timeSpent: unlocked ? `${2 + ((index + studentIndex) % 5)}h ${10 + index * 3}m` : '--'
     };
+  }),
+  swingTopics: SWING_TOPICS.map((topic, index) => {
+    const swingBase = student.swing.video;
+    const completion = Math.max(0, Math.min(100, swingBase + (studentIndex * 2) - index * 10 + 5));
+    const unlocked = index <= Math.floor(swingBase / 20);
+    return {
+      topic,
+      video: unlocked ? Math.min(100, completion + 5) : 0,
+      assessment: unlocked ? Math.max(0, completion - 5) : 0,
+      ideStatus: !unlocked ? 'Locked' : completion >= 80 ? 'Passed' : completion >= 40 ? 'Submitted' : 'Not Started',
+      completion,
+      unlocked,
+      timeSpent: unlocked ? `${1 + ((index + studentIndex) % 3)}h ${5 + index * 4}m` : '--'
+    };
   })
 });
 
@@ -455,6 +488,7 @@ export default function TeacherPortal({
         topicCompletion: overallProgress,
         recommendation: 'Progress is synced from the student account activity.',
         topics: syncedTopics || [],
+        swingTopics: [],
         swing: { video: 0, assessment: 0, ide: 0, miniProject: 0 }
       };
 
@@ -502,6 +536,7 @@ export default function TeacherPortal({
       topicCompletion: overallProgress,
       recommendation: latestSubmission?.feedback || 'Monitor the next video, assessment, and Practice IDE submission.',
       topics: [],
+      swingTopics: [],
       swing: { video: 0, assessment: 0, ide: 0, miniProject: 0 }
     }, index);
   });
@@ -1057,7 +1092,7 @@ export default function TeacherPortal({
         </div>
       )}
 
-      {activeTab === 'swing' && (
+      {activeTab === 'swing' && selectedStudent && (
         <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {[
@@ -1077,28 +1112,74 @@ export default function TeacherPortal({
           <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-black">Java Swing Cohort Analytics</h3>
-                <p className="mt-1 text-xs text-slate-500">Lesson completion, quiz mastery, programming submissions, and mini-app readiness for connected students.</p>
+                <h3 className="text-base font-black">5 Java Swing Topics Progress</h3>
+                <p className="mt-1 text-xs text-slate-500">Topic-level video, assessment, Practice IDE, unlock, and time-spent monitoring for {selectedStudent.name}.</p>
               </div>
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase text-emerald-700">80% Quiz Pass Mark</span>
+              <div className="flex items-center gap-3">
+                <select value={selectedStudent.id} onChange={event => setSelectedStudentId(event.target.value)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  {visibleStudents.map(student => <option key={student.id} value={student.id}>{student.name}</option>)}
+                </select>
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase text-emerald-700">80% Quiz Pass Mark</span>
+              </div>
             </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-4">
-              {[
-                ['Lesson Completion', swingVideoAverage],
-                ['Quiz Analytics', swingQuizAverage],
-                ['Programming Progress', swingPracticeAverage],
-                ['Mini App Readiness', swingProjectAverage]
-              ].map(([label, value]) => (
-                <div key={label as string} className={`rounded-xl border p-3 ${mutedPanel}`}>
-                  <div className="flex justify-between text-[10px] font-black uppercase text-slate-400">
-                    <span>{label as string}</span>
-                    <span>{value}%</span>
+            
+            <div className="mt-6 overflow-x-auto">
+              <table className="w-full min-w-[860px] text-left text-xs">
+                <thead className="bg-emerald-50/20 text-[10px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-3 py-3">Topic</th>
+                    <th className="px-3 py-3">Video</th>
+                    <th className="px-3 py-3">Assessment</th>
+                    <th className="px-3 py-3">Practice IDE</th>
+                    <th className="px-3 py-3">Completion</th>
+                    <th className="px-3 py-3">Unlock</th>
+                    <th className="px-3 py-3">Time Spent</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(selectedStudent.swingTopics || []).map(topic => (
+                    <tr key={topic.topic} className={isDark ? 'divide-slate-800' : ''}>
+                      <td className="px-3 py-3 font-black">{topic.topic}</td>
+                      <td className="px-3 py-3">{topic.video}%</td>
+                      <td className="px-3 py-3">{topic.assessment}%</td>
+                      <td className="px-3 py-3">{topic.ideStatus}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100">
+                            <div className="h-full rounded-full bg-emerald-600" style={{ width: `${topic.completion}%` }} />
+                          </div>
+                          <span className="font-mono font-bold">{topic.completion}%</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">{topic.unlocked ? <UserCheck className="h-4 w-4 text-emerald-600" /> : <Lock className="h-4 w-4 text-slate-400" />}</td>
+                      <td className="px-3 py-3 font-mono text-slate-500">{topic.timeSpent}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-8">
+              <h3 className="text-base font-black">Java Swing Cohort Analytics</h3>
+              <p className="mt-1 text-xs text-slate-500">Lesson completion, quiz mastery, programming submissions, and mini-app readiness for connected students.</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-4">
+                {[
+                  ['Lesson Completion', swingVideoAverage],
+                  ['Quiz Analytics', swingQuizAverage],
+                  ['Programming Progress', swingPracticeAverage],
+                  ['Mini App Readiness', swingProjectAverage]
+                ].map(([label, value]) => (
+                  <div key={label as string} className={`rounded-xl border p-3 ${mutedPanel}`}>
+                    <div className="flex justify-between text-[10px] font-black uppercase text-slate-400">
+                      <span>{label as string}</span>
+                      <span>{value}%</span>
+                    </div>
+                    <div className="mt-2 h-2 rounded-full bg-white">
+                      <div className="h-2 rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
+                    </div>
                   </div>
-                  <div className="mt-2 h-2 rounded-full bg-white">
-                    <div className="h-2 rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
-                  </div>
-                </div>
               ))}
+              </div>
             </div>
           </div>
 
