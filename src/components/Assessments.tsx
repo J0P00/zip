@@ -184,7 +184,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, active
             </span>
             <h2 className="mt-3 text-2xl font-extrabold text-slate-900">Lesson Assessments</h2>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-              Each lesson has exactly 15 randomized MCQs. Passing score is 70%, and lessons unlock sequentially.
+              Each lesson has exactly 20 randomized MCQs. Passing score is 70%, and lessons unlock sequentially.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
@@ -220,7 +220,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, active
                   </div>
                   <h3 className="mt-2 text-sm font-extrabold text-slate-900">{assessment.title}</h3>
                   <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
-                    15 questions: 5 Easy, 5 Medium, 5 Hard.
+                    20 questions from the lesson assessment file.
                   </p>
                   {attempt && (
                     <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>

@@ -61,35 +61,35 @@ const SDPT_VIDEO_CITATIONS: Record<number, Pick<VideoLesson, 'video_title' | 'cr
     accessed_date: '2026-07-14'
   },
   4: {
-    video_title: 'Encapsulation',
+    video_title: 'Inheritance',
     creator_name: 'SDPT Solutions',
     publisher_name: 'YouTube',
     source_url: 'https://www.youtube.com/watch?v=RkOgR2gTD20&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=4',
     accessed_date: '2026-07-14'
   },
   5: {
-    video_title: 'Overloading Constructors',
+    video_title: 'Method Overriding',
     creator_name: 'SDPT Solutions',
     publisher_name: 'YouTube',
     source_url: 'https://www.youtube.com/watch?v=FcJnGlDRlP8&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=5',
     accessed_date: '2026-07-14'
   },
   6: {
-    video_title: 'Inheritance (extends & super)',
+    video_title: 'Abstract Class',
     creator_name: 'SDPT Solutions',
     publisher_name: 'YouTube',
     source_url: 'https://www.youtube.com/watch?v=ptyqpfyB6oA&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=6',
     accessed_date: '2026-07-14'
   },
   7: {
-    video_title: 'Polymorphism',
+    video_title: 'Interface',
     creator_name: 'SDPT Solutions',
     publisher_name: 'YouTube',
     source_url: 'https://www.youtube.com/watch?v=3uPkB0_OdiM&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=7',
     accessed_date: '2026-07-14'
   },
   8: {
-    video_title: 'Abstraction (Abstract Classes)',
+    video_title: 'Abstraction',
     creator_name: 'SDPT Solutions',
     publisher_name: 'YouTube',
     source_url: 'https://www.youtube.com/watch?v=vr-OAZZZE_Y&list=PLVnJhHoKgEmqJoW6MSTpHtBpWv3rn-0Or&index=8',
@@ -132,20 +132,20 @@ const OOP_TOPIC_CITATIONS: Record<number, Pick<VideoLesson, 'citation_text' | 'c
     citation_url: 'https://docs.oracle.com/javase/tutorial/java/javaOO/methods.html'
   },
   4: {
-    citation_text: 'Controlling access to members of a class (The Java Tutorials > Learning the Java Language > Classes and Objects). (n.d.). Oracle.',
-    citation_url: 'https://docs.oracle.com/javase/tutorial/java/javaOO/accesscontrol.html'
+    citation_text: 'Inheritance (The Java Tutorials > Learning the Java Language > Interfaces and Inheritance). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/IandI/subclasses.html'
   },
   5: {
     citation_text: 'Defining Methods (The Java Tutorials > Learning the Java Language > Classes and Objects). (n.d.). Oracle.',
     citation_url: 'https://docs.oracle.com/javase/tutorial/java/javaOO/methods.html'
   },
   6: {
-    citation_text: 'Inheritance (The Java Tutorials > Learning the Java Language > Interfaces and Inheritance). (n.d.). Oracle.',
-    citation_url: 'https://docs.oracle.com/javase/tutorial/java/IandI/subclasses.html'
+    citation_text: 'Abstract Methods and Classes (The Java Tutorials > Learning the Java Language > Interfaces and Inheritance). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/IandI/abstract.html'
   },
   7: {
-    citation_text: 'Polymorphism (The Java Tutorials > Learning the Java Language > Interfaces and Inheritance). (n.d.). Oracle.',
-    citation_url: 'https://docs.oracle.com/javase/tutorial/java/IandI/polymorphism.html'
+    citation_text: 'Interfaces (The Java Tutorials > Learning the Java Language > Interfaces and Inheritance). (n.d.). Oracle.',
+    citation_url: 'https://docs.oracle.com/javase/tutorial/java/IandI/createinterface.html'
   },
   8: {
     citation_text: 'Abstract Methods and Classes (The Java Tutorials > Learning the Java Language > Interfaces and Inheritance). (n.d.). Oracle.',
@@ -178,12 +178,12 @@ const OOP_CITATION_TITLE_MAP = new Map(
     ['Classes and Objects', 1],
     ['Constructors', 2],
     ['Object Methods', 3],
-    ['Encapsulation', 4],
-    ['Constructor Overloading', 5],
-    ['Inheritance', 6],
-    ['Polymorphism', 7],
-    ['Abstract Classes', 8],
-    ['Interfaces Abstraction', 9],
+    ['Inheritance', 4],
+    ['Method Overriding', 5],
+    ['Abstract Class', 6],
+    ['Interface', 7],
+    ['Abstraction', 8],
+    ['Abstraction Interfaces', 9],
     ['Array of Objects', 10],
     ['Enum', 11]
   ].map(([title, sequence]) => [normalizeTitle(String(title)), Number(sequence)])
@@ -290,59 +290,15 @@ export const OOP_LESSON_BLUEPRINTS: LessonBlueprint[] = [
     id: 'oop_lesson_4',
     assessmentId: 'oop_assessment_4',
     sequence: 4,
-    title: 'Encapsulation',
+    title: 'Inheritance',
     videoUrl: '/videos/lesson4.mp4',
     duration: '12:05',
-    description: 'Explains data hiding with private fields and controlled access through getter and setter methods.',
-    concepts: ['Data hiding', 'private fields', 'getters', 'setters', 'validation'],
-    topic: 'Encapsulation',
-    module: 'OOP Fundamentals',
-    difficulty: 'Intermediate',
-    anchors: ['encapsulation', 'private', 'getter', 'setter', 'validation', 'data hiding'],
-    codeSnippet: `class BankAccount {
-    private double balance;
-
-    public double getBalance() {
-        return balance;
-    }
-}`
-  },
-  {
-    id: 'oop_lesson_5',
-    assessmentId: 'oop_assessment_5',
-    sequence: 5,
-    title: 'Constructor Overloading',
-    videoUrl: '/videos/lesson5.mp4',
-    duration: '10:42',
-    description: 'Shows how one class can define multiple constructors with different parameter lists for flexible object creation.',
-    concepts: ['Constructor overload', 'Different parameters', 'this()', 'Initialization paths', 'Compile-time selection'],
-    topic: 'Constructor Overloading',
-    module: 'OOP Fundamentals',
-    difficulty: 'Intermediate',
-    anchors: ['overloading', 'constructor', 'parameter list', 'this()', 'signature'],
-    codeSnippet: `class Student {
-    Student() {
-        this("Unknown");
-    }
-
-    Student(String name) {
-        System.out.println(name);
-    }
-}`
-  },
-  {
-    id: 'oop_lesson_6',
-    assessmentId: 'oop_assessment_6',
-    sequence: 6,
-    title: 'Inheritance',
-    videoUrl: '/videos/lesson6.mp4',
-    duration: '16:10',
     description: 'Introduces inheritance in Java, showing how child classes reuse and extend parent class fields and methods.',
-    concepts: ['Parent class', 'Child class', 'extends keyword', 'is-a relationship', 'Code reuse'],
+    concepts: ['Parent class', 'Child class', 'extends keyword', 'super keyword', 'is-a relationship'],
     topic: 'Inheritance',
     module: 'Core OOP',
     difficulty: 'Intermediate',
-    anchors: ['inheritance', 'parent class', 'child class', 'extends', 'is-a relationship', 'reuse'],
+    anchors: ['inheritance', 'parent class', 'child class', 'extends', 'super', 'is-a relationship'],
     codeSnippet: `class Animal {
     void eat() {
         System.out.println("Eating");
@@ -356,28 +312,74 @@ class Dog extends Animal {
 }`
   },
   {
-    id: 'oop_lesson_7',
-    assessmentId: 'oop_assessment_7',
-    sequence: 7,
-    title: 'Polymorphism',
-    videoUrl: '/videos/lesson7.mp4',
-    duration: '14:20',
-    description: 'Covers polymorphism through overloaded methods, overridden behavior, parent references, and dynamic method dispatch.',
-    concepts: ['Many forms', 'Method overloading', 'Method overriding', 'Parent reference', 'Runtime dispatch'],
-    topic: 'Polymorphism',
+    id: 'oop_lesson_5',
+    assessmentId: 'oop_assessment_5',
+    sequence: 5,
+    title: 'Method Overriding',
+    videoUrl: '/videos/lesson5.mp4',
+    duration: '10:42',
+    description: 'Explains how subclasses provide their own implementation of inherited methods while preserving the same method signature.',
+    concepts: ['Override behavior', 'Same signature', '@Override annotation', 'Runtime dispatch', 'Superclass methods'],
+    topic: 'Method Overriding',
     module: 'Core OOP',
     difficulty: 'Intermediate',
-    anchors: ['polymorphism', 'overloading', 'overriding', 'parent reference', 'runtime dispatch'],
-    codeSnippet: `class Notification {
-    void send() {
-        System.out.println("generic");
+    anchors: ['method overriding', 'override', 'same signature', 'superclass', 'subclass'],
+    codeSnippet: `class Animal {
+    void sound() {
+        System.out.println("Animal sound");
     }
 }
 
-class EmailNotification extends Notification {
+class Dog extends Animal {
     @Override
-    void send() {
-        System.out.println("email");
+    void sound() {
+        System.out.println("Bark");
+    }
+}`
+  },
+  {
+    id: 'oop_lesson_6',
+    assessmentId: 'oop_assessment_6',
+    sequence: 6,
+    title: 'Abstract Class',
+    videoUrl: '/videos/lesson6.mp4',
+    duration: '16:10',
+    description: 'Explains abstract classes as shared base definitions that can declare required behavior and provide reusable concrete methods.',
+    concepts: ['abstract class', 'Abstract method', 'Concrete method', 'Shared base class', 'Subclass responsibility'],
+    topic: 'Abstract Class',
+    module: 'Advanced OOP',
+    difficulty: 'Intermediate',
+    anchors: ['abstract class', 'abstract method', 'concrete method', 'base class', 'subclass responsibility'],
+    codeSnippet: `abstract class Shape {
+    abstract double area();
+}
+
+class Circle extends Shape {
+    double area() {
+        return 3.14;
+    }
+}`
+  },
+  {
+    id: 'oop_lesson_7',
+    assessmentId: 'oop_assessment_7',
+    sequence: 7,
+    title: 'Interface',
+    videoUrl: '/videos/lesson7.mp4',
+    duration: '14:20',
+    description: 'Introduces interfaces as contracts that classes implement to provide required behavior.',
+    concepts: ['interface keyword', 'implements keyword', 'Behavior contract', 'Abstract methods', 'Multiple interfaces'],
+    topic: 'Interface',
+    module: 'Advanced OOP',
+    difficulty: 'Intermediate',
+    anchors: ['interface', 'implements', 'contract', 'abstract method', 'multiple interfaces'],
+    codeSnippet: `interface Flyable {
+    void fly();
+}
+
+class Bird implements Flyable {
+    public void fly() {
+        System.out.println("Flying");
     }
 }`
   },
@@ -385,20 +387,20 @@ class EmailNotification extends Notification {
     id: 'oop_lesson_8',
     assessmentId: 'oop_assessment_8',
     sequence: 8,
-    title: 'Abstract Classes',
+    title: 'Abstraction',
     videoUrl: '/videos/lesson8.mp4',
     duration: '11:55',
-    description: 'Explains abstract classes as shared base definitions that can declare required behavior and provide reusable concrete methods.',
-    concepts: ['abstract class', 'Abstract method', 'Concrete method', 'Shared base class', 'Subclass responsibility'],
-    topic: 'Abstract Classes',
+    description: 'Explains abstraction as focusing on essential behavior while hiding unnecessary implementation details.',
+    concepts: ['Essential behavior', 'Implementation hiding', 'Abstract class', 'Interface', 'Simplified design'],
+    topic: 'Abstraction',
     module: 'Advanced OOP',
     difficulty: 'Intermediate',
-    anchors: ['abstract class', 'abstract method', 'concrete method', 'base class', 'subclass responsibility'],
-    codeSnippet: `abstract class Report {
-    abstract String title();
+    anchors: ['abstraction', 'essential behavior', 'implementation hiding', 'abstract class', 'interface'],
+    codeSnippet: `abstract class Payment {
+    abstract void pay();
 
-    void printHeader() {
-        System.out.println("Report");
+    void receipt() {
+        System.out.println("Paid");
     }
 }`
   },
@@ -406,15 +408,15 @@ class EmailNotification extends Notification {
     id: 'oop_lesson_9',
     assessmentId: 'oop_assessment_9',
     sequence: 9,
-    title: 'Interfaces / Abstraction',
+    title: 'Abstraction (Interfaces)',
     videoUrl: '/videos/lesson9.mp4',
     duration: '13:35',
-    description: 'Introduces interfaces and abstraction as ways to expose essential behavior while hiding implementation details.',
-    concepts: ['interface keyword', 'implements keyword', 'Behavior contract', 'Implementation hiding', 'Default methods'],
-    topic: 'Interfaces / Abstraction',
+    description: 'Shows how interfaces support abstraction by defining required behavior without exposing implementation details.',
+    concepts: ['Interface abstraction', 'implements keyword', 'Behavior contract', 'Implementation hiding', 'Flexible design'],
+    topic: 'Abstraction (Interfaces)',
     module: 'Advanced OOP',
     difficulty: 'Intermediate',
-    anchors: ['interface', 'implements', 'contract', 'abstraction', 'default method'],
+    anchors: ['interface abstraction', 'interface', 'implements', 'contract', 'implementation hiding'],
     codeSnippet: `interface Payable {
     double computePay();
 }
