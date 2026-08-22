@@ -1,0 +1,133 @@
+Assessment: Interface
+1. What is an interface in Java?
+A. Aclass that can be instantiated directly
+B. Areference type, similar to a fully abstract class, that specifies a set of methods a class must implement
+C. Atype of loop
+D. Aprivate helper method
+2. Which keyword is used to declare an interface?
+A. class
+B. interface
+C. abstract
+D. extends
+3. Which keyword does a class use to apply/use an interface?
+A. extends
+B. implements
+C. inherits
+D. uses
+4. Bydefault, whattypeofmethodsaredeclaredinsideaninterface(beforeJava8default/staticmethods)?
+A. Private methods
+B. Public and abstract methods
+C. Final methods
+D. Static methods only
+5. By default, what type are variables/fields declared inside an interface?
+A. Private and mutable
+B. Public, static, and final (constants)
+C. Protected only
+D. They cannot be declared at all
+6. Can an interface be instantiated directly (e.g., new SomeInterface())?
+A. Yes, always
+B. No, interfaces cannot be instantiated directly
+C. Only if it has no methods
+D. Only inside the main method
+7. What must a class do when it implements an interface?
+A. Nothing, all methods are optional
+B. It must override/implement all of the interface's abstract methods, or the class must be declared abstract
+C. It must delete the interface's methods
+D. It must also extend a superclass
+8. Can a Java class implement more than one interface?
+A. No, only one interface is allowed per class
+B. Yes, a class can implement multiple interfaces
+C. Only abstract classes can implement multiple interfaces
+D. Only if the interfaces have no methods
+9. How is an interface different from an abstract class in terms of multiple inheritance?
+A. They behave exactly the same way
+B. Aclass can implement multiple interfaces, but can only extend one (abstract or regular) class
+C. Abstract classes allow multiple inheritance, interfaces don't
+D. Neither supports any form of multiple inheritance
+10. What modifier, introduced in Java 8, allows an interface method to have a body (default
+implementation)?
+A. abstract
+B. default
+C. static (as the only way)
+D. final
+11. Can an interface have static methods with a full implementation?
+A. No, static methods are not allowed in interfaces
+B. Yes, since Java 8, interfaces can have static methods with a body
+C. Only abstract classes can have static methods
+D. Static methods must always be private in interfaces
+12. Why are variables in an interface implicitly final?
+A. Because interfaces represent a fixed contract, and constants should not be changed by implementing
+classes
+B. Because Java requires all variables to be final
+C. Because final variables run faster
+D. There is no specific reason
+13. What happens if a class implements an interface but forgets to override one of its abstract methods?
+A. Nothing happens; it compiles fine
+B. Acompile-time error occurs, unless the class is also declared abstract
+C. The interface method is automatically removed
+D. The program runs but skips that method silently
+14. Can one interface extend another interface?
+A. No, interfaces cannot extend other interfaces
+B. Yes, an interface can extend one or more other interfaces using the extends keyword
+C. Only abstract classes can extend interfaces
+D. Interfaces can only extend classes
+15. What is a key reason to use an interface instead of an abstract class when designing unrelated classes
+that need to share certain behavior?
+A. Interfaces let unrelated classes (e.g., Bird and Airplane) share a common capability (like fly()) without
+being forced into the same class hierarchy
+B. Interfaces are faster to compile than classes
+C. Interfaces can store more fields than abstract classes
+D. Interfaces automatically generate constructors
+16. Which of the following best demonstrates correct interface implementation syntax?
+A. class Dog extends Animal { }
+B. class Dog implements Animal { }
+C. interface Dog extends Animal { }
+D. class Dog(Animal) { }
+17. What is a common real-world example used to explain multiple interface implementation, such as an
+AirAnimal, LandAnimal, or WaterAnimal?
+A. Different animals can implement different interfaces depending on their abilities (e.g., a Bird implements
+both AirAnimal and LandAnimal, since it can fly and walk)
+B. All animals must implement exactly the same single interface
+C. Interfaces cannot represent real-world abilities
+D. Only one interface may ever be used per animal class
+18. If a class instantiates an object but stores it using the interface type (e.g., Animal a = new Dog();), what
+can be accessed through variable 'a'?
+A. All of Dog's methods, including ones not declared in Animal
+B. Only the methods declared in the Animal interface, unless the object is cast back to Dog
+C. Nothing can be accessed
+D. Only static methods
+19. Which of these is a valid reason an interface's abstract methods don't need the word 'abstract'
+explicitly written?
+A. Because all methods in an interface are already abstract by default (unless marked default or static)
+B. Because interfaces don't allow abstract methods
+C. Because 'abstract' is a reserved keyword only for classes
+D. Because interface methods are always private
+20. What is the overall purpose of an interface in Java's object-oriented design?
+A. To define a contract of behaviors that implementing classes must fulfill, enabling multiple, often
+unrelated classes to share required capabilities and supporting flexible, multiple-inheritance-like design
+B. To store data permanently on disk
+C. To replace the need for the main method
+D. To prevent classes from having any methods
+
+Answer Key
+
+1 B
+2 B
+3 B
+4 B
+5 B
+6 B
+7 B
+8 B
+9 B
+10 B
+11 B
+12 A
+13 B
+14 B
+15 A
+16 B
+17 A
+18 B
+19 A
+20 A

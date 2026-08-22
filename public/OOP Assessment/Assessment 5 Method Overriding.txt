@@ -1,0 +1,132 @@
+Assessment: Method Overriding
+1. What is method overriding in Java?
+A. Creating two methods with the same name but different parameters in the same class
+B. When a subclass provides its own specific implementation of a method already defined in its superclass
+C. Declaring a method without a body
+D. Deleting a method from a class
+2. Which relationship between classes is required for method overriding to occur?
+A. No relationship is needed
+B. An inheritance relationship (subclass and superclass)
+C. Both classes must be in the same file
+D. Both methods must be static
+3. For a method in a subclass to properly override a method in the superclass, what must be the same?
+A. Only the method name
+B. The method name, return type, and parameter list (method signature)
+C. Only the access modifier
+D. Only the number of lines of code
+4. Which annotation is commonly used in Java to indicate that a method is intended to override a
+superclass method?
+A. @Overload
+B. @Override
+C. @Inherit
+D. @Super
+5. What is the benefit of using the @Override annotation, even though it's optional?
+A. It makes the program run faster
+B. It lets the compiler catch errors if the method doesn't actually match a superclass method
+C. It automatically creates a constructor
+D. It hides the method from other classes
+6. Can a private method in a superclass be overridden by a subclass?
+A. Yes, private methods can always be overridden
+B. No, private methods are not inherited/visible to subclasses, so they cannot be overridden
+C. Only if the subclass is in the same file
+D. Only if the method is also static
+7. Can a static method be overridden in Java?
+A. Yes, static methods can be overridden just like instance methods
+B. No, static methods are not overridden; a subclass with the same static method signature instead 'hides'
+the superclass version
+C. Static methods cannot exist in subclasses at all
+D. Static methods automatically become abstract
+8. What keyword can a subclass use inside an overriding method to still call the superclass's original
+version of that method?
+A. this
+B. super
+C. base
+D. parent
+9. Which access modifier rule must be followed when overriding a method?
+A. The overriding method's access level cannot be more restrictive than the superclass method's
+B. The overriding method must always be private
+C. The overriding method must always be public regardless of the superclass
+D. There are no access modifier rules for overriding
+10. Why is method overriding closely tied to polymorphism?
+A. Because it allows a single method call to behave differently depending on the actual object type at
+runtime
+B. Because it prevents classes from having multiple methods
+C. Because it removes the need for inheritance
+D. Because it only works with abstract classes
+11. Which of these best demonstrates correct method overriding?
+A. Superclass: void sound(); Subclass: void sound(int x) { }
+B. Superclass: void sound() { }; Subclass: void sound() { } (with a new implementation)
+C. Superclass: int sound(); Subclass: String sound() { }
+D. Superclass: void sound(); Subclass: static void sound() { }
+12. Can a subclass method throw broader checked exceptions than the overridden superclass method?
+A. Yes, there are no restrictions
+B. No,anoverridingmethodcannotthrowneworbroadercheckedexceptionsthanthemethoditoverrides
+C. Only if the method is private
+D. Only if using the super keyword
+13. What happens if a subclass defines a method with the same name but a DIFFERENT parameter list
+than a superclass method?
+A. This is still considered overriding
+B. This is considered overloading (a new method), not overriding
+C. It causes a compile-time error
+D. The superclass method is deleted automatically
+14. In Java, can a final method in a superclass be overridden by a subclass?
+A. Yes, final methods can always be overridden
+B. No, methods marked final cannot be overridden
+C. Only if the subclass is also final
+D. Only in abstract classes
+15. When an object is accessed through a superclass reference variable but points to a subclass object
+(e.g., Animal a = new Dog();), which version of an overridden method runs when called?
+A. The superclass's version always runs
+B. The subclass's overridden version runs, due to dynamic method dispatch (runtime polymorphism)
+C. Both versions run one after another
+D. It causes a runtime error
+16. What is the term for the mechanism where Java decides at runtime which overridden method to
+execute?
+A. Static binding
+B. Dynamic method dispatch (runtime polymorphism)
+C. Compile-time binding
+D. Method hiding
+17. Why might a developer override the toString() method inherited from the Object class?
+A. To change how objects of that class are represented as a String, such as when printing them
+B. To delete the object
+C. To make the class abstract
+D. To prevent the object from being created
+18. Can constructors be overridden in Java?
+A. Yes, constructors can be overridden just like regular methods
+B. No, constructors are not inherited and therefore cannot be overridden (though they can be overloaded)
+C. Only default constructors can be overridden
+D. Constructors are always abstract
+19. What is a common real-world reason to use method overriding in a program?
+A. To completely remove a method's functionality with no replacement
+B. To customize or specialize the behavior of an inherited method to fit the specific needs of a subclass
+C. To avoid using constructors
+D. To make a class unable to be instantiated
+20. Which best summarizes the overall purpose of method overriding in OOP?
+A. To create entirely unrelated methods across classes
+B. Tolet a subclass redefine inherited behavior so that the same method call produces class-specific results,
+enabling polymorphism
+C. To prevent subclasses from using superclass methods
+D. To combine multiple unrelated classes into one
+
+Answer Key
+
+1 B
+2 B
+3 B
+4 B
+5 B
+6 B
+7 B
+8 B
+9 A
+10 A
+11 B
+12 B
+13 B
+14 B
+15 B
+16 B
+17 A
+18 B
+19 B
+20 B

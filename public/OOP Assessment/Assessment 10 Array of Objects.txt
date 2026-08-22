@@ -1,0 +1,128 @@
+Assessment: Java Array of Objects 
+1. What is an array of objects used for, according to the video? 
+A. To store only primitive data types like int or double 
+B. To declare an array of a certain class and store multiple instances of that class inside it 
+C. To delete unused classes 
+D. To convert objects into strings 
+2. Which is the correct syntax for initializing an array of objects, based on the video? 
+A. Employee employees = new Employee[5]; 
+B. Employee[] employees = new Employee(5); 
+C. Employee employees[] = new Employee[5]; 
+D. new Employee[5] = employees; 
+3. What problem does an array of objects solve, as demonstrated in the video? 
+A. It removes the need for constructors 
+B. It avoids having to create many separate individual variables (e.g., e1, e2, e3) for each object 
+C. It makes classes run faster 
+D. It prevents classes from having fields 
+4. In the video's example, what index does the first element of an array start at? 
+A. 1 
+B. -1 
+C. 0 
+D. It depends on the class 
+5. Which line correctly stores a new Employee object into the first slot of the array? 
+A. employees[1] = new Employee(...); 
+B. employees[0] = new Employee(...); 
+C. employees.add(new Employee(...)); 
+D. Employee[0] = employees(...); 
+6. How do you access a specific object's method or field inside an array of objects? 
+A. Using the array name and index with dot notation, e.g., employees[0].introduceSelf(); 
+B. Using only the class name 
+C. Arrays of objects cannot be accessed individually 
+D. By using a separate get() function only 
+7. What causes a NullPointerException when looping through an array of objects? 
+A. Declaring too many objects 
+B. Trying to access/call a method on an array index that was never assigned an object (still null) 
+C. Using a for-each loop instead of a for loop 
+D. Naming the array incorrectly 
+8. What is an advantage of using a for-each loop over a regular for loop when looping through an array? 
+A. It automatically fixes NullPointerExceptions 
+B. It provides a simpler way to access each element without manually managing an index 
+C. It is the only way to loop through arrays 
+D. It changes the array's size automatically 
+9. What common issue does `nextInt()` followed by `nextLine()` cause when using Scanner? 
+A. It causes a compiler error 
+B. It skips the next line of input because nextInt() leaves a newline character in the input buffer 
+C. It automatically closes the Scanner 
+D. It converts input into an integer permanently 
+10. Since Java's Scanner class has no built-in nextChar() method, how did the video show you can get a single 
+character input? 
+A. By using nextInt() and casting it 
+B. By using nextLine().charAt(0) 
+C. By using nextDouble() 
+D. It is impossible to get character input in Java 
+11. What was the main task in the Student Registration Simulation challenge? 
+A. Create a database connection 
+B. Ask the user for the number of students, then collect and store their information using an array of Student 
+objects 
+C. Build a graphical user interface 
+D. Sort students alphabetically using recursion 
+12. In the Student class, why were the fields declared as private? 
+A. Private fields make the program run faster 
+B. To follow encapsulation, restricting direct access from outside the class 
+C. Because public fields are not allowed in Java 
+D. Private fields are required for arrays 
+13. What is the purpose of the introduceSelf() method in the Student class? 
+A. To delete a student's data 
+B. To display/format a student's information, such as name and section (e.g., 'BSIT 2A') 
+C. To create a new Scanner object 
+D. To compare two students 
+14. Before creating the Student array, what does the program first ask the user for? 
+A. The teacher's name 
+B. The number of students to input, which determines the array size 
+C. The school's address 
+D. The current date 
+15. Why is the size of an array of objects fixed once it is created (e.g., new Employee[5])? 
+A. Because Java arrays have a fixed length once declared 
+B. Because objects cannot be stored in arrays 
+C. Because the class must be abstract 
+D. Because Java does not support arrays 
+16. What does `employees.length` return when used with an array of objects? 
+A. The number of characters in the array name 
+B. The number of methods in the Employee class 
+C. The total size/capacity of the array 
+D. The value of the first employee's name 
+17. Which of the following best demonstrates a for-loop used to loop through an employee array, as shown in 
+the video? 
+A. for (int i = 0; i < employees.length; i++) { employees[i].introduceSelf(); } 
+B. for (Employee e : new Employee()) { e.introduceSelf(); } 
+C. while (employees == null) { employees[i].introduceSelf(); } 
+D. for (int i = 1; i <= employees; i++) { } 
+18. Why did the instructor recommend pausing the video before showing the solution to the Student 
+Registration challenge? 
+A. To let viewers try solving it themselves first, to practice applying array of objects concepts 
+B. Because the video was too long 
+C. To advertise a sponsor 
+D. Because the answer required a different programming language 
+19. What must you do before you can store or access array elements meaningfully in an array of objects? 
+A. Convert the array into a String 
+B. Instantiate/assign an actual object into each array index (otherwise it remains null) 
+C. Delete the class constructor 
+D. Make all fields static 
+20. What is the overall lesson of this video about array of objects? 
+A. Arrays can only store numbers, not objects 
+B. Arrays of objects let you efficiently store, access, and loop through multiple instances of a class using a 
+single array, rather than creating many separate variables 
+C. Arrays of objects remove the need for classes 
+D. Arrays automatically resize when adding new objects 
+
+Answer Key 
+1 B
+2 C
+3 B
+4 C
+5 B
+6 A
+7 B
+8 B
+9 B
+10 B
+11 B
+12 B
+13 B
+14 B
+15 A
+16 C
+17 A
+18 A
+19 B
+20 B

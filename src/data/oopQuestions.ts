@@ -6,15 +6,15 @@ export const OOP_PARSED_QUESTIONS: Record<string, CourseQuestion[]> = {
     {
       "id": "oop_lesson_1_q01",
       "lessonId": "oop_lesson_1",
-      "question": "What is a class in Java?",
+      "question": "Which statement best describes a Java class?",
       "options": [
-        "A method used to execute code",
         "A blueprint used to create objects",
-        "A package containing Java files",
-        "An instance of an object"
+        "A command that immediately runs a program",
+        "A value stored only inside main",
+        "A replacement for all methods"
       ],
       "correctAnswer": "A blueprint used to create objects",
-      "explanation": "\"A blueprint used to create objects\" is the correct answer based on Topic 1 concepts.",
+      "explanation": "A class defines the structure and behavior that objects can have. The other choices are incorrect because a class is not a single command, not just a local value, and does not replace methods.",
       "difficulty": "Easy"
     },
     {
@@ -22,198 +22,343 @@ export const OOP_PARSED_QUESTIONS: Record<string, CourseQuestion[]> = {
       "lessonId": "oop_lesson_1",
       "question": "What is an object in Java?",
       "options": [
-        "A package",
-        "A class definition",
-        "An instance of a class",
-        "A constructor"
+        "An instance created from a class",
+        "A comment inside a program",
+        "A keyword used only for printing",
+        "A file extension for Java code"
       ],
-      "correctAnswer": "An instance of a class",
-      "explanation": "\"An instance of a class\" is the correct answer based on Topic 1 concepts.",
+      "correctAnswer": "An instance created from a class",
+      "explanation": "An object is an actual instance based on a class blueprint. The other options describe comments, unrelated keywords, or files rather than objects.",
       "difficulty": "Easy"
     },
     {
       "id": "oop_lesson_1_q03",
       "lessonId": "oop_lesson_1",
-      "question": "Which keyword is used to create an object?",
+      "question": "Which part of a class usually stores object state?",
       "options": [
-        "class",
-        "object",
-        "new",
-        "create"
+        "Fields",
+        "System.out.println",
+        "The file name only",
+        "Curly braces only"
       ],
-      "correctAnswer": "new",
-      "explanation": "\"new\" is the correct answer based on Topic 1 concepts.",
+      "correctAnswer": "Fields",
+      "explanation": "Fields store values that describe an object's state. Printing, file names, and braces do not by themselves store object-specific data.",
       "difficulty": "Easy"
     },
     {
       "id": "oop_lesson_1_q04",
       "lessonId": "oop_lesson_1",
-      "question": "Which statement correctly declares a class?",
+      "question": "Which part of a class defines object behavior?",
       "options": [
-        "Student();",
-        "class Student { }",
-        "Student class { }",
-        "object Student { }"
+        "Methods",
+        "Spaces",
+        "Package folders only",
+        "Semicolons only"
       ],
-      "correctAnswer": "class Student { }",
-      "explanation": "\"class Student { }\" is the correct answer based on Topic 1 concepts.",
+      "correctAnswer": "Methods",
+      "explanation": "Methods define actions an object can perform. Spaces, folders, and semicolons may be part of code formatting or syntax, but they do not represent behavior.",
       "difficulty": "Easy"
     },
     {
       "id": "oop_lesson_1_q05",
       "lessonId": "oop_lesson_1",
-      "question": "Which statement correctly creates an object named student?",
+      "question": "Which keyword is used to create a new object?",
       "options": [
-        "Student();",
-        "Student student = new Student();",
-        "new Student student;",
-        "Student = new();"
+        "new",
+        "class",
+        "void",
+        "static"
       ],
-      "correctAnswer": "Student student = new Student();",
-      "explanation": "\"Student student = new Student();\" is the correct answer based on Topic 1 concepts.",
+      "correctAnswer": "new",
+      "explanation": "The new keyword creates an object from a class. class defines a class, void indicates no return value, and static changes member access rules.",
       "difficulty": "Easy"
     },
     {
       "id": "oop_lesson_1_q06",
       "lessonId": "oop_lesson_1",
-      "question": "What is car?",
+      "question": "Given Student s1 = new Student();, what is s1?",
       "options": [
-        "A class",
-        "A method",
-        "An object reference",
-        "A constructor"
+        "A reference variable for a Student object",
+        "The class itself",
+        "A field name",
+        "A method body"
       ],
-      "correctAnswer": "An object reference",
-      "explanation": "\"An object reference\" is the correct answer based on Topic 1 concepts.",
-      "difficulty": "Medium",
-      "codeSnippet": "class Car {\n    String brand;\n}\nCar car = new Car();"
+      "correctAnswer": "A reference variable for a Student object",
+      "explanation": "s1 is a reference variable that refers to a Student object. It is not the class, a field, or a method body.",
+      "difficulty": "Easy"
     },
     {
       "id": "oop_lesson_1_q07",
       "lessonId": "oop_lesson_1",
-      "question": "What is the output?",
+      "question": "Which symbol is commonly used to access an object's fields or methods?",
       "options": [
-        "Student",
-        "null",
-        "John",
-        "Error"
+        "Dot operator .",
+        "Hash sign #",
+        "Question mark ?",
+        "Backslash \\"
       ],
-      "correctAnswer": "John",
-      "explanation": "\"John\" is the correct answer based on Topic 1 concepts.",
-      "difficulty": "Medium",
-      "codeSnippet": "class Student{\n    String name = \"John\";\n}\npublic class Main{\n    public static void main(String[] args){\n        Student s = new Student();\n        System.out.println(s.name);\n    }\n}"
+      "correctAnswer": "Dot operator .",
+      "explanation": "Java uses the dot operator to access fields and methods through an object reference. The other symbols do not perform this object member access.",
+      "difficulty": "Easy"
     },
     {
       "id": "oop_lesson_1_q08",
       "lessonId": "oop_lesson_1",
-      "question": "Which statement best describes a class?",
+      "question": "Which line correctly assigns a value to an object's field?",
       "options": [
-        "A blueprint",
-        "A variable",
-        "A package",
-        "A loop"
+        "s1.name = \"Lia\";",
+        "name.Student = \"Lia\";",
+        "Student.name(\"Lia\");",
+        "new = s1.name;"
       ],
-      "correctAnswer": "A blueprint",
-      "explanation": "\"A blueprint\" is the correct answer based on Topic 1 concepts.",
-      "difficulty": "Medium"
+      "correctAnswer": "s1.name = \"Lia\";",
+      "explanation": "s1.name = \"Lia\"; uses the object reference and dot operator to assign a field value. The other choices use invalid or incorrect Java syntax.",
+      "difficulty": "Easy"
     },
     {
       "id": "oop_lesson_1_q09",
       "lessonId": "oop_lesson_1",
-      "question": "Which statement creates two different objects?",
+      "question": "What does object state refer to?",
       "options": [
-        "Student s;\nStudent t;",
-        "Student s = new Student();\nStudent t = new Student();",
-        "new Student();",
-        "Student();"
+        "The current values stored in an object's fields",
+        "The color of the code editor",
+        "The number of Java files in a folder",
+        "The name of the operating system"
       ],
-      "correctAnswer": "Student s = new Student();\nStudent t = new Student();",
-      "explanation": "\"Student s = new Student();\nStudent t = new Student();\" is the correct answer based on Topic 1 concepts.",
-      "difficulty": "Medium"
+      "correctAnswer": "The current values stored in an object's fields",
+      "explanation": "Object state means the values stored in fields at a given time. The other choices are external details and do not describe object data.",
+      "difficulty": "Easy"
     },
     {
       "id": "oop_lesson_1_q10",
       "lessonId": "oop_lesson_1",
-      "question": "A university wants to represent every student individually. Which OOP concept should be used?",
+      "question": "What does object behavior refer to?",
       "options": [
-        "Package",
-        "Method",
-        "Object",
-        "Interface"
+        "The methods or actions an object can perform",
+        "The keyboard shortcut used to run Java",
+        "The size of the monitor",
+        "The folder where Java is installed"
       ],
-      "correctAnswer": "Object",
-      "explanation": "\"Object\" is the correct answer based on Topic 1 concepts.",
-      "difficulty": "Medium"
+      "correctAnswer": "The methods or actions an object can perform",
+      "explanation": "Behavior is represented by methods that perform actions. The other choices are environment details and not object behavior.",
+      "difficulty": "Easy"
     },
     {
       "id": "oop_lesson_1_q11",
       "lessonId": "oop_lesson_1",
-      "question": "Which code accesses the field name?",
+      "question": "What is the output of the following code?",
       "options": [
-        "s->name;",
-        "Student.name;",
-        "s.name;",
-        "name.s;"
+        "Marco is 18",
+        "name is age",
+        "Student is 18",
+        "Compilation error"
       ],
-      "correctAnswer": "s.name;",
-      "explanation": "\"s.name;\" is the correct answer based on Topic 1 concepts.",
-      "difficulty": "Hard",
-      "codeSnippet": "Student s = new Student();"
+      "correctAnswer": "Marco is 18",
+      "explanation": "The object fields are assigned \"Marco\" and 18, and the method prints those values. The other outputs do not match the assigned field values, and the code is valid.",
+      "difficulty": "Medium",
+      "codeSnippet": "class Student {\n    String name;\n    int age;\n\n    void introduce() {\n        System.out.println(name + \" is \" + age);\n    }\n}\n\nclass Main {\n    public static void main(String[] args) {\n        Student s = new Student();\n        s.name = \"Marco\";\n        s.age = 18;\n        s.introduce();\n    }\n}"
     },
     {
       "id": "oop_lesson_1_q12",
       "lessonId": "oop_lesson_1",
-      "question": "Which of the following is NOT an object?",
+      "question": "Which line creates the object in this code?",
       "options": [
-        "Dog",
-        "MyDog",
-        "Student named Alice",
-        "Car owned by John"
+        "s = new Student();",
+        "s.name = \"Jade\";",
+        "Student s;",
+        "All three lines create objects"
       ],
-      "correctAnswer": "Dog",
-      "explanation": "\"Dog\" is the correct answer based on Topic 1 concepts.",
-      "difficulty": "Hard"
+      "correctAnswer": "s = new Student();",
+      "explanation": "new Student() creates the actual object. Student s; only declares a reference, while s.name = \"Jade\"; assigns a field.",
+      "difficulty": "Medium",
+      "codeSnippet": "Student s;\ns = new Student();\ns.name = \"Jade\";"
     },
     {
       "id": "oop_lesson_1_q13",
       "lessonId": "oop_lesson_1",
-      "question": "What happens if no object is created from a class?",
+      "question": "Which statement is correct about two objects created from the same class?",
       "options": [
-        "The class automatically creates one.",
-        "The class still exists, but no object exists.",
-        "Java reports a syntax error.",
-        "Java exits immediately."
+        "They can store different values in their own fields.",
+        "They must always store identical field values.",
+        "Only the first object can call methods.",
+        "The second object deletes the first object automatically."
       ],
-      "correctAnswer": "The class still exists, but no object exists.",
-      "explanation": "\"The class still exists, but no object exists.\" is the correct answer based on Topic 1 concepts.",
-      "difficulty": "Hard"
+      "correctAnswer": "They can store different values in their own fields.",
+      "explanation": "Objects from the same class share structure but can have different state. The other choices incorrectly limit object behavior or describe automatic deletion that does not occur.",
+      "difficulty": "Medium"
     },
     {
       "id": "oop_lesson_1_q14",
       "lessonId": "oop_lesson_1",
-      "question": "Which symbol is used to access an object's field or method?",
+      "question": "What is wrong with this code?",
       "options": [
-        "->",
-        ":",
-        ".",
-        "::"
+        "The object was not created before using p.name.",
+        "The class name must be lowercase.",
+        "The field must be declared inside main.",
+        "Java does not allow String fields."
       ],
-      "correctAnswer": ".",
-      "explanation": "\".\" is the correct answer based on Topic 1 concepts.",
-      "difficulty": "Hard"
+      "correctAnswer": "The object was not created before using p.name.",
+      "explanation": "Product p; declares only a reference, so p does not refer to an object yet. The code needs p = new Product(); before accessing p.name.",
+      "difficulty": "Medium",
+      "codeSnippet": "class Product {\n    String name;\n}\n\nclass Main {\n    public static void main(String[] args) {\n        Product p;\n        p.name = \"Keyboard\";\n    }\n}"
     },
     {
       "id": "oop_lesson_1_q15",
       "lessonId": "oop_lesson_1",
-      "question": "Which of the following best models real-world OOP?",
+      "question": "Which replacement correctly completes the code?",
       "options": [
-        "Class = Student, Object = John",
-        "Class = John, Object = Student",
-        "Class = Toyota Vios, Object = Car",
-        "Class = My Laptop, Object = Laptop"
+        "new Phone()",
+        "Phone;",
+        "\"Phone\"",
+        "brand.Phone()"
       ],
-      "correctAnswer": "Class = Student, Object = John",
-      "explanation": "\"Class = Student, Object = John\" is the correct answer based on Topic 1 concepts.",
+      "correctAnswer": "new Phone()",
+      "explanation": "new Phone() constructs a new Phone object. The other choices do not create a valid object instance.",
+      "difficulty": "Medium",
+      "codeSnippet": "class Phone {\n    String brand;\n}\n\nclass Main {\n    public static void main(String[] args) {\n        Phone p = ________;\n        p.brand = \"Nova\";\n    }\n}"
+    },
+    {
+      "id": "oop_lesson_1_q16",
+      "lessonId": "oop_lesson_1",
+      "question": "What is the output?",
+      "options": [
+        "Red",
+        "Blue",
+        "Blue Red",
+        "Compilation error"
+      ],
+      "correctAnswer": "Red",
+      "explanation": "The method is called on b2, whose color field is \"Red\". b1 has a separate state, so its \"Blue\" value is not printed.",
+      "difficulty": "Medium",
+      "codeSnippet": "class Bag {\n    String color;\n\n    void showColor() {\n        System.out.println(color);\n    }\n}\n\nclass Main {\n    public static void main(String[] args) {\n        Bag b1 = new Bag();\n        Bag b2 = new Bag();\n        b1.color = \"Blue\";\n        b2.color = \"Red\";\n        b2.showColor();\n    }\n}"
+    },
+    {
+      "id": "oop_lesson_1_q17",
+      "lessonId": "oop_lesson_1",
+      "question": "Which statement best explains why classes help organize code?",
+      "options": [
+        "They group related data and behavior into one structure.",
+        "They remove the need to compile Java code.",
+        "They force every program to have only one object.",
+        "They prevent methods from being written."
+      ],
+      "correctAnswer": "They group related data and behavior into one structure.",
+      "explanation": "Classes organize related fields and methods. The other choices are false because Java code still compiles, programs can have many objects, and classes commonly contain methods.",
+      "difficulty": "Medium"
+    },
+    {
+      "id": "oop_lesson_1_q18",
+      "lessonId": "oop_lesson_1",
+      "question": "What should replace the missing code to call the method?",
+      "options": [
+        "lamp.turnOn();",
+        "Light.turnOn;",
+        "turnOn.lamp();",
+        "new turnOn();"
+      ],
+      "correctAnswer": "lamp.turnOn();",
+      "explanation": "lamp.turnOn(); calls the instance method using the object reference. The other choices use invalid or incorrect method-call syntax.",
+      "difficulty": "Medium",
+      "codeSnippet": "class Light {\n    void turnOn() {\n        System.out.println(\"Light on\");\n    }\n}\n\nclass Main {\n    public static void main(String[] args) {\n        Light lamp = new Light();\n        ________;\n    }\n}"
+    },
+    {
+      "id": "oop_lesson_1_q19",
+      "lessonId": "oop_lesson_1",
+      "question": "Which code best models a real-world student as an object?",
+      "options": [
+        "class Student { String name; int age; }",
+        "int Student = 5;",
+        "System.out.println(\"Student\");",
+        "if (student) { }"
+      ],
+      "correctAnswer": "class Student { String name; int age; }",
+      "explanation": "A class with fields can model a student's data. The other choices do not define a reusable object structure.",
+      "difficulty": "Medium"
+    },
+    {
+      "id": "oop_lesson_1_q20",
+      "lessonId": "oop_lesson_1",
+      "question": "What is the output?",
+      "options": [
+        "4",
+        "0",
+        "3",
+        "Compilation error"
+      ],
+      "correctAnswer": "4",
+      "explanation": "The field starts at 3, then increase() adds one. The final printed value is therefore 4.",
+      "difficulty": "Medium",
+      "codeSnippet": "class Counter {\n    int value;\n\n    void increase() {\n        value++;\n    }\n}\n\nclass Main {\n    public static void main(String[] args) {\n        Counter c = new Counter();\n        c.value = 3;\n        c.increase();\n        System.out.println(c.value);\n    }\n}"
+    },
+    {
+      "id": "oop_lesson_1_q21",
+      "lessonId": "oop_lesson_1",
+      "question": "A school management system needs to store each student's name and age and allow each student to introduce themselves. Which design is most appropriate?",
+      "options": [
+        "Create a Student class with fields and an introduce() method.",
+        "Store all student data in one long String.",
+        "Use only System.out.println() statements without objects.",
+        "Use a separate Java file for every student name only."
+      ],
+      "correctAnswer": "Create a Student class with fields and an introduce() method.",
+      "explanation": "A Student class groups the object's state and behavior clearly. The other choices make the program harder to reuse, organize, or extend.",
+      "difficulty": "Hard"
+    },
+    {
+      "id": "oop_lesson_1_q22",
+      "lessonId": "oop_lesson_1",
+      "question": "What is the main design problem in this code?",
+      "options": [
+        "It uses variables but does not model related entities as classes.",
+        "It has too many classes.",
+        "It creates too many objects.",
+        "It uses fields incorrectly inside a class."
+      ],
+      "correctAnswer": "It uses variables but does not model related entities as classes.",
+      "explanation": "The data is related to real-world entities, but it is stored as separate local variables. Classes could organize this state more clearly into objects such as Student and Teacher.",
+      "difficulty": "Hard",
+      "codeSnippet": "class Main {\n    public static void main(String[] args) {\n        String studentName = \"Nina\";\n        int studentAge = 19;\n        String teacherName = \"Mr. Cruz\";\n        int teacherAge = 35;\n    }\n}"
+    },
+    {
+      "id": "oop_lesson_1_q23",
+      "lessonId": "oop_lesson_1",
+      "question": "Why is s1.name and s2.name able to hold different values when s1 and s2 are both Student objects?",
+      "options": [
+        "Each object has its own copy of instance fields.",
+        "Java randomly chooses a name for each object.",
+        "The class is duplicated in the source file.",
+        "Methods erase fields after each call."
+      ],
+      "correctAnswer": "Each object has its own copy of instance fields.",
+      "explanation": "Each object has separate instance field values. The other choices describe behavior that does not happen in Java.",
+      "difficulty": "Hard"
+    },
+    {
+      "id": "oop_lesson_1_q24",
+      "lessonId": "oop_lesson_1",
+      "question": "Which code shows the best use of object behavior instead of doing everything directly in main?",
+      "options": [
+        "Student s = new Student(); s.name = \"Ana\"; s.age = 20; s.introduce();",
+        "System.out.println(\"Ana is 20\");",
+        "String data = \"Ana,20\";",
+        "int age = 20; System.out.println(age);"
+      ],
+      "correctAnswer": "Student s = new Student(); s.name = \"Ana\"; s.age = 20; s.introduce();",
+      "explanation": "This code creates an object, assigns state, and calls a method that represents behavior. The other choices print or store values without modeling behavior through an object.",
+      "difficulty": "Hard"
+    },
+    {
+      "id": "oop_lesson_1_q25",
+      "lessonId": "oop_lesson_1",
+      "question": "A beginner writes Student s = null; s.introduce();. What is the best explanation?",
+      "options": [
+        "It is unsafe because s does not refer to an actual object.",
+        "It works because null automatically creates an object.",
+        "It prints the default student values.",
+        "It creates two Student objects."
+      ],
+      "correctAnswer": "It is unsafe because s does not refer to an actual object.",
+      "explanation": "null means the reference does not point to an object, so calling a method through it is invalid at runtime. The other choices incorrectly assume an object is created or usable.",
       "difficulty": "Hard"
     }
   ],

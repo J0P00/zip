@@ -1,0 +1,161 @@
+Lesson 1 Quiz: Classes & Objects in Java OOP 
+Instructions: Choose the best answer for each question. 
+1. What does OOP stand for? 
+A. Object-Oriented Programming 
+B. Online Object Process 
+C. Open Operating Program 
+D. Object Output Program 
+2. What is the main purpose of Object-Oriented Programming? 
+A. To organize programs using objects 
+B. To make programs longer 
+C. To replace variables 
+D. To remove classes 
+3. Which of the following is considered a real-world object? 
+A. Car 
+B. Student 
+C. Book 
+D. All of the above 
+4. What is a Class in Java? 
+A. A blueprint for creating objects 
+B. A method inside a program 
+C. A variable declaration 
+D. A Java keyword for loops 
+5. What is an Object? 
+A. A blueprint of a class 
+B. An instance of a class 
+C. A method inside a class 
+D. A package in Java 
+6. Which keyword is used to define a class? 
+A. object 
+B. class 
+C. new 
+D. create 
+7. Which keyword is used to create an object? 
+A. object 
+B. class 
+C. new 
+D. public 
+8. Which of the following is an attribute? 
+A. name 
+B. walk() 
+C. run() 
+D. display() 
+9. Attributes are also known as ________. 
+A. Methods 
+B. Variables inside a class 
+C. Loops 
+D. Packages 
+10. Which data type is best for storing a person's age? 
+A. String 
+B. boolean 
+C. int 
+D. char 
+11. Which code correctly creates a Person object? 
+A. 
+Person person1 = new Person(); 
+B. 
+new Person = person1(); 
+C. 
+Person.new(); 
+D. 
+Person person1(); 
+12. What is the purpose of the new keyword? 
+A. Deletes an object 
+B. Creates an object 
+C. Declares a method 
+D. Prints data 
+13. Which operator is used to access an object's attributes? 
+A. + 
+B. - 
+C. . 
+D. * 
+14. Which statement assigns a value to an object's attribute? 
+A. 
+person.name = "John"; 
+B. 
+name.person = "John"; 
+C. 
+person("John"); 
+D. 
+name = person; 
+15. Consider the following class: 
+public class Dog { 
+String name; 
+int age; 
+} 
+Which of the following are attributes? 
+A. name and age 
+B. Dog and age 
+C. public and class 
+D. int and String 
+16. One class can create ________ objects. 
+A. Only one 
+B. Two only 
+C. Many 
+D. None 
+17. Which of the following best describes a Class and an Object? 
+A. Class = House, Object = Blueprint 
+B. Class = Blueprint, Object = House 
+C. Class = Object, Object = Class 
+D. They are exactly the same 
+18. What will this code print? 
+Dog dog1 = new Dog(); 
+dog1.name = "Buddy"; 
+System.out.println(dog1.name); 
+A. Dog 
+B. Buddy 
+C. name 
+D. Error 
+19. Which statement is TRUE about objects? 
+A. Objects are created from classes. 
+B. Objects create classes. 
+C. Objects cannot store data. 
+D. Objects cannot have attributes. 
+20. Why do programmers use Classes and Objects? 
+A. To make programs more organized and reusable 
+B. To avoid writing code 
+C. To remove variables 
+D. To replace Java 
+Item No. 
+Answer 
+1 
+A 
+2 
+A 
+3 
+D 
+4 
+A 
+5 
+B 
+6 
+B 
+7 
+C 
+8 
+A 
+9 
+B 
+10 
+C 
+11 
+A 
+12 
+B 
+13 
+C 
+14 
+A 
+15 
+A 
+16 
+C 
+17 
+B 
+18 
+B 
+19 
+A 
+20 
+A 
+ 
