@@ -893,7 +893,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                         value={loginEmail}
                         onBlur={() => setLoginTouched(prev => ({ ...prev, email: true }))}
                         onChange={e => setLoginEmail(e.target.value)}
-                        placeholder="dmitry@oophub.edu or elena@oophub.edu"
+                        placeholder="Email"
                         className={`${inputBase} ${loginEmailError ? inputError : inputNormal}`}
                         aria-label="Email address"
                         aria-invalid={Boolean(loginEmailError)}
@@ -921,7 +921,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                         value={loginPassword}
                         onBlur={() => setLoginTouched(prev => ({ ...prev, password: true }))}
                         onChange={e => setLoginPassword(e.target.value)}
-                        placeholder="Enter password (demo: password123)"
+                        placeholder="Password"
                         className={`${inputBase} pr-12 ${loginPasswordError ? inputError : inputNormal}`}
                         aria-label="Password"
                         aria-invalid={Boolean(loginPasswordError)}
