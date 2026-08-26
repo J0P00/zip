@@ -90,11 +90,12 @@ import AdminVideoManager from './components/AdminVideoManager';
 import AdminTermsManager from './components/AdminTermsManager';
 import { appApi, authApi, getAuthToken, isDemoEmail, practiceApi, recommendationApi, setAuthToken, userApi } from './services/api';
 import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
+import { seedDemoStudentProgress } from './data/demoSeed';
 
 const DEMO_STUDENT_PROGRESS = {
-  streak: 12,
-  points: 1950,
-  completedLessonsCount: 2
+  streak: 15,
+  points: 3500,
+  completedLessonsCount: 11
 };
 
 const NEW_STUDENT_PROGRESS = {
@@ -104,12 +105,12 @@ const NEW_STUDENT_PROGRESS = {
 };
 
 const DEMO_STUDENT_GRADE = {
-  grade: 75,
-  feedback: "Your constructor works fine. However, displayInfo() still needs to print the doors parameter. Please check the remediation challenge and resubmit.",
-  challenge: "Inheritance Constraints with Vehicle/Car Override"
+  grade: 100,
+  feedback: "Outstanding work! All 11 OOP challenges and 5 Swing exercises completed with full test passes and excellent OOP principles.",
+  challenge: "Swing UI Dialog & OOP Integration"
 };
 
-const DEMO_STUDENT_BADGES = ['Inheritance Lab', 'Quiz Streak', 'Practice IDE'];
+const DEMO_STUDENT_BADGES = ['Inheritance Lab', 'Quiz Streak', 'Practice IDE', 'Swing Master', 'OOP Master'];
 
 const OOP_LESSON_COUNT = OOP_COURSE_LESSONS.length;
 const clampCompletedLessons = (count: number) => Math.min(Math.max(count, 0), OOP_LESSON_COUNT);
@@ -546,7 +547,12 @@ export default function App() {
   }, [currentUser?.email, currentUser?.id, persona]);
 
   useEffect(() => {
+    seedDemoStudentProgress();
+  }, []);
+
+  useEffect(() => {
     if (persona === 'public') return;
+
 
     try {
       localStorage.setItem(SESSION_VIEW_KEY, JSON.stringify({

@@ -14,7 +14,9 @@ import {
   Mail,
   ShieldCheck,
   User,
-  GraduationCap
+  GraduationCap,
+  Sparkles,
+  BookOpen
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { AccountSource, AuthenticatedUser, Persona, UserTermsAgreement } from '../types';
@@ -23,7 +25,17 @@ import {
   recordTermsAcceptance,
   requiresTermsAcceptance
 } from '../data/termsStore';
-import { authApi, isDemoEmail, progressApi, setAuthToken } from '../services/api';
+import { authApi, getAuthToken, isDemoEmail, progressApi, setAuthToken } from '../services/api';
+import {
+  DEMO_AUTHENTICATED_USERS,
+  DEMO_PASSWORD,
+  DEMO_STUDENT_ALT_EMAIL,
+  DEMO_STUDENT_EMAIL,
+  DEMO_TEACHER_ALT_EMAIL,
+  DEMO_TEACHER_EMAIL,
+  DEMO_ADMIN_EMAIL,
+  seedDemoStudentProgress
+} from '../data/demoSeed';
 import TermsAgreementModal from './TermsAgreementModal';
 
 interface AuthPageProps {
@@ -41,11 +53,13 @@ type StoredUser = {
   email: string;
   password: string;
   role: Persona;
+  accountSource?: AccountSource;
   userId?: string;
   registrationDate?: string;
   contactNumber?: string;
   address?: string;
   dateOfBirth?: string;
+
   accountStatus?: string;
 
   // Student specific
@@ -94,7 +108,32 @@ const demoAccounts: StoredUser[] = [
     address: '123 Academic Way, University Hills',
     dateOfBirth: '2005-04-12',
     onlineStatus: 'online',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+    termsAgreementAccepted: true,
+    termsAcceptedAt: '2026-06-01T00:00:00.000Z',
+    termsVersion: '2026.06.26'
+  },
+  {
+    name: 'Dmitry Vance (Alex Mercer)',
+    email: 'student@oophub.edu',
+    password: 'password123',
+    role: 'student',
+    userId: 'STU-0001',
+    registrationDate: '2026-06-01T00:00:00.000Z',
+    accountStatus: 'Active',
+    studentNumber: '2026-0001',
+    course: 'BS Computer Science',
+    yearLevel: '3rd Year',
+    section: 'CS-3A',
+    programStatus: 'Regular',
+    contactNumber: '+1 (555) 019-2834',
+    address: '123 Academic Way, University Hills',
+    dateOfBirth: '2005-04-12',
+    onlineStatus: 'online',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+    termsAgreementAccepted: true,
+    termsAcceptedAt: '2026-06-01T00:00:00.000Z',
+    termsVersion: '2026.06.26'
   },
   {
     name: 'Dr. Elena Vance',
@@ -112,7 +151,31 @@ const demoAccounts: StoredUser[] = [
     address: '456 Faculty Lane, Green Hills',
     dateOfBirth: '1985-09-22',
     onlineStatus: 'online',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80'
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
+    termsAgreementAccepted: true,
+    termsAcceptedAt: '2026-06-01T00:00:00.000Z',
+    termsVersion: '2026.06.26'
+  },
+  {
+    name: 'Dr. Elena Vance',
+    email: 'teacher@oophub.edu',
+    password: 'password123',
+    role: 'teacher',
+    userId: 'TEA-0001',
+    registrationDate: '2026-06-01T00:00:00.000Z',
+    accountStatus: 'Active',
+    employeeId: 'EMP-0001',
+    department: 'College of Computer Studies',
+    specialization: 'Object-Oriented Programming',
+    assignedCourses: 'OOP 101, Advanced Java, Software Architecture',
+    contactNumber: '+1 (555) 083-9921',
+    address: '456 Faculty Lane, Green Hills',
+    dateOfBirth: '1985-09-22',
+    onlineStatus: 'online',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
+    termsAgreementAccepted: true,
+    termsAcceptedAt: '2026-06-01T00:00:00.000Z',
+    termsVersion: '2026.06.26'
   },
   {
     name: 'Jerico Vance (Admin)',
@@ -129,7 +192,30 @@ const demoAccounts: StoredUser[] = [
     address: 'System Ops HQ, Tech Park',
     dateOfBirth: '1990-01-15',
     onlineStatus: 'online',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80'
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+    termsAgreementAccepted: true,
+    termsAcceptedAt: '2026-06-01T00:00:00.000Z',
+    termsVersion: '2026.06.26'
+  },
+  {
+    name: 'Jerico Vance (Admin)',
+    email: 'admin@oophub.edu',
+    password: 'password123',
+    role: 'admin',
+    userId: 'ADM-0001',
+    registrationDate: '2026-06-01T00:00:00.000Z',
+    accountStatus: 'Active',
+    adminId: 'ADM-0001',
+    systemRole: 'Super Admin',
+    accessLevel: 'Level 5 - Full Access',
+    contactNumber: '+1 (555) 091-7723',
+    address: 'System Ops HQ, Tech Park',
+    dateOfBirth: '1990-01-15',
+    onlineStatus: 'online',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+    termsAgreementAccepted: true,
+    termsAcceptedAt: '2026-06-01T00:00:00.000Z',
+    termsVersion: '2026.06.26'
   }
 ];
 
@@ -275,8 +361,8 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       ? 'Username must be at least 3 characters.'
       : '';
   const registerEmailError =
-    registerTouched.email && !isRegEmailValid
-      ? 'Enter a valid email address.'
+    registerTouched.email && (!regEmail.trim() || !isRegEmailValid)
+      ? 'Valid email address is required.'
       : '';
   const registerPasswordError =
     registerTouched.password && !isRegPasswordValid
@@ -284,11 +370,11 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       : '';
   const registerConfirmPasswordError =
     registerTouched.confirmPassword && !isRegConfirmPasswordValid
-      ? 'Confirm password must match your password.'
+      ? 'Passwords do not match.'
       : '';
   const registerSectionError =
     regRole === 'student' && registerTouched.section && !isRegSectionValid
-      ? 'Section is required (e.g. A, B, C).'
+      ? 'Section is required.'
       : '';
   const registerStudentNumberError =
     regRole === 'student' && registerTouched.studentNumber && !isRegStudentNumberValid
@@ -300,7 +386,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       : '';
   const registerTermsError =
     registerTouched.terms && !termsAccepted
-      ? 'You must accept the Terms and Agreement before creating an account.'
+      ? 'You must review and agree to the Terms & Agreement to register.'
       : '';
 
   const canRegisterDetails =
@@ -308,79 +394,42 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     isRegEmailValid &&
     isRegPasswordValid &&
     isRegConfirmPasswordValid &&
-    (regRole === 'student'
-      ? isRegSectionValid && isRegStudentNumberValid
-      : isRegTeacherIdValid);
+    isRegSectionValid &&
+    isRegStudentNumberValid &&
+    isRegTeacherIdValid;
+
   const canRegister = canRegisterDetails && termsAccepted && !isSubmitting;
 
   const showNotice = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
-    window.setTimeout(() => setNotification(null), 4000);
   };
 
-  const openTermsModal = (initialTab: 'terms' | 'privacy' = 'terms', mode: 'registration' | 'reauth' | 'view' = 'registration') => {
+  const openTermsModal = (tab: 'terms' | 'privacy' = 'terms', mode: 'registration' | 'reauth' | 'view' = 'registration') => {
     setPublishedPolicy(getPublishedPolicy());
-    setTermsInitialTab(initialTab);
+    setTermsInitialTab(tab);
     setTermsModalMode(mode);
     setIsTermsModalOpen(true);
   };
 
-  const startAuthenticatedSession = async (user: StoredUser, accountSource: AccountSource, token = user.token || '') => {
+  const startAuthenticatedSession = async (user: StoredUser, accountSource: AccountSource) => {
+    const token = user.token || getAuthToken() || `local-${user.role}-${Date.now()}`;
+    setAuthToken(token);
+
     if (rememberMe) {
       localStorage.setItem('oophub_remembered_email', user.email);
     } else {
       localStorage.removeItem('oophub_remembered_email');
     }
 
-    setAuthToken(token);
-    if (user.id) localStorage.setItem('oophub_current_user_id', user.id);
-
-    if (token && user.id) {
-      try {
-        const [videoProgress, quizAttempts] = await Promise.all([
-          progressApi.getVideoProgress(user.id, token),
-          progressApi.getQuizAttempts(user.id, token)
-        ]);
-
-        const watchDb = videoProgress.data.reduce((acc: Record<string, any>, row: any) => {
-          acc[row.video_id] = {
-            lessonId: row.video_id,
-            lastPosition: Number(row.last_position || 0),
-            completionPercentage: Number(row.completion_percentage || 0),
-            completed: Boolean(row.completed),
-            dateCompleted: row.date_completed || undefined
-          };
-          return acc;
-        }, {});
-
-        const quizDb = quizAttempts.data.reduce((acc: Record<string, any>, row: any) => {
-          acc[row.assessment_id] = {
-            assessmentId: row.assessment_id,
-            lessonId: row.lesson_id || '',
-            score: row.score,
-            total: row.total,
-            percentage: Number(row.percentage || 0),
-            correctAnswers: row.correct_answers,
-            incorrectAnswers: row.incorrect_answers,
-            passed: Boolean(row.passed),
-            attemptNumber: row.attempt_number,
-            answers: row.answers || {},
-            dateCompleted: row.date_completed
-          };
-          return acc;
-        }, {});
-
-        localStorage.setItem('oophub_oop_video_progress', JSON.stringify(watchDb));
-        localStorage.setItem('oophub_oop_quiz_attempts', JSON.stringify(quizDb));
-      } catch {
-        // The authenticated session can still start; progress will retry from each workspace view.
-      }
+    if (user.role === 'student' || accountSource === 'demo') {
+      seedDemoStudentProgress();
     }
 
-    showNotice('success', `Welcome back, ${user.name}. Loading workspace...`);
-    window.setTimeout(() => {
+    showNotice('success', `Welcome back, ${user.name}! Redirecting to workspace...`);
+
+    setTimeout(() => {
       onAuthSuccess({
-        id: user.id,
+        id: user.id || user.userId || `usr-${Date.now()}`,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -414,11 +463,11 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
         // Status & Avatar
         onlineStatus: user.onlineStatus ?? 'online',
         avatar: user.avatar ?? '',
-        termsAgreementAccepted: user.termsAgreementAccepted ?? false,
+        termsAgreementAccepted: user.termsAgreementAccepted ?? true,
         termsAcceptedAt: user.termsAcceptedAt ?? '',
         termsVersion: user.termsVersion ?? ''
       });
-    }, 800);
+    }, 500);
   };
 
   const completeLogin = async (user: StoredUser, accountSource: AccountSource) => {
@@ -426,6 +475,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     const userId = user.userId ?? buildUserId(user.email, user.role);
     const mustAcceptTerms =
       (user.role === 'student' || user.role === 'teacher') &&
+      !user.termsAgreementAccepted &&
       requiresTermsAcceptance(userId, activePolicy);
 
     setPublishedPolicy(activePolicy);
@@ -487,6 +537,41 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     showNotice('success', `Terms version ${publishedPolicy.version} accepted for registration.`);
   };
 
+  const handleQuickDemoLogin = async (role: 'student' | 'teacher' | 'admin') => {
+    seedDemoStudentProgress();
+    const demoUser = DEMO_AUTHENTICATED_USERS[role];
+    if (!demoUser) return;
+    
+    setLoginEmail(demoUser.email);
+    setLoginPassword(DEMO_PASSWORD);
+    setIsSubmitting(true);
+
+    try {
+      const response = await authApi.login(demoUser.email, DEMO_PASSWORD);
+      await completeLogin(
+        {
+          ...response.user,
+          role: response.user.role as Persona,
+          token: response.token,
+          password: ''
+        },
+        'demo'
+      );
+    } catch {
+      // Offline fallback login for instant local access
+      await completeLogin(
+        {
+          ...demoUser,
+          password: DEMO_PASSWORD,
+          token: `demo-${role}-token-${Date.now()}`
+        },
+        'demo'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginTouched({ email: true, password: true });
@@ -497,10 +582,14 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     }
 
     setIsSubmitting(true);
+    const normalizedEmail = loginEmail.trim().toLowerCase();
+
     try {
-      const normalizedEmail = loginEmail.trim().toLowerCase();
       const response = await authApi.login(normalizedEmail, loginPassword);
       const accountSource: AccountSource = isDemoEmail(response.user.email, response.user.role) ? 'demo' : 'custom';
+      if (accountSource === 'demo' || response.user.role === 'student' || response.user.role === 'teacher') {
+        seedDemoStudentProgress();
+      }
       await completeLogin(
         {
           ...response.user,
@@ -511,6 +600,28 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
         accountSource
       );
     } catch (error) {
+      // Check local demo accounts & stored users fallback
+      const allAccounts = [...demoAccounts, ...readStoredUsers()];
+      const matched = allAccounts.find(
+        acc => acc.email.toLowerCase() === normalizedEmail && acc.password === loginPassword
+      );
+
+      if (matched) {
+        const accountSource: AccountSource = isDemoEmail(matched.email, matched.role) ? 'demo' : 'custom';
+        if (accountSource === 'demo' || matched.role === 'student' || matched.role === 'teacher') {
+          seedDemoStudentProgress();
+        }
+        await completeLogin(
+          {
+            ...matched,
+            accountSource,
+            token: `local-token-${Date.now()}`
+          },
+          accountSource
+        );
+        return;
+      }
+
       setIsSubmitting(false);
       showNotice('error', error instanceof Error ? error.message : 'Invalid email or password. Please verify credentials or create an account.');
     }
@@ -570,6 +681,46 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       setIsSubmitting(false);
       setIsRegSuccess(true);
     } catch (error) {
+      // Local registration fallback if backend is offline
+      try {
+        const activePolicy = getPublishedPolicy();
+        const displayCourse = regCourse === 'CS' ? 'CS (Computer Science)' : 'IT (Information Technology)';
+        const computedSection = regRole === 'student' ? regSection.trim().toUpperCase() : undefined;
+        const newLocalUser: StoredUser = {
+          name: regUsername.trim(),
+          email: regEmail.trim(),
+          password: regPassword,
+          role: regRole,
+          userId: buildUserId(regEmail.trim(), regRole),
+          registrationDate: new Date().toISOString(),
+          accountStatus: 'Active',
+          studentNumber: regRole === 'student' ? regStudentNumber.trim() : undefined,
+          course: regRole === 'student' ? displayCourse : undefined,
+          yearLevel: regRole === 'student' ? regYearLevel : undefined,
+          section: computedSection,
+          programStatus: regRole === 'student' ? 'Regular' : undefined,
+          employeeId: regRole === 'teacher' ? regTeacherId.trim() : undefined,
+          department: regRole === 'teacher' ? 'College of Computer Studies' : undefined,
+          specialization: regRole === 'teacher' ? 'Object-Oriented Programming' : undefined,
+          assignedCourses: regRole === 'teacher' ? 'OOP 101, Advanced Java' : undefined,
+          termsAgreementAccepted: true,
+          termsAcceptedAt: new Date().toISOString(),
+          termsVersion: activePolicy.version,
+          onlineStatus: 'online'
+        };
+
+        const existingUsers = readStoredUsers();
+        existingUsers.push(newLocalUser);
+        localStorage.setItem('oophub_users', JSON.stringify(existingUsers));
+
+        setLoginEmail(newLocalUser.email);
+        setLoginPassword('');
+        setTermsAccepted(false);
+        setIsSubmitting(false);
+        setIsRegSuccess(true);
+        return;
+      } catch {}
+
       setIsSubmitting(false);
       showNotice('error', error instanceof Error ? error.message : 'Unable to create account. Please try again.');
     }
@@ -593,7 +744,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       <div className="absolute -top-20 -left-20 w-72 h-72 rounded-full bg-emerald-400/10 blur-3xl pointer-events-none" />
       <div className="absolute -bottom-20 -right-20 w-96 h-96 rounded-full bg-emerald-300/15 blur-3xl pointer-events-none" />
 
-      <div className="relative w-full max-w-[480px]">
+      <div className="relative w-full max-w-[540px]">
         {/* Back Link above card */}
         <button
           type="button"
@@ -633,7 +784,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                 setIsLogin(true);
                 setNotification(null);
               }}
-              className={`min-h-9 flex-1 rounded-full px-4 text-xs font-bold transition-all focus:outline-none ${
+              className={`min-h-9 flex-1 rounded-full px-4 text-xs font-bold transition-all focus:outline-none cursor-pointer ${
                 isLogin ? 'bg-white text-slate-900 shadow-xs border border-slate-200/20' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -647,7 +798,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                 setIsLogin(false);
                 setNotification(null);
               }}
-              className={`min-h-9 flex-1 rounded-full px-4 text-xs font-bold transition-all focus:outline-none ${
+              className={`min-h-9 flex-1 rounded-full px-4 text-xs font-bold transition-all focus:outline-none cursor-pointer ${
                 !isLogin ? 'bg-white text-slate-900 shadow-xs border border-slate-200/20' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -715,134 +866,192 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                 </div>
               </motion.div>
             ) : isLogin ? (
-              <motion.form
+              <motion.div
                 key="login"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                onSubmit={handleLoginSubmit}
-                className="space-y-4"
-                id="login-form-element"
-                noValidate
+                className="space-y-5"
               >
-                <div className="space-y-1 text-left">
-                  <label htmlFor="login-email" className="text-xs font-bold text-slate-700">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                       id="login-email"
-                       type="email"
-                       autoComplete="email"
-                       value={loginEmail}
-                       onBlur={() => setLoginTouched(prev => ({ ...prev, email: true }))}
-                       onChange={e => setLoginEmail(e.target.value)}
-                       placeholder="you@school.edu"
-                       className={`${inputBase} ${loginEmailError ? inputError : inputNormal}`}
-                       aria-label="Email address"
-                       aria-invalid={Boolean(loginEmailError)}
-                       aria-describedby={loginEmailError ? 'login-email-error' : undefined}
-                    />
+                {/* QUICK 1-CLICK DEMO ACCOUNTS PANEL */}
+                <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50/60 via-slate-50/80 to-emerald-50/30 p-3.5 text-left">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                      Quick 1-Click Demo Logins
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100/80 text-emerald-800 rounded-full">
+                      Full Demo Ready
+                    </span>
                   </div>
-                  {loginEmailError && (
-                    <p id="login-email-error" className="text-xs font-semibold text-rose-600 mt-1 flex items-center gap-1">
-                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                      {loginEmailError}
-                    </p>
-                  )}
-                </div>
 
-                <div className="space-y-1 text-left">
-                  <label htmlFor="login-password" className="text-xs font-bold text-slate-700">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                       id="login-password"
-                       type={showPassword ? 'text' : 'password'}
-                       autoComplete="current-password"
-                       value={loginPassword}
-                       onBlur={() => setLoginTouched(prev => ({ ...prev, password: true }))}
-                       onChange={e => setLoginPassword(e.target.value)}
-                       placeholder="Enter your password"
-                       className={`${inputBase} pr-12 ${loginPasswordError ? inputError : inputNormal}`}
-                       aria-label="Password"
-                       aria-invalid={Boolean(loginPasswordError)}
-                       aria-describedby={loginPasswordError ? 'login-password-error' : undefined}
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Student Demo Button */}
                     <button
-                       type="button"
-                       onClick={() => setShowPassword(prev => !prev)}
-                       className="absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 focus:outline-none"
-                       aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => handleQuickDemoLogin('student')}
+                      className="p-2.5 rounded-lg bg-white border border-emerald-200/80 hover:border-emerald-400 hover:bg-emerald-50/40 text-left transition shadow-xs group cursor-pointer"
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">👨‍🎓</span>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 flex items-center gap-1">
+                            Demo Student
+                            <span className="text-[9px] font-black bg-emerald-600 text-white px-1.5 py-0.2 rounded">100% DONE</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate">All OOP & Swing Videos, Quizzes, IDEs</div>
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Teacher Demo Button */}
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => handleQuickDemoLogin('teacher')}
+                      className="p-2.5 rounded-lg bg-white border border-emerald-200/80 hover:border-emerald-400 hover:bg-emerald-50/40 text-left transition shadow-xs group cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">👩‍🏫</span>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-900 group-hover:text-emerald-700">Demo Teacher</div>
+                          <div className="text-[10px] text-slate-500 truncate">Cohort & Student Progress Tracking</div>
+                        </div>
+                      </div>
                     </button>
                   </div>
-                  {loginPasswordError && (
-                    <p id="login-password-error" className="text-xs font-semibold text-rose-600 mt-1 flex items-center gap-1">
-                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                      {loginPasswordError}
-                    </p>
-                  )}
                 </div>
 
-                <div className="flex items-center justify-between gap-3 text-xs pt-1">
-                  <label className="flex cursor-pointer items-center gap-2 text-slate-600 font-semibold select-none">
-                    <input
-                       type="checkbox"
-                       checked={rememberMe}
-                       onChange={e => setRememberMe(e.target.checked)}
-                       className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                       aria-label="Remember me"
-                    />
-                    Remember Me
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => showNotice('error', 'Password recovery is not connected yet.')}
-                    className="font-bold text-emerald-600 hover:text-emerald-700 transition focus:outline-none"
-                  >
-                    Forgot Password?
-                  </button>
+                <div className="relative flex items-center justify-center">
+                  <div className="border-t border-slate-200 w-full" />
+                  <span className="bg-white px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
+                    Or Sign In with Credentials
+                  </span>
+                  <div className="border-t border-slate-200 w-full" />
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={!canLogin}
-                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 hover:-translate-y-0.5 active:scale-[0.98] transition-all hover:shadow-[0_8px_20px_rgba(16,185,129,0.25)] text-sm font-extrabold text-white focus:outline-none focus:ring-4 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:translate-y-0 mt-3"
-                  aria-label="Sign in"
+                <form
+                  onSubmit={handleLoginSubmit}
+                  className="space-y-4"
+                  id="login-form-element"
+                  noValidate
                 >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Signing In
-                    </>
-                  ) : (
-                    <>
-                      Sign In
-                      <ArrowRight className="h-4 w-4" />
-                    </>
-                  )}
-                </button>
+                  <div className="space-y-1 text-left">
+                    <label htmlFor="login-email" className="text-xs font-bold text-slate-700">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        id="login-email"
+                        type="email"
+                        autoComplete="email"
+                        value={loginEmail}
+                        onBlur={() => setLoginTouched(prev => ({ ...prev, email: true }))}
+                        onChange={e => setLoginEmail(e.target.value)}
+                        placeholder="dmitry@oophub.edu or elena@oophub.edu"
+                        className={`${inputBase} ${loginEmailError ? inputError : inputNormal}`}
+                        aria-label="Email address"
+                        aria-invalid={Boolean(loginEmailError)}
+                        aria-describedby={loginEmailError ? 'login-email-error' : undefined}
+                      />
+                    </div>
+                    {loginEmailError && (
+                      <p id="login-email-error" className="text-xs font-semibold text-rose-600 mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {loginEmailError}
+                      </p>
+                    )}
+                  </div>
 
-                <p className="text-center text-xs text-slate-500 pt-1">
-                  Don't have an account?{' '}
+                  <div className="space-y-1 text-left">
+                    <label htmlFor="login-password" className="text-xs font-bold text-slate-700">
+                      Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        id="login-password"
+                        type={showPassword ? 'text' : 'password'}
+                        autoComplete="current-password"
+                        value={loginPassword}
+                        onBlur={() => setLoginTouched(prev => ({ ...prev, password: true }))}
+                        onChange={e => setLoginPassword(e.target.value)}
+                        placeholder="Enter password (demo: password123)"
+                        className={`${inputBase} pr-12 ${loginPasswordError ? inputError : inputNormal}`}
+                        aria-label="Password"
+                        aria-invalid={Boolean(loginPasswordError)}
+                        aria-describedby={loginPasswordError ? 'login-password-error' : undefined}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(prev => !prev)}
+                        className="absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 focus:outline-none cursor-pointer"
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {loginPasswordError && (
+                      <p id="login-password-error" className="text-xs font-semibold text-rose-600 mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {loginPasswordError}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 text-xs pt-1">
+                    <label className="flex cursor-pointer items-center gap-2 text-slate-600 font-semibold select-none">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={e => setRememberMe(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        aria-label="Remember me"
+                      />
+                      Remember Me
+                    </label>
+                    <span className="text-[11px] font-semibold text-slate-400">
+                      Default password: <span className="font-mono text-emerald-700 font-bold">password123</span>
+                    </span>
+                  </div>
+
                   <button
-                    type="button"
-                    onClick={() => {
-                      setIsLogin(false);
-                      setNotification(null);
-                    }}
-                    className="font-bold text-emerald-600 hover:text-emerald-700 transition focus:outline-none"
+                    type="submit"
+                    disabled={!canLogin}
+                    className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 hover:-translate-y-0.5 active:scale-[0.98] transition-all hover:shadow-[0_8px_20px_rgba(16,185,129,0.25)] text-sm font-extrabold text-white focus:outline-none focus:ring-4 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:translate-y-0 mt-3 cursor-pointer"
+                    aria-label="Sign in"
                   >
-                    Create one
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Signing In
+                      </>
+                    ) : (
+                      <>
+                        Sign In
+                        <ArrowRight className="h-4 w-4" />
+                      </>
+                    )}
                   </button>
-                </p>
-              </motion.form>
+
+                  <p className="text-center text-xs text-slate-500 pt-1">
+                    Don't have an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsLogin(false);
+                        setNotification(null);
+                      }}
+                      className="font-bold text-emerald-600 hover:text-emerald-700 transition focus:outline-none cursor-pointer"
+                    >
+                      Create one
+                    </button>
+                  </p>
+                </form>
+              </motion.div>
             ) : (
               <motion.form
                 key="register"
@@ -899,13 +1108,12 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                     initial={{ opacity: 0, x: regRole === 'student' ? -12 : 12 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: regRole === 'student' ? 12 : -12 }}
-                    transition={{ duration: 0.18, ease: 'easeOut' }}
+                    transition={{ duration: 0.2 }}
                     className="space-y-4"
                   >
-                    {/* Common Fields */}
                     <div className="space-y-1 text-left">
                       <label htmlFor="reg-username" className="text-xs font-bold text-slate-700">
-                        Username
+                        Full Name / Username
                       </label>
                       <div className="relative">
                         <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -915,9 +1123,9 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                           value={regUsername}
                           onBlur={() => setRegisterTouched(prev => ({ ...prev, username: true }))}
                           onChange={e => setRegUsername(e.target.value)}
-                          placeholder="Enter username"
+                          placeholder="Enter your full name"
                           className={`${inputBase} ${registerUsernameError ? inputError : inputNormal}`}
-                          aria-label="Username"
+                          aria-label="Full name"
                         />
                       </div>
                       {registerUsernameError && (
@@ -972,7 +1180,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                         <button
                           type="button"
                           onClick={() => setShowPassword(prev => !prev)}
-                          className="absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 focus:outline-none"
+                          className="absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 focus:outline-none cursor-pointer"
                           aria-label={showPassword ? 'Hide password' : 'Show password'}
                         >
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -1024,7 +1232,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                             value={regSection}
                             onBlur={() => setRegisterTouched(prev => ({ ...prev, section: true }))}
                             onChange={e => setRegSection(e.target.value)}
-                            placeholder="Enter your section (e.g. A, B, C)"
+                            placeholder="Enter your section (e.g. CS-3A, IT-2B)"
                             className={`${inputBase} pl-4 pr-4 ${registerSectionError ? inputError : inputNormal}`}
                             aria-label="Section"
                           />
@@ -1174,7 +1382,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                         <button
                           type="button"
                           onClick={() => openTermsModal('terms', 'registration')}
-                          className="font-extrabold text-[#5f6f24] underline decoration-[#6b7f2a]/30 underline-offset-2 hover:text-[#435018] focus:outline-none"
+                          className="font-extrabold text-[#5f6f24] underline decoration-[#6b7f2a]/30 underline-offset-2 hover:text-[#435018] focus:outline-none cursor-pointer"
                         >
                           Terms and Conditions
                         </button>{' '}
@@ -1182,7 +1390,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                         <button
                           type="button"
                           onClick={() => openTermsModal('privacy', 'registration')}
-                          className="font-extrabold text-[#5f6f24] underline decoration-[#6b7f2a]/30 underline-offset-2 hover:text-[#435018] focus:outline-none"
+                          className="font-extrabold text-[#5f6f24] underline decoration-[#6b7f2a]/30 underline-offset-2 hover:text-[#435018] focus:outline-none cursor-pointer"
                         >
                           Privacy Policy
                         </button>
@@ -1195,7 +1403,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                     <button
                       type="button"
                       onClick={() => openTermsModal('terms', 'registration')}
-                      className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#dfe8c5] bg-white px-3 text-[11px] font-extrabold text-[#5f6f24] transition hover:bg-[#f6f8ee] focus:outline-none focus:ring-4 focus:ring-[#dfe8c5]"
+                      className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#dfe8c5] bg-white px-3 text-[11px] font-extrabold text-[#5f6f24] transition hover:bg-[#f6f8ee] focus:outline-none focus:ring-4 focus:ring-[#dfe8c5] cursor-pointer"
                     >
                       <FileText className="h-3.5 w-3.5" />
                       View Terms
