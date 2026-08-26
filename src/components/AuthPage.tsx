@@ -872,66 +872,8 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                className="space-y-5"
+                className="space-y-4"
               >
-                {/* QUICK 1-CLICK DEMO ACCOUNTS PANEL */}
-                <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50/60 via-slate-50/80 to-emerald-50/30 p-3.5 text-left">
-                  <div className="flex items-center justify-between mb-2.5">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                      Quick 1-Click Demo Logins
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100/80 text-emerald-800 rounded-full">
-                      Full Demo Ready
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {/* Student Demo Button */}
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={() => handleQuickDemoLogin('student')}
-                      className="p-2.5 rounded-lg bg-white border border-emerald-200/80 hover:border-emerald-400 hover:bg-emerald-50/40 text-left transition shadow-xs group cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">👨‍🎓</span>
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 flex items-center gap-1">
-                            Demo Student
-                            <span className="text-[9px] font-black bg-emerald-600 text-white px-1.5 py-0.2 rounded">100% DONE</span>
-                          </div>
-                          <div className="text-[10px] text-slate-500 truncate">All OOP & Swing Videos, Quizzes, IDEs</div>
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* Teacher Demo Button */}
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={() => handleQuickDemoLogin('teacher')}
-                      className="p-2.5 rounded-lg bg-white border border-emerald-200/80 hover:border-emerald-400 hover:bg-emerald-50/40 text-left transition shadow-xs group cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">👩‍🏫</span>
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-slate-900 group-hover:text-emerald-700">Demo Teacher</div>
-                          <div className="text-[10px] text-slate-500 truncate">Cohort & Student Progress Tracking</div>
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="relative flex items-center justify-center">
-                  <div className="border-t border-slate-200 w-full" />
-                  <span className="bg-white px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
-                    Or Sign In with Credentials
-                  </span>
-                  <div className="border-t border-slate-200 w-full" />
-                </div>
-
                 <form
                   onSubmit={handleLoginSubmit}
                   className="space-y-4"

@@ -1007,15 +1007,25 @@ export default function App() {
       return;
     }
 
-    const progress = currentUser.accountSource === 'demo' ? DEMO_STUDENT_PROGRESS : NEW_STUDENT_PROGRESS;
+    const isDemoStudent =
+      currentUser.accountSource === 'demo' ||
+      isDemoEmail(currentUser.email, currentUser.role) ||
+      currentUser.email.toLowerCase() === 'dmitry@oophub.edu' ||
+      currentUser.email.toLowerCase() === 'student@oophub.edu';
+
+    if (isDemoStudent) {
+      seedDemoStudentProgress();
+    }
+
+    const progress = isDemoStudent ? DEMO_STUDENT_PROGRESS : NEW_STUDENT_PROGRESS;
     const studentProgress = ensureStudentProgress(currentUser);
-    const visibleProgress = currentUser.accountSource === 'demo' ? progress.completedLessonsCount : studentProgress.completedLessons;
+    const visibleProgress = isDemoStudent ? progress.completedLessonsCount : studentProgress.completedLessons;
 
     setStreak(progress.streak);
-    setPoints(currentUser.accountSource === 'demo' ? progress.points : studentProgress.overallProgress);
+    setPoints(isDemoStudent ? progress.points : studentProgress.overallProgress);
     setCompletedLessonsCount(visibleProgress);
-    setRecentStudentGrade(currentUser.accountSource === 'demo' ? DEMO_STUDENT_GRADE : null);
-    setLeaderboardUsers(prev => currentUser.accountSource === 'demo'
+    setRecentStudentGrade(isDemoStudent ? DEMO_STUDENT_GRADE : null);
+    setLeaderboardUsers(prev => isDemoStudent
       ? prev.map(entry => (
           entry.isCurrentUser
             ? {
