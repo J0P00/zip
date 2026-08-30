@@ -50,6 +50,15 @@ interface JavaSwingModuleProps {
 type SwingTab = 'lessons' | 'videos' | 'quiz' | 'practice' | 'progress';
 type DraftDb = Record<string, string>;
 type SubmissionDb = Record<string, PracticeSubmission>;
+type SwingGradeResult = {
+  compileStatus: PracticeSubmission['compileStatus'];
+  score: number;
+  runtime: number;
+  memoryUsage: number | undefined;
+  programOutput: string;
+  errorMessage: string;
+  testResults: PracticeSubmission['testResults'];
+};
 
 const QUIZ_HISTORY_KEY = 'oophub_swing_quiz_history';
 
@@ -107,7 +116,7 @@ export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlo
       compileStatus: submissionDb[key].compileStatus,
       score: submissionDb[key].score,
       runtime: submissionDb[key].runtime,
-      memoryUsage: submissionDb[key].memoryUsage,
+      memoryUsage: submissionDb[key].memoryUsage ?? 0,
       programOutput: submissionDb[key].programOutput,
       errorMessage: submissionDb[key].errorMessage || '',
       testResults: submissionDb[key].testResults

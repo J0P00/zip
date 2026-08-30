@@ -193,7 +193,7 @@ export const applyOopLessonCitation = (lesson: VideoLesson): VideoLesson => {
   const matchedTitleCitation = OOP_CITATION_TITLE_MAP.get(normalizeTitle(lesson.title));
   const isOopLesson = lesson.courseId === 'oop' || lesson.id.startsWith('oop_lesson_');
   const citationIndex = matchedTitleCitation || (isOopLesson ? lesson.sequence : undefined);
-  const citation = OOP_TOPIC_CITATIONS[citationIndex];
+  const citation = citationIndex !== undefined ? OOP_TOPIC_CITATIONS[citationIndex] : undefined;
 
   return citation ? { ...lesson, ...citation } : lesson;
 };
