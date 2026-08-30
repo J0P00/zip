@@ -240,6 +240,15 @@ const readStoredUsers = (): StoredUser[] => {
   }
 };
 
+const findExistingUserByEmail = (email: string): StoredUser | undefined => {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return undefined;
+
+  return [...demoAccounts, ...readStoredUsers()].find(
+    account => account.email.trim().toLowerCase() === normalizedEmail
+  );
+};
+
 const updateStoredUserTermsMetadata = (user: StoredUser, acceptance: UserTermsAgreement) => {
   try {
     const usersList = readStoredUsers();
@@ -421,7 +430,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       localStorage.removeItem('oophub_remembered_email');
     }
 
-    if (user.role === 'student' || accountSource === 'demo') {
+    if (accountSource === 'demo') {
       seedDemoStudentProgress();
     }
 
@@ -587,7 +596,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     try {
       const response = await authApi.login(normalizedEmail, loginPassword);
       const accountSource: AccountSource = isDemoEmail(response.user.email, response.user.role) ? 'demo' : 'custom';
-      if (accountSource === 'demo' || response.user.role === 'student' || response.user.role === 'teacher') {
+      if (accountSource === 'demo') {
         seedDemoStudentProgress();
       }
       await completeLogin(
@@ -608,7 +617,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
 
       if (matched) {
         const accountSource: AccountSource = isDemoEmail(matched.email, matched.role) ? 'demo' : 'custom';
-        if (accountSource === 'demo' || matched.role === 'student' || matched.role === 'teacher') {
+        if (accountSource === 'demo') {
           seedDemoStudentProgress();
         }
         await completeLogin(
@@ -650,6 +659,13 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       return;
     }
 
+    const normalizedEmail = regEmail.trim().toLowerCase();
+    if (findExistingUserByEmail(normalizedEmail)) {
+      setIsSubmitting(false);
+      showNotice('error', 'An account with this email already exists. Please sign in or use a different email.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const displayCourse = regCourse === 'CS' ? 'CS (Computer Science)' : 'IT (Information Technology)';
@@ -686,6 +702,14 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
         const activePolicy = getPublishedPolicy();
         const displayCourse = regCourse === 'CS' ? 'CS (Computer Science)' : 'IT (Information Technology)';
         const computedSection = regRole === 'student' ? regSection.trim().toUpperCase() : undefined;
+        const normalizedEmail = regEmail.trim().toLowerCase();
+
+        if (findExistingUserByEmail(normalizedEmail)) {
+          setIsSubmitting(false);
+          showNotice('error', 'An account with this email already exists. Please sign in or use a different email.');
+          return;
+        }
+
         const newLocalUser: StoredUser = {
           name: regUsername.trim(),
           email: regEmail.trim(),
@@ -955,9 +979,6 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                       />
                       Remember Me
                     </label>
-                    <span className="text-[11px] font-semibold text-slate-400">
-                      Default password: <span className="font-mono text-emerald-700 font-bold">password123</span>
-                    </span>
                   </div>
 
                   <button
