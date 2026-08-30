@@ -26,16 +26,7 @@ import {
   requiresTermsAcceptance
 } from '../data/termsStore';
 import { authApi, getAuthToken, isDemoEmail, progressApi, setAuthToken } from '../services/api';
-import {
-  DEMO_AUTHENTICATED_USERS,
-  DEMO_PASSWORD,
-  DEMO_STUDENT_ALT_EMAIL,
-  DEMO_STUDENT_EMAIL,
-  DEMO_TEACHER_ALT_EMAIL,
-  DEMO_TEACHER_EMAIL,
-  DEMO_ADMIN_EMAIL,
-  seedDemoStudentProgress
-} from '../data/demoSeed';
+import { seedDemoStudentProgress } from '../data/demoSeed';
 import TermsAgreementModal from './TermsAgreementModal';
 
 interface AuthPageProps {
@@ -90,134 +81,7 @@ type StoredUser = {
   termsVersion?: string;
 };
 
-const demoAccounts: StoredUser[] = [
-  {
-    name: 'Dmitry Vance (Alex Mercer)',
-    email: 'dmitry@oophub.edu',
-    password: 'password123',
-    role: 'student',
-    userId: 'STU-0001',
-    registrationDate: '2026-06-01T00:00:00.000Z',
-    accountStatus: 'Active',
-    studentNumber: '2026-0001',
-    course: 'BS Computer Science',
-    yearLevel: '3rd Year',
-    section: 'CS-3A',
-    programStatus: 'Regular',
-    contactNumber: '+1 (555) 019-2834',
-    address: '123 Academic Way, University Hills',
-    dateOfBirth: '2005-04-12',
-    onlineStatus: 'online',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-    termsAgreementAccepted: true,
-    termsAcceptedAt: '2026-06-01T00:00:00.000Z',
-    termsVersion: '2026.06.26'
-  },
-  {
-    name: 'Dmitry Vance (Alex Mercer)',
-    email: 'student@oophub.edu',
-    password: 'password123',
-    role: 'student',
-    userId: 'STU-0001',
-    registrationDate: '2026-06-01T00:00:00.000Z',
-    accountStatus: 'Active',
-    studentNumber: '2026-0001',
-    course: 'BS Computer Science',
-    yearLevel: '3rd Year',
-    section: 'CS-3A',
-    programStatus: 'Regular',
-    contactNumber: '+1 (555) 019-2834',
-    address: '123 Academic Way, University Hills',
-    dateOfBirth: '2005-04-12',
-    onlineStatus: 'online',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-    termsAgreementAccepted: true,
-    termsAcceptedAt: '2026-06-01T00:00:00.000Z',
-    termsVersion: '2026.06.26'
-  },
-  {
-    name: 'Dr. Elena Vance',
-    email: 'elena@oophub.edu',
-    password: 'password123',
-    role: 'teacher',
-    userId: 'TEA-0001',
-    registrationDate: '2026-06-01T00:00:00.000Z',
-    accountStatus: 'Active',
-    employeeId: 'EMP-0001',
-    department: 'College of Computer Studies',
-    specialization: 'Object-Oriented Programming',
-    assignedCourses: 'OOP 101, Advanced Java, Software Architecture',
-    contactNumber: '+1 (555) 083-9921',
-    address: '456 Faculty Lane, Green Hills',
-    dateOfBirth: '1985-09-22',
-    onlineStatus: 'online',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
-    termsAgreementAccepted: true,
-    termsAcceptedAt: '2026-06-01T00:00:00.000Z',
-    termsVersion: '2026.06.26'
-  },
-  {
-    name: 'Dr. Elena Vance',
-    email: 'teacher@oophub.edu',
-    password: 'password123',
-    role: 'teacher',
-    userId: 'TEA-0001',
-    registrationDate: '2026-06-01T00:00:00.000Z',
-    accountStatus: 'Active',
-    employeeId: 'EMP-0001',
-    department: 'College of Computer Studies',
-    specialization: 'Object-Oriented Programming',
-    assignedCourses: 'OOP 101, Advanced Java, Software Architecture',
-    contactNumber: '+1 (555) 083-9921',
-    address: '456 Faculty Lane, Green Hills',
-    dateOfBirth: '1985-09-22',
-    onlineStatus: 'online',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
-    termsAgreementAccepted: true,
-    termsAcceptedAt: '2026-06-01T00:00:00.000Z',
-    termsVersion: '2026.06.26'
-  },
-  {
-    name: 'Jerico Vance (Admin)',
-    email: 'jericokunn@gmail.com',
-    password: 'password123',
-    role: 'admin',
-    userId: 'ADM-0001',
-    registrationDate: '2026-06-01T00:00:00.000Z',
-    accountStatus: 'Active',
-    adminId: 'ADM-0001',
-    systemRole: 'Super Admin',
-    accessLevel: 'Level 5 - Full Access',
-    contactNumber: '+1 (555) 091-7723',
-    address: 'System Ops HQ, Tech Park',
-    dateOfBirth: '1990-01-15',
-    onlineStatus: 'online',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-    termsAgreementAccepted: true,
-    termsAcceptedAt: '2026-06-01T00:00:00.000Z',
-    termsVersion: '2026.06.26'
-  },
-  {
-    name: 'Jerico Vance (Admin)',
-    email: 'admin@oophub.edu',
-    password: 'password123',
-    role: 'admin',
-    userId: 'ADM-0001',
-    registrationDate: '2026-06-01T00:00:00.000Z',
-    accountStatus: 'Active',
-    adminId: 'ADM-0001',
-    systemRole: 'Super Admin',
-    accessLevel: 'Level 5 - Full Access',
-    contactNumber: '+1 (555) 091-7723',
-    address: 'System Ops HQ, Tech Park',
-    dateOfBirth: '1990-01-15',
-    onlineStatus: 'online',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-    termsAgreementAccepted: true,
-    termsAcceptedAt: '2026-06-01T00:00:00.000Z',
-    termsVersion: '2026.06.26'
-  }
-];
+const demoAccounts: StoredUser[] = [];
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isValidEmail = (value: string) => emailPattern.test(value.trim());
@@ -544,41 +408,6 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     setRegisterTouched(prev => ({ ...prev, terms: true }));
     setIsTermsModalOpen(false);
     showNotice('success', `Terms version ${publishedPolicy.version} accepted for registration.`);
-  };
-
-  const handleQuickDemoLogin = async (role: 'student' | 'teacher' | 'admin') => {
-    seedDemoStudentProgress();
-    const demoUser = DEMO_AUTHENTICATED_USERS[role];
-    if (!demoUser) return;
-    
-    setLoginEmail(demoUser.email);
-    setLoginPassword(DEMO_PASSWORD);
-    setIsSubmitting(true);
-
-    try {
-      const response = await authApi.login(demoUser.email, DEMO_PASSWORD);
-      await completeLogin(
-        {
-          ...response.user,
-          role: response.user.role as Persona,
-          token: response.token,
-          password: ''
-        },
-        'demo'
-      );
-    } catch {
-      // Offline fallback login for instant local access
-      await completeLogin(
-        {
-          ...demoUser,
-          password: DEMO_PASSWORD,
-          token: `demo-${role}-token-${Date.now()}`
-        },
-        'demo'
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
