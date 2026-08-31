@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Award, Check, CheckCircle, ChevronLeft, ChevronRight, Lock, RotateCcw, X } from 'lucide-react';
-import { AdaptiveRecommendation, StudentSubView, VideoLesson } from '../types';
+import { AdaptiveRecommendation, AuthenticatedUser, StudentSubView, VideoLesson } from '../types';
 import { CourseQuestion, getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson, shuffleArray } from '../data/oopCourse';
 import { progressApi } from '../services/api';
 import RecommendationCard from './RecommendationCard';
@@ -9,6 +9,7 @@ interface AssessmentsProps {
   onCorrectAnswerAdded: (xp: number, attempt: QuizAttempt) => void;
   onNavigateTo?: (view: StudentSubView) => void;
   lessons: VideoLesson[];
+  currentUser: AuthenticatedUser;
   activeRecommendation?: AdaptiveRecommendation | null;
 }
 
@@ -39,6 +40,8 @@ type QuizDb = Record<string, QuizAttempt>;
 
 const WATCH_KEY = 'oophub_oop_video_progress';
 const QUIZ_KEY = 'oophub_oop_quiz_attempts';
+const getUserStorageKey = (key: string, user: AuthenticatedUser) =>
+  `${key}:${user.id || user.userId || user.email}`;
 const PASSING_PERCENTAGE = 70;
 
 const getAssessmentLockedReason = (lessonId: string, watchDb: WatchDb, quizDb: QuizDb) => {
@@ -56,9 +59,11 @@ const getAssessmentLockedReason = (lessonId: string, watchDb: WatchDb, quizDb: Q
   return '';
 };
 
-export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, activeRecommendation }: AssessmentsProps) {
-  const [watchDb] = useState<WatchDb>(() => getStoredJson(WATCH_KEY, {}));
-  const [quizDb, setQuizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
+export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, activeRecommendation, currentUser }: AssessmentsProps) {
+  const watchStorageKey = getUserStorageKey(WATCH_KEY, currentUser);
+  const quizStorageKey = getUserStorageKey(QUIZ_KEY, currentUser);
+  const [watchDb] = useState<WatchDb>(() => getStoredJson(`${watchStorageKey}`, {}));
+  const [quizDb, setQuizDb] = useState<QuizDb>(() => getStoredJson(quizStorageKey, {}));
   const [activeAssessmentId, setActiveAssessmentId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<CourseQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -73,7 +78,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, active
   useEffect(() => {
     let isMounted = true;
     const token = localStorage.getItem('oophub_auth_token');
-    const user = localStorage.getItem('oophub_current_user_id');
+    const user = currentUser.id || currentUser.userId || currentUser.email;
     if (!token || !user) return;
 
     progressApi.getQuizAttempts(user, token)
@@ -97,7 +102,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, active
         }, {});
         setQuizDb(prev => {
           const next = { ...prev, ...remoteDb };
-          setStoredJson(QUIZ_KEY, next);
+          setStoredJson(quizStorageKey, next);
           return next;
         });
       })
@@ -106,7 +111,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, active
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser.id, currentUser.userId, currentUser.email, quizStorageKey]);
 
   const courseStats = useMemo(() => {
     const completedLessons = OOP_COURSE_LESSONS.filter(lesson => watchDb[lesson.id]?.completed).length;
@@ -164,7 +169,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, active
 
     const nextDb = { ...quizDb, [activeAssessment.id]: attempt };
     setQuizDb(nextDb);
-    setStoredJson(QUIZ_KEY, nextDb);
+    setStoredJson(quizStorageKey, nextDb);
     progressApi.saveQuizAttempt(attempt as any).catch(error => {
       console.warn('Unable to sync assessment attempt with backend:', error);
     });

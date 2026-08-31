@@ -1624,7 +1624,9 @@ export default function App() {
 
             {persona === 'student' && studentTab === 'videos' && (
               <VideoTutorials 
+                key={`videos-${displayUser.id || displayUser.userId || displayUser.email}`}
                 lessons={videoLessons} 
+                currentUser={displayUser}
                 onNavigateTo={handleDirectNavigation}
                 onUpdateVideoProgress={handleUpdateVideoProgress}
               />
@@ -1632,9 +1634,11 @@ export default function App() {
 
             {persona === 'student' && studentTab === 'assessments' && (
               <Assessments 
+                key={`assessments-${displayUser.id || displayUser.userId || displayUser.email}`}
                 onNavigateTo={(view) => setStudentTab(view as any)}
                 onCorrectAnswerAdded={handleCorrectAnswerAdded}
                 lessons={videoLessons}
+                currentUser={displayUser}
                 activeRecommendation={activeRecommendation}
               />
             )}

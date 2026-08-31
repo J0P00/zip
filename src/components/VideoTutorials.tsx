@@ -13,12 +13,13 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react';
-import { StudentSubView, VideoLesson } from '../types';
+import { AuthenticatedUser, StudentSubView, VideoLesson } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, setStoredJson } from '../data/oopCourse';
 import { progressApi } from '../services/api';
 
 interface VideoTutorialsProps {
   lessons: VideoLesson[];
+  currentUser: AuthenticatedUser;
   onNavigateTo: (view: StudentSubView) => void;
   onUpdateVideoProgress: (id: string, progress: number) => void;
 }
@@ -36,6 +37,8 @@ type QuizDb = Record<string, { passed: boolean; percentage: number; score: numbe
 
 const WATCH_KEY = 'oophub_oop_video_progress';
 const QUIZ_KEY = 'oophub_oop_quiz_attempts';
+const getUserStorageKey = (key: string, user: AuthenticatedUser) =>
+  `${key}:${user.id || user.userId || user.email}`;
 
 const formatTime = (seconds: number) => {
   if (!Number.isFinite(seconds)) return '00:00';
@@ -56,9 +59,11 @@ const getLessonAccess = (lesson: VideoLesson, allLessons: VideoLesson[], watchDb
   return previousWatch?.completed && previousQuiz?.passed ? 'active' : 'locked';
 };
 
-export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress }: VideoTutorialsProps) {
-  const [watchDb, setWatchDb] = useState<WatchDb>(() => getStoredJson(WATCH_KEY, {}));
-  const [quizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
+export default function VideoTutorials({ lessons: sourceLessons, currentUser, onNavigateTo, onUpdateVideoProgress }: VideoTutorialsProps) {
+  const watchStorageKey = getUserStorageKey(WATCH_KEY, currentUser);
+  const quizStorageKey = getUserStorageKey(QUIZ_KEY, currentUser);
+  const [watchDb, setWatchDb] = useState<WatchDb>(() => getStoredJson(watchStorageKey, {}));
+  const [quizDb] = useState<QuizDb>(() => getStoredJson(quizStorageKey, {}));
   const lessons = useMemo(() => sourceLessons.map(lesson => {
     const watch = watchDb[lesson.id];
     const access = getLessonAccess(lesson, sourceLessons, watchDb, quizDb);
@@ -94,7 +99,7 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
   useEffect(() => {
     let isMounted = true;
     const token = localStorage.getItem('oophub_auth_token');
-    const user = localStorage.getItem('oophub_current_user_id');
+    const user = currentUser.id || currentUser.userId || currentUser.email;
     if (!token || !user) return;
 
     progressApi.getVideoProgress(user, token)
@@ -110,18 +115,15 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
           };
           return acc;
         }, {});
-        setWatchDb(prev => {
-          const next = { ...prev, ...remoteDb };
-          setStoredJson(WATCH_KEY, next);
-          return next;
-        });
+        setWatchDb(remoteDb);
+        setStoredJson(watchStorageKey, remoteDb);
       })
       .catch(error => console.warn('Unable to load video progress from backend:', error));
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser.id, currentUser.userId, currentUser.email, watchStorageKey]);
 
   useEffect(() => {
     if (!activeLesson) return;
@@ -168,7 +170,7 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
     };
 
     setWatchDb(nextDb);
-    setStoredJson(WATCH_KEY, nextDb);
+    setStoredJson(watchStorageKey, nextDb);
     progressApi.saveVideoProgress({
       videoId: activeLesson.id,
       lastPosition: position,
