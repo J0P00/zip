@@ -88,29 +88,14 @@ import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
 import AdminVideoManager from './components/AdminVideoManager';
 import AdminTermsManager from './components/AdminTermsManager';
-import { appApi, authApi, getAuthToken, isDemoEmail, practiceApi, recommendationApi, setAuthToken, userApi } from './services/api';
+import { appApi, authApi, getAuthToken, practiceApi, recommendationApi, setAuthToken, userApi } from './services/api';
 import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
-import { seedDemoStudentProgress } from './data/demoSeed';
-
-const DEMO_STUDENT_PROGRESS = {
-  streak: 15,
-  points: 3500,
-  completedLessonsCount: 11
-};
 
 const NEW_STUDENT_PROGRESS = {
   streak: 0,
   points: 0,
   completedLessonsCount: 0
 };
-
-const DEMO_STUDENT_GRADE = {
-  grade: 100,
-  feedback: "Outstanding work! All 11 OOP challenges and 5 Swing exercises completed with full test passes and excellent OOP principles.",
-  challenge: "Swing UI Dialog & OOP Integration"
-};
-
-const DEMO_STUDENT_BADGES = ['Inheritance Lab', 'Quiz Streak', 'Practice IDE', 'Swing Master', 'OOP Master'];
 
 const OOP_LESSON_COUNT = OOP_COURSE_LESSONS.length;
 const clampCompletedLessons = (count: number) => Math.min(Math.max(count, 0), OOP_LESSON_COUNT);
@@ -547,10 +532,6 @@ export default function App() {
   }, [currentUser?.email, currentUser?.id, persona]);
 
   useEffect(() => {
-    seedDemoStudentProgress();
-  }, []);
-
-  useEffect(() => {
     if (persona === 'public') return;
 
 
@@ -587,7 +568,7 @@ export default function App() {
         const restoredUser: AuthenticatedUser = {
           ...response.user,
           role: response.user.role as Persona,
-          accountSource: response.user.accountSource ?? (isDemoEmail(response.user.email, response.user.role) ? 'demo' : 'custom'),
+          accountSource: response.user.accountSource ?? 'custom',
           token
         };
 
@@ -640,9 +621,9 @@ export default function App() {
   }, [currentUser?.id, currentUser?.role, currentUser?.userId, currentUser?.email]);
 
   // Student Statistics State
-  const [streak, setStreak] = useState<number>(DEMO_STUDENT_PROGRESS.streak);
-  const [points, setPoints] = useState<number>(DEMO_STUDENT_PROGRESS.points);
-  const [completedLessonsCount, setCompletedLessonsCount] = useState<number>(DEMO_STUDENT_PROGRESS.completedLessonsCount);
+  const [streak, setStreak] = useState<number>(NEW_STUDENT_PROGRESS.streak);
+  const [points, setPoints] = useState<number>(NEW_STUDENT_PROGRESS.points);
+  const [completedLessonsCount, setCompletedLessonsCount] = useState<number>(NEW_STUDENT_PROGRESS.completedLessonsCount);
 
   // Dynamic shared database states
   const [videoLessons, setVideoLessons] = useState<VideoLesson[]>([]);
@@ -718,37 +699,8 @@ export default function App() {
       const saved = localStorage.getItem('oophub_monitoring_requests');
       if (saved) return JSON.parse(saved);
     } catch {}
-    
-    // Seed initial accepted connections for Elena Vance (demo teacher)
-    return [
-      {
-        id: 'req_1',
-        teacherEmail: 'elena@oophub.edu',
-        teacherName: 'Dr. Elena Vance',
-        studentEmail: 'dmitry@oophub.edu',
-        studentName: 'Dmitry Vance (Alex Mercer)',
-        studentId: 'STU-0001',
-        status: 'accepted'
-      },
-      {
-        id: 'req_2',
-        teacherEmail: 'elena@oophub.edu',
-        teacherName: 'Dr. Elena Vance',
-        studentEmail: 'rodriguez@oophub.edu',
-        studentName: 'S. Rodriguez',
-        studentId: 'STU-0002',
-        status: 'accepted'
-      },
-      {
-        id: 'req_3',
-        teacherEmail: 'elena@oophub.edu',
-        teacherName: 'Dr. Elena Vance',
-        studentEmail: 'volkov@oophub.edu',
-        studentName: 'Dmitry Volkov',
-        studentId: 'STU-0003',
-        status: 'accepted'
-      }
-    ];
+
+    return [];
   });
 
   useEffect(() => {
@@ -829,7 +781,7 @@ export default function App() {
   };
 
   const handleUpdateVideoProgress = (videoId: string, progress: number) => {
-    const userEmail = currentUser?.email || 'student@oophub.edu';
+    const userEmail = currentUser?.email || 'student@example.com';
     const studentProgress = recordVideoProgress(currentUser, videoId, progress);
     setLeaderboardUsers(prev => mergeCurrentProgressIntoLeaderboard(prev, currentUser, studentProgress, streak));
     setVideoLessons(prev => {
@@ -894,24 +846,7 @@ export default function App() {
   // Utility to lookup a student by email/ID
   const findStudentByEmailOrId = async (query: string) => {
     const normalized = query.trim().toLowerCase();
-    
-    // 1. Check default demo student
-    if ('dmitry@oophub.edu' === normalized || 'stu-0001' === normalized) {
-      return { name: 'Dmitry Vance (Alex Mercer)', email: 'dmitry@oophub.edu', userId: 'STU-0001' };
-    }
-    
-    // 2. Check other mock students
-    const mockStudents = [
-      { name: 'S. Rodriguez', email: 'rodriguez@oophub.edu', userId: 'STU-0002' },
-      { name: 'Dmitry Volkov', email: 'volkov@oophub.edu', userId: 'STU-0003' },
-      { name: 'J. Chen', email: 'chen@oophub.edu', userId: 'STU-0004' },
-      { name: 'Elena Rossi', email: 'rossi@oophub.edu', userId: 'STU-0005' },
-      { name: 'Liam Hughes', email: 'hughes@oophub.edu', userId: 'STU-0006' }
-    ];
-    const matched = mockStudents.find(s => s.email.toLowerCase() === normalized || s.userId.toLowerCase() === normalized);
-    if (matched) return matched;
-    
-    // 3. Check custom users in localStorage
+
     try {
       const saved = localStorage.getItem('oophub_users');
       if (saved) {
@@ -923,7 +858,6 @@ export default function App() {
       }
     } catch {}
 
-    // 4. Check registered backend users so deployed accounts can be invited.
     try {
       const response = await userApi.listUsers(currentUser?.token);
       const found = response.data.find((user: AuthenticatedUser) => {
@@ -945,7 +879,7 @@ export default function App() {
     } catch (error) {
       console.warn('Unable to search backend users for monitoring invitation:', error);
     }
-    
+
     return null;
   };
 
@@ -1007,38 +941,14 @@ export default function App() {
       return;
     }
 
-    const isDemoStudent =
-      currentUser.accountSource === 'demo' ||
-      isDemoEmail(currentUser.email, currentUser.role) ||
-      currentUser.email.toLowerCase() === 'dmitry@oophub.edu' ||
-      currentUser.email.toLowerCase() === 'student@oophub.edu';
-
-    if (isDemoStudent) {
-      seedDemoStudentProgress();
-    }
-
-    const progress = isDemoStudent ? DEMO_STUDENT_PROGRESS : NEW_STUDENT_PROGRESS;
     const studentProgress = ensureStudentProgress(currentUser);
-    const visibleProgress = isDemoStudent ? progress.completedLessonsCount : studentProgress.completedLessons;
+    const progress = NEW_STUDENT_PROGRESS;
 
     setStreak(progress.streak);
-    setPoints(isDemoStudent ? progress.points : studentProgress.overallProgress);
-    setCompletedLessonsCount(visibleProgress);
-    setRecentStudentGrade(isDemoStudent ? DEMO_STUDENT_GRADE : null);
-    setLeaderboardUsers(prev => isDemoStudent
-      ? prev.map(entry => (
-          entry.isCurrentUser
-            ? {
-                ...entry,
-                name: `${currentUser.name} (You)`,
-                points: progress.points,
-                streak: progress.streak,
-                badges: DEMO_STUDENT_BADGES
-              }
-            : entry
-        ))
-      : mergeCurrentProgressIntoLeaderboard(prev, currentUser, studentProgress, progress.streak)
-    );
+    setPoints(studentProgress.overallProgress);
+    setCompletedLessonsCount(studentProgress.completedLessons);
+    setRecentStudentGrade(null);
+    setLeaderboardUsers(prev => mergeCurrentProgressIntoLeaderboard(prev, currentUser, studentProgress, progress.streak));
   }, [currentUser?.accountSource, currentUser?.email, currentUser?.name, currentUser?.role]);
 
   // Core functions to interactively link dashboards together
@@ -1246,9 +1156,9 @@ export default function App() {
   const needsGradingCount = pendingSubmissions.filter(s => s.status === 'pending').length;
   const displayUser: AuthenticatedUser = currentUser ?? {
     name: persona === 'student' ? 'Student User' : persona === 'teacher' ? 'Teacher User' : 'Admin User',
-    email: persona === 'student' ? 'student@oophub.edu' : persona === 'teacher' ? 'teacher@oophub.edu' : 'admin@oophub.edu',
+    email: persona === 'student' ? 'student@example.com' : persona === 'teacher' ? 'teacher@example.com' : 'admin@example.com',
     role: persona === 'public' ? 'student' : persona,
-    accountSource: 'demo',
+    accountSource: 'custom',
     userId: persona === 'student' ? 'STU-0000' : persona === 'teacher' ? 'TEA-0000' : 'ADM-0000',
     registrationDate: '2026-06-01T00:00:00.000Z',
     accountStatus: 'Active',
@@ -1428,13 +1338,13 @@ export default function App() {
             setPersona(user.role);
             setAuthMode(null);
             if (user.role === 'student') {
-              const progress = user.accountSource === 'demo' ? DEMO_STUDENT_PROGRESS : NEW_STUDENT_PROGRESS;
+              const progress = NEW_STUDENT_PROGRESS;
 
               setStudentTab('dashboard');
               setStreak(progress.streak);
               setPoints(progress.points);
               setCompletedLessonsCount(progress.completedLessonsCount);
-              setRecentStudentGrade(user.accountSource === 'demo' ? DEMO_STUDENT_GRADE : null);
+              setRecentStudentGrade(null);
               setLeaderboardUsers(prev => prev.map(entry => (
                 entry.isCurrentUser
                   ? {
@@ -1442,7 +1352,7 @@ export default function App() {
                       name: `${user.name} (You)`,
                       points: progress.points,
                       streak: progress.streak,
-                      badges: user.accountSource === 'demo' ? DEMO_STUDENT_BADGES : []
+                      badges: []
                     }
                   : entry
               )));

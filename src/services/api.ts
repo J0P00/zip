@@ -186,15 +186,5 @@ export const appApi = {
   health: () => apiRequest<{ status?: string; message?: string }>('/health')
 };
 
-export const isDemoEmail = (email: string, role?: Persona) => {
-  const normalized = email.toLowerCase().trim();
-  return (
-    normalized === 'dmitry@oophub.edu' ||
-    normalized === 'student@oophub.edu' ||
-    normalized === 'elena@oophub.edu' ||
-    normalized === 'teacher@oophub.edu' ||
-    normalized === 'jericokunn@gmail.com' ||
-    normalized === 'admin@oophub.edu'
-  );
-};
+export const isDemoEmail = (_email: string, _role?: Persona) => false;
 
