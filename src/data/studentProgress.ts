@@ -77,10 +77,17 @@ export const getStudentProgressKey = (user?: Partial<AuthenticatedUser> | null) 
 
 const normalizeLookup = (value?: string | null) => String(value || '').trim().toLowerCase();
 
-const getStudentProgressAliases = (user?: Partial<AuthenticatedUser> | null) =>
-  [user?.id, user?.userId, user?.email, user?.studentNumber, user?.name]
+const getStudentProgressAliases = (user?: Partial<AuthenticatedUser> | null) => {
+  const primaryAliases = [user?.id, user?.userId, user?.email, user?.studentNumber]
     .filter(Boolean)
     .map(value => normalizeLookup(String(value)));
+
+  if (primaryAliases.length) return primaryAliases;
+
+  return [user?.name]
+    .filter(Boolean)
+    .map(value => normalizeLookup(String(value)));
+};
 
 const readDb = (): ProgressDb => {
   try {

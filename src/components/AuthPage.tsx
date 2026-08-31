@@ -796,9 +796,6 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                       />
                       Remember Me
                     </label>
-                    <span className="text-[11px] font-semibold text-slate-400">
-                      Default password: <span className="font-mono text-emerald-700 font-bold">password123</span>
-                    </span>
                   </div>
 
                   <button

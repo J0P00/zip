@@ -189,7 +189,7 @@ const upsertCurrentRegisteredStudent = (
 
   const displayName = `${currentUser.name} (You)`;
   const matchesCurrentUser = (entry: LeaderboardUser) =>
-    entry.isCurrentUser || entry.name === currentUser.name || entry.name === displayName;
+    entry.isCurrentUser || entry.name === displayName;
   const hasCurrentUser = users.some(matchesCurrentUser);
   const nextUsers = hasCurrentUser
     ? users.map(entry => matchesCurrentUser(entry)
