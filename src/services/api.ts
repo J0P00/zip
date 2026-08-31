@@ -187,14 +187,7 @@ export const appApi = {
 };
 
 export const isDemoEmail = (email: string, role?: Persona) => {
-  const normalized = email.toLowerCase().trim();
-  return (
-    normalized === 'dmitry@oophub.edu' ||
-    normalized === 'student@oophub.edu' ||
-    normalized === 'elena@oophub.edu' ||
-    normalized === 'teacher@oophub.edu' ||
-    normalized === 'jericokunn@gmail.com' ||
-    normalized === 'admin@oophub.edu'
-  );
+  void role;
+  return false;
 };
 

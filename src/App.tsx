@@ -547,10 +547,6 @@ export default function App() {
   }, [currentUser?.email, currentUser?.id, persona]);
 
   useEffect(() => {
-    seedDemoStudentProgress();
-  }, []);
-
-  useEffect(() => {
     if (persona === 'public') return;
 
 
