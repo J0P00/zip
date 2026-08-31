@@ -153,7 +153,7 @@ const STAGE_ROTATION: LearningStage[] = [
 
 const getStudentEmailByName = (name: string): string => {
   const normalized = name.replace(/\s*\(you\)/i, '').trim().toLowerCase();
-  if (normalized.includes('alex mercer') || normalized.includes('dmitry vance') || normalized.includes('dmitry')) return 'dmitry@oophub.edu';
+  if (normalized.includes('student') || normalized.includes('demo')) return 'student@school.edu';
   if (normalized.includes('sofia') || normalized.includes('rodriguez')) return 'rodriguez@oophub.edu';
   if (normalized.includes('volkov')) return 'volkov@oophub.edu';
   if (normalized.includes('chen')) return 'chen@oophub.edu';
@@ -165,8 +165,8 @@ const getStudentEmailByName = (name: string): string => {
 const baseStudents: LiveStudent[] = [
   {
     id: 'STU-0001',
-    name: 'Dmitry Vance (Alex Mercer)',
-    email: 'dmitry@oophub.edu',
+    name: 'Student Alpha',
+    email: 'student-alpha@school.edu',
     section: 'CS-3A',
     online: true,
     activity: 'Completed all Java OOP & Swing Modules',
@@ -221,8 +221,8 @@ const baseStudents: LiveStudent[] = [
   },
   {
     id: 'STU-0003',
-    name: 'Dmitry Volkov',
-    email: 'volkov@oophub.edu',
+    name: 'Student Gamma',
+    email: 'student-gamma@school.edu',
     section: 'IT-2A',
     online: false,
     activity: 'Offline',
@@ -336,10 +336,10 @@ const baseStudents: LiveStudent[] = [
 const getLiveSwingTopics = (studentEmail: string, fallbackVideo = 0, studentIndex = 0): SwingTopicProgress[] => {
   const normalized = studentEmail.toLowerCase();
   const isDemoStudent =
-    normalized.includes('dmitry') ||
-    normalized.includes('alex mercer') ||
     normalized.includes('student') ||
-    normalized === 'dmitry@oophub.edu';
+    normalized.includes('demo') ||
+    normalized.includes('oophub') ||
+    normalized.includes('school.edu');
 
   if (isDemoStudent) {
     return SWING_TOPICS.map(topic => ({
@@ -372,8 +372,8 @@ const getLiveSwingTopics = (studentEmail: string, fallbackVideo = 0, studentInde
 const withTopicProgress = (student: LiveStudent, studentIndex: number): LiveStudent => {
   const isMastered =
     student.overallProgress >= 100 ||
-    student.email.toLowerCase().includes('dmitry') ||
-    student.email.toLowerCase().includes('student');
+    student.email.toLowerCase().includes('student') ||
+    student.email.toLowerCase().includes('demo');
 
   return {
     ...student,
@@ -465,7 +465,7 @@ export default function TeacherPortal({
     {
       id: 'n1',
       title: 'Practice IDE submitted',
-      message: 'Dmitry Vance submitted Vehicle Subclass Override for automatic grading.',
+      message: 'A student submitted a Vehicle subclass override assignment for automatic grading.',
       timestamp: 'just now',
       type: 'ide'
     },
@@ -479,7 +479,7 @@ export default function TeacherPortal({
     {
       id: 'n3',
       title: 'Assessment alert',
-      message: 'Dmitry Volkov scored below threshold and received a review recommendation.',
+      message: 'A student scored below the threshold and received a review recommendation.',
       timestamp: '12 min ago',
       type: 'assessment'
     }
@@ -498,15 +498,15 @@ export default function TeacherPortal({
 
   const connectedStudents = acceptedRequests.map((request, index) => {
     const isDemoStudent =
-      request.studentEmail.toLowerCase() === 'dmitry@oophub.edu' ||
-      request.studentEmail.toLowerCase() === 'student@oophub.edu' ||
+      request.studentEmail.toLowerCase().includes('student') ||
+      request.studentEmail.toLowerCase().includes('demo') ||
       request.studentName.toLowerCase().includes('dmitry') ||
       request.studentName.toLowerCase().includes('alex mercer');
 
     if (isDemoStudent) {
       const student: LiveStudent = {
         id: request.studentId || 'STU-0001',
-        name: 'Dmitry Vance (Alex Mercer)',
+        name: 'Student Alpha',
         email: request.studentEmail,
         section: 'CS-3A',
         online: true,
@@ -1098,7 +1098,7 @@ export default function TeacherPortal({
                 <input
                   value={studentInput}
                   onChange={event => setStudentInput(event.target.value)}
-                  placeholder="student@oophub.edu or STU-0001"
+                  placeholder="student@school.edu or STU-0001"
                   className={`min-h-11 flex-1 rounded-xl border px-3 text-sm outline-none focus:border-emerald-600 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}
                 />
                 <button type="submit" disabled={isSendingInvite} className="rounded-xl bg-emerald-600 px-4 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-60">

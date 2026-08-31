@@ -319,23 +319,23 @@ for (Vehicle v : fleet) {
 ];
 
 export const INITIAL_LEADERBOARD_USERS: LeaderboardUser[] = [
-  { rank: 1, name: 'Alex Mercer', points: 3450, badges: ['Overachiever', 'Speedster', 'Clean Coder'], streak: 12, avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80', trend: 'stable' },
+  { rank: 1, name: 'Student Alpha', points: 3450, badges: ['Overachiever', 'Speedster', 'Clean Coder'], streak: 12, avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80', trend: 'stable' },
   { rank: 2, name: 'S. Rodriguez', points: 3120, badges: ['Bug Hunter', 'Refactoring Master'], streak: 8, avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80', trend: 'up' },
   { rank: 3, name: 'J. Chen', points: 2980, badges: ['Architecture Guru'], streak: 15, avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80', trend: 'down' },
-  { rank: 4, name: 'Elena Rossi', points: 2450, badges: ['Fast Learner'], streak: 6, avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&q=80', trend: 'up' },
+  { rank: 4, name: 'Student Delta', points: 2450, badges: ['Fast Learner'], streak: 6, avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&q=80', trend: 'up' },
   { rank: 5, name: 'You', points: 1950, badges: ['Rising Star', 'OOP Initiate'], streak: 5, isCurrentUser: true, avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80', trend: 'up' },
-  { rank: 6, name: 'Dmitry Volkov', points: 1840, badges: ['Memory leak finder'], streak: 4, avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80', trend: 'stable' },
+  { rank: 6, name: 'Student Beta', points: 1840, badges: ['Memory leak finder'], streak: 4, avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80', trend: 'stable' },
   { rank: 7, name: 'Liam Hughes', points: 1690, badges: ['Linter fanatic'], streak: 2, avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=150&q=80', trend: 'down' }
 ];
 
 export const INITIAL_SUBMISSIONS: PendingSubmission[] = [
   {
     id: 'sub_1',
-    studentName: 'Alex Mercer',
+    studentName: 'Student Alpha',
     challengeName: 'Inheritance Constraints with Vehicle/Car Override',
     submittedAt: 'Today, 2:15 PM',
     status: 'pending',
-    code: `// Alex Mercer - Car.java Submission
+    code: `// Student Alpha - Car.java Submission
 public class Car extends Vehicle {
     private int doors;
 
@@ -369,11 +369,11 @@ public class WinFactory implements GUIFactory {
   },
   {
     id: 'sub_3',
-    studentName: 'Dmitry Volkov',
+    studentName: 'Student Beta',
     challengeName: 'Inheritance Constraints with Vehicle/Car Override',
     submittedAt: 'Yesterday, 11:15 AM',
     status: 'reviewed',
-    code: `// Dmitry - Car.java
+    code: `// Student Beta - Car.java
 public class Car extends Vehicle {
     int doors;
     public Car(String b, int d) {
@@ -383,7 +383,7 @@ public class Car extends Vehicle {
     // Forgot to override displayInfo!
 }`,
     grade: 75,
-    feedback: 'Your constructor works fine, Dmitry. However, you forgot to override displayInfo() to print the doors parameter. Please check the remediation challenge and resubmit.'
+    feedback: 'Your constructor works fine. However, you forgot to override displayInfo() to print the doors parameter. Please review the remediation challenge and resubmit.'
   }
 ];
 

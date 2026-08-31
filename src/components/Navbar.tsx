@@ -57,7 +57,7 @@ export default function Navbar({
 
   // Mock Notifications
   const [notifications, setNotifications] = useState([
-    { id: 1, title: 'Submission Graded', desc: 'Your Vehicle class override constructor assignment was marked 100/100 by Dr. Elena Vance.', read: false, time: '10m ago' },
+    { id: 1, title: 'Submission Graded', desc: 'Your latest assignment was marked by the instructor.', read: false, time: '10m ago' },
     { id: 2, title: 'New Adaptive Challenge', desc: 'Recommendation engine suggested Polymorphism Diagnostics Quiz based on compiler practice results.', read: false, time: '1h ago' },
     { id: 3, title: 'Streak Milestone!', desc: 'You reached a 12-day coding consistency streak! Keep up the momentum.', read: true, time: '1d ago' }
   ]);
@@ -409,7 +409,7 @@ export default function Navbar({
               </button>
               <div className="p-3 border border-slate-100 dark:border-slate-800 rounded-xl text-left bg-slate-50/80 dark:bg-slate-900/40">
                 <span className="font-bold text-slate-700 dark:text-slate-300 block text-xs">🏫 Contact Course Advisor</span>
-                <span className="text-[11px] text-slate-400 block mt-0.5">Primary Instructor: <strong>Dr. Elena Vance</strong> (elena@oophub.edu)</span>
+                <span className="text-[11px] text-slate-400 block mt-0.5">Primary Instructor: <strong>Instructor</strong> (instructor@school.edu)</span>
               </div>
             </div>
           </div>

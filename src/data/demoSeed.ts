@@ -4,23 +4,19 @@ import { JAVA_SWING_ASSESSMENTS, JAVA_SWING_EXERCISES, JAVA_SWING_LESSONS, Swing
 import { PRACTICE_CHALLENGES } from './practiceChallenges';
 import { LessonProgressSummary, StudentOopProgress, STUDENT_PROGRESS_KEY } from './studentProgress';
 
-export const DEMO_STUDENT_EMAIL = 'dmitry@oophub.edu';
-export const DEMO_STUDENT_ALT_EMAIL = 'student@oophub.edu';
+export const DEMO_STUDENT_EMAIL = 'student@school.edu';
+export const DEMO_STUDENT_ALT_EMAIL = 'student-alt@school.edu';
 export const DEMO_STUDENT_ID = 'STU-0001';
-export const DEMO_STUDENT_NAME = 'Dmitry Vance (Alex Mercer)';
-
-export const DEMO_TEACHER_EMAIL = 'elena@oophub.edu';
-export const DEMO_TEACHER_ALT_EMAIL = 'teacher@oophub.edu';
+export const DEMO_STUDENT_NAME = 'Student User';
+export const DEMO_TEACHER_EMAIL = 'instructor@school.edu';
+export const DEMO_TEACHER_ALT_EMAIL = 'teacher@school.edu';
 export const DEMO_TEACHER_ID = 'TEA-0001';
-export const DEMO_TEACHER_NAME = 'Dr. Elena Vance';
-
-export const DEMO_ADMIN_EMAIL = 'jericokunn@gmail.com';
-export const DEMO_ADMIN_ALT_EMAIL = 'admin@oophub.edu';
+export const DEMO_TEACHER_NAME = 'Instructor';
+export const DEMO_ADMIN_EMAIL = 'admin@school.edu';
+export const DEMO_ADMIN_ALT_EMAIL = 'system-admin@school.edu';
 export const DEMO_ADMIN_ID = 'ADM-0001';
-export const DEMO_ADMIN_NAME = 'Jerico Vance (Admin)';
-
-export const DEMO_PASSWORD = 'password123';
-
+export const DEMO_ADMIN_NAME = 'System Administrator';
+export const DEMO_PASSWORD = 'changeme';
 const OOP_SAMPLE_SOLUTIONS: Record<string, string> = {
   practice_1: `public class Main {
     public static void main(String[] args) {

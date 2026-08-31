@@ -516,7 +516,7 @@ export default function StudentDashboard({
                   <p className="text-[11px] text-slate-600 leading-relaxed italic">
                     "{recentGrade.feedback}"
                   </p>
-                  <span className="text-[10px] text-slate-400 block text-right font-mono font-bold">Grader: Dr. Elena Vance</span>
+                  <span className="text-[10px] text-slate-400 block text-right font-mono font-bold">Grader: Instructor</span>
                 </div>
               </div>
             ) : (

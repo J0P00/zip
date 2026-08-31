@@ -336,6 +336,19 @@ const persistSessionUser = (user: AuthenticatedUser) => {
   }
 };
 
+const getUserCacheIdentity = (user?: Partial<AuthenticatedUser> | null) =>
+  String(user?.id || user?.userId || user?.email || '').trim();
+
+const clearUserProgressCaches = () => {
+  [LEADERBOARD_KEY, STUDENT_PROGRESS_KEY, PRACTICE_SUBMISSIONS_KEY, PENDING_SUBMISSIONS_KEY].forEach(key => {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Keep the active session functional even when browser storage is unavailable.
+    }
+  });
+};
+
 const clearSessionUser = () => {
   try {
     localStorage.removeItem(SESSION_USER_KEY);
@@ -344,6 +357,8 @@ const clearSessionUser = () => {
   } catch {
     // Logout should still complete even if storage cleanup is blocked.
   }
+
+  clearUserProgressCaches();
 };
 
 const readStoredJson = <T,>(key: string, fallback: T): T => {
@@ -688,7 +703,7 @@ export default function App() {
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
-  // Live reviews returned from Dr. Elena Vance
+  // Live reviews returned from the active instructor
   const [recentStudentGrade, setRecentStudentGrade] = useState<{ grade: number; feedback: string; challenge: string } | null>(
     null
   );
@@ -1333,29 +1348,31 @@ export default function App() {
           initialMode={authMode}
           onCancel={() => setAuthMode(null)}
           onAuthSuccess={(user) => {
+            const previousIdentity = getUserCacheIdentity(currentUser);
+            const nextIdentity = getUserCacheIdentity(user);
+
+            if (previousIdentity && nextIdentity && previousIdentity !== nextIdentity) {
+              clearUserProgressCaches();
+            }
+
             persistSessionUser(user);
             setCurrentUser(user);
             setPersona(user.role);
             setAuthMode(null);
             if (user.role === 'student') {
               const progress = NEW_STUDENT_PROGRESS;
+              const shouldResetStudentState = !previousIdentity || previousIdentity !== nextIdentity;
+
+              if (shouldResetStudentState) {
+                clearUserProgressCaches();
+                setLeaderboardUsers([]);
+              }
 
               setStudentTab('dashboard');
               setStreak(progress.streak);
               setPoints(progress.points);
               setCompletedLessonsCount(progress.completedLessonsCount);
               setRecentStudentGrade(null);
-              setLeaderboardUsers(prev => prev.map(entry => (
-                entry.isCurrentUser
-                  ? {
-                      ...entry,
-                      name: `${user.name} (You)`,
-                      points: progress.points,
-                      streak: progress.streak,
-                      badges: []
-                    }
-                  : entry
-              )));
             } else if (user.role === 'teacher') {
               setTeacherTab('dashboard');
             } else if (user.role === 'admin') {
@@ -1403,7 +1420,7 @@ export default function App() {
                     {persona === 'student' ? 'Student Workspace' : persona === 'teacher' ? 'Instructor Portal' : 'Admin Console'}
                   </h2>
                   <span className="text-[10px] text-slate-400 block mt-0.5 font-medium">
-                    {currentUser ? currentUser.name : (persona === 'student' ? 'Alex Mercer' : persona === 'teacher' ? 'Dr. Elena Vance' : 'Chief Curriculum Architect')}
+                    {currentUser ? currentUser.name : (persona === 'student' ? 'Student User' : persona === 'teacher' ? 'Instructor' : 'System Administrator')}
                   </span>
                 </div>
               </div>
@@ -1788,6 +1805,7 @@ export default function App() {
                   setPersona('public');
                   setCurrentUser(null);
                   setAuthToken('');
+                  setLeaderboardUsers([]);
                   clearSessionUser();
                   setAuthMode(null);
                 }}
