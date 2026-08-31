@@ -477,6 +477,12 @@ public class Main {
 ];
 
 export const isOopCourseComplete = () => {
+  const requireOopPrerequisite = false;
+
+  if (!requireOopPrerequisite) {
+    return true;
+  }
+
   const watchDb = getStoredJson<Record<string, { completed?: boolean; completionPercentage?: number }>>('oophub_oop_video_progress', {});
   const quizDb = getStoredJson<Record<string, { passed?: boolean; percentage?: number }>>('oophub_oop_quiz_attempts', {});
 
