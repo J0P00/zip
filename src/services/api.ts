@@ -98,6 +98,8 @@ export const progressApi = {
     }),
   getQuizAttempts: (studentId: string, token?: string) =>
     apiRequest<{ success: boolean; data: any[] }>(`/api/quiz-attempts/${studentId}`, { token }),
+  getStudentResults: (studentId: string, token?: string) =>
+    apiRequest<{ success: boolean; data: import('./interpretation').StudentResultsData }>(`/api/student-results/${encodeURIComponent(studentId)}`, { token }),
   saveQuizAttempt: (body: Record<string, unknown>) =>
     apiRequest<{ success: boolean; data: any }>('/api/quiz-attempts', {
       method: 'POST',
@@ -190,4 +192,3 @@ export const isDemoEmail = (email: string, role?: Persona) => {
   void role;
   return false;
 };
-
