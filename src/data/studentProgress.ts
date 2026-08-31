@@ -82,11 +82,7 @@ const getStudentProgressAliases = (user?: Partial<AuthenticatedUser> | null) => 
     .filter(Boolean)
     .map(value => normalizeLookup(String(value)));
 
-  if (primaryAliases.length) return primaryAliases;
-
-  return [user?.name]
-    .filter(Boolean)
-    .map(value => normalizeLookup(String(value)));
+  return primaryAliases;
 };
 
 const readDb = (): ProgressDb => {
@@ -207,17 +203,33 @@ const recompute = (snapshot: StudentOopProgress): StudentOopProgress => {
 };
 
 export const findStudentProgress = (...studentKeys: Array<string | undefined | null>) => {
-  const db = readDb();
   const normalizedKeys = studentKeys.map(normalizeLookup).filter(Boolean);
-  return Object.entries(db).find(([key, progress]) => {
+
+  if (!normalizedKeys.length) return undefined;
+
+  const db = readDb();
+  const matches = Object.entries(db).filter(([, progress]) => {
     const aliases = [
-      key,
       progress.studentId,
       progress.studentEmail,
       progress.studentName
     ].map(normalizeLookup);
+
     return normalizedKeys.some(candidate => aliases.includes(candidate));
-  })?.[1];
+  });
+
+  if (!matches.length) return undefined;
+
+  const exactMatches = matches.filter(([, progress]) => {
+    const identifiers = [
+      progress.studentId,
+      progress.studentEmail,
+      progress.studentName
+    ].map(normalizeLookup);
+    return normalizedKeys.some(candidate => identifiers.includes(candidate));
+  });
+
+  return exactMatches[0]?.[1] ?? undefined;
 };
 
 export const readStudentProgress = (studentKey: string) => findStudentProgress(studentKey);
