@@ -291,16 +291,16 @@ public class LayoutDemo extends JFrame {
       { label: 'String parsing', detail: 'Integer.parseInt()' }
     ],
     codeExample: `import javax.swing.JOptionPane;
-
+ 
 public class DialogDemo {
     public static void main(String[] args) {
         JOptionPane.showMessageDialog(null, "Welcome to Java Swing!");
         String name = JOptionPane.showInputDialog(null, "Enter your name:");
         String ageStr = JOptionPane.showInputDialog(null, "Enter age:");
-        
+         
         int age = Integer.parseInt(ageStr);
         int confirm = JOptionPane.showConfirmDialog(null, "Save information?", "Confirm", JOptionPane.YES_NO_OPTION);
-        
+         
         if (confirm == JOptionPane.YES_OPTION) {
             JOptionPane.showMessageDialog(null, "Name: " + name + "\\nAge: " + age, "Saved", JOptionPane.INFORMATION_MESSAGE);
         }
@@ -313,7 +313,91 @@ public class DialogDemo {
     ],
     summary: 'JOptionPane is used to show popups: showMessageDialog() for notifications, showInputDialog() for text inputs, and showConfirmDialog() for questions.',
     keyTakeaways: ['JOptionPane displays simple popups.', 'showInputDialog() returns text input.', 'Integer.parseInt() converts text to numbers.']
-  }
+ },
+ {
+   id: 'swing_lesson_6',
+   sequence: 6,
+   title: 'JComboBox and List Selection',
+   topics: ['JComboBox', 'DefaultComboBoxModel', 'JList', 'Selection event', 'User choice'],
+   objectives: ['Create dropdown selections with JComboBox.', 'Display options in a list with JList.', 'Handle user-selected values.'],
+   introduction: 'Selection components help users choose one or more valid options from a predefined list.',
+   content: ['Dropdown lists and list boxes are common in dashboards and forms.', 'JComboBox stores a list of options and exposes the selected value.', 'JList is useful when users need to view multiple entries and choose one or more.'],
+   diagram: [{ label: 'Selection', detail: 'User chooses from a list' }, { label: 'Store', detail: 'Model contains values' }, { label: 'Respond', detail: 'Handle selected item' }],
+   codeExample: `import javax.swing.*;\n\npublic class ComboDemo extends JFrame {\n    public ComboDemo() {\n        String[] fruits = {"Apple", "Banana", "Mango"};\n        JComboBox<String> combo = new JComboBox<>(fruits);\n        add(combo);\n        setSize(250, 150);\n        setDefaultCloseOperation(EXIT_ON_CLOSE);\n        setVisible(true);\n    }\n}`,
+   bestPractices: ['Populate combo boxes with real domain values.', 'Use item listeners when the selected option changes logic.', 'Keep options concise and readable.'],
+   summary: 'Dropdown lists help capture user choices in a compact, organized form.',
+   keyTakeaways: ['JComboBox is a dropdown.', 'JList supports multiple item display.', 'Selection events drive interactivity.']
+ },
+ {
+   id: 'swing_lesson_7',
+   sequence: 7,
+   title: 'JTable and Data Display',
+   topics: ['JTable', 'DefaultTableModel', 'rows', 'columns', 'table model'],
+   objectives: ['Display data in rows and columns.', 'Build table models for data content.', 'Understand how tables represent structured information.'],
+   introduction: 'Tables are used to present tabular data such as records, grades, or inventory items.',
+   content: ['A JTable arranges data in rows and columns.', 'The DefaultTableModel provides a simple data model that can be edited and displayed.', 'Tables are often shown in forms or dashboard panels.'],
+   diagram: [{ label: 'Table', detail: 'Rows and columns' }, { label: 'Model', detail: 'Stores data' }, { label: 'Display', detail: 'JTable renders content' }],
+   codeExample: `import javax.swing.*;\n\npublic class TableDemo extends JFrame {\n    public TableDemo() {\n        String[] columns = {"Name", "Score"};\n        Object[][] data = {{"Ana", 90}, {"Jeric", 88}};\n        JTable table = new JTable(data, columns);\n        add(new JScrollPane(table));\n        setSize(300, 200);\n        setDefaultCloseOperation(EXIT_ON_CLOSE);\n        setVisible(true);\n    }\n}`,
+   bestPractices: ['Use scroll panes for larger tables.', 'Keep column names clear and consistent.', 'Use table models when data is dynamic.'],
+   summary: 'JTable is the Swing component used for structured tabular data output.',
+   keyTakeaways: ['JTable shows rows and columns.', 'DefaultTableModel stores table data.', 'JScrollPane makes tables scrollable.']
+ },
+ {
+   id: 'swing_lesson_8',
+   sequence: 8,
+   title: 'Menus and Toolbar Actions',
+   topics: ['JMenuBar', 'JMenu', 'JMenuItem', 'Action', 'toolbar'],
+   objectives: ['Create menu bars and dropdown menus.', 'Add items that trigger actions.', 'Organize controls into a common navigation structure.'],
+   introduction: 'Menus organize commands and actions in an application interface so users can access them quickly.',
+   content: ['JMenuBar holds menus, and JMenu contains menu items.', 'JMenuItem represents a command the user can click.', 'These menu components are often part of desktop application interfaces.'],
+   diagram: [{ label: 'Menu Bar', detail: 'Top-level container' }, { label: 'Menu', detail: 'Groups commands' }, { label: 'Item', detail: 'Command or action' }],
+   codeExample: `import javax.swing.*;\n\npublic class MenuDemo extends JFrame {\n    public MenuDemo() {\n        JMenuBar menuBar = new JMenuBar();\n        JMenu fileMenu = new JMenu("File");\n        fileMenu.add(new JMenuItem("Open"));\n        menuBar.add(fileMenu);\n        setJMenuBar(menuBar);\n        setSize(300, 200);\n        setDefaultCloseOperation(EXIT_ON_CLOSE);\n        setVisible(true);\n    }\n}`,
+   bestPractices: ['Group commands by user task.', 'Use clear labels for menu items.', 'Keep menus shallow and easy to scan.'],
+   summary: 'Menu bars structure common actions and improve usability.',
+   keyTakeaways: ['JMenuBar groups menus.', 'JMenu contains related actions.', 'JMenuItem triggers commands.']
+ },
+ {
+   id: 'swing_lesson_9',
+   sequence: 9,
+   title: 'Icons, Borders, and Decor',
+   topics: ['ImageIcon', 'Border', 'setBorder()', 'padding', 'UI styling'],
+   objectives: ['Add icons and visual polish with ImageIcon.', 'Decorate containers with borders.', 'Improve the appearance of Swing forms.'],
+   introduction: 'Visual design in Swing helps communicate clarity and improves usability.',
+   content: ['Borders and icons make components easier to understand.', 'ImageIcon loads icons for buttons or labels.', 'Borders help group and distinguish content sections in forms.'],
+   diagram: [{ label: 'Icon', detail: 'Visual clue' }, { label: 'Border', detail: 'Decorates component' }, { label: 'Padding', detail: 'Spacing around content' }],
+   codeExample: `import javax.swing.*;\nimport javax.swing.border.*;\n\npublic class DecorDemo extends JFrame {\n    public DecorDemo() {\n        JLabel label = new JLabel("Welcome");\n        label.setBorder(BorderFactory.createTitledBorder("Status"));\n        add(label);\n        setSize(220, 160);\n        setDefaultCloseOperation(EXIT_ON_CLOSE);\n        setVisible(true);\n    }\n}`,
+   bestPractices: ['Use icons sparingly and consistently.', 'Avoid visual clutter in forms.', 'Apply borders to group related fields.'],
+   summary: 'Swing offers simple decoration tools to improve readability and interface polish.',
+   keyTakeaways: ['ImageIcon adds pictures.', 'Borders group content.', 'Good visual styling improves usability.']
+ },
+ {
+   id: 'swing_lesson_10',
+   sequence: 10,
+   title: 'Form Validation and Events',
+   topics: ['validation', 'DocumentListener', 'focus', 'input checking', 'error handling'],
+   objectives: ['Validate user input before submission.', 'Respond to focused events and value changes.', 'Prevent invalid form entries.'],
+   introduction: 'User input should be checked before it is accepted by the system to avoid invalid or unsafe actions.',
+   content: ['Swing forms often rely on event listeners to validate input values.', 'Checking for empty strings or invalid numbers prevents runtime errors.', 'Validation helps users understand what they need to correct.'],
+   diagram: [{ label: 'Input', detail: 'User enters data' }, { label: 'Check', detail: 'Validate before continue' }, { label: 'Submit', detail: 'Only accept valid values' }],
+   codeExample: `import javax.swing.*;\n\npublic class ValidationDemo extends JFrame {\n    public ValidationDemo() {\n        JTextField field = new JTextField(20);\n        JButton submit = new JButton("Submit");\n        submit.addActionListener(e -> {\n            if (field.getText().trim().isEmpty()) {\n                JOptionPane.showMessageDialog(this, "Field cannot be empty");\n            }\n        });\n        add(field);\n        add(submit);\n        setLayout(new BoxLayout(getContentPane(), BoxLayout.Y_AXIS));\n        setSize(260, 140);\n        setDefaultCloseOperation(EXIT_ON_CLOSE);\n        setVisible(true);\n    }\n}`,
+   bestPractices: ['Check for empty input before using it.', 'Show clear validation messages.', 'Validate both front-end and logic values.'],
+   summary: 'Validation ensures the form data is usable before continuing the workflow.',
+   keyTakeaways: ['Validation prevents bad input.', 'Events help respond to changes.', 'Clear feedback helps users correct mistakes.']
+ },
+ {
+   id: 'swing_lesson_11',
+   sequence: 11,
+   title: 'Building a Complete Swing App',
+   topics: ['app design', 'MVC thinking', 'components', 'flow', 'integration'],
+   objectives: ['Combine multiple Swing components into one interface.', 'Plan a small application flow.', 'Recognize how GUI components work together.'],
+   introduction: 'A complete Swing application combines multiple components into one consistent user interface.',
+   content: ['Applications often involve labels, fields, buttons, lists, menus, and actions working together.', 'A clear layout and consistent events make the application easier to maintain.', 'A strong desktop interface follows a readable information flow.'],
+   diagram: [{ label: 'Input', detail: 'Form components' }, { label: 'Action', detail: 'Buttons and menu items' }, { label: 'Output', detail: 'Tables, dialogs, and labels' }],
+   codeExample: `import javax.swing.*;\n\npublic class AppDemo extends JFrame {\n    public AppDemo() {\n        JLabel title = new JLabel("Student Portal");\n        JTextField field = new JTextField("Name");\n        JButton button = new JButton("Submit");\n        add(title);\n        add(field);\n        add(button);\n        setLayout(new BoxLayout(getContentPane(), BoxLayout.Y_AXIS));\n        setSize(300, 180);\n        setDefaultCloseOperation(EXIT_ON_CLOSE);\n        setVisible(true);\n    }\n}`,
+   bestPractices: ['Keep screens focused on one task.', 'Arrange controls in a natural reading order.', 'Use consistent labels and spacing.'],
+   summary: 'The best Swing applications combine simple components into a clear and useful user flow.',
+   keyTakeaways: ['Good design is organized.', 'UI components work together.', 'User-facing clarity matters.']
+ }
 ];
 
 export const JAVA_SWING_VIDEOS: SwingVideo[] = [
