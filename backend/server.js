@@ -652,44 +652,6 @@ const initializeDatabase = async () => {
     `);
 };
 
-const seedDemoUsers = async () => {
-    const demoUsers = [
-        ["Dmitry Vance (Alex Mercer)", "dmitry@oophub.edu", "password123", "student"],
-        ["Dr. Elena Vance", "elena@oophub.edu", "password123", "teacher"],
-        ["Jerico Vance (Admin)", "jericokunn@gmail.com", "password123", "admin"]
-    ];
-
-    for (const [name, email, password, role] of demoUsers) {
-        const existing = await pool.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email]);
-        if (existing.rowCount) continue;
-
-        const passwordHash = await bcrypt.hash(password, 12);
-        const userResult = await pool.query(`
-            INSERT INTO users (user_id, name, email, password_hash, role, terms_agreement_accepted, terms_accepted_at, terms_version)
-            VALUES ($1, $2, LOWER($3), $4, $5, TRUE, NOW(), '2026.06.26')
-            RETURNING id
-        `, [buildUserId(email, role), name, email, passwordHash, role]);
-        const id = userResult.rows[0].id;
-
-        if (role === "student") {
-            await pool.query(`
-                INSERT INTO students (user_id, student_number, course, year_level, section, program_status)
-                VALUES ($1, '2026-0001', 'BS Computer Science', '3rd Year', 'CS-3A', 'Regular')
-            `, [id]);
-        } else if (role === "teacher") {
-            await pool.query(`
-                INSERT INTO teachers (user_id, employee_id, department, specialization, assigned_courses)
-                VALUES ($1, 'EMP-0001', 'College of Computer Studies', 'Object-Oriented Programming', 'OOP 101, Advanced Java, Software Architecture')
-            `, [id]);
-        } else if (role === "admin") {
-            await pool.query(`
-                INSERT INTO admins (user_id, admin_id, system_role, access_level)
-                VALUES ($1, 'ADM-0001', 'Super Admin', 'Level 5 - Full Access')
-            `, [id]);
-        }
-    }
-};
-
 const seedLessons = async () => {
     const lessons = [
         [
@@ -2422,7 +2384,6 @@ const PORT = process.env.PORT || 5000;
 initializeDatabase()
     .then(async () => {
         try {
-            await seedDemoUsers();
             await seedLessons();
             await seedPracticeChallenges();
             console.log("Database seeded successfully.");
