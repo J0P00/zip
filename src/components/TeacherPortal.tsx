@@ -29,6 +29,8 @@ import {
 import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
 import { LeaderboardUser } from '../types';
 import Leaderboard from './Leaderboard';
+import { progressApi } from '../services/api';
+import { generateStudentResultsInterpretation, StudentResultsData, StudentResultsInterpretation } from '../services/interpretation';
 
 interface TeacherPortalProps {
   submissions: PendingSubmission[];
@@ -644,6 +646,38 @@ export default function TeacherPortal({
 
   const visibleStudents = connectedStudents;
   const selectedStudent = visibleStudents.find(student => student.id === selectedStudentId) ?? visibleStudents[0];
+  const [studentResults, setStudentResults] = useState<StudentResultsData | null>(null);
+  const [resultsLoading, setResultsLoading] = useState(false);
+  const [resultsError, setResultsError] = useState<string | null>(null);
+  const resultsInterpretation: StudentResultsInterpretation | null = studentResults
+    ? generateStudentResultsInterpretation(studentResults)
+    : null;
+
+  useEffect(() => {
+    if (!selectedStudent?.id) {
+      setStudentResults(null);
+      return;
+    }
+    let cancelled = false;
+    setResultsLoading(true);
+    setResultsError(null);
+    progressApi.getStudentResults(selectedStudent.id)
+      .then(response => {
+        if (!cancelled) setStudentResults(response.data);
+      })
+      .catch(error => {
+        if (!cancelled) {
+          setStudentResults(null);
+          setResultsError(error instanceof Error ? error.message : 'Unable to load student results.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setResultsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedStudent?.id]);
   const visibleStudentKeys = visibleStudents.flatMap(student => [student.id, student.email, student.name]);
   const visibleRecommendations = recommendationHistory.filter(item =>
     visibleStudentKeys.includes(item.studentId) ||
@@ -994,6 +1028,48 @@ export default function TeacherPortal({
                 </div>
               ))}
             </div>
+
+            <section className={`mt-5 rounded-2xl border p-5 ${isDark ? 'border-indigo-900 bg-indigo-950/30' : 'border-indigo-100 bg-indigo-50/40'}`}>
+              <div className="flex items-start gap-3">
+                <BarChart3 className="mt-0.5 h-5 w-5 shrink-0 text-indigo-600" />
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Interpretation of Results</p>
+                  <h4 className="mt-1 text-base font-black">Evidence-based learning interpretation</h4>
+                </div>
+              </div>
+              {resultsLoading && <p className="mt-4 text-xs font-semibold text-slate-500">Loading results from the student record...</p>}
+              {resultsError && <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">{resultsError}</p>}
+              {resultsInterpretation && studentResults && (
+                <div className="mt-4 grid gap-4 text-xs sm:grid-cols-2">
+                  <div className="rounded-xl bg-white/80 p-3 sm:col-span-2">
+                    <span className="font-black uppercase tracking-wider text-slate-400">Overall Performance</span>
+                    <p className="mt-1 text-sm font-black text-indigo-700">{resultsInterpretation.overallPerformance}</p>
+                  </div>
+                  {[
+                    ['Learning Progress Analysis', resultsInterpretation.learningProgressAnalysis],
+                    ['Assessment Performance', resultsInterpretation.assessmentPerformance],
+                    ['Programming Practice Performance', `${resultsInterpretation.programmingPracticePerformance} Java Swing submissions: ${studentResults.swingSubmissions}; completed activities: ${studentResults.swingCompletedActivities}; pending activities: ${studentResults.swingPendingActivities}.`]
+                  ].map(([title, text]) => (
+                    <div key={title} className="rounded-xl bg-white/80 p-3">
+                      <span className="font-black uppercase tracking-wider text-slate-400">{title}</span>
+                      <p className="mt-1 leading-relaxed text-slate-700">{text}</p>
+                    </div>
+                  ))}
+                  <div className="rounded-xl bg-white/80 p-3">
+                    <span className="font-black uppercase tracking-wider text-slate-400">Strengths</span>
+                    <ul className="mt-2 list-disc space-y-1 pl-4 text-slate-700">{resultsInterpretation.strengths.map(item => <li key={item}>{item}</li>)}</ul>
+                  </div>
+                  <div className="rounded-xl bg-white/80 p-3">
+                    <span className="font-black uppercase tracking-wider text-slate-400">Areas for Improvement</span>
+                    <ul className="mt-2 list-disc space-y-1 pl-4 text-slate-700">{resultsInterpretation.areasForImprovement.map(item => <li key={item}>{item}</li>)}</ul>
+                  </div>
+                  <div className="rounded-xl bg-white/80 p-3 sm:col-span-2">
+                    <span className="font-black uppercase tracking-wider text-slate-400">Recommended Next Steps</span>
+                    <p className="mt-1 leading-relaxed text-slate-700">{resultsInterpretation.recommendation}</p>
+                  </div>
+                </div>
+              )}
+            </section>
 
             <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/15 p-4">
               <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">Rule-Based Adaptive Learning</p>

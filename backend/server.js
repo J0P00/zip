@@ -1796,6 +1796,102 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
     }
 });
 
+app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", "admin", "student"]), async (req, res, next) => {
+    try {
+        if (req.authUser.role === "student" && req.authUser.id !== req.params.studentId) {
+            return res.status(403).json({ success: false, message: "Students can only view their own results." });
+        }
+        const studentId = req.params.studentId;
+        const identity = await pool.query(
+            "SELECT id FROM users WHERE id::text = $1 OR user_id = $1 OR LOWER(email) = LOWER($1) LIMIT 1",
+            [studentId]
+        );
+        if (!identity.rowCount) return res.status(404).json({ success: false, message: "Student not found." });
+        const dbStudentId = identity.rows[0].id;
+        const [course, videos, quizzes, practice, swing] = await Promise.all([
+            pool.query(`
+                SELECT COUNT(*)::int AS total_lessons,
+                       COUNT(*) FILTER (WHERE sp.completed AND COALESCE(qa.passed, FALSE) AND COALESCE(ps.score, 0) >= 70)::int AS completed_lessons
+                FROM lessons l
+                LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND sp.video_id = l.id
+                LEFT JOIN LATERAL (
+                  SELECT passed FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = l.id
+                  ORDER BY attempt_number DESC, date_completed DESC LIMIT 1
+                ) qa ON TRUE
+                LEFT JOIN LATERAL (
+                  SELECT ps.score FROM practice_submissions ps
+                  JOIN programming_challenges pc ON pc.id = ps.challenge_id
+                  WHERE ps.student_id = $1 AND pc.lesson_id = l.id
+                  ORDER BY ps.submitted_at DESC LIMIT 1
+                ) ps ON TRUE
+                WHERE l.status <> 'Archived'
+            `, [dbStudentId]),
+            pool.query(`
+                SELECT COUNT(*)::int AS total_videos,
+                       COUNT(*) FILTER (WHERE completed)::int AS completed_videos,
+                       COALESCE(ROUND(AVG(completion_percentage)), 0)::int AS video_percentage
+                FROM student_progress WHERE student_user_id = $1
+            `, [dbStudentId]),
+            pool.query(`
+                SELECT COUNT(*)::int AS quiz_attempts, COALESCE(ROUND(AVG(percentage)), 0)::int AS average_quiz_score
+                FROM (
+                  SELECT DISTINCT ON (assessment_id) percentage
+                  FROM quiz_attempts WHERE student_user_id = $1
+                  ORDER BY assessment_id, attempt_number DESC, date_completed DESC
+                ) latest
+            `, [dbStudentId]),
+            pool.query(`
+                SELECT COUNT(pc.id)::int AS total_practice_activities,
+                       COUNT(ps.id)::int AS submitted_practice_activities,
+                       COUNT(ps.id) FILTER (WHERE ps.score >= 70)::int AS completed_practice_activities
+                FROM programming_challenges pc
+                LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND ps.student_id = $1
+                WHERE pc.status <> 'Archived'
+            `, [dbStudentId]),
+            pool.query(`
+                SELECT COUNT(DISTINCT ss.id)::int AS swing_submissions,
+                       COUNT(DISTINCT sp.id) FILTER (WHERE sp.content_completed OR sp.video_completed OR sp.quiz_passed OR sp.exercise_completed)::int AS swing_completed_activities,
+                       COUNT(DISTINCT sl.id) FILTER (WHERE NOT (COALESCE(sp.content_completed, FALSE) AND COALESCE(sp.video_completed, FALSE) AND COALESCE(sp.quiz_passed, FALSE) AND COALESCE(sp.exercise_completed, FALSE)))::int AS swing_pending_activities
+                FROM swing_lessons sl
+                LEFT JOIN swing_progress sp ON sp.lesson_id = sl.id AND sp.student_id = $1
+                LEFT JOIN swing_programming_exercises se ON se.lesson_id = sl.id
+                LEFT JOIN swing_submissions ss ON ss.exercise_id = se.id AND ss.student_id = $1
+            `, [dbStudentId])
+        ]);
+        const row = { ...course.rows[0], ...videos.rows[0], ...quizzes.rows[0], ...practice.rows[0], ...swing.rows[0] };
+        const totalLessons = Number(row.total_lessons || 0);
+        const totalVideos = Number(row.total_videos || totalLessons);
+        const submittedPracticeActivities = Number(row.submitted_practice_activities || 0);
+        const totalPracticeActivities = Number(row.total_practice_activities || 0);
+        const overallProgress = totalLessons
+            ? Math.round((Number(row.completed_lessons || 0) / totalLessons) * 100)
+            : 0;
+        res.json({
+            success: true,
+            data: {
+                overallProgress,
+                completedLessons: Number(row.completed_lessons || 0),
+                totalLessons,
+                completedVideos: Number(row.completed_videos || 0),
+                totalVideos,
+                videoPercentage: Number(row.video_percentage || 0),
+                averageQuizScore: Number(row.average_quiz_score || 0),
+                quizAttempts: Number(row.quiz_attempts || 0),
+                completedPracticeActivities: Number(row.completed_practice_activities || 0),
+                submittedPracticeActivities,
+                totalPracticeActivities,
+                practiceCompletionRate: totalPracticeActivities ? Math.round((submittedPracticeActivities / totalPracticeActivities) * 100) : 0,
+                swingSubmissions: Number(row.swing_submissions || 0),
+                swingCompletedActivities: Number(row.swing_completed_activities || 0),
+                swingPendingActivities: Number(row.swing_pending_activities || 0),
+                hasActivity: Number(row.completed_videos || 0) > 0 || Number(row.quiz_attempts || 0) > 0 || submittedPracticeActivities > 0 || Number(row.swing_submissions || 0) > 0
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.put("/api/progress", requireAuth, async (req, res, next) => {
     try {
         const { videoId, lastPosition = 0, completionPercentage = 0, completed = false, notes = "" } = req.body || {};
