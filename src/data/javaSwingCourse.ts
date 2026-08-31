@@ -1,5 +1,5 @@
 import { ChallengeTestResult, ProgrammingChallenge } from '../types';
-import { CourseQuestion, getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from './oopCourse';
+import { CourseQuestion, getStoredJson, getUserStorageKey, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from './oopCourse';
 import { SWING_QUESTION_BANKS } from './javaSwingQuestions';
 
 export const SWING_WATCH_KEY = 'oophub_swing_lesson_progress';
@@ -7,6 +7,14 @@ export const SWING_QUIZ_KEY = 'oophub_swing_quiz_attempts';
 export const SWING_DRAFT_KEY = 'oophub_swing_practice_drafts';
 export const SWING_SUBMISSION_KEY = 'oophub_swing_submissions';
 export const SWING_PASSING_PERCENTAGE = 80;
+
+export const getSwingStorageKeys = (user?: { id?: string; userId?: string; email?: string } | null) => ({
+  watch: getUserStorageKey(SWING_WATCH_KEY, user),
+  quiz: getUserStorageKey(SWING_QUIZ_KEY, user),
+  draft: getUserStorageKey(SWING_DRAFT_KEY, user),
+  submission: getUserStorageKey(SWING_SUBMISSION_KEY, user),
+  quizHistory: getUserStorageKey('oophub_swing_quiz_history', user)
+});
 
 export interface SwingLesson {
   id: string;
@@ -476,9 +484,11 @@ public class Main {
   }
 ];
 
-export const isOopCourseComplete = () => {
-  const watchDb = getStoredJson<Record<string, { completed?: boolean; completionPercentage?: number }>>('oophub_oop_video_progress', {});
-  const quizDb = getStoredJson<Record<string, { passed?: boolean; percentage?: number }>>('oophub_oop_quiz_attempts', {});
+export const isOopCourseComplete = (user?: { id?: string; userId?: string; email?: string } | null) => {
+  const watchKey = getUserStorageKey('oophub_oop_video_progress', user);
+  const quizKey = getUserStorageKey('oophub_oop_quiz_attempts', user);
+  const watchDb = getStoredJson<Record<string, { completed?: boolean; completionPercentage?: number }>>(watchKey, {});
+  const quizDb = getStoredJson<Record<string, { passed?: boolean; percentage?: number }>>(quizKey, {});
 
   const allLessonsCompleted = OOP_COURSE_LESSONS.every(lesson =>
     Boolean(watchDb[lesson.id]?.completed) || Number(watchDb[lesson.id]?.completionPercentage || 0) >= 95
@@ -490,10 +500,11 @@ export const isOopCourseComplete = () => {
   return allLessonsCompleted && allAssessmentsPassed;
 };
 
-export const getSwingCourseProgress = () => {
-  const progressDb = getStoredJson<SwingProgressDb>(SWING_WATCH_KEY, {});
-  const quizDb = getStoredJson<SwingQuizDb>(SWING_QUIZ_KEY, {});
-  const submissionDb = getStoredJson<Record<string, unknown>>(SWING_SUBMISSION_KEY, {});
+export const getSwingCourseProgress = (user?: { id?: string; userId?: string; email?: string } | null) => {
+  const storageKeys = getSwingStorageKeys(user);
+  const progressDb = getStoredJson<SwingProgressDb>(storageKeys.watch, {});
+  const quizDb = getStoredJson<SwingQuizDb>(storageKeys.quiz, {});
+  const submissionDb = getStoredJson<Record<string, unknown>>(storageKeys.submission, {});
   const completedLessons = JAVA_SWING_LESSONS.filter(lesson =>
     progressDb[lesson.id]?.contentCompleted && progressDb[lesson.id]?.videoCompleted
   ).length;
@@ -504,7 +515,7 @@ export const getSwingCourseProgress = () => {
   const totalUnits = JAVA_SWING_LESSONS.length + JAVA_SWING_ASSESSMENTS.length + JAVA_SWING_EXERCISES.length;
 
   return {
-    unlocked: isOopCourseComplete(),
+    unlocked: isOopCourseComplete(user),
     completedLessons,
     passedQuizzes,
     completedExercises,

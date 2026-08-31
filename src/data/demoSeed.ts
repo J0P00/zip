@@ -1,5 +1,5 @@
 import { AuthenticatedUser, MonitoringRequest, PendingSubmission, PracticeSubmission } from '../types';
-import { CourseQuestion, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from './oopCourse';
+import { CourseQuestion, getUserStorageKey, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from './oopCourse';
 import { JAVA_SWING_ASSESSMENTS, JAVA_SWING_EXERCISES, JAVA_SWING_LESSONS, SwingLessonProgress, SwingQuizAttempt } from './javaSwingCourse';
 import { PRACTICE_CHALLENGES } from './practiceChallenges';
 import { LessonProgressSummary, StudentOopProgress, STUDENT_PROGRESS_KEY } from './studentProgress';
@@ -378,7 +378,7 @@ export const seedDemoStudentProgress = () => {
         lastPosition: 900
       };
     });
-    localStorage.setItem('oophub_oop_video_progress', JSON.stringify(oopVideoProgress));
+    localStorage.setItem(getUserStorageKey('oophub_oop_video_progress', { id: DEMO_STUDENT_ID, email: DEMO_STUDENT_EMAIL }), JSON.stringify(oopVideoProgress));
 
     // 2. OOP Quiz Attempts (11/11 Assessments Passed 100%)
     const oopQuizAttempts: Record<string, any> = {};
@@ -401,7 +401,7 @@ export const seedDemoStudentProgress = () => {
         dateCompleted: timestamp
       };
     });
-    localStorage.setItem('oophub_oop_quiz_attempts', JSON.stringify(oopQuizAttempts));
+    localStorage.setItem(getUserStorageKey('oophub_oop_quiz_attempts', { id: DEMO_STUDENT_ID, email: DEMO_STUDENT_EMAIL }), JSON.stringify(oopQuizAttempts));
 
     // 3. OOP Practice Submissions (11/11 Challenges Passed 100%)
     let existingPractice: Record<string, PracticeSubmission> = {};
@@ -494,7 +494,7 @@ export const seedDemoStudentProgress = () => {
         completedAt: timestamp
       };
     });
-    localStorage.setItem('oophub_swing_lesson_progress', JSON.stringify(swingWatchDb));
+    localStorage.setItem(getUserStorageKey('oophub_swing_lesson_progress', { id: DEMO_STUDENT_ID, email: DEMO_STUDENT_EMAIL }), JSON.stringify(swingWatchDb));
 
     // 5. Java Swing Quiz Attempts (5/5 Quizzes Passed 100%)
     const swingQuizDb: Record<string, SwingQuizAttempt> = {};
@@ -520,8 +520,8 @@ export const seedDemoStudentProgress = () => {
       swingQuizDb[assessment.id] = attempt;
       swingQuizHistory.push(attempt);
     });
-    localStorage.setItem('oophub_swing_quiz_attempts', JSON.stringify(swingQuizDb));
-    localStorage.setItem('oophub_swing_quiz_history', JSON.stringify(swingQuizHistory));
+    localStorage.setItem(getUserStorageKey('oophub_swing_quiz_attempts', { id: DEMO_STUDENT_ID, email: DEMO_STUDENT_EMAIL }), JSON.stringify(swingQuizDb));
+    localStorage.setItem(getUserStorageKey('oophub_swing_quiz_history', { id: DEMO_STUDENT_ID, email: DEMO_STUDENT_EMAIL }), JSON.stringify(swingQuizHistory));
 
     // 6. Java Swing Submissions (5/5 Exercises Submitted & Passed 100%)
     let existingSwingSubmissions: Record<string, PracticeSubmission> = {};

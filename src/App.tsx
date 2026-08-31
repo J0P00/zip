@@ -345,7 +345,10 @@ const readWorkspaceView = (): WorkspaceViewState => {
 const persistSessionUser = (user: AuthenticatedUser) => {
   try {
     localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
-    if (user.id) localStorage.setItem('oophub_current_user_id', user.id);
+    localStorage.setItem('oophub_current_user_id', user.id || user.userId || user.email);
+    localStorage.setItem('oophub_current_user_email', user.email);
+
+    ['oophub_oop_video_progress', 'oophub_oop_quiz_attempts', 'oophub_practice_submissions', 'oophub_practice_drafts', 'oophub_swing_lesson_progress', 'oophub_swing_quiz_attempts', 'oophub_swing_quiz_history', 'oophub_swing_submissions', 'oophub_swing_practice_drafts'].forEach(key => localStorage.removeItem(key));
   } catch {
     // The active React session still works if storage is unavailable.
   }
@@ -356,6 +359,7 @@ const clearSessionUser = () => {
     localStorage.removeItem(SESSION_USER_KEY);
     localStorage.removeItem(SESSION_VIEW_KEY);
     localStorage.removeItem('oophub_current_user_id');
+    localStorage.removeItem('oophub_current_user_email');
   } catch {
     // Logout should still complete even if storage cleanup is blocked.
   }

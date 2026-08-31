@@ -537,6 +537,24 @@ export const getStoredJson = <T,>(key: string, fallback: T): T => {
   }
 };
 
+export type UserStorageIdentity = {
+  id?: string;
+  userId?: string;
+  email?: string;
+};
+
+export const getUserStorageKey = (baseKey: string, user?: UserStorageIdentity | null) => {
+  const memberId = user?.id || user?.userId || user?.email || 'guest';
+  const normalized = String(memberId).trim();
+
+  if (!normalized || normalized === 'guest') {
+    return baseKey;
+  }
+
+  const safeSuffix = normalized.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return safeSuffix ? `${baseKey}_${safeSuffix}` : baseKey;
+};
+
 export const setStoredJson = <T,>(key: string, value: T) => {
   localStorage.setItem(key, JSON.stringify(value));
 };

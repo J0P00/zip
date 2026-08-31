@@ -21,7 +21,7 @@ import {
   Check
 } from 'lucide-react';
 import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
-import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
+import { getStoredJson, getUserStorageKey, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
 import { getSwingCourseProgress } from '../data/javaSwingCourse';
 import { getCurrentPracticeChallenge, PRACTICE_CHALLENGES } from '../data/practiceChallenges';
 import RecommendationCard from './RecommendationCard';
@@ -106,9 +106,9 @@ export default function StudentDashboard({
   const pendingRequests = monitoringRequests.filter(
     req => req.studentEmail.toLowerCase() === currentUser.email.toLowerCase() && req.status === 'pending'
   );
-  const watchDb = getStoredJson<Record<string, any>>('oophub_oop_video_progress', {});
-  const quizDb = getStoredJson<Record<string, any>>('oophub_oop_quiz_attempts', {});
-  const submissionDb = getStoredJson<Record<string, any>>('oophub_practice_submissions', {});
+  const watchDb = getStoredJson<Record<string, any>>(getUserStorageKey('oophub_oop_video_progress', currentUser), {});
+  const quizDb = getStoredJson<Record<string, any>>(getUserStorageKey('oophub_oop_quiz_attempts', currentUser), {});
+  const submissionDb = getStoredJson<Record<string, any>>(getUserStorageKey('oophub_practice_submissions', currentUser), {});
   const activePractice = getCurrentPracticeChallenge();
   const activeLesson = OOP_COURSE_LESSONS.find(lesson => lesson.id === activePractice.lessonId) || OOP_COURSE_LESSONS[0];
   const activeAssessment = OOP_ASSESSMENTS.find(assessment => assessment.id === activePractice.assessmentId) || OOP_ASSESSMENTS[0];
@@ -125,7 +125,7 @@ export default function StudentDashboard({
   const learningState = performanceIndex >= 85 ? 'Mastered' : performanceIndex >= 60 ? 'Developing' : 'Beginner';
   const learningStateClass = performanceIndex >= 85 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : performanceIndex >= 60 ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-sky-100 text-sky-800 border border-sky-200';
   const performanceClass = performanceIndex >= 85 ? 'Mastered' : performanceIndex >= 70 ? 'Completed' : 'In Progress';
-  const swingProgress = getSwingCourseProgress();
+  const swingProgress = getSwingCourseProgress(currentUser);
   const pendingAssessments = OOP_ASSESSMENTS
     .map(assessment => {
       const lesson = OOP_COURSE_LESSONS.find(item => item.id === assessment.lessonId);

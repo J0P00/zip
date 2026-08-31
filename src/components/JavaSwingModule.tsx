@@ -21,17 +21,14 @@ import {
 import { AuthenticatedUser, PracticeSubmission } from '../types';
 import { getStoredJson, setStoredJson, shuffleArray } from '../data/oopCourse';
 import {
+  getSwingStorageKeys,
   gradeSwingSource,
   isOopCourseComplete,
   JAVA_SWING_ASSESSMENTS,
   JAVA_SWING_EXERCISES,
   JAVA_SWING_LESSONS,
   JAVA_SWING_VIDEOS,
-  SWING_DRAFT_KEY,
   SWING_PASSING_PERCENTAGE,
-  SWING_QUIZ_KEY,
-  SWING_SUBMISSION_KEY,
-  SWING_WATCH_KEY,
   SwingLesson,
   SwingLessonProgress,
   SwingProgressDb,
@@ -60,8 +57,6 @@ type SwingGradeResult = {
   testResults: PracticeSubmission['testResults'];
 };
 
-const QUIZ_HISTORY_KEY = 'oophub_swing_quiz_history';
-
 const formatDateTime = (value: string) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
@@ -72,14 +67,15 @@ const getLessonCompleted = (lessonId: string, progressDb: SwingProgressDb) =>
 
 export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlocked, theme }: JavaSwingModuleProps) {
   const isDark = theme === 'dark';
-  const [isUnlocked, setIsUnlocked] = useState(() => isOopCourseComplete());
+  const swingKeys = useMemo(() => getSwingStorageKeys(currentUser), [currentUser.email, currentUser.id, currentUser.userId]);
+  const [isUnlocked, setIsUnlocked] = useState(() => isOopCourseComplete(currentUser));
   const [activeTab, setActiveTab] = useState<SwingTab>('lessons');
   const [activeLessonId, setActiveLessonId] = useState(JAVA_SWING_LESSONS[0].id);
-  const [progressDb, setProgressDb] = useState<SwingProgressDb>(() => getStoredJson(SWING_WATCH_KEY, {}));
-  const [quizDb, setQuizDb] = useState<SwingQuizDb>(() => getStoredJson(SWING_QUIZ_KEY, {}));
-  const [quizHistory, setQuizHistory] = useState<SwingQuizAttempt[]>(() => getStoredJson(QUIZ_HISTORY_KEY, []));
-  const [draftDb, setDraftDb] = useState<DraftDb>(() => getStoredJson(SWING_DRAFT_KEY, {}));
-  const [submissionDb, setSubmissionDb] = useState<SubmissionDb>(() => getStoredJson(SWING_SUBMISSION_KEY, {}));
+  const [progressDb, setProgressDb] = useState<SwingProgressDb>(() => getStoredJson(swingKeys.watch, {}));
+  const [quizDb, setQuizDb] = useState<SwingQuizDb>(() => getStoredJson(swingKeys.quiz, {}));
+  const [quizHistory, setQuizHistory] = useState<SwingQuizAttempt[]>(() => getStoredJson(swingKeys.quizHistory, []));
+  const [draftDb, setDraftDb] = useState<DraftDb>(() => getStoredJson(swingKeys.draft, {}));
+  const [submissionDb, setSubmissionDb] = useState<SubmissionDb>(() => getStoredJson(swingKeys.submission, {}));
   const [quizQuestions, setQuizQuestions] = useState<CourseQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [quizIndex, setQuizIndex] = useState(0);
@@ -99,7 +95,7 @@ export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlo
   const [sourceCode, setSourceCode] = useState(() => submitted?.sourceCode || draftDb[submissionKey] || activeExercise.starterCode);
 
   useEffect(() => {
-    const unlocked = isOopCourseComplete();
+    const unlocked = isOopCourseComplete(currentUser);
     setIsUnlocked(unlocked);
     if (unlocked) {
       setNotice('Java Swing Programming unlocked. Welcome to the desktop UI track.');
@@ -175,7 +171,7 @@ export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlo
     };
     const next = { ...progressDb, [activeLesson.id]: nextRecord };
     setProgressDb(next);
-    setStoredJson(SWING_WATCH_KEY, next);
+    setStoredJson(swingKeys.watch, next);
     setNotice(field === 'videoCompleted' ? 'Video completion saved.' : 'Lesson content marked complete.');
     window.setTimeout(() => setNotice(''), 2400);
   };
@@ -222,8 +218,8 @@ export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlo
     const nextHistory = [attempt, ...quizHistory].slice(0, 100);
     setQuizDb(nextDb);
     setQuizHistory(nextHistory);
-    setStoredJson(SWING_QUIZ_KEY, nextDb);
-    setStoredJson(QUIZ_HISTORY_KEY, nextHistory);
+    setStoredJson(swingKeys.quiz, nextDb);
+    setStoredJson(swingKeys.quizHistory, nextHistory);
     setLatestAttempt(attempt);
     setQuizMode('result');
     setNotice(attempt.passed ? 'Quiz passed. Programming practice is now unlocked.' : 'Quiz saved. You can retake until you reach 80%.');
@@ -234,7 +230,7 @@ export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlo
     setSourceCode(value);
     const next = { ...draftDb, [submissionKey]: value };
     setDraftDb(next);
-    setStoredJson(SWING_DRAFT_KEY, next);
+    setStoredJson(swingKeys.draft, next);
   };
 
   const runCode = () => {
@@ -299,7 +295,7 @@ export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlo
     window.setTimeout(() => {
       const next = { ...submissionDb, [submissionKey]: submission };
       setSubmissionDb(next);
-      setStoredJson(SWING_SUBMISSION_KEY, next);
+      setStoredJson(swingKeys.submission, next);
       setLastResult(result);
       setConsoleLogs(['Final Swing submission saved.', `Score: ${result.score}%`, `Submitted: ${formatDateTime(now)}`]);
       onSubmitCompleted(submission);
