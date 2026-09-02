@@ -756,29 +756,7 @@ export default function TeacherPortal({
       })
       .catch(error => {
         if (!cancelled) {
-          const isBackendStudent = backendStudents.some(student => student.id === selectedStudent.id);
-          if (isBackendStudent) {
-            setStudentResults({
-              overallProgress: selectedStudent.overallProgress,
-              completedLessons: 0,
-              totalLessons: 0,
-              completedVideos: 0,
-              totalVideos: 0,
-              videoPercentage: selectedStudent.videoCompletion,
-              averageQuizScore: selectedStudent.quizScore,
-              quizAttempts: 0,
-              completedPracticeActivities: 0,
-              submittedPracticeActivities: 0,
-              totalPracticeActivities: 0,
-              practiceCompletionRate: selectedStudent.practiceScore,
-              swingSubmissions: selectedStudent.swing.ide > 0 ? 1 : 0,
-              swingCompletedActivities: selectedStudent.swing.video > 0 ? 1 : 0,
-              swingPendingActivities: 0,
-              hasActivity: selectedStudent.overallProgress > 0 || selectedStudent.videoCompletion > 0 || selectedStudent.quizScore > 0 || selectedStudent.practiceScore > 0
-            });
-          } else {
-            setStudentResults(null);
-          }
+          setStudentResults(null);
           setResultsError(error instanceof Error ? error.message : 'Unable to load student results.');
         }
       })
@@ -788,7 +766,7 @@ export default function TeacherPortal({
     return () => {
       cancelled = true;
     };
-  }, [backendStudents, currentUser.token, selectedStudent?.id]);
+  }, [activeTab, backendStudents, currentUser.token, selectedStudent?.id]);
   const visibleStudentKeys = visibleStudents.flatMap(student => [student.id, student.email, student.name]);
   const visibleRecommendations = recommendationHistory.filter(item =>
     visibleStudentKeys.includes(item.studentId) ||
@@ -1240,19 +1218,40 @@ export default function TeacherPortal({
               {resultsInterpretation && studentResults && (
                 <div className="mt-4 grid gap-4 text-xs sm:grid-cols-2">
                   <div className="rounded-xl bg-white/80 p-3 sm:col-span-2">
-                    <span className="font-black uppercase tracking-wider text-slate-400">Overall Performance</span>
-                    <p className="mt-1 text-sm font-black text-indigo-700">{resultsInterpretation.overallPerformance}</p>
+                    <span className="font-black uppercase tracking-wider text-slate-400">Current Learning Stage</span>
+                    <p className="mt-1 text-sm font-black text-indigo-700">{resultsInterpretation.currentLearningStage}</p>
+                    <div className="mt-3 flex flex-wrap gap-2 font-black">
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">Java OOP: {resultsInterpretation.oopResult}</span>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-600">Java Swing: {resultsInterpretation.swingStatus}</span>
+                      {resultsInterpretation.swingResult && <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">Swing Result: {resultsInterpretation.swingResult}</span>}
+                    </div>
                   </div>
                   {[
                     ['Learning Progress Analysis', resultsInterpretation.learningProgressAnalysis],
                     ['Assessment Performance', resultsInterpretation.assessmentPerformance],
-                    ['Programming Practice Performance', `${resultsInterpretation.programmingPracticePerformance} Java Swing submissions: ${studentResults.swingSubmissions}; completed activities: ${studentResults.swingCompletedActivities}; pending activities: ${studentResults.swingPendingActivities}.`]
+                    ['Programming Practice Performance', resultsInterpretation.programmingPracticePerformance]
                   ].map(([title, text]) => (
                     <div key={title} className="rounded-xl bg-white/80 p-3">
                       <span className="font-black uppercase tracking-wider text-slate-400">{title}</span>
                       <p className="mt-1 leading-relaxed text-slate-700">{text}</p>
                     </div>
                   ))}
+                  <div className="rounded-xl bg-white/80 p-3 sm:col-span-2">
+                    <span className="font-black uppercase tracking-wider text-slate-400">Java OOP Topic Evidence</span>
+                    <div className="mt-2 space-y-2">
+                      {(studentResults.oopTopics || []).filter(topic => topic.attempted).map(topic => (
+                        <div key={topic.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px]">
+                          <span className="font-black">{topic.title}</span>
+                          <span className="ml-2 text-slate-600">{topic.lessonCompleted ? 'Completed' : 'In Progress'} | Video {topic.videoPercentage === null ? 'Insufficient data' : `${topic.videoPercentage}%`} | Assessment {topic.quizPercentage === null ? 'Insufficient data' : `${topic.quizPercentage}%`} | Practice {topic.practiceScore === null ? 'Insufficient data' : `${topic.practiceScore}%`}</span>
+                        </div>
+                      ))}
+                      {!(studentResults.oopTopics || []).some(topic => topic.attempted) && <p className="text-[11px] text-slate-500">No Java OOP topic has been attempted yet.</p>}
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-white/80 p-3 sm:col-span-2">
+                    <span className="font-black uppercase tracking-wider text-slate-400">Java Swing Evidence</span>
+                    <p className="mt-1 leading-relaxed text-slate-700">{resultsInterpretation.swingStatus === 'LOCKED' ? 'Java Swing is currently locked because the Java OOP prerequisite is incomplete. Locked topics are not evaluated as failures.' : (studentResults.swingTopics || []).some(topic => topic.attempted) ? `${(studentResults.swingTopics || []).filter(topic => topic.attempted).map(topic => `${topic.title} (${topic.overallPercentage === null ? 'Insufficient data' : `${topic.overallPercentage}%`})`).join(', ')}.` : 'Java Swing is unlocked, but no Swing activity has been attempted yet.'}</p>
+                  </div>
                   <div className="rounded-xl bg-white/80 p-3">
                     <span className="font-black uppercase tracking-wider text-slate-400">Strengths</span>
                     <ul className="mt-2 list-disc space-y-1 pl-4 text-slate-700">{resultsInterpretation.strengths.map(item => <li key={item}>{item}</li>)}</ul>

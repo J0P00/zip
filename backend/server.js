@@ -1808,7 +1808,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         );
         if (!identity.rowCount) return res.status(404).json({ success: false, message: "Student not found." });
         const dbStudentId = identity.rows[0].id;
-        const [course, videos, quizzes, practice, swing] = await Promise.all([
+        const [course, videos, quizzes, practice, swing, oopTopics, swingTopics] = await Promise.all([
             pool.query(`
                 SELECT COUNT(*)::int AS total_lessons,
                        COUNT(*) FILTER (WHERE sp.completed AND COALESCE(qa.passed, FALSE) AND COALESCE(ps.score, 0) >= 70)::int AS completed_lessons
@@ -1857,12 +1857,86 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 LEFT JOIN swing_programming_exercises se ON se.lesson_id = sl.id
                 LEFT JOIN swing_submissions ss ON ss.exercise_id = se.id AND ss.student_id = $1
             `, [dbStudentId])
+                        , pool.query(`
+                                SELECT l.id, l.title, l.sequence,
+                                             sp.completion_percentage AS video_percentage,
+                                             sp.completed AS video_completed,
+                                             qa.percentage AS quiz_percentage,
+                                             qa.passed AS quiz_passed,
+                                             ps.score AS practice_score,
+                                             lp.completed AS lesson_completed,
+                                             (sp.id IS NOT NULL OR qa.id IS NOT NULL OR ps.id IS NOT NULL OR lp.id IS NOT NULL) AS attempted
+                                FROM lessons l
+                                LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND sp.video_id = l.id
+                                LEFT JOIN lesson_progress lp ON lp.student_id = $1 AND lp.lesson_id = l.id
+                                LEFT JOIN LATERAL (
+                                    SELECT id, percentage, passed
+                                    FROM quiz_attempts
+                                    WHERE student_user_id = $1 AND lesson_id = l.id
+                                    ORDER BY attempt_number DESC, date_completed DESC
+                                    LIMIT 1
+                                ) qa ON TRUE
+                                LEFT JOIN LATERAL (
+                                    SELECT ps.id, ps.score
+                                    FROM practice_submissions ps
+                                    JOIN programming_challenges pc ON pc.id = ps.challenge_id
+                                    WHERE ps.student_id = $1 AND pc.lesson_id = l.id
+                                    ORDER BY ps.submitted_at DESC
+                                    LIMIT 1
+                                ) ps ON TRUE
+                                WHERE l.status <> 'Archived'
+                                ORDER BY l.sequence, l.title
+                        `, [dbStudentId])
+                        , pool.query(`
+                                SELECT sl.id, sl.title, sl.sequence,
+                                             sg.overall_percentage,
+                                             sg.content_completed,
+                                             sg.video_completed,
+                                             sg.quiz_passed,
+                                             sg.exercise_completed,
+                                             ss.submission_score,
+                                             (sg.id IS NOT NULL OR ss.submission_score IS NOT NULL) AS attempted
+                                FROM swing_lessons sl
+                                LEFT JOIN swing_progress sg ON sg.student_id = $1::text AND sg.lesson_id = sl.id
+                                LEFT JOIN LATERAL (
+                                    SELECT MAX(score) AS submission_score
+                                    FROM swing_submissions
+                                    WHERE student_id = $1::text
+                                        AND exercise_id IN (SELECT id FROM swing_programming_exercises WHERE lesson_id = sl.id)
+                                ) ss ON TRUE
+                                ORDER BY sl.sequence, sl.title
+                        `, [dbStudentId])
         ]);
         const row = { ...course.rows[0], ...videos.rows[0], ...quizzes.rows[0], ...practice.rows[0], ...swing.rows[0] };
         const totalLessons = Number(row.total_lessons || 0);
         const totalVideos = Number(row.total_videos || totalLessons);
         const submittedPracticeActivities = Number(row.submitted_practice_activities || 0);
         const totalPracticeActivities = Number(row.total_practice_activities || 0);
+        const oopTopicRows = oopTopics.rows.map(topic => ({
+            id: topic.id,
+            title: topic.title,
+            sequence: Number(topic.sequence || 0),
+            attempted: Boolean(topic.attempted),
+            videoPercentage: topic.video_percentage === null ? null : Number(topic.video_percentage),
+            videoCompleted: Boolean(topic.video_completed),
+            quizPercentage: topic.quiz_percentage === null ? null : Number(topic.quiz_percentage),
+            quizPassed: topic.quiz_passed === null ? null : Boolean(topic.quiz_passed),
+            practiceScore: topic.practice_score === null ? null : Number(topic.practice_score),
+            lessonCompleted: Boolean(topic.lesson_completed)
+        }));
+        const oopComplete = oopTopicRows.length > 0 && oopTopicRows.every(topic => topic.lessonCompleted);
+        const swingTopicRows = swingTopics.rows.map(topic => ({
+            id: topic.id,
+            title: topic.title,
+            sequence: Number(topic.sequence || 0),
+            attempted: Boolean(topic.attempted),
+            overallPercentage: topic.overall_percentage === null ? null : Number(topic.overall_percentage),
+            contentCompleted: Boolean(topic.content_completed),
+            videoCompleted: Boolean(topic.video_completed),
+            quizPassed: Boolean(topic.quiz_passed),
+            exerciseCompleted: Boolean(topic.exercise_completed),
+            submissionScore: topic.submission_score === null ? null : Number(topic.submission_score)
+        }));
         const overallProgress = totalLessons
             ? Math.round((Number(row.completed_lessons || 0) / totalLessons) * 100)
             : 0;
@@ -1884,7 +1958,11 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 swingSubmissions: Number(row.swing_submissions || 0),
                 swingCompletedActivities: Number(row.swing_completed_activities || 0),
                 swingPendingActivities: Number(row.swing_pending_activities || 0),
-                hasActivity: Number(row.completed_videos || 0) > 0 || Number(row.quiz_attempts || 0) > 0 || submittedPracticeActivities > 0 || Number(row.swing_submissions || 0) > 0
+                hasActivity: oopTopicRows.some(topic => topic.attempted) || swingTopicRows.some(topic => topic.attempted),
+                oopComplete,
+                swingUnlocked: oopComplete,
+                oopTopics: oopTopicRows,
+                swingTopics: swingTopicRows
             }
         });
     } catch (error) {

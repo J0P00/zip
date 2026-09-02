@@ -15,9 +15,43 @@ export interface StudentResultsData {
   swingCompletedActivities: number;
   swingPendingActivities: number;
   hasActivity: boolean;
+  oopComplete?: boolean;
+  swingUnlocked?: boolean;
+  oopTopics?: StudentTopicResult[];
+  swingTopics?: SwingTopicResult[];
+}
+
+export interface StudentTopicResult {
+  id: string;
+  title: string;
+  sequence: number;
+  attempted: boolean;
+  videoPercentage: number | null;
+  videoCompleted: boolean;
+  quizPercentage: number | null;
+  quizPassed: boolean | null;
+  practiceScore: number | null;
+  lessonCompleted: boolean;
+}
+
+export interface SwingTopicResult {
+  id: string;
+  title: string;
+  sequence: number;
+  attempted: boolean;
+  overallPercentage: number | null;
+  contentCompleted: boolean;
+  videoCompleted: boolean;
+  quizPassed: boolean;
+  exerciseCompleted: boolean;
+  submissionScore: number | null;
 }
 
 export interface StudentResultsInterpretation {
+  currentLearningStage: string;
+  oopResult: string;
+  swingStatus: string;
+  swingResult?: string;
   overallPerformance: string;
   learningProgressAnalysis: string;
   assessmentPerformance: string;
@@ -28,6 +62,12 @@ export interface StudentResultsInterpretation {
 }
 
 const percent = (value: number) => Math.round(Math.max(0, Math.min(100, Number(value) || 0)));
+
+const formatMetric = (label: string, value: number | null) => value === null ? `${label}: Insufficient data to evaluate this metric.` : `${label}: ${percent(value)}%`;
+
+const topicPerformance = (topic: StudentTopicResult) => [topic.quizPercentage, topic.practiceScore, topic.videoPercentage].filter((value): value is number => value !== null);
+
+const swingPerformance = (topic: SwingTopicResult) => [topic.overallPercentage, topic.submissionScore].filter((value): value is number => value !== null);
 
 export const generateStudentResultsInterpretation = (
   input: StudentResultsData
@@ -40,66 +80,88 @@ export const generateStudentResultsInterpretation = (
     practiceCompletionRate: percent(input.practiceCompletionRate)
   };
 
+  const oopTopics = (input.oopTopics || []).filter(topic => topic.attempted);
+  const swingTopics = (input.swingTopics || []).filter(topic => topic.attempted);
+  const averageAttemptedOop = oopTopics.length
+    ? Math.round(oopTopics.flatMap(topicPerformance).reduce((sum, value) => sum + value, 0) / Math.max(1, oopTopics.flatMap(topicPerformance).length))
+    : null;
+  const oopResult = input.oopComplete
+    ? 'COMPLETED'
+    : oopTopics.length
+      ? averageAttemptedOop !== null && averageAttemptedOop >= 75 ? 'Improving' : 'Needs Help'
+      : 'Early Progress';
+  const swingStatus = input.swingUnlocked ? (swingTopics.length ? 'UNLOCKED' : 'UNLOCKED - NOT STARTED') : 'LOCKED';
+  const averageSwing = swingTopics.length
+    ? Math.round(swingTopics.flatMap(swingPerformance).reduce((sum, value) => sum + value, 0) / Math.max(1, swingTopics.flatMap(swingPerformance).length))
+    : null;
+  const swingResult = input.swingUnlocked && swingTopics.length
+    ? averageSwing !== null && averageSwing >= 75 ? 'Improving' : 'Needs Help'
+    : undefined;
+  const attemptedTopicText = oopTopics.length
+    ? oopTopics.map(topic => {
+        const metrics = [formatMetric('Video', topic.videoPercentage), formatMetric('Assessment', topic.quizPercentage), formatMetric('Practice IDE', topic.practiceScore)].join('; ');
+        const state = topic.lessonCompleted ? 'completed' : 'in progress';
+        return `${topic.title} is ${state} (${metrics}).`;
+      }).join(' ')
+    : 'No Java OOP topic has been attempted yet.';
+  const strongTopics = oopTopics.filter(topic => {
+    const metrics = topicPerformance(topic);
+    return metrics.length > 0 && Math.round(metrics.reduce((sum, value) => sum + value, 0) / metrics.length) >= 75;
+  });
+  const weakTopics = oopTopics.filter(topic => {
+    const metrics = topicPerformance(topic);
+    return metrics.length > 0 && Math.round(metrics.reduce((sum, value) => sum + value, 0) / metrics.length) < 75;
+  });
+
   if (!data.hasActivity) {
     return {
+      currentLearningStage: 'Java OOP',
+      oopResult,
+      swingStatus,
       overallPerformance: 'No activity recorded',
-      learningProgressAnalysis: 'No learning activity has been recorded yet. The student is recommended to begin the available lessons and assessments.',
+      learningProgressAnalysis: 'No learning activity has been recorded yet. Java OOP has not been evaluated beyond the available starting point.',
       assessmentPerformance: 'No assessment attempts have been recorded yet.',
       programmingPracticePerformance: 'No programming practice activity has been recorded yet.',
       strengths: [],
-      areasForImprovement: ['Begin the available video lessons', 'Attempt the assessments', 'Submit a Practice IDE activity'],
+      areasForImprovement: ['Begin the first available Java OOP lesson'],
       recommendation: 'The student should begin with the first lesson, complete its assessment, and submit the related programming activity.'
     };
   }
 
-  const overallPerformance =
-    data.overallProgress >= 90
-      ? 'Excellent Progress'
-      : data.overallProgress >= 75
-        ? 'Good Progress'
-        : data.overallProgress >= 50
-          ? 'Moderate Progress'
-          : 'Low Progress';
+  const overallPerformance = oopResult;
   const overallText =
-    data.overallProgress >= 90
-      ? 'The student demonstrates strong engagement and mastery of the course materials.'
-      : data.overallProgress >= 75
-        ? 'The student is performing well but still has some remaining learning activities.'
-        : data.overallProgress >= 50
-          ? 'The student has completed several learning activities but needs improvement and more consistent participation.'
-          : 'The student needs additional attention and is recommended to complete more lessons and learning activities.';
-  const quizText =
-    data.averageQuizScore >= 90
-      ? 'Excellent assessment performance.'
-      : data.averageQuizScore >= 75
-        ? 'Good assessment performance.'
-        : data.averageQuizScore >= 50
-          ? 'Average assessment performance. Additional review is recommended.'
-          : 'Low assessment performance. The student may need additional support and review of the lessons.';
+    input.oopComplete
+      ? 'The student has satisfied the existing Java OOP completion requirement.'
+      : oopTopics.length
+        ? `The student has interacted with ${oopTopics.length} of ${input.oopTopics?.length || data.totalLessons} Java OOP topics. ${attemptedTopicText} Topics not yet attempted are excluded from performance weaknesses.`
+        : 'The student has not attempted a Java OOP topic yet.';
+  const quizText = data.quizAttempts ? `Latest available assessment evidence averages ${data.averageQuizScore}%.` : 'Assessment performance cannot yet be evaluated because no assessment has been attempted.';
 
   const strengths: string[] = [];
-  if (data.videoPercentage >= 75) strengths.push('Strong participation in video lessons');
-  if (data.averageQuizScore >= 75) strengths.push('Good assessment performance');
-  if (data.practiceCompletionRate >= 75) strengths.push('Active Practice IDE participation');
-  if (data.swingCompletedActivities > 0) strengths.push('Participation in Java Swing activities');
+  if (strongTopics.length) strengths.push(`Strong evidence in ${strongTopics.map(topic => topic.title).join(', ')}`);
+  if (data.quizAttempts > 0) strengths.push(`Assessment attempts recorded (${data.averageQuizScore}% latest average)`);
+  if (data.submittedPracticeActivities > 0) strengths.push(`Practice IDE submissions recorded (${data.completedPracticeActivities} completed)`);
 
   const areasForImprovement: string[] = [];
-  if (data.completedVideos < data.totalVideos) areasForImprovement.push(`Complete the ${data.totalVideos - data.completedVideos} remaining video lesson${data.totalVideos - data.completedVideos === 1 ? '' : 's'}`);
-  if (data.averageQuizScore < 75 || data.quizAttempts === 0) areasForImprovement.push('Review topics with lower assessment scores');
-  if (data.submittedPracticeActivities < data.totalPracticeActivities) areasForImprovement.push('Complete pending programming activities');
-  if (data.swingPendingActivities > 0) areasForImprovement.push('Complete pending Java Swing activities');
+  if (weakTopics.length) areasForImprovement.push(`Review attempted topics with lower evidence: ${weakTopics.map(topic => topic.title).join(', ')}`);
+  if (!input.oopComplete && oopTopics.length < (input.oopTopics?.length || data.totalLessons)) areasForImprovement.push('Continue the next available Java OOP topic; unattempted topics are not yet evaluated.');
+  if (input.swingUnlocked && !swingTopics.length) areasForImprovement.push('Begin Java Swing activities when ready.');
 
   return {
+    currentLearningStage: input.swingUnlocked ? 'Java OOP and Java Swing' : 'Java OOP',
+    oopResult,
+    swingStatus,
+    swingResult,
     overallPerformance,
-    learningProgressAnalysis: `The student has completed ${data.completedLessons} out of ${data.totalLessons} lessons, with ${Math.max(0, data.totalLessons - data.completedLessons)} incomplete, and currently has ${data.overallProgress}% overall progress. ${overallText}`,
-    assessmentPerformance: data.quizAttempts
-      ? `The student achieved an average quiz score of ${data.averageQuizScore}%, indicating ${quizText.toLowerCase().replace(/\.$/, '')}.`
-      : 'No assessment attempts have been recorded yet. Additional review is recommended after the first assessment.',
-    programmingPracticePerformance: `The student completed ${data.completedPracticeActivities} of ${data.totalPracticeActivities} programming activities and submitted ${data.submittedPracticeActivities}. Practice completion is ${data.practiceCompletionRate}%.`,
+    learningProgressAnalysis: `${overallText} ${attemptedTopicText}`,
+    assessmentPerformance: quizText,
+    programmingPracticePerformance: data.submittedPracticeActivities
+      ? `Practice IDE evidence is available from ${data.submittedPracticeActivities} submission${data.submittedPracticeActivities === 1 ? '' : 's'}; completed activities: ${data.completedPracticeActivities}.`
+      : 'Practice IDE performance cannot yet be evaluated because the student has not submitted a Practice IDE activity.',
     strengths: strengths.length ? strengths : ['The student has started the learning path'],
     areasForImprovement: areasForImprovement.length ? areasForImprovement : ['Continue the current learning activities consistently'],
-    recommendation: areasForImprovement.length
-      ? `The student should ${areasForImprovement[0].toLowerCase()} and continue focusing on weaker OOP topics.`
-      : 'The student should continue completing the remaining activities and attempt advanced OOP and Java Swing practice.'
+    recommendation: !input.swingUnlocked
+      ? areasForImprovement[0] || 'Continue the next available Java OOP activity.'
+      : areasForImprovement[0] || 'Continue the current learning activities and use the latest evidence to guide the next topic.'
   };
 };
