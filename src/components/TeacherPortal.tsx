@@ -572,11 +572,19 @@ export default function TeacherPortal({
     userApi.listUsers(currentUser.token)
       .then(async response => {
         const studentUsers = response.data.filter(user => user.role === 'student');
-        const syncedStudents = await Promise.all(studentUsers.map(async user => {
-          const results = await progressApi.getStudentResults(user.id || user.userId || user.email, currentUser.token);
-          return mapBackendStudent(user, results.data);
-        }));
-        if (!cancelled) setBackendStudents(syncedStudents);
+        const syncedStudents = (await Promise.all(studentUsers.map(async user => {
+          try {
+            const results = await progressApi.getStudentResults(user.id || user.userId || user.email, currentUser.token);
+            return mapBackendStudent(user, results.data);
+          } catch (error) {
+            console.warn(`Unable to load results for ${user.email}:`, error);
+            return null;
+          }
+        }))).filter((student): student is LiveStudent => student !== null);
+        if (!cancelled) {
+          setBackendStudents(syncedStudents);
+          setSelectedStudentId(currentId => syncedStudents.some(student => student.id === currentId) ? currentId : syncedStudents[0]?.id || currentId);
+        }
       })
       .catch(error => {
         if (!cancelled) console.warn('Unable to load the teacher roster from the backend:', error);
