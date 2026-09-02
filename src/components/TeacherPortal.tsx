@@ -49,6 +49,8 @@ interface TeacherPortalProps {
 type TeacherTab = 'monitoring' | 'invitations' | 'topics' | 'swing' | 'assessments' | 'ide' | 'analytics';
 type LearningStage = 'Lesson' | 'Watch Video' | 'Assessment' | 'Practice IDE' | 'Automatic Grading' | 'Adaptive Recommendation' | 'Unlock Next Topic';
 type LearningStatus = 'In Progress' | 'Completed' | 'Mastered' | 'Needs Improvement' | 'At Risk';
+type MonitoringStatus = 'At Risk' | 'Needs Help' | 'Improving' | 'On Track' | 'Excellent';
+type StudentSort = 'priority' | 'name' | 'progress' | 'quiz' | 'practice' | 'activity' | 'status';
 
 type TopicProgress = {
   topic: string;
@@ -433,6 +435,22 @@ const statusClass = (status: LearningStatus) => {
   return 'bg-slate-100 text-slate-700 border-slate-200';
 };
 
+const monitoringStatus = (student: LiveStudent): MonitoringStatus => {
+  if (student.overallProgress < 40 || student.quizScore < 50 || student.practiceScore < 25) return 'At Risk';
+  if (student.overallProgress < 60 || student.quizScore < 65 || student.practiceScore < 50) return 'Needs Help';
+  if (student.overallProgress < 75) return 'Improving';
+  if (student.overallProgress >= 90 && student.quizScore >= 85 && student.practiceScore >= 75) return 'Excellent';
+  return 'On Track';
+};
+
+const monitoringStatusClass = (status: MonitoringStatus, dark: boolean) => {
+  if (status === 'At Risk') return dark ? 'border-rose-900 bg-rose-950/40 text-rose-300' : 'border-rose-200 bg-rose-50 text-rose-700';
+  if (status === 'Needs Help') return dark ? 'border-amber-900 bg-amber-950/40 text-amber-300' : 'border-amber-200 bg-amber-50 text-amber-700';
+  if (status === 'Improving') return dark ? 'border-sky-900 bg-sky-950/40 text-sky-300' : 'border-sky-200 bg-sky-50 text-sky-700';
+  if (status === 'Excellent') return dark ? 'border-emerald-900 bg-emerald-950/40 text-emerald-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  return dark ? 'border-slate-700 bg-slate-800 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-700';
+};
+
 const teacherScopedCode = (email: string) => {
   const seed = email.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
   return `TEA-${String(seed).slice(-4)}-OOP`;
@@ -504,6 +522,11 @@ export default function TeacherPortal({
   const [isSendingInvite, setIsSendingInvite] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [rosterSearch, setRosterSearch] = useState('');
+  const [rosterStatus, setRosterStatus] = useState<'All' | MonitoringStatus>('All');
+  const [sectionFilter, setSectionFilter] = useState('All');
+  const [studentSort, setStudentSort] = useState<StudentSort>('priority');
+  const [rosterPage, setRosterPage] = useState(1);
   const [selectedSubId, setSelectedSubId] = useState<string>('');
   const [commentText, setCommentText] = useState('');
   const [scoreText, setScoreText] = useState(90);
@@ -937,6 +960,31 @@ export default function TeacherPortal({
   const swingPracticeAverage = avg(visibleStudents.map(student => student.swing.ide));
   const swingProjectAverage = avg(visibleStudents.map(student => student.swing.miniProject));
   const atRiskStudents = visibleStudents.filter(student => student.learningStatus === 'At Risk' || student.learningStatus === 'Needs Improvement');
+  const studentsNeedingAttention = visibleStudents.filter(student => ['At Risk', 'Needs Help'].includes(monitoringStatus(student)));
+  const rosterSections = [...new Set(visibleStudents.map(student => student.section).filter(Boolean))].sort();
+  const statusPriority: Record<MonitoringStatus, number> = { 'At Risk': 0, 'Needs Help': 1, Improving: 2, 'On Track': 3, Excellent: 4 };
+  const filteredRoster = useMemo(() => {
+    const query = rosterSearch.trim().toLowerCase();
+    return visibleStudents
+      .filter(student => {
+        const matchesQuery = !query || [student.name, student.email, student.id, student.section].some(value => value.toLowerCase().includes(query));
+        const matchesStatus = rosterStatus === 'All' || monitoringStatus(student) === rosterStatus;
+        const matchesSection = sectionFilter === 'All' || student.section === sectionFilter;
+        return matchesQuery && matchesStatus && matchesSection;
+      })
+      .sort((a, b) => {
+        if (studentSort === 'name') return a.name.localeCompare(b.name);
+        if (studentSort === 'progress') return b.overallProgress - a.overallProgress;
+        if (studentSort === 'quiz') return b.quizScore - a.quizScore;
+        if (studentSort === 'practice') return b.practiceScore - a.practiceScore;
+        if (studentSort === 'status') return statusPriority[monitoringStatus(a)] - statusPriority[monitoringStatus(b)];
+        return statusPriority[monitoringStatus(a)] - statusPriority[monitoringStatus(b)] || a.overallProgress - b.overallProgress;
+      });
+  }, [rosterSearch, rosterStatus, sectionFilter, studentSort, visibleStudents]);
+  const rosterPageSize = 20;
+  const rosterPageCount = Math.max(1, Math.ceil(filteredRoster.length / rosterPageSize));
+  const pagedRoster = filteredRoster.slice((rosterPage - 1) * rosterPageSize, rosterPage * rosterPageSize);
+  useEffect(() => setRosterPage(1), [rosterSearch, rosterStatus, sectionFilter, studentSort]);
   const mostSuccessfulStudent = [...visibleStudents].sort((a, b) => b.performanceIndex - a.performanceIndex)[0];
   const mostDifficultTopic = OOP_TOPICS.map(topic => ({
     topic,
@@ -1007,47 +1055,112 @@ export default function TeacherPortal({
       </div>
 
       {activeTab === 'monitoring' && selectedStudent && (
-        <div className="grid gap-5 xl:grid-cols-[320px_1fr]">
-          <div className={`rounded-2xl border p-4 shadow-sm ${cardClass}`}>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-black">Connected Students</h3>
-                <p className="text-[11px] text-slate-500">Teacher-scoped live roster</p>
+        <div className="space-y-5">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {[
+              ['Total Students', visibleStudents.length],
+              ['Average Progress', `${completionRate}%`],
+              ['Average Quiz Score', `${averageQuiz}%`],
+              ['Practice Completion', `${averagePractice}%`],
+              ['Needs Attention', `${studentsNeedingAttention.length} students`]
+            ].map(([label, value]) => (
+              <div key={label as string} className={`rounded-xl border p-4 shadow-sm ${label === 'Needs Attention' ? 'border-amber-300 bg-amber-50/70' : cardClass}`}>
+                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">{label as string}</span>
+                <strong className="mt-2 block font-mono text-xl">{value}</strong>
               </div>
-              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">{visibleStudents.length} visible</span>
-            </div>
-            <div className="space-y-2">
-              {visibleStudents.map(student => (
-                <button
-                  key={student.id}
-                  type="button"
-                  onClick={() => setSelectedStudentId(student.id)}
-                  className={`w-full rounded-xl border p-3 text-left transition ${
-                    selectedStudent.id === student.id
-                      ? 'border-emerald-500 bg-emerald-50/40'
-                      : isDark
-                        ? 'border-slate-800 bg-slate-950 hover:border-slate-700'
-                        : 'border-slate-200 bg-white hover:border-emerald-300'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-black">{student.name}</p>
-                      <p className="mt-0.5 text-[10px] font-semibold text-slate-500">{student.section} | {student.email}</p>
-                    </div>
-                    {student.online ? <Wifi className="h-4 w-4 text-emerald-600" /> : <WifiOff className="h-4 w-4 text-slate-400" />}
-                  </div>
-                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-emerald-600" style={{ width: `${student.overallProgress}%` }} />
-                  </div>
-                  <div className="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-500">
-                    <span>{student.activity}</span>
-                    <span>{student.overallProgress}%</span>
-                  </div>
-                </button>
-              ))}
-            </div>
+            ))}
           </div>
+
+          <section className={`rounded-2xl border p-4 shadow-sm ${cardClass}`} aria-labelledby="attention-heading">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 id="attention-heading" className="text-base font-black">Students Needing Attention</h3>
+                <p className="mt-1 text-xs text-slate-500">Prioritized from current progress, assessment, and practice activity.</p>
+              </div>
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-black text-amber-700">{studentsNeedingAttention.length} priority students</span>
+            </div>
+            {studentsNeedingAttention.length === 0 ? (
+              <p className="mt-4 rounded-xl border border-dashed border-emerald-200 bg-emerald-50/30 p-4 text-xs font-semibold text-emerald-700">No students currently meet the attention thresholds.</p>
+            ) : (
+              <div className="mt-4 grid gap-2 lg:grid-cols-2">
+                {studentsNeedingAttention.slice(0, 6).map(student => {
+                  const status = monitoringStatus(student);
+                  return (
+                    <div key={student.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 ${mutedPanel}`}>
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-black">{student.name}</p>
+                        <p className="mt-1 text-[10px] text-slate-500">{student.section} | {student.overallProgress}% progress | {student.quizScore}% quiz</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span>
+                        <button type="button" onClick={() => setSelectedStudentId(student.id)} className="min-h-9 rounded-lg bg-emerald-600 px-3 text-[10px] font-black text-white">View Progress</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className={`rounded-2xl border shadow-sm ${cardClass}`} aria-labelledby="roster-heading">
+            <div className="border-b border-slate-200 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 id="roster-heading" className="text-base font-black">Student Monitoring</h3>
+                  <p className="mt-1 text-xs text-slate-500">Showing {filteredRoster.length ? (rosterPage - 1) * rosterPageSize + 1 : 0}-{Math.min(rosterPage * rosterPageSize, filteredRoster.length)} of {filteredRoster.length} students</p>
+                </div>
+                <div className="relative w-full sm:w-72">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input aria-label="Search students" value={rosterSearch} onChange={event => setRosterSearch(event.target.value)} placeholder="Search students..." className={`h-11 w-full rounded-xl border pl-9 pr-3 text-xs outline-none focus:border-emerald-600 ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`} />
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <select aria-label="Filter by status" value={rosterStatus} onChange={event => setRosterStatus(event.target.value as 'All' | MonitoringStatus)} className={`h-10 rounded-xl border px-3 text-xs font-bold ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`}>
+                  <option value="All">All statuses</option><option>At Risk</option><option>Needs Help</option><option>Improving</option><option>On Track</option><option>Excellent</option>
+                </select>
+                <select aria-label="Filter by section" value={sectionFilter} onChange={event => setSectionFilter(event.target.value)} className={`h-10 rounded-xl border px-3 text-xs font-bold ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`}>
+                  <option value="All">All sections</option>{rosterSections.map(section => <option key={section}>{section}</option>)}
+                </select>
+                <select aria-label="Sort students" value={studentSort} onChange={event => setStudentSort(event.target.value as StudentSort)} className={`h-10 rounded-xl border px-3 text-xs font-bold ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`}>
+                  <option value="priority">Sort: Priority</option><option value="name">Sort: Name</option><option value="progress">Sort: Progress</option><option value="quiz">Sort: Quiz score</option><option value="practice">Sort: Practice</option><option value="status">Sort: Status</option>
+                </select>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="hidden w-full min-w-[760px] text-left text-xs sm:table">
+                <thead className="bg-emerald-50/30 text-[10px] uppercase tracking-wider text-slate-500"><tr><th className="px-4 py-3">Student</th><th className="px-3 py-3">Section</th><th className="px-3 py-3">Progress</th><th className="px-3 py-3">Quiz</th><th className="px-3 py-3">Practice</th><th className="px-3 py-3">Activity</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Action</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pagedRoster.map(student => {
+                    const status = monitoringStatus(student);
+                    return <tr key={student.id} className="hover:bg-emerald-50/20">
+                      <td className="px-4 py-3"><button type="button" onClick={() => setSelectedStudentId(student.id)} className="text-left"><span className="block font-black">{student.name}</span><span className="block text-[10px] text-slate-500">{student.email}</span></button></td>
+                      <td className="px-3 py-3 font-semibold">{student.section}</td>
+                      <td className="px-3 py-3"><div className="flex items-center gap-2"><div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${student.overallProgress}%` }} /></div><span className="font-mono font-bold">{student.overallProgress}%</span></div></td>
+                      <td className="px-3 py-3 font-mono font-bold">{student.quizScore}%</td><td className="px-3 py-3 font-mono font-bold">{student.practiceScore}%</td>
+                      <td className="px-3 py-3 text-slate-500">{student.lastActivity}</td>
+                      <td className="px-3 py-3"><span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span></td>
+                      <td className="px-3 py-3"><button type="button" onClick={() => setSelectedStudentId(student.id)} className="min-h-9 rounded-lg border border-emerald-200 px-3 text-[10px] font-black text-emerald-700 hover:bg-emerald-50">View Progress</button></td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+              <div className="space-y-2 p-3 sm:hidden">
+                {pagedRoster.map(student => {
+                  const status = monitoringStatus(student);
+                  return <div key={student.id} className={`rounded-xl border p-3 ${mutedPanel}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <button type="button" onClick={() => setSelectedStudentId(student.id)} className="min-w-0 text-left"><span className="block truncate text-xs font-black">{student.name}</span><span className="mt-1 block truncate text-[10px] text-slate-500">{student.email}</span></button>
+                      <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]"><span><b className="block text-slate-400">Progress</b><strong>{student.overallProgress}%</strong></span><span><b className="block text-slate-400">Quiz</b><strong>{student.quizScore}%</strong></span><span><b className="block text-slate-400">Practice</b><strong>{student.practiceScore}%</strong></span></div>
+                    <div className="mt-3 flex items-center justify-between gap-2"><span className="truncate text-[10px] text-slate-500">{student.section} | {student.lastActivity}</span><button type="button" onClick={() => setSelectedStudentId(student.id)} className="min-h-9 shrink-0 rounded-lg bg-emerald-600 px-3 text-[10px] font-black text-white">View Progress</button></div>
+                  </div>;
+                })}
+              </div>
+              {pagedRoster.length === 0 && <p className="p-8 text-center text-xs font-semibold text-slate-500">No students match these filters.</p>}
+            </div>
+            {rosterPageCount > 1 && <div className="flex items-center justify-between border-t border-slate-200 p-3 text-xs"><button type="button" disabled={rosterPage === 1} onClick={() => setRosterPage(page => page - 1)} className="min-h-9 rounded-lg border px-3 font-black disabled:opacity-40">Previous</button><span className="font-bold text-slate-500">Page {rosterPage} of {rosterPageCount}</span><button type="button" disabled={rosterPage === rosterPageCount} onClick={() => setRosterPage(page => page + 1)} className="min-h-9 rounded-lg border px-3 font-black disabled:opacity-40">Next</button></div>}
+          </section>
 
           <div className="min-w-0">
             <Leaderboard users={visibleLeaderboardUsers} />
