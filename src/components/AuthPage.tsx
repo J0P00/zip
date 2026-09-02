@@ -438,6 +438,12 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
         accountSource
       );
     } catch (error) {
+      if (import.meta.env.PROD) {
+        setIsSubmitting(false);
+        showNotice('error', error instanceof Error ? error.message : 'Unable to sign in to the backend.');
+        return;
+      }
+
       // Check local demo accounts & stored users fallback
       const allAccounts = [...demoAccounts, ...readStoredUsers()];
       const matched = allAccounts.find(
@@ -526,7 +532,12 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       setIsSubmitting(false);
       setIsRegSuccess(true);
     } catch (error) {
-      // Local registration fallback if backend is offline
+      if (import.meta.env.PROD) {
+        setIsSubmitting(false);
+        showNotice('error', error instanceof Error ? error.message : 'Unable to create the account on the backend.');
+        return;
+      }
+
       try {
         const activePolicy = getPublishedPolicy();
         const displayCourse = regCourse === 'CS' ? 'CS (Computer Science)' : 'IT (Information Technology)';

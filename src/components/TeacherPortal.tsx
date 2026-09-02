@@ -29,7 +29,7 @@ import {
 import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
 import { LeaderboardUser } from '../types';
 import Leaderboard from './Leaderboard';
-import { progressApi } from '../services/api';
+import { progressApi, userApi } from '../services/api';
 import { generateStudentResultsInterpretation, StudentResultsData, StudentResultsInterpretation } from '../services/interpretation';
 
 interface TeacherPortalProps {
@@ -438,6 +438,50 @@ const teacherScopedCode = (email: string) => {
   return `TEA-${String(seed).slice(-4)}-OOP`;
 };
 
+const mapBackendStudent = (user: AuthenticatedUser, results: StudentResultsData): LiveStudent => {
+  const overallProgress = Number(results.overallProgress || 0);
+  const videoCompletion = Number(results.videoPercentage || 0);
+  const quizScore = Number(results.averageQuizScore || 0);
+  const practiceScore = Number(results.practiceCompletionRate || 0);
+  const performanceIndex = Math.round((overallProgress + videoCompletion + quizScore + practiceScore) / 4);
+  const learningStatus: LearningStatus =
+    performanceIndex >= 100 ? 'Mastered' : performanceIndex >= 70 ? 'Completed' : performanceIndex > 0 ? 'In Progress' : 'At Risk';
+
+  return {
+    id: user.id || user.userId || user.email,
+    name: user.name,
+    email: user.email,
+    section: user.section || 'Unassigned',
+    online: user.onlineStatus !== 'offline',
+    activity: results.hasActivity ? 'Active in the OOP learning path' : 'No activity recorded',
+    currentLesson: results.hasActivity ? 'OOP learning path' : 'Not started',
+    currentTopic: results.hasActivity ? 'OOP learning path' : 'Not started',
+    swingLesson: results.swingCompletedActivities > 0 ? 'Java Swing activity' : 'Not started',
+    stage: results.hasActivity ? 'Lesson' : 'Watch Video',
+    overallProgress,
+    moduleProgress: overallProgress,
+    topicProgress: overallProgress,
+    videoCompletion,
+    quizScore,
+    practiceScore,
+    challengesCompleted: Number(results.completedPracticeActivities || 0),
+    performanceIndex,
+    learningStatus,
+    lastActivity: results.hasActivity ? 'synced from backend' : 'not started',
+    moduleCompletion: overallProgress,
+    topicCompletion: overallProgress,
+    recommendation: 'Progress is synced from Render PostgreSQL.',
+    topics: [],
+    swingTopics: [],
+    swing: {
+      video: results.swingCompletedActivities > 0 ? 100 : 0,
+      assessment: results.swingCompletedActivities > 0 ? 100 : 0,
+      ide: results.swingSubmissions > 0 ? 100 : 0,
+      miniProject: 0
+    }
+  };
+};
+
 export default function TeacherPortal({
   submissions,
   onGradeSubmission,
@@ -453,6 +497,7 @@ export default function TeacherPortal({
   const isDark = theme === 'dark';
   const [activeTab, setActiveTab] = useState<TeacherTab>('monitoring');
   const [students, setStudents] = useState<LiveStudent[]>(initialStudents);
+  const [backendStudents, setBackendStudents] = useState<LiveStudent[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState(initialStudents[0]?.id ?? '');
   const [studentInput, setStudentInput] = useState('');
   const [requestFeedback, setRequestFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -497,6 +542,25 @@ export default function TeacherPortal({
 
   const teacherRequests = monitoringRequests.filter(req => req.teacherEmail.toLowerCase() === currentUser.email.toLowerCase());
   const pendingRequests = teacherRequests.filter(req => req.status === 'pending');
+
+  useEffect(() => {
+    let cancelled = false;
+    userApi.listUsers(currentUser.token)
+      .then(async response => {
+        const studentUsers = response.data.filter(user => user.role === 'student');
+        const syncedStudents = await Promise.all(studentUsers.map(async user => {
+          const results = await progressApi.getStudentResults(user.id || user.userId || user.email, currentUser.token);
+          return mapBackendStudent(user, results.data);
+        }));
+        if (!cancelled) setBackendStudents(syncedStudents);
+      })
+      .catch(error => {
+        if (!cancelled) console.warn('Unable to load the teacher roster from the backend:', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser.token]);
 
   const connectedStudents = acceptedRequests.map((request, index) => {
     const isDemoStudent =
@@ -644,7 +708,7 @@ export default function TeacherPortal({
     }, index);
   });
 
-  const visibleStudents = connectedStudents;
+  const visibleStudents = backendStudents.length ? backendStudents : connectedStudents;
   const selectedStudent = visibleStudents.find(student => student.id === selectedStudentId) ?? visibleStudents[0];
   const [studentResults, setStudentResults] = useState<StudentResultsData | null>(null);
   const [resultsLoading, setResultsLoading] = useState(false);
