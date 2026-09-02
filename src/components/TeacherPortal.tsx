@@ -21,6 +21,7 @@ import {
   Search,
   Sparkles,
   TrendingUp,
+  Trophy,
   UserCheck,
   Users,
   Wifi,
@@ -46,7 +47,7 @@ interface TeacherPortalProps {
   leaderboardUsers?: LeaderboardUser[];
 }
 
-type TeacherTab = 'monitoring' | 'invitations' | 'topics' | 'swing' | 'assessments' | 'ide' | 'analytics';
+type TeacherTab = 'monitoring' | 'ranking' | 'invitations' | 'topics' | 'swing' | 'assessments' | 'ide' | 'analytics';
 type LearningStage = 'Lesson' | 'Watch Video' | 'Assessment' | 'Practice IDE' | 'Automatic Grading' | 'Adaptive Recommendation' | 'Unlock Next Topic';
 type LearningStatus = 'In Progress' | 'Completed' | 'Mastered' | 'Needs Improvement' | 'At Risk';
 type MonitoringStatus = 'At Risk' | 'Needs Help' | 'Improving' | 'On Track' | 'Excellent';
@@ -746,15 +747,38 @@ export default function TeacherPortal({
       return;
     }
     let cancelled = false;
+    setStudentResults(null);
     setResultsLoading(true);
     setResultsError(null);
-    progressApi.getStudentResults(selectedStudent.id)
+    progressApi.getStudentResults(selectedStudent.id, currentUser.token)
       .then(response => {
         if (!cancelled) setStudentResults(response.data);
       })
       .catch(error => {
         if (!cancelled) {
-          setStudentResults(null);
+          const isBackendStudent = backendStudents.some(student => student.id === selectedStudent.id);
+          if (isBackendStudent) {
+            setStudentResults({
+              overallProgress: selectedStudent.overallProgress,
+              completedLessons: 0,
+              totalLessons: 0,
+              completedVideos: 0,
+              totalVideos: 0,
+              videoPercentage: selectedStudent.videoCompletion,
+              averageQuizScore: selectedStudent.quizScore,
+              quizAttempts: 0,
+              completedPracticeActivities: 0,
+              submittedPracticeActivities: 0,
+              totalPracticeActivities: 0,
+              practiceCompletionRate: selectedStudent.practiceScore,
+              swingSubmissions: selectedStudent.swing.ide > 0 ? 1 : 0,
+              swingCompletedActivities: selectedStudent.swing.video > 0 ? 1 : 0,
+              swingPendingActivities: 0,
+              hasActivity: selectedStudent.overallProgress > 0 || selectedStudent.videoCompletion > 0 || selectedStudent.quizScore > 0 || selectedStudent.practiceScore > 0
+            });
+          } else {
+            setStudentResults(null);
+          }
           setResultsError(error instanceof Error ? error.message : 'Unable to load student results.');
         }
       })
@@ -764,7 +788,7 @@ export default function TeacherPortal({
     return () => {
       cancelled = true;
     };
-  }, [selectedStudent?.id]);
+  }, [backendStudents, currentUser.token, selectedStudent?.id]);
   const visibleStudentKeys = visibleStudents.flatMap(student => [student.id, student.email, student.name]);
   const visibleRecommendations = recommendationHistory.filter(item =>
     visibleStudentKeys.includes(item.studentId) ||
@@ -1025,6 +1049,7 @@ export default function TeacherPortal({
         <div className="flex min-w-max gap-1">
           {[
             ['monitoring', 'Live Monitoring', Activity],
+            ['ranking', 'Student Ranking', Trophy],
             ['invitations', 'Invitations', MailPlus],
             ['topics', '11 OOP Topics', BookOpen],
             ['swing', 'Java Swing', PlayCircle],
@@ -1161,10 +1186,6 @@ export default function TeacherPortal({
             </div>
             {rosterPageCount > 1 && <div className="flex items-center justify-between border-t border-slate-200 p-3 text-xs"><button type="button" disabled={rosterPage === 1} onClick={() => setRosterPage(page => page - 1)} className="min-h-9 rounded-lg border px-3 font-black disabled:opacity-40">Previous</button><span className="font-bold text-slate-500">Page {rosterPage} of {rosterPageCount}</span><button type="button" disabled={rosterPage === rosterPageCount} onClick={() => setRosterPage(page => page + 1)} className="min-h-9 rounded-lg border px-3 font-black disabled:opacity-40">Next</button></div>}
           </section>
-
-          <div className="min-w-0">
-            <Leaderboard users={visibleLeaderboardUsers} />
-          </div>
 
           <div className={`rounded-2xl border p-5 shadow-sm xl:col-span-2 ${cardClass}`}>
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1328,6 +1349,16 @@ export default function TeacherPortal({
             </div>
           </div>
         </div>
+      )}
+
+      {activeTab === 'ranking' && (
+        <section className={`space-y-4 rounded-2xl border p-5 shadow-sm ${cardClass}`} aria-labelledby="student-ranking-heading">
+          <div>
+            <h3 id="student-ranking-heading" className="text-lg font-black">Student Ranking</h3>
+            <p className="mt-1 text-xs text-slate-500">Compare enrolled students by OOP progress, quiz performance, and Practice IDE activity.</p>
+          </div>
+          <Leaderboard users={visibleLeaderboardUsers} />
+        </section>
       )}
 
       {activeTab === 'invitations' && (
