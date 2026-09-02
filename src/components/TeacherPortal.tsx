@@ -1538,37 +1538,6 @@ export default function TeacherPortal({
             </div>
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-2">
-            {visibleStudents.map(student => (
-              <div key={student.id} className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-sm font-black">{student.name}</h3>
-                    <p className="mt-1 text-xs text-slate-500">Current Swing Lesson: {student.swingLesson}</p>
-                  </div>
-                  <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">Swing Track</span>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {[
-                    ['Video Completion', student.swing.video],
-                    ['Swing Assessment', student.swing.assessment],
-                    ['Swing IDE Progress', student.swing.ide],
-                    ['Mini Project Completion', student.swing.miniProject]
-                  ].map(([label, value]) => (
-                    <div key={label as string} className={`rounded-xl border p-3 ${mutedPanel}`}>
-                      <div className="flex justify-between text-[10px] font-black uppercase text-slate-400">
-                        <span>{label as string}</span>
-                        <span>{value}%</span>
-                      </div>
-                      <div className="mt-2 h-2 rounded-full bg-white">
-                        <div className="h-2 rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
