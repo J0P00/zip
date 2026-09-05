@@ -113,6 +113,12 @@ export default function StudentDashboard({
   const activeLesson = OOP_COURSE_LESSONS.find(lesson => lesson.id === activePractice.lessonId) || OOP_COURSE_LESSONS[0];
   const activeAssessment = OOP_ASSESSMENTS.find(assessment => assessment.id === activePractice.assessmentId) || OOP_ASSESSMENTS[0];
   const nextLesson = OOP_COURSE_LESSONS.find(lesson => !watchDb[lesson.id]?.completed) || OOP_COURSE_LESSONS[OOP_COURSE_LESSONS.length - 1];
+  const currentLesson = OOP_COURSE_LESSONS.find(lesson => {
+    const watch = watchDb[lesson.id];
+    const assessment = OOP_ASSESSMENTS.find(item => item.lessonId === lesson.id);
+    return !watch?.completed || !quizDb[assessment?.id || '']?.passed;
+  }) || nextLesson;
+  const currentModuleLabel = `Module ${currentLesson.sequence}: ${currentLesson.title}`;
   const nextPractice = PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === nextLesson.id) || activePractice;
   const nextAssessment = OOP_ASSESSMENTS.find(assessment => assessment.lessonId === nextLesson.id) || activeAssessment;
   const practiceKey = `${currentUser.id || currentUser.userId || currentUser.email}:${activePractice.id}`;
@@ -282,8 +288,8 @@ export default function StudentDashboard({
             <div className="flex justify-between items-start mb-4 flex-wrap gap-4">
               <div className="space-y-1">
                 <span className="text-[9px] font-bold font-mono tracking-wider bg-emerald-50 border border-emerald-200 px-2 py-0.5 uppercase rounded text-emerald-700">{hasProgress ? 'Currently Studying' : 'Ready to Start'}</span>
-                <h2 className="text-lg font-bold text-slate-900">{hasProgress ? 'Module 3: Inheritance & Polymorphism' : 'Module 1: Classes & Objects'}</h2>
-                <p className="text-xs text-slate-500 font-medium">{hasProgress ? 'Deconstruct subclasses, parameter extensions, and late virtual method dispatch tables.' : 'Begin with foundational class structure, object creation, and method basics.'}</p>
+                <h2 className="text-lg font-bold text-slate-900">{currentModuleLabel}</h2>
+                <p className="text-xs text-slate-500 font-medium">{hasProgress ? `Continue ${currentLesson.title.toLowerCase()} and complete its video and 80% assessment.` : 'Begin with foundational class structure, object creation, and method basics.'}</p>
               </div>
               <span className="text-xs font-bold font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">{moduleProgress}% Completed</span>
             </div>
