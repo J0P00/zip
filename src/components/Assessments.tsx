@@ -133,7 +133,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
 
     const seed = Date.now();
     setActiveAssessmentId(assessment.id);
-    setQuestions(shuffleArray(assessment.questions, seed).map((item, index) => ({
+    setQuestions(shuffleArray(assessment.questions, seed).slice(0, 15).map((item, index) => ({
       ...item,
       options: shuffleArray(item.options, seed + index + 1)
     })));
@@ -190,7 +190,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
             </span>
             <h2 className="mt-3 text-2xl font-extrabold text-slate-900">Lesson Assessments</h2>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-              Each lesson has exactly 20 randomized MCQs. Passing score is 80%, and lessons unlock sequentially.
+              Each lesson presents 15 randomized MCQs from the full question bank. Passing score is 80%, and lessons unlock sequentially.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
@@ -226,7 +226,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
                   </div>
                   <h3 className="mt-2 text-sm font-extrabold text-slate-900">{assessment.title}</h3>
                   <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
-                    20 questions from the lesson assessment file.
+                    15 randomized questions from the lesson assessment bank.
                   </p>
                   {attempt && (
                     <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>

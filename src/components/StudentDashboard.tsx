@@ -176,7 +176,7 @@ export default function StudentDashboard({
       return {
         id: assessment.id,
         title: assessment.title,
-        type: `${assessment.questions.length || 15} MCQ | ${lesson?.topic || lesson?.title || 'Assessment'}`,
+        type: '15 MCQ | ' + (lesson?.topic || lesson?.title || 'Assessment'),
         sequence: lesson?.sequence || 999,
         status,
         color: status === 'Ready Now' ? 'border-l-emerald-600' : status === 'Retry' ? 'border-l-amber-500' : 'border-l-slate-400',
@@ -340,7 +340,7 @@ export default function StudentDashboard({
                 <div>
                   <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block">Diagnostic Milestones</span>
                 <h4 className="font-extrabold text-slate-900 text-sm mt-1">{dashboardAssessment.title}</h4>
-                <p className="text-[11px] text-slate-500 mt-1 leading-normal">Assess {dashboardCurrentLesson.title.toLowerCase()} concepts with {dashboardAssessment.questions.length || 0} quiz checks tied to this week’s programming problem.</p>
+                <p className="text-[11px] text-slate-500 mt-1 leading-normal">Assess {dashboardCurrentLesson.title.toLowerCase()} concepts with 15 quiz checks tied to this week’s programming problem.</p>
                 </div>
                 <button
                   id="student-bento-quiz-cta"

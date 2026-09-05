@@ -191,7 +191,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
       return;
     }
     const seed = Date.now();
-    setQuizQuestions(shuffleArray(activeAssessment.questions, seed).map((question, index) => ({
+    setQuizQuestions(shuffleArray(activeAssessment.questions, seed).slice(0, 15).map((question, index) => ({
       ...question,
       options: shuffleArray(question.options, seed + index + 1)
     })));
@@ -575,7 +575,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
             <article key={assessment.id} className={`rounded-2xl border bg-white p-5 shadow-sm ${selected ? 'border-emerald-300' : 'border-slate-200'}`}>
               <span className="font-mono text-[10px] font-black uppercase text-slate-400">Lesson {lesson?.sequence}</span>
               <h3 className="mt-2 text-sm font-extrabold text-slate-900">{assessment.title}</h3>
-              <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">10 randomized MCQs. Unlimited retakes. Passing score: 80%.</p>
+              <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">15 randomized MCQs from the full question bank. Unlimited retakes. Passing score: 80%.</p>
               {attempt && <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>Latest: {attempt.percentage}% - Attempt {attempt.attemptNumber}</p>}
               <button type="button" onClick={() => { if (lesson) setActiveLessonId(lesson.id); window.setTimeout(startQuiz, 0); }} className="mt-4 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white">Start Quiz</button>
             </article>
