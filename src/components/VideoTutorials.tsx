@@ -90,10 +90,20 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     const submission = challenge ? submissionDb[`${studentKey}:${challenge.id}`] : undefined;
     const completed = Boolean(watch?.completed && watch.completionPercentage >= 95 && assessment && quizDb[assessment.id]?.passed && (!challenge || (submission?.compileStatus === 'success' && Number(submission.score || 0) >= challenge.passingScore)));
     const access = getLessonAccess(lesson, sourceLessons, watchDb, quizDb, submissionDb, studentKey);
+    const previous = sourceLessons.find(item => item.sequence === lesson.sequence - 1);
+    const previousAssessment = previous ? OOP_ASSESSMENTS.find(item => item.lessonId === previous.id) : undefined;
+    const previousChallenge = previous ? PRACTICE_CHALLENGES.find(item => item.lessonId === previous.id) : undefined;
+    const previousSubmission = previousChallenge ? submissionDb[`${studentKey}:${previousChallenge.id}`] : undefined;
+    const previousCompleted = lesson.sequence === 1 || Boolean(
+      previous &&
+      watchDb[previous.id]?.completed && watchDb[previous.id].completionPercentage >= 95 &&
+      previousAssessment && quizDb[previousAssessment.id]?.passed && quizDb[previousAssessment.id].percentage >= 80 &&
+      (!previousChallenge || (previousSubmission?.compileStatus === 'success' && Number(previousSubmission.score || 0) >= previousChallenge.passingScore))
+    );
     return {
       ...lesson,
       status: completed ? 'completed' as const : access as VideoLesson['status'],
-      progressPercent: watch?.completionPercentage || 0
+      progressPercent: previousCompleted || completed ? watch?.completionPercentage || 0 : 0
     };
   }), [sourceLessons, watchDb, quizDb, submissionDb, studentKey]);
 
@@ -445,10 +455,10 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
                       <span>{lesson.duration}</span>
-                      <span>{progress}% watched</span>
+                      <span>{isLocked ? 'Unavailable' : `${progress}% watched`}</span>
                     </div>
                     <div className="mt-2 h-1.5 rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress}%` }} />
+                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${isLocked ? 0 : progress}%` }} />
                     </div>
                   </button>
                 );
