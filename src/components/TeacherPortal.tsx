@@ -31,6 +31,7 @@ import { LeaderboardUser } from '../types';
 import Leaderboard from './Leaderboard';
 import { progressApi, userApi } from '../services/api';
 import { generateStudentResultsInterpretation, StudentResultsData, StudentResultsInterpretation } from '../services/interpretation';
+import { generateRuleBasedRecommendation } from '../services/recommendationEngine';
 
 interface TeacherPortalProps {
   submissions: PendingSubmission[];
@@ -569,7 +570,7 @@ export default function TeacherPortal({
 
     if (isDemoStudent) {
       const student: LiveStudent = {
-        id: request.studentId || 'STU-0001',
+        id: request.studentEmail,
         name: 'Dmitry Vance (Alex Mercer)',
         email: request.studentEmail,
         section: 'CS-3A',
@@ -629,7 +630,7 @@ export default function TeacherPortal({
       const syncedTopics = progressUserTopics(progressUser);
 
       const student: LiveStudent = {
-        id: request.studentId || request.studentEmail,
+        id: request.studentEmail,
         name: request.studentName,
         email: request.studentEmail,
         section: 'Unassigned',
@@ -677,7 +678,7 @@ export default function TeacherPortal({
     const performanceIndex = Math.round(quizScore * 0.35 + practiceScore * 0.4 + overallProgress * 0.25);
 
     return withTopicProgress({
-      id: request.studentId || request.studentEmail,
+      id: request.studentEmail,
       name: request.studentName,
       email: request.studentEmail,
       section: latestSubmission?.section || 'Unassigned',
@@ -741,13 +742,43 @@ export default function TeacherPortal({
       cancelled = true;
     };
   }, [activeTab, backendStudents, currentUser.token, selectedStudent?.id]);
-  const visibleStudentKeys = visibleStudents.flatMap(student => [student.id, student.email, student.name]);
-  const visibleRecommendations = recommendationHistory.filter(item =>
-    visibleStudentKeys.includes(item.studentId) ||
-    (item.studentName ? visibleStudentKeys.includes(item.studentName) : false)
-  );
+  const selectedStudentKeys = selectedStudent
+    ? [
+        selectedStudent.id,
+        selectedStudent.email,
+        ...acceptedRequests
+          .filter(request => request.studentEmail.toLowerCase() === selectedStudent.email.toLowerCase())
+          .map(request => request.studentId)
+      ]
+    : [];
+  const visibleRecommendations = recommendationHistory
+    .filter(item => selectedStudentKeys.includes(item.studentId))
+    .sort((a, b) => new Date(b.generatedDate).getTime() - new Date(a.generatedDate).getTime());
+  const recommendationIsCurrent = (item: AdaptiveRecommendation) => {
+    if (!selectedStudent) return false;
+    const scoreMatches = item.codingScore === undefined || item.codingScore === selectedStudent.practiceScore;
+    const quizMatches = item.quizScore === undefined || item.quizScore === selectedStudent.quizScore;
+    const progressMatches = item.progressPercentage === undefined || item.progressPercentage === selectedStudent.overallProgress;
+    return scoreMatches && quizMatches && progressMatches;
+  };
+  const currentRecommendation = selectedStudent
+    ? selectedStudent.overallProgress === 0 && selectedStudent.quizScore === 0 && selectedStudent.practiceScore === 0
+      ? 'No current learning activity is recorded. Begin with the first available lesson.'
+      : generateRuleBasedRecommendation({
+          studentId: selectedStudent.id,
+          studentName: selectedStudent.name,
+          lessonId: selectedStudent.topics[0]?.topic || 'current-topic',
+          currentTopic: selectedStudent.currentTopic,
+          trigger: 'Coding Score',
+          videoCompleted: selectedStudent.videoCompletion >= 95,
+          lessonCompleted: selectedStudent.overallProgress >= 100,
+          quizScore: selectedStudent.quizScore,
+          codingScore: selectedStudent.practiceScore,
+          progressPercentage: selectedStudent.overallProgress
+        }).summary
+    : null;
   const remedialCounts = visibleRecommendations
-    .filter(item => item.type === 'Remedial')
+    .filter(item => item.type === 'Remedial' && recommendationIsCurrent(item))
     .reduce<Record<string, number>>((acc, item) => {
       const key = item.studentName || item.studentId;
       acc[key] = (acc[key] || 0) + 1;
@@ -1208,7 +1239,7 @@ export default function TeacherPortal({
 
             <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/15 p-4">
               <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">Rule-Based Adaptive Learning</p>
-              <p className="mt-1 text-sm font-bold text-slate-800">{selectedStudent.recommendation}</p>
+              <p className="mt-1 text-sm font-bold text-slate-800">{currentRecommendation}</p>
               <div className="mt-4 grid gap-2 text-xs sm:grid-cols-4">
                 {['Save activity', 'Run adaptive rules', 'Update PI', 'Push live dashboard'].map(step => (
                   <div key={step} className="flex items-center gap-2 rounded-xl bg-white p-2 font-bold text-slate-600 shadow-sm">
@@ -1223,7 +1254,7 @@ export default function TeacherPortal({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Recommendation History</p>
-                  <h4 className="mt-1 text-sm font-black text-slate-900">Current Rule-Based Recommendations</h4>
+                  <h4 className="mt-1 text-sm font-black text-slate-900">Selected Student Recommendation History</h4>
                 </div>
                 <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[10px] font-black text-rose-700">
                   {repeatedRemedialStudents.length} repeated remedial
@@ -1238,9 +1269,9 @@ export default function TeacherPortal({
                         <p className="mt-1 text-[11px] font-semibold text-slate-500">{item.lessonTitle} | {item.reason}</p>
                       </div>
                       <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
-                        item.type === 'Remedial' ? 'bg-rose-100 text-rose-700' : item.type === 'Continue' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                        item.status === 'Completed' || !recommendationIsCurrent(item) ? 'bg-slate-100 text-slate-600' : item.type === 'Remedial' ? 'bg-rose-100 text-rose-700' : item.type === 'Continue' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
                       }`}>
-                        {item.type}
+                        {item.status === 'Completed' ? 'Resolved' : !recommendationIsCurrent(item) ? 'Historical' : item.type === 'Remedial' ? 'Active' : item.status}
                       </span>
                     </div>
                     <div className="mt-2 grid gap-2 text-[10px] font-bold text-slate-500 sm:grid-cols-3">
