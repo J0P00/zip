@@ -1,5 +1,6 @@
 import { ChallengeTestResult, ProgrammingChallenge } from '../types';
 import { CourseQuestion, getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from './oopCourse';
+import { PRACTICE_CHALLENGES } from './practiceChallenges';
 import { SWING_QUESTION_BANKS } from './javaSwingQuestions';
 
 export const SWING_WATCH_KEY = 'oophub_swing_lesson_progress';
@@ -479,6 +480,8 @@ public class Main {
 export const isOopCourseComplete = () => {
   const watchDb = getStoredJson<Record<string, { completed?: boolean; completionPercentage?: number }>>('oophub_oop_video_progress', {});
   const quizDb = getStoredJson<Record<string, { passed?: boolean; percentage?: number }>>('oophub_oop_quiz_attempts', {});
+  const submissionDb = getStoredJson<Record<string, { score?: number; compileStatus?: string }>>('oophub_practice_submissions', {});
+  const studentKey = localStorage.getItem('oophub_current_user_id') || '';
 
   const allLessonsCompleted = OOP_COURSE_LESSONS.every(lesson =>
     Boolean(watchDb[lesson.id]?.completed) || Number(watchDb[lesson.id]?.completionPercentage || 0) >= 95
@@ -486,8 +489,14 @@ export const isOopCourseComplete = () => {
   const allAssessmentsPassed = OOP_ASSESSMENTS.every(assessment =>
     Boolean(quizDb[assessment.id]?.passed) && Number(quizDb[assessment.id]?.percentage || 0) >= 80
   );
+  const allPracticeCompleted = PRACTICE_CHALLENGES
+    .filter(challenge => OOP_COURSE_LESSONS.some(lesson => lesson.id === challenge.lessonId))
+    .every(challenge => {
+      const submission = submissionDb[`${studentKey}:${challenge.id}`];
+      return submission?.compileStatus === 'success' && Number(submission.score || 0) >= challenge.passingScore;
+    });
 
-  return allLessonsCompleted && allAssessmentsPassed;
+  return allLessonsCompleted && allAssessmentsPassed && allPracticeCompleted;
 };
 
 export const getSwingCourseProgress = () => {

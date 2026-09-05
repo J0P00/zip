@@ -145,6 +145,11 @@ export const assessmentApi = {
 
 export const practiceApi = {
   listChallenges: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-challenges'),
+  submit: (body: Record<string, unknown>) =>
+    apiRequest<{ success: boolean; data: any }>('/api/practice-submissions', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
   createChallenge: (body: Record<string, unknown>) =>
     apiRequest<{ success: boolean; data: any }>('/api/practice-challenges', {
       method: 'POST',

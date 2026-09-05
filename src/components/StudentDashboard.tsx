@@ -131,6 +131,8 @@ export default function StudentDashboard({
     ? OOP_COURSE_LESSONS.find(lesson => lesson.id === authoritativeCurrentTopic.id) || currentLesson
     : currentLesson;
   const dashboardCurrentModuleLabel = `Module ${dashboardCurrentLesson.sequence}: ${dashboardCurrentLesson.title}`;
+  const dashboardPractice = PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === dashboardCurrentLesson.id) || activePractice;
+  const dashboardAssessment = OOP_ASSESSMENTS.find(assessment => assessment.lessonId === dashboardCurrentLesson.id) || activeAssessment;
   const currentModuleLabel = `Module ${currentLesson.sequence}: ${currentLesson.title}`;
   const nextPractice = PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === nextLesson.id) || activePractice;
   const nextAssessment = OOP_ASSESSMENTS.find(assessment => assessment.lessonId === nextLesson.id) || activeAssessment;
@@ -316,30 +318,30 @@ export default function StudentDashboard({
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex flex-col justify-between shadow-sm">
                 <div>
                   <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block">Recommended Lab Unit</span>
-                <h4 className="font-extrabold text-slate-900 text-sm mt-1">{activePractice.title}</h4>
-                <p className="text-[11px] text-slate-500 mt-1 leading-normal">{activePractice.description}</p>
+                <h4 className="font-extrabold text-slate-900 text-sm mt-1">{dashboardPractice.title}</h4>
+                <p className="text-[11px] text-slate-500 mt-1 leading-normal">{dashboardPractice.description}</p>
                 </div>
                 <button
                   id="student-bento-lab-cta"
                   onClick={() => onNavigateTo('ide')}
                   className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer max-w-max transition shadow-sm hover:shadow active:scale-95"
                 >
-                <Code2 className="w-3.5 h-3.5" /> Open {activePractice.title}
+                <Code2 className="w-3.5 h-3.5" /> Open {dashboardPractice.title}
                 </button>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex flex-col justify-between shadow-sm">
                 <div>
                   <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block">Diagnostic Milestones</span>
-                <h4 className="font-extrabold text-slate-900 text-sm mt-1">{activeAssessment.title}</h4>
-                <p className="text-[11px] text-slate-500 mt-1 leading-normal">Assess {activeLesson.title.toLowerCase()} concepts with {activeAssessment.questions.length || 0} quiz checks tied to this week’s programming problem.</p>
+                <h4 className="font-extrabold text-slate-900 text-sm mt-1">{dashboardAssessment.title}</h4>
+                <p className="text-[11px] text-slate-500 mt-1 leading-normal">Assess {dashboardCurrentLesson.title.toLowerCase()} concepts with {dashboardAssessment.questions.length || 0} quiz checks tied to this week’s programming problem.</p>
                 </div>
                 <button
                   id="student-bento-quiz-cta"
                   onClick={() => onNavigateTo('assessments')}
                   className="mt-4 bg-white border border-slate-300 hover:bg-emerald-50 hover:border-emerald-500 text-slate-700 hover:text-emerald-800 font-bold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer max-w-max transition shadow-sm"
                 >
-                <BookOpen className="w-3.5 h-3.5 text-slate-500" /> Start {activeAssessment.title}
+                <BookOpen className="w-3.5 h-3.5 text-slate-500" /> Start {dashboardAssessment.title}
                 </button>
               </div>
             </div>

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { StudentSubView, VideoLesson } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, setStoredJson } from '../data/oopCourse';
+import { PRACTICE_CHALLENGES } from '../data/practiceChallenges';
 import { progressApi } from '../services/api';
 
 interface VideoTutorialsProps {
@@ -57,7 +58,9 @@ const formatTime = (seconds: number) => {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-const getLessonAccess = (lesson: VideoLesson, allLessons: VideoLesson[], watchDb: WatchDb, quizDb: QuizDb) => {
+type SubmissionDb = Record<string, { score?: number; compileStatus?: string }>;
+
+const getLessonAccess = (lesson: VideoLesson, allLessons: VideoLesson[], watchDb: WatchDb, quizDb: QuizDb, submissionDb: SubmissionDb, studentKey: string) => {
   if (lesson.sequence === 1) return 'active';
   const previous = allLessons.find(item => item.sequence === lesson.sequence - 1);
   if (!previous) return 'locked';
@@ -65,19 +68,30 @@ const getLessonAccess = (lesson: VideoLesson, allLessons: VideoLesson[], watchDb
   const previousWatch = watchDb[previous.id];
   const previousAssessment = OOP_ASSESSMENTS.find(item => item.lessonId === previous.id);
   const previousQuiz = previousAssessment ? quizDb[previousAssessment.id] : undefined;
+  const previousChallenge = PRACTICE_CHALLENGES.find(item => item.lessonId === previous.id);
+  const previousSubmission = previousChallenge ? submissionDb[`${studentKey}:${previousChallenge.id}`] : undefined;
 
-  return previousWatch?.completed && previousQuiz?.passed ? 'active' : 'locked';
+  const previousCompleted = previousWatch?.completed && previousWatch.completionPercentage >= 95
+    && previousQuiz?.passed && previousQuiz.percentage >= 80
+    && (!previousChallenge || (previousSubmission?.compileStatus === 'success' && Number(previousSubmission.score || 0) >= previousChallenge.passingScore));
+  return previousCompleted ? 'active' : 'locked';
 };
 
 export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress }: VideoTutorialsProps) {
   const [watchDb, setWatchDb] = useState<WatchDb>(readWatchProgress);
   const [quizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
+  const [submissionDb] = useState<SubmissionDb>(() => getStoredJson('oophub_practice_submissions', {}));
+  const studentKey = localStorage.getItem('oophub_current_user_id') || '';
   const lessons = useMemo(() => sourceLessons.map(lesson => {
     const watch = watchDb[lesson.id];
-    const access = getLessonAccess(lesson, sourceLessons, watchDb, quizDb);
+    const assessment = OOP_ASSESSMENTS.find(item => item.lessonId === lesson.id);
+    const challenge = PRACTICE_CHALLENGES.find(item => item.lessonId === lesson.id);
+    const submission = challenge ? submissionDb[`${studentKey}:${challenge.id}`] : undefined;
+    const completed = Boolean(watch?.completed && watch.completionPercentage >= 95 && assessment && quizDb[assessment.id]?.passed && (!challenge || (submission?.compileStatus === 'success' && Number(submission.score || 0) >= challenge.passingScore)));
+    const access = getLessonAccess(lesson, sourceLessons, watchDb, quizDb, submissionDb, studentKey);
     return {
       ...lesson,
-      status: watch?.completed ? 'completed' as const : access as VideoLesson['status'],
+      status: completed ? 'completed' as const : access as VideoLesson['status'],
       progressPercent: watch?.completionPercentage || 0
     };
   }), [sourceLessons, watchDb, quizDb]);

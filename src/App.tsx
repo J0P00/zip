@@ -831,7 +831,7 @@ export default function App() {
         
         const prevProgress = video.progressPercent || 0;
         const nextProgress = Math.max(prevProgress, progress);
-        const isCompletedNow = nextProgress >= 95 && video.status !== 'completed';
+        const videoRequirementCompleted = nextProgress >= 95;
         
         let completed = [...(video.completedStudents || [])];
         let inProgress = [...(video.inProgressStudents || [])];
@@ -850,20 +850,18 @@ export default function App() {
         const updatedVideo = {
           ...video,
           progressPercent: nextProgress,
-          status: (isCompletedNow ? 'completed' : video.status) as any,
+          status: (videoRequirementCompleted ? 'active' : video.status) as any,
           completedStudents: completed,
           inProgressStudents: inProgress,
           notStartedStudents: notStarted,
-          views: isCompletedNow ? (video.views || 0) + 1 : (video.views || 0)
+          views: videoRequirementCompleted ? (video.views || 0) + 1 : (video.views || 0)
         };
 
-        if (isCompletedNow) {
+        if (videoRequirementCompleted && video.progressPercent < 95) {
           setPoints(p => p + 100);
-          setCompletedLessonsCount(studentProgress.completedLessons);
-          
           addNotification(
-            `Lesson Completed! 🎉`,
-            `You finished watching "${video.title}". +100 XP gained.`,
+            `Assessment Unlocked! 🔓`,
+            `The video requirement for "${video.title}" is complete. Pass its assessment to unlock practice.`,
             'unlock'
           );
           
@@ -1002,6 +1000,7 @@ export default function App() {
     }
     const studentId = getCanonicalStudentId(currentUser);
     let cancelled = false;
+    ['oophub_oop_video_progress', 'oophub_oop_quiz_attempts', 'oophub_practice_submissions', 'oophub_practice_drafts'].forEach(key => localStorage.removeItem(key));
     setStudentResults(null);
     setStreak(0);
     setPoints(0);
@@ -1654,6 +1653,7 @@ export default function App() {
 
             {persona === 'student' && studentTab === 'ide' && (
               <PracticeIDE 
+                key={`practice-${displayUser.id || displayUser.userId || displayUser.email}`}
                 currentUser={displayUser}
                 onSubmitCompleted={handleStudentSubmitCode}
                 theme={theme}
@@ -1663,6 +1663,7 @@ export default function App() {
 
             {persona === 'student' && studentTab === 'videos' && (
               <VideoTutorials 
+                key={`videos-${displayUser.id || displayUser.userId || displayUser.email}`}
                 lessons={videoLessons} 
                 onNavigateTo={handleDirectNavigation}
                 onUpdateVideoProgress={handleUpdateVideoProgress}
@@ -1671,6 +1672,7 @@ export default function App() {
 
             {persona === 'student' && studentTab === 'assessments' && (
               <Assessments 
+                key={`assessments-${displayUser.id || displayUser.userId || displayUser.email}`}
                 onNavigateTo={(view) => setStudentTab(view as any)}
                 onCorrectAnswerAdded={handleCorrectAnswerAdded}
                 lessons={videoLessons}

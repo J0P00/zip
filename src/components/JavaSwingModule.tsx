@@ -146,7 +146,10 @@ export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlo
     const previousExercise = JAVA_SWING_EXERCISES.find(item => item.lessonId === previous.id);
     if (!getLessonCompleted(previous.id, progressDb)) return `Complete Java Swing Lesson ${previous.sequence} content and video first.`;
     if (previousAssessment && !quizDb[previousAssessment.id]?.passed) return `Pass Java Swing Quiz ${previous.sequence} first.`;
-    if (previousExercise && !submissionDb[`${userKeyFor(currentUser)}:${previousExercise.id}`]) return `Submit Java Swing Exercise ${previous.sequence} first.`;
+    if (previousExercise) {
+      const previousSubmission = submissionDb[`${userKeyFor(currentUser)}:${previousExercise.id}`];
+      if (!previousSubmission || previousSubmission.compileStatus !== 'success' || previousSubmission.score < previousExercise.passingScore) return `Complete Java Swing Exercise ${previous.sequence} first.`;
+    }
     return '';
   };
 

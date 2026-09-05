@@ -1305,36 +1305,75 @@ const checkAndAwardBadges = async (studentId) => {
     }
 };
 
+const getLessonEvidence = async (studentId, lessonId) => {
+    const lessonResult = await pool.query(
+        "SELECT id, sequence, module FROM lessons WHERE id = $1 AND status <> 'Archived'",
+        [lessonId]
+    );
+    if (!lessonResult.rowCount) return null;
+    const lesson = lessonResult.rows[0];
+    const videoResult = await pool.query(
+        "SELECT completed, completion_percentage FROM student_progress WHERE student_user_id = $1 AND video_id = $2",
+        [studentId, lessonId]
+    );
+    const quizResult = await pool.query(
+        "SELECT EXISTS (SELECT 1 FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 AND percentage >= 80) AS passed",
+        [studentId, lessonId]
+    );
+    const challengeResult = await pool.query(`
+        SELECT pc.id, pc.passing_score,
+               latest.score, latest.compile_status,
+               latest.submitted_at
+        FROM programming_challenges pc
+        LEFT JOIN LATERAL (
+            SELECT ps.score, ps.compile_status, ps.submitted_at
+            FROM practice_submissions ps
+            WHERE ps.student_id = $1::text AND ps.challenge_id = pc.id
+            ORDER BY ps.submitted_at DESC
+            LIMIT 1
+        ) latest ON TRUE
+        WHERE pc.lesson_id = $2 AND pc.status <> 'Archived'
+        ORDER BY pc.id
+        LIMIT 1
+    `, [studentId, lessonId]);
+    const videoCompleted = Boolean(videoResult.rows[0]?.completed) && Number(videoResult.rows[0]?.completion_percentage || 0) >= 95;
+    const assessmentPassed = Boolean(quizResult.rows[0]?.passed);
+    const practiceRequired = challengeResult.rowCount > 0;
+    const practice = challengeResult.rows[0];
+    const practiceCompleted = !practiceRequired || (
+        practice.score !== null &&
+        Number(practice.score) >= Number(practice.passing_score || 70) &&
+        practice.compile_status === 'success'
+    );
+    return {
+        ...lesson,
+        videoCompleted,
+        assessmentPassed,
+        practiceRequired,
+        practiceCompleted,
+        completed: videoCompleted && assessmentPassed && practiceCompleted
+    };
+};
+
+const getLessonAccessState = async (studentId, lessonId) => {
+    const current = await getLessonEvidence(studentId, lessonId);
+    if (!current) return { canAccess: false, reason: "Lesson not found." };
+    if (current.sequence <= 1) return { canAccess: true, current };
+    const previousResult = await pool.query(
+        "SELECT id FROM lessons WHERE module = $1 AND sequence = $2 AND status <> 'Archived' LIMIT 1",
+        [current.module, current.sequence - 1]
+    );
+    if (!previousResult.rowCount) return { canAccess: false, reason: "Complete the previous lesson requirements first.", current };
+    const previous = await getLessonEvidence(studentId, previousResult.rows[0].id);
+    return previous?.completed
+        ? { canAccess: true, current }
+        : { canAccess: false, reason: "Complete the previous lesson requirements first.", current };
+};
+
 const verifyLessonCompletion = async (studentId, lessonId) => {
     try {
-        const videoRes = await pool.query(
-            "SELECT completed FROM student_progress WHERE student_user_id = $1 AND video_id = $2",
-            [studentId, lessonId]
-        );
-        const videoCompleted = videoRes.rows[0]?.completed || false;
-
-        const quizRes = await pool.query(
-            "SELECT passed FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 AND passed = TRUE LIMIT 1",
-            [studentId, lessonId]
-        );
-        const quizPassed = quizRes.rowCount > 0;
-
-        const challengeRes = await pool.query(
-            "SELECT id FROM programming_challenges WHERE lesson_id = $1 LIMIT 1",
-            [lessonId]
-        );
-        let practiceCompleted = true;
-        if (challengeRes.rowCount > 0) {
-            const challengeId = challengeRes.rows[0].id;
-            const practiceRes = await pool.query(
-                "SELECT score FROM practice_submissions WHERE student_id = $1::text AND challenge_id = $2",
-                [studentId, challengeId]
-            );
-            const score = Number(practiceRes.rows[0]?.score || 0);
-            practiceCompleted = score >= 70;
-        }
-
-        const completed = videoCompleted && quizPassed && practiceCompleted;
+        const evidence = await getLessonEvidence(studentId, lessonId);
+        if (!evidence) return;
         await pool.query(`
             INSERT INTO lesson_progress (student_id, lesson_id, video_completed, quiz_passed, practice_completed, completed, completed_at)
             VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 THEN NOW() ELSE NULL END)
@@ -1345,9 +1384,9 @@ const verifyLessonCompletion = async (studentId, lessonId) => {
               completed = EXCLUDED.completed,
               completed_at = CASE WHEN EXCLUDED.completed THEN NOW() ELSE lesson_progress.completed_at END,
               updated_at = NOW()
-        `, [studentId, lessonId, videoCompleted, quizPassed, practiceCompleted, completed]);
+        `, [studentId, lessonId, evidence.videoCompleted, evidence.assessmentPassed, evidence.practiceCompleted, evidence.completed]);
 
-        if (completed) {
+        if (evidence.completed) {
             await logActivity(studentId, "lesson_complete", `Completed OOP Lesson: ${lessonId}`, { lessonId });
 
             const lessonInfo = await pool.query("SELECT module FROM lessons WHERE id = $1", [lessonId]);
@@ -1800,6 +1839,15 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
     }
 });
 
+app.get("/api/lesson-access/:lessonId", requireAuth, requireRole(["student"]), async (req, res, next) => {
+    try {
+        const access = await getLessonAccessState(req.authUser.id, cleanText(req.params.lessonId, 120));
+        res.json({ success: true, data: access });
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", "admin", "student"]), async (req, res, next) => {
     try {
         if (req.authUser.role === "student" && req.authUser.id !== req.params.studentId) {
@@ -1923,17 +1971,20 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         const totalVideos = Number(row.total_videos || totalLessons);
         const submittedPracticeActivities = Number(row.submitted_practice_activities || 0);
         const totalPracticeActivities = Number(row.total_practice_activities || 0);
-        const oopTopicRows = oopTopics.rows.map(topic => ({
-            id: topic.id,
-            title: topic.title,
-            sequence: Number(topic.sequence || 0),
-            attempted: Boolean(topic.attempted),
-            videoPercentage: topic.video_percentage === null ? null : Number(topic.video_percentage),
-            videoCompleted: Boolean(topic.video_completed),
-            quizPercentage: topic.quiz_percentage === null ? null : Number(topic.quiz_percentage),
-            quizPassed: topic.quiz_passed === null ? null : Boolean(topic.quiz_passed),
-            practiceScore: topic.practice_score === null ? null : Number(topic.practice_score),
-            lessonCompleted: Boolean(topic.lesson_completed)
+        const oopTopicRows = await Promise.all(oopTopics.rows.map(async topic => {
+            const evidence = await getLessonEvidence(dbStudentId, topic.id);
+            return {
+                id: topic.id,
+                title: topic.title,
+                sequence: Number(topic.sequence || 0),
+                attempted: Boolean(topic.attempted),
+                videoPercentage: topic.video_percentage === null ? null : Number(topic.video_percentage),
+                videoCompleted: Boolean(topic.video_completed),
+                quizPercentage: topic.quiz_percentage === null ? null : Number(topic.quiz_percentage),
+                quizPassed: topic.quiz_passed === null ? null : Boolean(topic.quiz_passed),
+                practiceScore: topic.practice_score === null ? null : Number(topic.practice_score),
+                lessonCompleted: Boolean(evidence?.completed)
+            };
         }));
         const oopComplete = oopTopicRows.length > 0 && oopTopicRows.every(topic => topic.lessonCompleted && topic.quizPassed === true);
         const swingTopicRows = swingTopics.rows.map(topic => ({
@@ -1995,6 +2046,10 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
         const safeCompletionPercentage = clampNumber(completionPercentage, 0, 100);
         const safeCompleted = Boolean(completed) && safeCompletionPercentage >= 95;
         const safeNotes = cleanText(notes, 5000);
+        const access = await getLessonAccessState(req.authUser.id, safeVideoId);
+        if (!access.canAccess) {
+            return res.status(403).json({ success: false, message: access.reason });
+        }
 
         const result = await pool.query(`
             INSERT INTO student_progress (student_user_id, video_id, last_position, completion_percentage, completed, date_completed, notes)
@@ -2081,6 +2136,11 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
         if (req.authUser.role !== "student") {
             return res.status(403).json({ success: false, message: "Only students can submit quiz attempts." });
         }
+        const safeLessonId = cleanText(lessonId, 120);
+        const lessonAccess = await getLessonAccessState(req.authUser.id, safeLessonId);
+        if (!lessonAccess.canAccess || !lessonAccess.current.videoCompleted) {
+            return res.status(403).json({ success: false, message: "Complete the current lesson video before starting its assessment." });
+        }
 
         const safeTotal = Math.max(1, Math.floor(clampNumber(total, 1, 100)));
         const safeScore = Math.floor(clampNumber(score, 0, safeTotal));
@@ -2088,7 +2148,6 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
         const safeCorrectAnswers = Math.floor(clampNumber(correctAnswers, 0, safeTotal));
         const safeIncorrectAnswers = Math.floor(clampNumber(incorrectAnswers, 0, safeTotal));
         const safeAssessmentId = cleanText(assessmentId, 120);
-        const safeLessonId = cleanText(lessonId, 120);
         const attemptResult = await pool.query(
             "SELECT COALESCE(MAX(attempt_number), 0) + 1 AS next_attempt FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = $2",
             [req.authUser.id, safeAssessmentId]
@@ -2550,6 +2609,10 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
         if (!prerequisite.rowCount) {
             return res.status(404).json({ success: false, message: "Practice challenge not found." });
         }
+        const lessonAccess = await getLessonAccessState(req.authUser.id, prerequisite.rows[0].lesson_id);
+        if (!lessonAccess.canAccess || !lessonAccess.current.videoCompleted || !lessonAccess.current.assessmentPassed) {
+            return res.status(403).json({ success: false, message: "Pass the current lesson assessment before submitting practice." });
+        }
         if (!prerequisite.rows[0].quiz_passed) {
             return res.status(403).json({ success: false, message: "Pass the required assessment with 80% or higher before submitting practice." });
         }
@@ -2592,6 +2655,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             String(errorMessage).slice(0, 20000),
             JSON.stringify(Array.isArray(testResults) ? testResults : [])
         ]);
+        await verifyLessonCompletion(req.authUser.id, prerequisite.rows[0].lesson_id);
         res.status(201).json({ success: true, data: result.rows[0] });
     } catch (error) {
         next(error);

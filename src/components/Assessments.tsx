@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Award, Check, CheckCircle, ChevronLeft, ChevronRight, Lock, RotateCcw, X } from 'lucide-react';
 import { AdaptiveRecommendation, StudentSubView, VideoLesson } from '../types';
 import { CourseQuestion, getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson, shuffleArray } from '../data/oopCourse';
+import { PRACTICE_CHALLENGES } from '../data/practiceChallenges';
 import { progressApi } from '../services/api';
 import RecommendationCard from './RecommendationCard';
 
@@ -36,20 +37,24 @@ interface QuizAttempt {
 
 type WatchDb = Record<string, WatchRecord>;
 type QuizDb = Record<string, QuizAttempt>;
+type SubmissionDb = Record<string, { score?: number; compileStatus?: string }>;
 
 const WATCH_KEY = 'oophub_oop_video_progress';
 const QUIZ_KEY = 'oophub_oop_quiz_attempts';
 const PASSING_PERCENTAGE = 80;
 
-const getAssessmentLockedReason = (lessonId: string, watchDb: WatchDb, quizDb: QuizDb) => {
+const getAssessmentLockedReason = (lessonId: string, watchDb: WatchDb, quizDb: QuizDb, submissionDb: SubmissionDb, studentKey: string) => {
   const lesson = OOP_COURSE_LESSONS.find(item => item.id === lessonId);
   if (!lesson) return 'Lesson unavailable';
 
   if (lesson.sequence > 1) {
     const previous = OOP_COURSE_LESSONS.find(item => item.sequence === lesson.sequence - 1);
     const previousAssessment = previous ? OOP_ASSESSMENTS.find(item => item.lessonId === previous.id) : undefined;
+    const previousChallenge = previous ? PRACTICE_CHALLENGES.find(item => item.lessonId === previous.id) : undefined;
+    const previousSubmission = previousChallenge ? submissionDb[`${studentKey}:${previousChallenge.id}`] : undefined;
     if (previous && !watchDb[previous.id]?.completed) return `Complete Lesson ${previous.sequence} video first.`;
     if (previousAssessment && !quizDb[previousAssessment.id]?.passed) return `Pass Assessment ${lesson.sequence - 1} first.`;
+    if (previousChallenge && !(previousSubmission?.compileStatus === 'success' && Number(previousSubmission.score || 0) >= previousChallenge.passingScore)) return `Complete Lesson ${lesson.sequence - 1} practice first.`;
   }
 
   if (!watchDb[lessonId]?.completed) return 'Watch at least 95% of this lesson video first.';
@@ -59,6 +64,8 @@ const getAssessmentLockedReason = (lessonId: string, watchDb: WatchDb, quizDb: Q
 export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, activeRecommendation }: AssessmentsProps) {
   const [watchDb] = useState<WatchDb>(() => getStoredJson(WATCH_KEY, {}));
   const [quizDb, setQuizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
+  const [submissionDb] = useState<SubmissionDb>(() => getStoredJson('oophub_practice_submissions', {}));
+  const studentKey = localStorage.getItem('oophub_current_user_id') || '';
   const [activeAssessmentId, setActiveAssessmentId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<CourseQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -122,7 +129,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, active
   const startAssessment = (assessmentId: string) => {
     const assessment = OOP_ASSESSMENTS.find(item => item.id === assessmentId);
     if (!assessment) return;
-    const reason = getAssessmentLockedReason(assessment.lessonId, watchDb, quizDb);
+    const reason = getAssessmentLockedReason(assessment.lessonId, watchDb, quizDb, submissionDb, studentKey);
     if (reason) return;
 
     const seed = Date.now();
@@ -206,7 +213,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, active
       <div className="grid gap-5 lg:grid-cols-5">
         {OOP_ASSESSMENTS.map(assessment => {
           const lesson = OOP_COURSE_LESSONS.find(item => item.id === assessment.lessonId);
-          const reason = getAssessmentLockedReason(assessment.lessonId, watchDb, quizDb);
+          const reason = getAssessmentLockedReason(assessment.lessonId, watchDb, quizDb, submissionDb, studentKey);
           const attempt = quizDb[assessment.id];
           const passed = attempt?.passed;
 

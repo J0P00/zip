@@ -4,6 +4,7 @@ import { AdaptiveRecommendation, AuthenticatedUser, PracticeSubmission } from '.
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson } from '../data/oopCourse';
 import { getPracticeChallengeForLesson, gradePracticeSource, PRACTICE_CHALLENGES } from '../data/practiceChallenges';
 import RecommendationCard from './RecommendationCard';
+import { practiceApi } from '../services/api';
 
 interface PracticeIDEProps {
   currentUser: AuthenticatedUser;
@@ -66,6 +67,16 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
   const activeAssessment = OOP_ASSESSMENTS.find(assessment => assessment.id === activeChallenge.assessmentId);
 
   const lockReason = useMemo(() => {
+    const currentLessonSequence = activeLesson?.sequence || 1;
+    if (currentLessonSequence > 1) {
+      const previousLesson = OOP_COURSE_LESSONS.find(lesson => lesson.sequence === currentLessonSequence - 1);
+      const previousAssessment = previousLesson && OOP_ASSESSMENTS.find(assessment => assessment.lessonId === previousLesson.id);
+      const previousChallenge = previousLesson && PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === previousLesson.id);
+      const previousSubmission = previousChallenge && submissionDb[`${currentUser.id || currentUser.userId || currentUser.email}:${previousChallenge.id}`];
+      if (!previousLesson || !watchDb[previousLesson.id]?.completed || watchDb[previousLesson.id].completionPercentage < 95 || !previousAssessment || !quizDb[previousAssessment.id]?.passed || !previousChallenge || previousSubmission?.compileStatus !== 'success' || Number(previousSubmission.score || 0) < previousChallenge.passingScore) {
+        return 'Practice IDE is locked until the previous lesson is fully completed.';
+      }
+    }
     const watchRecord = watchDb[activeChallenge.lessonId];
     const quizAttempt = quizDb[activeChallenge.assessmentId];
     if (!watchRecord?.completed || watchRecord.completionPercentage < 95) return 'Practice IDE is locked until the lesson video is completed at 100%.';
@@ -152,6 +163,18 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
       errorMessage: result.errorMessage,
       testResults: result.testResults
     };
+
+    practiceApi.submit({
+      challengeId: activeChallenge.id,
+      sourceCode,
+      programOutput: result.programOutput,
+      compileStatus: result.compileStatus,
+      runtime: result.runtime,
+      memoryUsage: result.memoryUsage,
+      score: result.score,
+      errorMessage: result.errorMessage,
+      testResults: result.testResults
+    }).catch(error => console.warn('Unable to sync practice submission with backend:', error));
 
     window.setTimeout(() => {
       const next = { ...submissionDb, [submissionKey]: practiceSubmission };
