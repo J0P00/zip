@@ -50,6 +50,7 @@ import {
   PracticeSubmission,
   AdaptiveRecommendation
 } from './types';
+import type { StudentResultsData } from './services/interpretation';
 
 // Import Mock Data
 import { 
@@ -88,30 +89,14 @@ import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
 import AdminVideoManager from './components/AdminVideoManager';
 import AdminTermsManager from './components/AdminTermsManager';
-import { appApi, authApi, getAuthToken, isDemoEmail, practiceApi, recommendationApi, setAuthToken, userApi } from './services/api';
+import { appApi, authApi, getAuthToken, isDemoEmail, practiceApi, progressApi, recommendationApi, setAuthToken, userApi } from './services/api';
 import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
 import { getCanonicalStudentId, recommendationBelongsToStudent } from './services/identity';
-import { seedDemoStudentProgress } from './data/demoSeed';
-
-const DEMO_STUDENT_PROGRESS = {
-  streak: 15,
-  points: 3500,
-  completedLessonsCount: 11
-};
-
 const NEW_STUDENT_PROGRESS = {
   streak: 0,
   points: 0,
   completedLessonsCount: 0
 };
-
-const DEMO_STUDENT_GRADE = {
-  grade: 100,
-  feedback: "Outstanding work! All 11 OOP challenges and 5 Swing exercises completed with full test passes and excellent OOP principles.",
-  challenge: "Swing UI Dialog & OOP Integration"
-};
-
-const DEMO_STUDENT_BADGES = ['Inheritance Lab', 'Quiz Streak', 'Practice IDE', 'Swing Master', 'OOP Master'];
 
 const OOP_LESSON_COUNT = OOP_COURSE_LESSONS.length;
 const clampCompletedLessons = (count: number) => Math.min(Math.max(count, 0), OOP_LESSON_COUNT);
@@ -634,9 +619,22 @@ export default function App() {
   }, [currentUser?.id, currentUser?.role, currentUser?.userId, currentUser?.email]);
 
   // Student Statistics State
-  const [streak, setStreak] = useState<number>(DEMO_STUDENT_PROGRESS.streak);
-  const [points, setPoints] = useState<number>(DEMO_STUDENT_PROGRESS.points);
-  const [completedLessonsCount, setCompletedLessonsCount] = useState<number>(DEMO_STUDENT_PROGRESS.completedLessonsCount);
+  const [streak, setStreak] = useState<number>(0);
+  const [points, setPoints] = useState<number>(0);
+  const [completedLessonsCount, setCompletedLessonsCount] = useState<number>(0);
+  const [studentResults, setStudentResults] = useState<StudentResultsData | null>(null);
+
+  const refreshStudentResults = async (user: AuthenticatedUser | null = currentUser) => {
+    if (!user || user.role !== 'student') return;
+    try {
+      const response = await progressApi.getStudentResults(getCanonicalStudentId(user), user.token);
+      setStudentResults(response.data);
+      setCompletedLessonsCount(response.data.completedLessons);
+      setPoints(response.data.overallProgress);
+    } catch (error) {
+      console.warn('Unable to refresh current student progress:', error);
+    }
+  };
 
   // Dynamic shared database states
   const [videoLessons, setVideoLessons] = useState<VideoLesson[]>([]);
@@ -825,6 +823,7 @@ export default function App() {
   const handleUpdateVideoProgress = (videoId: string, progress: number) => {
     const userEmail = currentUser?.email || 'student@oophub.edu';
     const studentProgress = recordVideoProgress(currentUser, videoId, progress);
+    void refreshStudentResults();
     setLeaderboardUsers(prev => mergeCurrentProgressIntoLeaderboard(prev, currentUser, studentProgress, streak));
     setVideoLessons(prev => {
       const next = prev.map(video => {
@@ -998,48 +997,37 @@ export default function App() {
 
   useEffect(() => {
     if (currentUser?.role !== 'student') {
+      setStudentResults(null);
       return;
     }
-
-    const isDemoStudent =
-      currentUser.accountSource === 'demo' ||
-      isDemoEmail(currentUser.email, currentUser.role) ||
-      currentUser.email.toLowerCase() === 'dmitry@oophub.edu' ||
-      currentUser.email.toLowerCase() === 'student@oophub.edu';
-
-    if (isDemoStudent) {
-      seedDemoStudentProgress();
-    }
-
-    const progress = isDemoStudent ? DEMO_STUDENT_PROGRESS : NEW_STUDENT_PROGRESS;
-    const studentProgress = ensureStudentProgress(currentUser);
-    const visibleProgress = isDemoStudent ? progress.completedLessonsCount : studentProgress.completedLessons;
-
-    setStreak(progress.streak);
-    setPoints(isDemoStudent ? progress.points : studentProgress.overallProgress);
-    setCompletedLessonsCount(visibleProgress);
-    setRecentStudentGrade(isDemoStudent ? DEMO_STUDENT_GRADE : null);
-    setLeaderboardUsers(prev => isDemoStudent
-      ? prev.map(entry => (
-          entry.isCurrentUser
-            ? {
-                ...entry,
-                name: `${currentUser.name} (You)`,
-                points: progress.points,
-                streak: progress.streak,
-                badges: DEMO_STUDENT_BADGES
-              }
-            : entry
-        ))
-      : mergeCurrentProgressIntoLeaderboard(prev, currentUser, studentProgress, progress.streak)
-    );
-  }, [currentUser?.accountSource, currentUser?.email, currentUser?.name, currentUser?.role]);
+    const studentId = getCanonicalStudentId(currentUser);
+    let cancelled = false;
+    setStudentResults(null);
+    setStreak(0);
+    setPoints(0);
+    setCompletedLessonsCount(0);
+    progressApi.getStudentResults(studentId, currentUser.token)
+      .then(response => {
+        if (cancelled) return;
+        setStudentResults(response.data);
+        setCompletedLessonsCount(response.data.completedLessons);
+        setPoints(response.data.overallProgress);
+        setRecentStudentGrade(null);
+      })
+      .catch(error => {
+        if (!cancelled) console.warn('Unable to load current student dashboard progress:', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, currentUser?.userId, currentUser?.email, currentUser?.role, currentUser?.token]);
 
   // Core functions to interactively link dashboards together
   
   // 1. When student compiles and submits vehicle code
   const handleStudentSubmitCode = (submission: PracticeSubmission) => {
     const studentProgress = recordPracticeSubmission(currentUser, submission);
+    void refreshStudentResults();
     // Increment points & complete lessons count
     const xpAward = Math.max(25, Math.round(submission.score * 1.5));
     setPoints(prev => prev + xpAward);
@@ -1098,6 +1086,7 @@ export default function App() {
     attemptNumber: number;
   }) => {
     const studentProgress = recordQuizAttempt(currentUser, attempt.lessonId, attempt.percentage, attempt.passed);
+    void refreshStudentResults();
     if (xpAward > 0) setPoints(prev => prev + xpAward);
     setStreak(prev => prev + 1);
     setCompletedLessonsCount(studentProgress.completedLessons);
@@ -1421,24 +1410,11 @@ export default function App() {
             setPersona(user.role);
             setAuthMode(null);
             if (user.role === 'student') {
-              const progress = user.accountSource === 'demo' ? DEMO_STUDENT_PROGRESS : NEW_STUDENT_PROGRESS;
-
               setStudentTab('dashboard');
-              setStreak(progress.streak);
-              setPoints(progress.points);
-              setCompletedLessonsCount(progress.completedLessonsCount);
-              setRecentStudentGrade(user.accountSource === 'demo' ? DEMO_STUDENT_GRADE : null);
-              setLeaderboardUsers(prev => prev.map(entry => (
-                entry.isCurrentUser
-                  ? {
-                      ...entry,
-                      name: `${user.name} (You)`,
-                      points: progress.points,
-                      streak: progress.streak,
-                      badges: user.accountSource === 'demo' ? DEMO_STUDENT_BADGES : []
-                    }
-                  : entry
-              )));
+              setStreak(0);
+              setPoints(0);
+              setCompletedLessonsCount(0);
+              setRecentStudentGrade(null);
             } else if (user.role === 'teacher') {
               setTeacherTab('dashboard');
             } else if (user.role === 'admin') {
@@ -1672,6 +1648,7 @@ export default function App() {
                 onMarkNotificationRead={(id) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n))}
                 activeRecommendation={activeRecommendation}
                 recommendationHistory={recommendationHistory.filter(item => recommendationBelongsToStudent(item, displayUser))}
+                studentResults={studentResults}
               />
             )}
 

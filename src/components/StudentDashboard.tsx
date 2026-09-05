@@ -24,6 +24,7 @@ import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, StudentSu
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
 import { getSwingCourseProgress } from '../data/javaSwingCourse';
 import { getCurrentPracticeChallenge, PRACTICE_CHALLENGES } from '../data/practiceChallenges';
+import type { StudentResultsData } from '../services/interpretation';
 import RecommendationCard from './RecommendationCard';
 
 interface StudentDashboardProps {
@@ -42,6 +43,7 @@ interface StudentDashboardProps {
   onMarkNotificationRead?: (id: string) => void;
   activeRecommendation?: AdaptiveRecommendation | null;
   recommendationHistory?: AdaptiveRecommendation[];
+  studentResults?: StudentResultsData | null;
 }
 
 export default function StudentDashboard({
@@ -59,12 +61,16 @@ export default function StudentDashboard({
   notifications = [],
   onMarkNotificationRead,
   activeRecommendation,
-  recommendationHistory = []
+  recommendationHistory = [],
+  studentResults = null
 }: StudentDashboardProps) {
   const firstName = userName.trim().split(/\s+/)[0] || 'Student';
-  const hasProgress = streak > 0 || points > 0 || completedLessonsCount > 0 || Boolean(recentGrade);
+  const effectiveCompletedLessons = studentResults?.completedLessons ?? completedLessonsCount;
+  const hasProgress = Boolean(studentResults?.hasActivity) || streak > 0 || points > 0 || effectiveCompletedLessons > 0 || Boolean(recentGrade);
   const lessonCount = OOP_COURSE_LESSONS.length;
-  const moduleProgress = Math.min(100, Math.round((completedLessonsCount / lessonCount) * 100));
+  const moduleProgress = studentResults
+    ? Math.min(100, Math.round((studentResults.completedLessons / Math.max(1, studentResults.totalLessons)) * 100))
+    : Math.min(100, Math.round((effectiveCompletedLessons / lessonCount) * 100));
   const weeklyActivityHours = hasProgress
     ? `${(completedLessonsCount * 1.4 + Math.min(streak, 7) * 0.4).toFixed(1)} hrs`
     : '0 hrs';
@@ -118,6 +124,13 @@ export default function StudentDashboard({
     const assessment = OOP_ASSESSMENTS.find(item => item.lessonId === lesson.id);
     return !watch?.completed || !quizDb[assessment?.id || '']?.passed;
   }) || nextLesson;
+  const authoritativeCurrentTopic = studentResults?.oopTopics?.find(topic => !topic.lessonCompleted)
+    || studentResults?.oopTopics?.find(topic => topic.attempted)
+    || null;
+  const dashboardCurrentLesson = authoritativeCurrentTopic
+    ? OOP_COURSE_LESSONS.find(lesson => lesson.id === authoritativeCurrentTopic.id) || currentLesson
+    : currentLesson;
+  const dashboardCurrentModuleLabel = `Module ${dashboardCurrentLesson.sequence}: ${dashboardCurrentLesson.title}`;
   const currentModuleLabel = `Module ${currentLesson.sequence}: ${currentLesson.title}`;
   const nextPractice = PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === nextLesson.id) || activePractice;
   const nextAssessment = OOP_ASSESSMENTS.find(assessment => assessment.lessonId === nextLesson.id) || activeAssessment;
@@ -247,7 +260,7 @@ export default function StudentDashboard({
               </div>
               <div>
                 <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider font-mono">Mastery Completed</div>
-                <div className="text-xs sm:text-sm font-extrabold text-slate-800 font-mono">{completedLessonsCount}/{lessonCount} Lessons</div>
+                <div className="text-xs sm:text-sm font-extrabold text-slate-800 font-mono">{effectiveCompletedLessons}/{studentResults?.totalLessons || lessonCount} Lessons</div>
               </div>
             </div>
           </div>
@@ -288,8 +301,8 @@ export default function StudentDashboard({
             <div className="flex justify-between items-start mb-4 flex-wrap gap-4">
               <div className="space-y-1">
                 <span className="text-[9px] font-bold font-mono tracking-wider bg-emerald-50 border border-emerald-200 px-2 py-0.5 uppercase rounded text-emerald-700">{hasProgress ? 'Currently Studying' : 'Ready to Start'}</span>
-                <h2 className="text-lg font-bold text-slate-900">{currentModuleLabel}</h2>
-                <p className="text-xs text-slate-500 font-medium">{hasProgress ? `Continue ${currentLesson.title.toLowerCase()} and complete its video and 80% assessment.` : 'Begin with foundational class structure, object creation, and method basics.'}</p>
+                <h2 className="text-lg font-bold text-slate-900">{dashboardCurrentModuleLabel}</h2>
+                <p className="text-xs text-slate-500 font-medium">{hasProgress ? `Continue ${dashboardCurrentLesson.title.toLowerCase()} and complete its video and 80% assessment.` : 'Begin with foundational class structure, object creation, and method basics.'}</p>
               </div>
               <span className="text-xs font-bold font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">{moduleProgress}% Completed</span>
             </div>
