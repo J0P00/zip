@@ -1039,7 +1039,7 @@ const getStudentProgressSummary = async (studentId) => {
             SELECT ps.*, pc.lesson_id 
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
-            WHERE ps.student_id = $1::text OR ps.student_id = $1
+            WHERE ps.student_id = $1::text
         `, [studentId]);
         const practiceMap = {};
         practiceRes.rows.forEach(p => {
@@ -1821,7 +1821,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 LEFT JOIN LATERAL (
                   SELECT ps.score FROM practice_submissions ps
                   JOIN programming_challenges pc ON pc.id = ps.challenge_id
-                  WHERE ps.student_id = $1 AND pc.lesson_id = l.id
+                                    WHERE ps.student_id = $1::text AND pc.lesson_id = l.id
                   ORDER BY ps.submitted_at DESC LIMIT 1
                 ) ps ON TRUE
                 WHERE l.status <> 'Archived'
@@ -1845,7 +1845,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                        COUNT(ps.id)::int AS submitted_practice_activities,
                        COUNT(ps.id) FILTER (WHERE ps.score >= 70)::int AS completed_practice_activities
                 FROM programming_challenges pc
-                LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND ps.student_id = $1
+                LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND ps.student_id = $1::text
                 WHERE pc.status <> 'Archived'
             `, [dbStudentId]),
             pool.query(`
@@ -1880,7 +1880,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                     SELECT ps.id, ps.score
                                     FROM practice_submissions ps
                                     JOIN programming_challenges pc ON pc.id = ps.challenge_id
-                                    WHERE ps.student_id = $1 AND pc.lesson_id = l.id
+                                    WHERE ps.student_id = $1::text AND pc.lesson_id = l.id
                                     ORDER BY ps.submitted_at DESC
                                     LIMIT 1
                                 ) ps ON TRUE
@@ -2493,7 +2493,7 @@ app.get("/api/practice-submissions/me", requireAuth, requireRole(["student"]), a
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
-            WHERE ps.student_id = $1
+            WHERE ps.student_id = $1::text
             ORDER BY ps.submitted_at DESC
         `, [req.authUser.id]);
         res.json({ success: true, data: result.rows });
@@ -2521,7 +2521,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
         }
 
         const existing = await pool.query(
-            "SELECT id, is_locked FROM practice_submissions WHERE student_id = $1 AND challenge_id = $2",
+            "SELECT id, is_locked FROM practice_submissions WHERE student_id = $1::text AND challenge_id = $2",
             [req.authUser.id, cleanText(challengeId, 120)]
         );
         if (existing.rows[0]?.is_locked) {
