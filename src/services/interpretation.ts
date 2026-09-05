@@ -11,6 +11,7 @@ export interface StudentResultsData {
   submittedPracticeActivities: number;
   totalPracticeActivities: number;
   practiceCompletionRate: number;
+  averagePracticeScore: number;
   swingSubmissions: number;
   swingCompletedActivities: number;
   swingPendingActivities: number;
@@ -77,7 +78,8 @@ export const generateStudentResultsInterpretation = (
     overallProgress: percent(input.overallProgress),
     videoPercentage: percent(input.videoPercentage),
     averageQuizScore: percent(input.averageQuizScore),
-    practiceCompletionRate: percent(input.practiceCompletionRate)
+    practiceCompletionRate: percent(input.practiceCompletionRate),
+    averagePracticeScore: percent(input.averagePracticeScore)
   };
 
   const oopTopics = (input.oopTopics || []).filter(topic => topic.attempted);
@@ -128,7 +130,9 @@ export const generateStudentResultsInterpretation = (
     };
   }
 
-  const overallPerformance = oopResult;
+  const overallPerformance = input.oopComplete && data.averageQuizScore >= 80 && data.averagePracticeScore >= 80
+    ? 'Excellent'
+    : oopResult;
   const overallText =
     input.oopComplete
       ? 'The student has satisfied the existing Java OOP completion requirement.'
@@ -156,7 +160,7 @@ export const generateStudentResultsInterpretation = (
     learningProgressAnalysis: `${overallText} ${attemptedTopicText}`,
     assessmentPerformance: quizText,
     programmingPracticePerformance: data.submittedPracticeActivities
-      ? `Practice IDE evidence is available from ${data.submittedPracticeActivities} submission${data.submittedPracticeActivities === 1 ? '' : 's'}; completed activities: ${data.completedPracticeActivities}.`
+      ? `Practice IDE evidence is available from ${data.submittedPracticeActivities} submission${data.submittedPracticeActivities === 1 ? '' : 's'}; current average coding score: ${data.averagePracticeScore}%; completed activities: ${data.completedPracticeActivities}.`
       : 'Practice IDE performance cannot yet be evaluated because the student has not submitted a Practice IDE activity.',
     strengths: strengths.length ? strengths : ['The student has started the learning path'],
     areasForImprovement: areasForImprovement.length ? areasForImprovement : ['Continue the current learning activities consistently'],

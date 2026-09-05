@@ -119,7 +119,7 @@ export default function StudentDashboard({
   const practiceSubmission = submissionDb[practiceKey];
   const practiceWatch = watchDb[activePractice.lessonId];
   const practiceQuiz = quizDb[activePractice.assessmentId];
-  const practiceUnlocked = Boolean(practiceWatch?.completed && practiceQuiz?.passed && practiceQuiz?.percentage >= 70);
+  const practiceUnlocked = Boolean(practiceWatch?.completed && practiceQuiz?.passed && practiceQuiz?.percentage >= 80);
   const practiceScore = Number(practiceSubmission?.score || 0);
   const performanceIndex = Math.round((0.4 * Number(practiceQuiz?.percentage || 0)) + (0.5 * practiceScore) + (0.1 * moduleProgress));
   const learningState = performanceIndex >= 85 ? 'Mastered' : performanceIndex >= 60 ? 'Developing' : 'Beginner';

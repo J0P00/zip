@@ -39,7 +39,7 @@ type QuizDb = Record<string, QuizAttempt>;
 
 const WATCH_KEY = 'oophub_oop_video_progress';
 const QUIZ_KEY = 'oophub_oop_quiz_attempts';
-const PASSING_PERCENTAGE = 70;
+const PASSING_PERCENTAGE = 80;
 
 const getAssessmentLockedReason = (lessonId: string, watchDb: WatchDb, quizDb: QuizDb) => {
   const lesson = OOP_COURSE_LESSONS.find(item => item.id === lessonId);

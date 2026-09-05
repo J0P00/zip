@@ -342,7 +342,8 @@ const readWorkspaceView = (): WorkspaceViewState => {
 const persistSessionUser = (user: AuthenticatedUser) => {
   try {
     localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
-    if (user.id) localStorage.setItem('oophub_current_user_id', user.id);
+    const canonicalId = user.id || user.userId || user.email;
+    if (canonicalId) localStorage.setItem('oophub_current_user_id', canonicalId);
   } catch {
     // The active React session still works if storage is unavailable.
   }
@@ -1296,7 +1297,6 @@ export default function App() {
       : [
           { label: 'Completed Courses', value: completedLessonsCount >= OOP_LESSON_COUNT ? '1' : '0', helper: 'Courses completed from the active learning path' },
           { label: 'Learning Progress', value: `${learningProgress}%`, helper: 'Progress through the current OOP module sequence' },
-          { label: 'Certificates Earned', value: points >= 1500 ? '1' : '0', helper: 'Certificates unlocked by finishing course requirements' }
         ];
 
   const handleUpdateProfile = (updates: Partial<AuthenticatedUser>) => {

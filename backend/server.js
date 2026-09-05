@@ -376,7 +376,7 @@ const initializeDatabase = async () => {
           lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
           title TEXT NOT NULL,
           quiz_type TEXT NOT NULL DEFAULT 'Multiple Choice',
-          passing_score NUMERIC NOT NULL DEFAULT 70,
+          passing_score NUMERIC NOT NULL DEFAULT 80,
           attempts INTEGER NOT NULL DEFAULT 1,
           questions JSONB NOT NULL DEFAULT '[]'::jsonb,
           status TEXT NOT NULL DEFAULT 'Draft',
@@ -423,7 +423,7 @@ const initializeDatabase = async () => {
           starter_code TEXT DEFAULT '',
           sample_input TEXT DEFAULT '',
           sample_output TEXT DEFAULT '',
-          passing_score NUMERIC NOT NULL DEFAULT 70,
+          passing_score NUMERIC NOT NULL DEFAULT 80,
           status TEXT NOT NULL DEFAULT 'Draft',
           created_by UUID REFERENCES users(id) ON DELETE SET NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1718,7 +1718,7 @@ app.post("/api/assessments", requireAuth, requireRole(["admin", "teacher"]), asy
             lessonId,
             title,
             cleanText(body.quizType || "Multiple Choice", 80),
-            clampNumber(body.passingScore ?? body.passing_score ?? 70, 0, 100),
+            clampNumber(body.passingScore ?? body.passing_score ?? 80, 0, 100),
             Math.floor(clampNumber(body.attempts ?? 1, 1, 100)),
             JSON.stringify(Array.isArray(body.questions) ? body.questions : []),
             cleanText(body.status || "Draft", 40),
@@ -1843,7 +1843,8 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             pool.query(`
                 SELECT COUNT(pc.id)::int AS total_practice_activities,
                        COUNT(ps.id)::int AS submitted_practice_activities,
-                       COUNT(ps.id) FILTER (WHERE ps.score >= 70)::int AS completed_practice_activities
+                      COUNT(ps.id) FILTER (WHERE ps.score >= 70)::int AS completed_practice_activities,
+                      COALESCE(ROUND(AVG(ps.score)), 0)::int AS average_practice_score
                 FROM programming_challenges pc
                 LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND ps.student_id = $1::text
                 WHERE pc.status <> 'Archived'
@@ -1861,8 +1862,14 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                 SELECT l.id, l.title, l.sequence,
                                              sp.completion_percentage AS video_percentage,
                                              sp.completed AS video_completed,
-                                             qa.percentage AS quiz_percentage,
-                                             qa.passed AS quiz_passed,
+                                                                                         qa.percentage AS quiz_percentage,
+                                                                                         EXISTS (
+                                                                                             SELECT 1
+                                                                                             FROM quiz_attempts passed_attempt
+                                                                                             WHERE passed_attempt.student_user_id = $1
+                                                                                                 AND passed_attempt.lesson_id = l.id
+                                                                                                 AND passed_attempt.percentage >= 80
+                                                                                         ) AS quiz_passed,
                                              ps.score AS practice_score,
                                              lp.completed AS lesson_completed,
                                              (sp.id IS NOT NULL OR qa.id IS NOT NULL OR ps.id IS NOT NULL OR lp.id IS NOT NULL) AS attempted
@@ -1924,7 +1931,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             practiceScore: topic.practice_score === null ? null : Number(topic.practice_score),
             lessonCompleted: Boolean(topic.lesson_completed)
         }));
-        const oopComplete = oopTopicRows.length > 0 && oopTopicRows.every(topic => topic.lessonCompleted);
+        const oopComplete = oopTopicRows.length > 0 && oopTopicRows.every(topic => topic.lessonCompleted && topic.quizPassed === true);
         const swingTopicRows = swingTopics.rows.map(topic => ({
             id: topic.id,
             title: topic.title,
@@ -1955,6 +1962,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 submittedPracticeActivities,
                 totalPracticeActivities,
                 practiceCompletionRate: totalPracticeActivities ? Math.round((submittedPracticeActivities / totalPracticeActivities) * 100) : 0,
+                averagePracticeScore: Number(row.average_practice_score || 0),
                 swingSubmissions: Number(row.swing_submissions || 0),
                 swingCompletedActivities: Number(row.swing_completed_activities || 0),
                 swingPendingActivities: Number(row.swing_pending_activities || 0),
@@ -2061,7 +2069,6 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
             correctAnswers = 0,
             incorrectAnswers = 0,
             passed = false,
-            attemptNumber = 1,
             answers = {},
             dateCompleted
         } = req.body || {};
@@ -2076,7 +2083,13 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
         const computedPercentage = Math.round((safeScore / safeTotal) * 100);
         const safeCorrectAnswers = Math.floor(clampNumber(correctAnswers, 0, safeTotal));
         const safeIncorrectAnswers = Math.floor(clampNumber(incorrectAnswers, 0, safeTotal));
-        const safeAttemptNumber = Math.max(1, Math.floor(clampNumber(attemptNumber, 1, 1000)));
+        const safeAssessmentId = cleanText(assessmentId, 120);
+        const safeLessonId = cleanText(lessonId, 120);
+        const attemptResult = await pool.query(
+            "SELECT COALESCE(MAX(attempt_number), 0) + 1 AS next_attempt FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = $2",
+            [req.authUser.id, safeAssessmentId]
+        );
+        const safeAttemptNumber = Number(attemptResult.rows[0]?.next_attempt || 1);
         const safeAnswers = answers && typeof answers === "object" && !Array.isArray(answers) ? answers : {};
 
         const result = await pool.query(`
@@ -2088,22 +2101,20 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
             RETURNING *
         `, [
             req.authUser.id,
-            cleanText(assessmentId, 120),
-            cleanText(lessonId, 120),
+            safeAssessmentId,
+            safeLessonId,
             safeScore,
             safeTotal,
             computedPercentage,
             safeCorrectAnswers,
             safeIncorrectAnswers,
-            Boolean(passed) && computedPercentage >= 70,
+            computedPercentage >= 80,
             safeAttemptNumber,
             JSON.stringify(safeAnswers),
             dateCompleted || null
         ]);
 
-        const safeAssessmentId = cleanText(assessmentId, 120);
-        const safeLessonId = cleanText(lessonId, 120);
-        const isPassedNow = Boolean(passed) && computedPercentage >= 70;
+        const isPassedNow = computedPercentage >= 80;
 
         // Award completion and pass XP
         await awardXP(req.authUser.id, 30, `Quiz Completion: ${safeAssessmentId}`);
@@ -2284,7 +2295,7 @@ app.post("/api/practice-challenges", requireAuth, requireRole(["admin", "teacher
             String(body.starterCode || body.starter_code || "").slice(0, 50000),
             String(body.sampleInput || body.sample_input || "").slice(0, 10000),
             String(body.sampleOutput || body.expectedOutput || body.sample_output || "").slice(0, 10000),
-            clampNumber(body.passingScore ?? body.passing_score ?? 70, 0, 100),
+            clampNumber(body.passingScore ?? body.passing_score ?? 80, 0, 100),
             cleanText(body.status || "Draft", 40),
             req.authUser.id
         ]);
@@ -2518,6 +2529,25 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
 
         if (!challengeId || !sourceCode) {
             return res.status(400).json({ success: false, message: "challengeId and sourceCode are required." });
+        }
+
+        const prerequisite = await pool.query(`
+            SELECT pc.lesson_id,
+                   EXISTS (
+                       SELECT 1
+                       FROM quiz_attempts qa
+                       WHERE qa.student_user_id = $1
+                         AND qa.lesson_id = pc.lesson_id
+                         AND qa.percentage >= 80
+                   ) AS quiz_passed
+            FROM programming_challenges pc
+            WHERE pc.id = $2 AND pc.status <> 'Archived'
+        `, [req.authUser.id, cleanText(challengeId, 120)]);
+        if (!prerequisite.rowCount) {
+            return res.status(404).json({ success: false, message: "Practice challenge not found." });
+        }
+        if (!prerequisite.rows[0].quiz_passed) {
+            return res.status(403).json({ success: false, message: "Pass the required assessment with 80% or higher before submitting practice." });
         }
 
         const existing = await pool.query(

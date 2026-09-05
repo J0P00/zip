@@ -151,16 +151,11 @@ const STAGE_ROTATION: LearningStage[] = [
 
 const getStudentEmailByName = (name: string): string => {
   const normalized = name.replace(/\s*\(you\)/i, '').trim().toLowerCase();
-  if (normalized.includes('alex mercer') || normalized.includes('dmitry vance') || normalized.includes('dmitry')) return 'dmitry@oophub.edu';
-  if (normalized.includes('sofia') || normalized.includes('rodriguez')) return 'rodriguez@oophub.edu';
-  if (normalized.includes('volkov')) return 'volkov@oophub.edu';
-  if (normalized.includes('chen')) return 'chen@oophub.edu';
-  if (normalized.includes('rossi')) return 'rossi@oophub.edu';
-  if (normalized.includes('hughes')) return 'hughes@oophub.edu';
-  return normalized;
+  return normalized.includes('@') ? normalized : '';
 };
 
-const baseStudents: LiveStudent[] = [
+const baseStudents: LiveStudent[] = [];
+/* const baseStudents: LiveStudent[] = [
   {
     id: 'STU-0001',
     name: 'Dmitry Vance (Alex Mercer)',
@@ -329,28 +324,9 @@ const baseStudents: LiveStudent[] = [
     swingTopics: [],
     swing: { video: 48, assessment: 44, ide: 32, miniProject: 12 }
   }
-];
+]; */
 
 const getLiveSwingTopics = (studentEmail: string, fallbackVideo = 0, studentIndex = 0): SwingTopicProgress[] => {
-  const normalized = studentEmail.toLowerCase();
-  const isDemoStudent =
-    normalized.includes('dmitry') ||
-    normalized.includes('alex mercer') ||
-    normalized.includes('student') ||
-    normalized === 'dmitry@oophub.edu';
-
-  if (isDemoStudent) {
-    return SWING_TOPICS.map(topic => ({
-      topic,
-      video: 100,
-      assessment: 100,
-      ideStatus: 'Passed',
-      completion: 100,
-      unlocked: true,
-      timeSpent: 'Mastered'
-    }));
-  }
-
   return SWING_TOPICS.map((topic, index) => {
     const swingBase = fallbackVideo;
     const completion = Math.max(0, Math.min(100, swingBase + (studentIndex * 2) - index * 10 + 5));
@@ -454,7 +430,7 @@ const mapBackendStudent = (user: AuthenticatedUser, results: StudentResultsData)
   const overallProgress = Number(results.overallProgress || 0);
   const videoCompletion = Number(results.videoPercentage || 0);
   const quizScore = Number(results.averageQuizScore || 0);
-  const practiceScore = Number(results.practiceCompletionRate || 0);
+  const practiceScore = Number(results.averagePracticeScore || 0);
   const performanceIndex = Math.round((overallProgress + videoCompletion + quizScore + practiceScore) / 4);
   const learningStatus: LearningStatus =
     performanceIndex >= 100 ? 'Mastered' : performanceIndex >= 70 ? 'Completed' : performanceIndex > 0 ? 'In Progress' : 'At Risk';
@@ -563,60 +539,6 @@ export default function TeacherPortal({
   }, [currentUser.token]);
 
   const connectedStudents = acceptedRequests.map((request, index) => {
-    const isDemoStudent =
-      request.studentEmail.toLowerCase() === 'dmitry@oophub.edu' ||
-      request.studentEmail.toLowerCase() === 'student@oophub.edu' ||
-      request.studentName.toLowerCase().includes('dmitry') ||
-      request.studentName.toLowerCase().includes('alex mercer');
-
-    if (isDemoStudent) {
-      const student: LiveStudent = {
-        id: request.studentEmail,
-        name: 'Dmitry Vance (Alex Mercer)',
-        email: request.studentEmail,
-        section: 'CS-3A',
-        online: true,
-        activity: 'Completed all Java OOP & Swing Modules',
-        currentLesson: 'Completed Java OOP & Swing Track',
-        currentTopic: 'Java OOP & Swing Mastery',
-        swingLesson: 'Topic 5 JOptionPane Dialogs',
-        stage: 'Unlock Next Topic',
-        overallProgress: 100,
-        moduleProgress: 100,
-        topicProgress: 100,
-        videoCompletion: 100,
-        quizScore: 100,
-        practiceScore: 100,
-        challengesCompleted: 16,
-        performanceIndex: 100,
-        learningStatus: 'Mastered',
-        lastActivity: 'just now',
-        moduleCompletion: 100,
-        topicCompletion: 100,
-        recommendation: 'Outstanding performance: All 11 OOP topics and 5 Swing modules completed with 100% score.',
-        topics: OOP_TOPICS.map(topic => ({
-          topic,
-          video: 100,
-          assessment: 100,
-          ideStatus: 'Passed',
-          completion: 100,
-          unlocked: true,
-          timeSpent: 'Mastered'
-        })),
-        swingTopics: SWING_TOPICS.map(topic => ({
-          topic,
-          video: 100,
-          assessment: 100,
-          ideStatus: 'Passed',
-          completion: 100,
-          unlocked: true,
-          timeSpent: 'Mastered'
-        })),
-        swing: { video: 100, assessment: 100, ide: 100, miniProject: 100 }
-      };
-      return student;
-    }
-
     const progressUser = leaderboardUsers.find(user =>
       user.name.replace(/\s+\(You\)$/i, '').toLowerCase() === request.studentName.toLowerCase()
     );
@@ -753,7 +675,7 @@ export default function TeacherPortal({
       ]
     : [];
   const visibleRecommendations = recommendationHistory
-    .filter(item => selectedStudentKeys.includes(item.studentId))
+    .filter(item => selectedStudentKeys.includes(item.studentId) || item.studentId.toLowerCase() === selectedStudent?.email.toLowerCase())
     .sort((a, b) => new Date(b.generatedDate).getTime() - new Date(a.generatedDate).getTime());
   const recommendationIsCurrent = (item: AdaptiveRecommendation) => {
     if (!selectedStudent) return false;
@@ -762,8 +684,28 @@ export default function TeacherPortal({
     const progressMatches = item.progressPercentage === undefined || item.progressPercentage === selectedStudent.overallProgress;
     return scoreMatches && quizMatches && progressMatches;
   };
+  const currentEvidenceTopic = studentResults?.oopTopics?.find(topic => topic.practiceScore !== null && topic.practiceScore < 60)
+    || studentResults?.oopTopics?.find(topic => !topic.lessonCompleted)
+    || studentResults?.oopTopics?.find(topic => topic.attempted);
   const currentRecommendation = selectedStudent
-    ? selectedStudent.overallProgress === 0 && selectedStudent.quizScore === 0 && selectedStudent.practiceScore === 0
+    ? studentResults && !studentResults.hasActivity
+      ? 'No current learning activity is recorded. Begin with the first available lesson.'
+      : studentResults
+        ? generateRuleBasedRecommendation({
+            studentId: selectedStudent.id,
+            studentName: selectedStudent.name,
+            lessonId: currentEvidenceTopic?.id || 'current-topic',
+            currentTopic: currentEvidenceTopic?.title || selectedStudent.currentTopic,
+            trigger: currentEvidenceTopic?.practiceScore !== null && currentEvidenceTopic?.practiceScore !== undefined ? 'Coding Score' : 'Quiz Score',
+            videoCompleted: currentEvidenceTopic?.videoCompleted || false,
+            lessonCompleted: currentEvidenceTopic?.lessonCompleted || false,
+            quizScore: currentEvidenceTopic?.quizPercentage ?? studentResults.averageQuizScore,
+            codingScore: currentEvidenceTopic?.practiceScore ?? studentResults.averagePracticeScore,
+            quizAttempts: studentResults.quizAttempts,
+            codingAttempts: studentResults.submittedPracticeActivities,
+            progressPercentage: studentResults.overallProgress
+          }).summary
+        : selectedStudent.overallProgress === 0 && selectedStudent.quizScore === 0 && selectedStudent.practiceScore === 0
       ? 'No current learning activity is recorded. Begin with the first available lesson.'
       : generateRuleBasedRecommendation({
           studentId: selectedStudent.id,

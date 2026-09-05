@@ -127,9 +127,10 @@ export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlo
   const stats = useMemo(() => {
     const completedLessons = JAVA_SWING_LESSONS.filter(lesson => getLessonCompleted(lesson.id, progressDb)).length;
     const passedQuizzes = JAVA_SWING_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
-    const completedExercises = JAVA_SWING_EXERCISES.filter(exercise =>
-      Boolean(submissionDb[`${userKeyFor(currentUser)}:${exercise.id}`])
-    ).length;
+    const completedExercises = JAVA_SWING_EXERCISES.filter(exercise => {
+      const submission = submissionDb[`${userKeyFor(currentUser)}:${exercise.id}`];
+      return Boolean(submission && submission.compileStatus === 'success' && submission.score >= exercise.passingScore);
+    }).length;
     const overall = Math.round(((completedLessons + passedQuizzes + completedExercises) / 15) * 100);
     return { completedLessons, passedQuizzes, completedExercises, overall };
   }, [currentUser, progressDb, quizDb, submissionDb]);

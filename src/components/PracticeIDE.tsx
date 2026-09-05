@@ -70,7 +70,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     const quizAttempt = quizDb[activeChallenge.assessmentId];
     if (!watchRecord?.completed || watchRecord.completionPercentage < 95) return 'Practice IDE is locked until the lesson video is completed at 100%.';
     if (!quizAttempt) return 'Practice IDE is locked until the assessment is completed.';
-    if (!quizAttempt.passed || quizAttempt.percentage < 70) return 'Practice IDE is locked until the quiz score is 70% or higher.';
+    if (!quizAttempt.passed || quizAttempt.percentage < 80) return 'Practice IDE is locked until the quiz score is 80% or higher.';
     return '';
   }, [activeChallenge.assessmentId, activeChallenge.lessonId, quizDb, watchDb]);
 

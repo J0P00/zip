@@ -72,7 +72,7 @@ export const generateRuleBasedRecommendation = (input: RecommendationInput): Ada
     );
   }
 
-  if ((input.quizAttempts || 0) >= 3 && (input.quizScore ?? 100) < 70) {
+  if ((input.quizAttempts || 0) >= 3 && (input.quizScore ?? 100) < 80) {
     return buildRecommendation(
       input,
       'Remedial',
@@ -86,11 +86,11 @@ export const generateRuleBasedRecommendation = (input: RecommendationInput): Ada
   }
 
   if (input.trigger === 'Quiz Score' && typeof input.quizScore === 'number') {
-    if (input.quizScore < 70) {
+    if (input.quizScore < 80) {
       return buildRecommendation(
         input,
         'Remedial',
-        `Quiz Score below 70% (${input.quizScore}%)`,
+        `Quiz Score below 80% (${input.quizScore}%)`,
         'Recommended Next Step',
         'Strengthen the current topic before retaking the quiz.',
         [`Watch the ${input.currentTopic} lesson again`, 'Read the lesson notes', 'Solve an Easy Coding Challenge', 'Retake the quiz after review'],
@@ -103,7 +103,7 @@ export const generateRuleBasedRecommendation = (input: RecommendationInput): Ada
       return buildRecommendation(
         input,
         'Continue',
-        `Quiz Score between 70% and 89% (${input.quizScore}%)`,
+        `Quiz Score between 80% and 89% (${input.quizScore}%)`,
         'Good Progress',
         'Continue to practice while reviewing the quiz items you missed.',
         ['Continue to the Coding Exercise', 'Review incorrect quiz answers', 'Practice an Intermediate Challenge'],

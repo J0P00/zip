@@ -421,7 +421,7 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
 
           <div className="rounded-xl border border-slate-200 bg-white/80 p-4 text-xs font-semibold leading-6 text-slate-500 shadow-sm backdrop-blur-md sm:rounded-2xl sm:p-5">
             <h3 className="mb-2 text-sm font-extrabold text-slate-900">Unlock Rule</h3>
-            Complete at least 95% of the current video and pass its assessment with 70% or higher. The next lesson unlocks automatically after both are done.
+            Complete at least 95% of the current video and pass its assessment with 80% or higher. The next lesson unlocks automatically after both are done.
             {activeQuiz && (
               <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3 font-mono text-[11px] text-slate-600">
                 Current assessment: {activeQuiz.score}/{activeQuiz.total} ({activeQuiz.percentage}%)

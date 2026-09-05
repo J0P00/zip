@@ -477,12 +477,6 @@ public class Main {
 ];
 
 export const isOopCourseComplete = () => {
-  const requireOopPrerequisite = false;
-
-  if (!requireOopPrerequisite) {
-    return true;
-  }
-
   const watchDb = getStoredJson<Record<string, { completed?: boolean; completionPercentage?: number }>>('oophub_oop_video_progress', {});
   const quizDb = getStoredJson<Record<string, { passed?: boolean; percentage?: number }>>('oophub_oop_quiz_attempts', {});
 
@@ -490,7 +484,7 @@ export const isOopCourseComplete = () => {
     Boolean(watchDb[lesson.id]?.completed) || Number(watchDb[lesson.id]?.completionPercentage || 0) >= 95
   );
   const allAssessmentsPassed = OOP_ASSESSMENTS.every(assessment =>
-    Boolean(quizDb[assessment.id]?.passed) && Number(quizDb[assessment.id]?.percentage || 0) >= 70
+    Boolean(quizDb[assessment.id]?.passed) && Number(quizDb[assessment.id]?.percentage || 0) >= 80
   );
 
   return allLessonsCompleted && allAssessmentsPassed;

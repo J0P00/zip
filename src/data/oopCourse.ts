@@ -511,7 +511,7 @@ export const OOP_ASSESSMENTS: LessonAssessment[] = OOP_LESSON_BLUEPRINTS.map(les
   id: lesson.assessmentId,
   lessonId: lesson.id,
   title: `${lesson.title} Assessment`,
-  passingPercentage: 70,
+  passingPercentage: 80,
   questions: OOP_PARSED_QUESTIONS[lesson.id] || []
 }));
 
