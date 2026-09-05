@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
   BarChart3,
-  Bell,
   BookOpen,
   CheckCircle2,
   ClipboardCheck,
@@ -105,14 +104,6 @@ type LiveStudent = {
     ide: number;
     miniProject: number;
   };
-};
-
-type TeacherNotification = {
-  id: string;
-  title: string;
-  message: string;
-  timestamp: string;
-  type: 'invitation' | 'lesson' | 'assessment' | 'ide' | 'unlock';
 };
 
 const OOP_TOPICS = [
@@ -531,31 +522,6 @@ export default function TeacherPortal({
   const [selectedSubId, setSelectedSubId] = useState<string>('');
   const [commentText, setCommentText] = useState('');
   const [scoreText, setScoreText] = useState(90);
-  const notifiedSubmissionIds = useRef<Set<string>>(new Set());
-  const [notifications, setNotifications] = useState<TeacherNotification[]>([
-    {
-      id: 'n1',
-      title: 'Practice IDE submitted',
-      message: 'Dmitry Vance submitted Vehicle Subclass Override for automatic grading.',
-      timestamp: 'just now',
-      type: 'ide'
-    },
-    {
-      id: 'n2',
-      title: 'Topic unlocked',
-      message: 'Sofia Rodriguez unlocked Interfaces after passing polymorphism requirements.',
-      timestamp: '4 min ago',
-      type: 'unlock'
-    },
-    {
-      id: 'n3',
-      title: 'Assessment alert',
-      message: 'Dmitry Volkov scored below threshold and received a review recommendation.',
-      timestamp: '12 min ago',
-      type: 'assessment'
-    }
-  ]);
-
   const acceptedRequests = useMemo(
     () =>
       monitoringRequests
@@ -871,18 +837,6 @@ export default function TeacherPortal({
         })
       );
 
-      setNotifications(prev => {
-        const sample = visibleStudents[0];
-        if (!sample) return prev;
-        const next: TeacherNotification = {
-          id: `live-${Date.now()}`,
-          title: 'Live learning update',
-          message: `${sample.name} advanced to ${sample.stage} in ${sample.currentTopic}.`,
-          timestamp: 'now',
-          type: 'lesson'
-        };
-        return [next, ...prev].slice(0, 6);
-      });
     }, 9000);
 
     return () => window.clearInterval(interval);
@@ -894,22 +848,6 @@ export default function TeacherPortal({
     setCommentText(selectedSubmission.feedback || '');
     setScoreText(Number(selectedSubmission.grade ?? selectedSubmission.score ?? 90));
   }, [selectedSubmission?.id]);
-
-  useEffect(() => {
-    const unseen = visibleSubmissions.filter(submission => !notifiedSubmissionIds.current.has(submission.id));
-    if (unseen.length === 0) return;
-
-    unseen.forEach(submission => notifiedSubmissionIds.current.add(submission.id));
-    const nextNotifications = unseen.map((submission): TeacherNotification => ({
-      id: `submission-${submission.id}`,
-      title: 'Practice IDE submission received',
-      message: `${submission.studentName} submitted ${submission.challengeName} with an automated score of ${submission.score ?? submission.grade ?? 0}%.`,
-      timestamp: 'now',
-      type: 'ide'
-    }));
-
-    setNotifications(prev => [...nextNotifications, ...prev].slice(0, 8));
-  }, [visibleSubmissions]);
 
   const handleSendRequestSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -946,14 +884,6 @@ export default function TeacherPortal({
       return;
     }
     onGradeSubmission(selectedSubmission.id, scoreText, commentText);
-    const gradeNotification: TeacherNotification = {
-      id: `grade-${Date.now()}`,
-      title: 'Grade published',
-      message: `${selectedSubmission.studentName} received ${scoreText}% and adaptive feedback.`,
-      timestamp: 'now',
-      type: 'ide'
-    };
-    setNotifications(prev => [gradeNotification, ...prev].slice(0, 6));
   };
 
   const avg = (values: number[]) => (values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0);
@@ -1340,21 +1270,6 @@ export default function TeacherPortal({
             </div>
           </div>
 
-          <div className={`rounded-2xl border p-4 shadow-sm xl:col-span-2 ${cardClass}`}>
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-black">Real-Time Notifications</h3>
-              <Bell className="h-4 w-4 text-emerald-600" />
-            </div>
-            <div className="space-y-2">
-              {notifications.map(note => (
-                <div key={note.id} className={`rounded-xl border p-3 ${mutedPanel}`}>
-                  <p className="text-xs font-black">{note.title}</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{note.message}</p>
-                  <p className="mt-2 text-[10px] font-bold uppercase text-slate-400">{note.timestamp}</p>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 
