@@ -32,6 +32,7 @@ import Leaderboard from './Leaderboard';
 import { progressApi, userApi } from '../services/api';
 import { generateStudentResultsInterpretation, StudentResultsData, StudentResultsInterpretation } from '../services/interpretation';
 import { generateRuleBasedRecommendation } from '../services/recommendationEngine';
+import { getCanonicalStudentId } from '../services/identity';
 
 interface TeacherPortalProps {
   submissions: PendingSubmission[];
@@ -459,7 +460,7 @@ const mapBackendStudent = (user: AuthenticatedUser, results: StudentResultsData)
     performanceIndex >= 100 ? 'Mastered' : performanceIndex >= 70 ? 'Completed' : performanceIndex > 0 ? 'In Progress' : 'At Risk';
 
   return {
-    id: user.id || user.userId || user.email,
+    id: getCanonicalStudentId(user),
     name: user.name,
     email: user.email,
     section: user.section || 'Unassigned',
@@ -541,7 +542,7 @@ export default function TeacherPortal({
         const studentUsers = response.data.filter(user => user.role === 'student');
         const syncedStudents = (await Promise.all(studentUsers.map(async user => {
           try {
-            const results = await progressApi.getStudentResults(user.id || user.userId || user.email, currentUser.token);
+            const results = await progressApi.getStudentResults(getCanonicalStudentId(user), currentUser.token);
             return mapBackendStudent(user, results.data);
           } catch (error) {
             console.warn(`Unable to load results for ${user.email}:`, error);

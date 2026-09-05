@@ -1,20 +1,29 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# OOP Pedagogical Hub
 
-# Run and deploy your AI Studio app
+This project is a React/TypeScript learning hub with an Express/PostgreSQL backend.
 
-This contains everything you need to run your app locally.
+## Architecture
 
-View your app in AI Studio: https://ai.studio/apps/25556761-ae9b-41a9-943a-8c0e50c5afa4
+- `src/App.tsx` owns application routing, session state, and cross-feature orchestration.
+- `src/components/` contains the student, teacher, admin, and shared UI surfaces.
+- `src/data/` contains local course/demo data and browser-backed progress stores.
+- `src/services/api.ts` is the frontend API boundary; `src/services/identity.ts` provides canonical student identity matching.
+- `src/services/interpretation.ts` and `src/services/recommendationEngine.ts` contain the rule-based learning engines.
+- `backend/server.js` is the active Express API and PostgreSQL integration; `backend/oop_course_schema.sql` defines the database schema.
+
+Student monitoring uses the selected student's canonical `id`, falling back to `userId` and then email. The backend resolves that value to `users.id` before querying progress and assessment data.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+Prerequisites: Node.js and PostgreSQL for backend-backed features.
 
+1. Install frontend dependencies with `npm install`.
+2. Set frontend values in `.env` or `.env.local` as needed, especially `VITE_API_BASE_URL`.
+3. Run the frontend with `npm run dev`.
+4. Install backend dependencies in `backend/` and configure `backend/.env` from `backend/.env.example`.
+5. Run the backend with `npm start` from `backend/`.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Validation
+
+- `npm run lint` runs the TypeScript check.
+- `npm run build` creates the production frontend bundle.

@@ -90,6 +90,7 @@ import AdminVideoManager from './components/AdminVideoManager';
 import AdminTermsManager from './components/AdminTermsManager';
 import { appApi, authApi, getAuthToken, isDemoEmail, practiceApi, recommendationApi, setAuthToken, userApi } from './services/api';
 import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
+import { getCanonicalStudentId, recommendationBelongsToStudent } from './services/identity';
 import { seedDemoStudentProgress } from './data/demoSeed';
 
 const DEMO_STUDENT_PROGRESS = {
@@ -182,16 +183,12 @@ const getTeacherScopedLeaderboard = (
   return users;
 };
 
-const getProgressSnapshotForRequest = (request: MonitoringRequest) => {
-  return findStudentProgress(request.studentId, request.studentEmail, request.studentName);
-};
-
-const recommendationBelongsToUser = (recommendation: AdaptiveRecommendation, user?: AuthenticatedUser | null) => {
-  if (!user) return false;
-  const keys = [user.id, user.userId, user.email, user.name].filter(Boolean).map(value => String(value).toLowerCase());
-  return keys.includes(String(recommendation.studentId).toLowerCase()) ||
-    (recommendation.studentName ? keys.includes(recommendation.studentName.toLowerCase()) : false);
-};
+const getProgressSnapshotForRequest = (request: MonitoringRequest) =>
+  findStudentProgress(
+    getCanonicalStudentId({ id: request.studentId, email: request.studentEmail, name: request.studentName }),
+    request.studentEmail,
+    request.studentName
+  );
 
 const upsertCurrentRegisteredStudent = (
   users: LeaderboardUser[],
@@ -612,14 +609,14 @@ export default function App() {
       setActiveRecommendation(null);
       return;
     }
-    recommendationApi.list(currentUser.role === 'student' ? (currentUser.id || currentUser.userId || currentUser.email) : undefined)
+    recommendationApi.list(currentUser.role === 'student' ? getCanonicalStudentId(currentUser) : undefined)
       .then(response => {
         const localHistory = getRecommendationHistory();
         const merged = [...response.data, ...localHistory]
           .filter((item, index, arr) => arr.findIndex(other => other.id === item.id) === index)
           .slice(0, 100);
         const currentUserHistory = currentUser.role === 'student'
-          ? merged.filter(item => recommendationBelongsToUser(item, currentUser))
+          ? merged.filter(item => recommendationBelongsToStudent(item, currentUser))
           : merged;
         setRecommendationHistory(merged);
         setActiveRecommendation(currentUserHistory[0] || null);
@@ -628,7 +625,7 @@ export default function App() {
         console.warn('Unable to load adaptive recommendation history from backend:', error);
         const localHistory = getRecommendationHistory();
         const currentUserHistory = currentUser.role === 'student'
-          ? localHistory.filter(item => recommendationBelongsToUser(item, currentUser))
+          ? localHistory.filter(item => recommendationBelongsToStudent(item, currentUser))
           : localHistory;
         setRecommendationHistory(localHistory);
         setActiveRecommendation(currentUserHistory[0] || null);
@@ -1674,11 +1671,7 @@ export default function App() {
                 notifications={notifications}
                 onMarkNotificationRead={(id) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n))}
                 activeRecommendation={activeRecommendation}
-                recommendationHistory={recommendationHistory.filter(item =>
-                  item.studentId === (displayUser.id || displayUser.userId || displayUser.email) ||
-                  item.studentId === displayUser.email ||
-                  item.studentName === displayUser.name
-                )}
+                recommendationHistory={recommendationHistory.filter(item => recommendationBelongsToStudent(item, displayUser))}
               />
             )}
 
