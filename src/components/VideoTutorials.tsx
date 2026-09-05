@@ -37,17 +37,17 @@ type QuizDb = Record<string, { passed: boolean; percentage: number; score: numbe
 const WATCH_KEY = 'oophub_oop_video_progress';
 const QUIZ_KEY = 'oophub_oop_quiz_attempts';
 
+const isInvalidLegacyCompletion = (record: Partial<WatchRecord>) =>
+  record.completed === true && record.completionPercentage === 100 && record.lastPosition === 900;
+
 const readWatchProgress = (): WatchDb => {
   const stored = getStoredJson<WatchDb>(WATCH_KEY, {});
-  const isLegacySeed = Object.keys(stored).length > 0 && Object.values(stored).every(record =>
-    record.completed && record.completionPercentage === 100 && record.lastPosition === 900
-  );
-  if (isLegacySeed) {
-    localStorage.removeItem(WATCH_KEY);
+  const cleaned = Object.fromEntries(Object.entries(stored).filter(([, record]) => !isInvalidLegacyCompletion(record)));
+  if (Object.keys(cleaned).length !== Object.keys(stored).length) {
+    setStoredJson(WATCH_KEY, cleaned);
     localStorage.removeItem(QUIZ_KEY);
-    return {};
   }
-  return stored;
+  return cleaned;
 };
 
 const formatTime = (seconds: number) => {
@@ -114,12 +114,16 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
       .then(response => {
         if (!isMounted) return;
         const remoteDb = response.data.reduce((acc: WatchDb, row: any) => {
-          acc[row.video_id] = {
+          const record = {
             lessonId: row.video_id,
             lastPosition: Number(row.last_position || 0),
             completionPercentage: Number(row.completion_percentage || 0),
             completed: Boolean(row.completed),
             dateCompleted: row.date_completed || undefined
+          };
+          if (isInvalidLegacyCompletion(record)) return acc;
+          acc[row.video_id] = {
+            ...record
           };
           return acc;
         }, {});

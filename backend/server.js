@@ -1786,6 +1786,10 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
         if (req.authUser.role === "student" && req.authUser.id !== req.params.studentId) {
             return res.status(403).json({ success: false, message: "Students can only view their own progress." });
         }
+        await pool.query(
+            "DELETE FROM student_progress WHERE student_user_id = $1 AND completed = TRUE AND completion_percentage = 100 AND last_position = 900",
+            [req.params.studentId]
+        );
         const result = await pool.query(
             "SELECT * FROM student_progress WHERE student_user_id = $1 ORDER BY updated_at DESC",
             [req.params.studentId]
