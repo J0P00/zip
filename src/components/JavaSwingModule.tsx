@@ -22,7 +22,6 @@ import { AuthenticatedUser, PracticeSubmission } from '../types';
 import { getStoredJson, setStoredJson, shuffleArray } from '../data/oopCourse';
 import {
   gradeSwingSource,
-  isOopCourseComplete,
   JAVA_SWING_ASSESSMENTS,
   JAVA_SWING_EXERCISES,
   JAVA_SWING_LESSONS,
@@ -42,6 +41,7 @@ import { CourseQuestion } from '../data/oopCourse';
 
 interface JavaSwingModuleProps {
   currentUser: AuthenticatedUser;
+  oopUnlocked: boolean;
   onSubmitCompleted: (submission: PracticeSubmission) => void;
   onUnlocked?: () => void;
   theme?: 'light' | 'dark';
@@ -70,9 +70,9 @@ const userKeyFor = (user: AuthenticatedUser) => user.id || user.userId || user.e
 const getLessonCompleted = (lessonId: string, progressDb: SwingProgressDb) =>
   Boolean(progressDb[lessonId]?.contentCompleted && progressDb[lessonId]?.videoCompleted);
 
-export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlocked, theme }: JavaSwingModuleProps) {
+export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitCompleted, onUnlocked, theme }: JavaSwingModuleProps) {
   const isDark = theme === 'dark';
-  const [isUnlocked, setIsUnlocked] = useState(() => isOopCourseComplete());
+  const [isUnlocked, setIsUnlocked] = useState(oopUnlocked);
   const [activeTab, setActiveTab] = useState<SwingTab>('lessons');
   const [activeLessonId, setActiveLessonId] = useState(JAVA_SWING_LESSONS[0].id);
   const [progressDb, setProgressDb] = useState<SwingProgressDb>(() => getStoredJson(SWING_WATCH_KEY, {}));
@@ -99,7 +99,7 @@ export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlo
   const [sourceCode, setSourceCode] = useState(() => submitted?.sourceCode || draftDb[submissionKey] || activeExercise.starterCode);
 
   useEffect(() => {
-    const unlocked = isOopCourseComplete();
+    const unlocked = oopUnlocked;
     setIsUnlocked(unlocked);
     if (unlocked) {
       setNotice('Java Swing Programming unlocked. Welcome to the desktop UI track.');
@@ -107,7 +107,7 @@ export default function JavaSwingModule({ currentUser, onSubmitCompleted, onUnlo
       const timer = window.setTimeout(() => setNotice(''), 4200);
       return () => window.clearTimeout(timer);
     }
-  }, [onUnlocked]);
+  }, [oopUnlocked, onUnlocked]);
 
   useEffect(() => {
     const key = `${userKeyFor(currentUser)}:${activeExercise.id}`;

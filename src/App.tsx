@@ -1066,14 +1066,6 @@ export default function App() {
       progressPercentage: studentProgress.overallProgress
     }));
 
-    // Unlock next lesson only when both quiz and practice work are passed.
-    const completedPracticeSequence = Number(submission.challengeId.replace('practice_', ''));
-    if (submission.score >= 70) setVideoLessons(prev => prev.map(l => {
-      if (l.sequence === completedPracticeSequence + 1) {
-        return { ...l, status: 'active' };
-      }
-      return l;
-    }));
   };
 
   // 2. After every diagnostic MCQ attempt, run the rule-based recommendation engine.
@@ -1664,6 +1656,7 @@ export default function App() {
             {persona === 'student' && studentTab === 'videos' && (
               <VideoTutorials 
                 key={`videos-${displayUser.id || displayUser.userId || displayUser.email}`}
+                currentUser={displayUser}
                 lessons={videoLessons} 
                 onNavigateTo={handleDirectNavigation}
                 onUpdateVideoProgress={handleUpdateVideoProgress}
@@ -1673,6 +1666,7 @@ export default function App() {
             {persona === 'student' && studentTab === 'assessments' && (
               <Assessments 
                 key={`assessments-${displayUser.id || displayUser.userId || displayUser.email}`}
+                currentUser={displayUser}
                 onNavigateTo={(view) => setStudentTab(view as any)}
                 onCorrectAnswerAdded={handleCorrectAnswerAdded}
                 lessons={videoLessons}
@@ -1683,6 +1677,7 @@ export default function App() {
             {persona === 'student' && studentTab === 'swing' && (
               <JavaSwingModule
                 currentUser={displayUser}
+                oopUnlocked={Boolean(studentResults?.swingUnlocked)}
                 onSubmitCompleted={handleStudentSubmitCode}
                 onUnlocked={() => addNotification('Java Swing Unlocked', 'Java Swing Programming is now available after completing OOP.', 'unlock')}
                 theme={theme}

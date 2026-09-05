@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Award, Check, CheckCircle, ChevronLeft, ChevronRight, Lock, RotateCcw, X } from 'lucide-react';
-import { AdaptiveRecommendation, StudentSubView, VideoLesson } from '../types';
+import { AdaptiveRecommendation, AuthenticatedUser, StudentSubView, VideoLesson } from '../types';
 import { CourseQuestion, getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson, shuffleArray } from '../data/oopCourse';
 import { PRACTICE_CHALLENGES } from '../data/practiceChallenges';
-import { progressApi } from '../services/api';
+import { practiceApi, progressApi } from '../services/api';
 import RecommendationCard from './RecommendationCard';
 
 interface AssessmentsProps {
+  currentUser: AuthenticatedUser;
   onCorrectAnswerAdded: (xp: number, attempt: QuizAttempt) => void;
   onNavigateTo?: (view: StudentSubView) => void;
   lessons: VideoLesson[];
@@ -61,11 +62,11 @@ const getAssessmentLockedReason = (lessonId: string, watchDb: WatchDb, quizDb: Q
   return '';
 };
 
-export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, activeRecommendation }: AssessmentsProps) {
-  const [watchDb] = useState<WatchDb>(() => getStoredJson(WATCH_KEY, {}));
-  const [quizDb, setQuizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
-  const [submissionDb] = useState<SubmissionDb>(() => getStoredJson('oophub_practice_submissions', {}));
-  const studentKey = localStorage.getItem('oophub_current_user_id') || '';
+export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavigateTo, activeRecommendation }: AssessmentsProps) {
+  const [watchDb, setWatchDb] = useState<WatchDb>({});
+  const [quizDb, setQuizDb] = useState<QuizDb>({});
+  const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
+  const studentKey = currentUser.id;
   const [activeAssessmentId, setActiveAssessmentId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<CourseQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -79,13 +80,14 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, active
 
   useEffect(() => {
     let isMounted = true;
-    const token = localStorage.getItem('oophub_auth_token');
-    const user = localStorage.getItem('oophub_current_user_id');
+    const token = currentUser.token;
+    const user = currentUser.id;
     if (!token || !user) return;
 
-    progressApi.getQuizAttempts(user, token)
-      .then(response => {
+    Promise.all([progressApi.getVideoProgress(user, token), progressApi.getQuizAttempts(user, token), practiceApi.listMine()])
+      .then(([videoResponse, response, submissions]) => {
         if (!isMounted) return;
+        setWatchDb(videoResponse.data.reduce((acc: WatchDb, row: any) => ({ ...acc, [row.video_id]: { lessonId: row.video_id, lastPosition: Number(row.last_position || 0), completionPercentage: Number(row.completion_percentage || 0), completed: Boolean(row.completed) } }), {}));
         const remoteDb = response.data.reduce((acc: QuizDb, row: any) => {
           acc[row.assessment_id] = {
             assessmentId: row.assessment_id,
@@ -102,18 +104,15 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, active
           };
           return acc;
         }, {});
-        setQuizDb(prev => {
-          const next = { ...prev, ...remoteDb };
-          setStoredJson(QUIZ_KEY, next);
-          return next;
-        });
+        setQuizDb(remoteDb);
+        setSubmissionDb(submissions.data.reduce((acc: SubmissionDb, row: any) => ({ ...acc, [`${user}:${row.challenge_id}`]: { score: Number(row.score || 0), compileStatus: row.compile_status } }), {}));
       })
       .catch(error => console.warn('Unable to load assessment attempts from backend:', error));
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser.id, currentUser.token]);
 
   const courseStats = useMemo(() => {
     const completedLessons = OOP_COURSE_LESSONS.filter(lesson => watchDb[lesson.id]?.completed).length;
@@ -191,7 +190,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, active
             </span>
             <h2 className="mt-3 text-2xl font-extrabold text-slate-900">Lesson Assessments</h2>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-              Each lesson has exactly 20 randomized MCQs. Passing score is 70%, and lessons unlock sequentially.
+              Each lesson has exactly 20 randomized MCQs. Passing score is 80%, and lessons unlock sequentially.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
@@ -325,7 +324,7 @@ export default function Assessments({ onCorrectAnswerAdded, onNavigateTo, active
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 text-xs font-semibold leading-6 text-amber-800">
             <AlertCircle className="mb-2 h-4 w-4" />
-            Passing requires 70%. If you score below 70%, the next lesson remains locked and the system recommends rewatching the current video.
+            Passing requires 80%. If you score below 80%, the next lesson remains locked and the system recommends rewatching the current video.
           </div>
         </aside>
       </div>

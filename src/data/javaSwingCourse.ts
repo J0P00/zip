@@ -1,6 +1,5 @@
 import { ChallengeTestResult, ProgrammingChallenge } from '../types';
-import { CourseQuestion, getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from './oopCourse';
-import { PRACTICE_CHALLENGES } from './practiceChallenges';
+import { CourseQuestion } from './oopCourse';
 import { SWING_QUESTION_BANKS } from './javaSwingQuestions';
 
 export const SWING_WATCH_KEY = 'oophub_swing_lesson_progress';
@@ -476,50 +475,6 @@ public class Main {
     createdAt: '2026-07-28T00:00:00.000Z'
   }
 ];
-
-export const isOopCourseComplete = () => {
-  const watchDb = getStoredJson<Record<string, { completed?: boolean; completionPercentage?: number }>>('oophub_oop_video_progress', {});
-  const quizDb = getStoredJson<Record<string, { passed?: boolean; percentage?: number }>>('oophub_oop_quiz_attempts', {});
-  const submissionDb = getStoredJson<Record<string, { score?: number; compileStatus?: string }>>('oophub_practice_submissions', {});
-  const studentKey = localStorage.getItem('oophub_current_user_id') || '';
-
-  const allLessonsCompleted = OOP_COURSE_LESSONS.every(lesson =>
-    Boolean(watchDb[lesson.id]?.completed) || Number(watchDb[lesson.id]?.completionPercentage || 0) >= 95
-  );
-  const allAssessmentsPassed = OOP_ASSESSMENTS.every(assessment =>
-    Boolean(quizDb[assessment.id]?.passed) && Number(quizDb[assessment.id]?.percentage || 0) >= 80
-  );
-  const allPracticeCompleted = PRACTICE_CHALLENGES
-    .filter(challenge => OOP_COURSE_LESSONS.some(lesson => lesson.id === challenge.lessonId))
-    .every(challenge => {
-      const submission = submissionDb[`${studentKey}:${challenge.id}`];
-      return submission?.compileStatus === 'success' && Number(submission.score || 0) >= challenge.passingScore;
-    });
-
-  return allLessonsCompleted && allAssessmentsPassed && allPracticeCompleted;
-};
-
-export const getSwingCourseProgress = () => {
-  const progressDb = getStoredJson<SwingProgressDb>(SWING_WATCH_KEY, {});
-  const quizDb = getStoredJson<SwingQuizDb>(SWING_QUIZ_KEY, {});
-  const submissionDb = getStoredJson<Record<string, unknown>>(SWING_SUBMISSION_KEY, {});
-  const completedLessons = JAVA_SWING_LESSONS.filter(lesson =>
-    progressDb[lesson.id]?.contentCompleted && progressDb[lesson.id]?.videoCompleted
-  ).length;
-  const passedQuizzes = JAVA_SWING_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
-  const completedExercises = JAVA_SWING_EXERCISES.filter(exercise =>
-    Object.keys(submissionDb).some(key => key.endsWith(`:${exercise.id}`))
-  ).length;
-  const totalUnits = JAVA_SWING_LESSONS.length + JAVA_SWING_ASSESSMENTS.length + JAVA_SWING_EXERCISES.length;
-
-  return {
-    unlocked: isOopCourseComplete(),
-    completedLessons,
-    passedQuizzes,
-    completedExercises,
-    overall: totalUnits ? Math.round(((completedLessons + passedQuizzes + completedExercises) / totalUnits) * 100) : 0
-  };
-};
 
 export const gradeSwingSource = (challenge: ProgrammingChallenge, sourceCode: string) => {
   const startedAt = performance.now();

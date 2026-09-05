@@ -13,12 +13,13 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react';
-import { StudentSubView, VideoLesson } from '../types';
+import { AuthenticatedUser, StudentSubView, VideoLesson } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, setStoredJson } from '../data/oopCourse';
 import { PRACTICE_CHALLENGES } from '../data/practiceChallenges';
-import { progressApi } from '../services/api';
+import { practiceApi, progressApi } from '../services/api';
 
 interface VideoTutorialsProps {
+  currentUser: AuthenticatedUser;
   lessons: VideoLesson[];
   onNavigateTo: (view: StudentSubView) => void;
   onUpdateVideoProgress: (id: string, progress: number) => void;
@@ -77,11 +78,11 @@ const getLessonAccess = (lesson: VideoLesson, allLessons: VideoLesson[], watchDb
   return previousCompleted ? 'active' : 'locked';
 };
 
-export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress }: VideoTutorialsProps) {
-  const [watchDb, setWatchDb] = useState<WatchDb>(readWatchProgress);
-  const [quizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
-  const [submissionDb] = useState<SubmissionDb>(() => getStoredJson('oophub_practice_submissions', {}));
-  const studentKey = localStorage.getItem('oophub_current_user_id') || '';
+export default function VideoTutorials({ currentUser, lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress }: VideoTutorialsProps) {
+  const [watchDb, setWatchDb] = useState<WatchDb>({});
+  const [quizDb, setQuizDb] = useState<QuizDb>({});
+  const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
+  const studentKey = currentUser.id;
   const lessons = useMemo(() => sourceLessons.map(lesson => {
     const watch = watchDb[lesson.id];
     const assessment = OOP_ASSESSMENTS.find(item => item.lessonId === lesson.id);
@@ -94,7 +95,7 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
       status: completed ? 'completed' as const : access as VideoLesson['status'],
       progressPercent: watch?.completionPercentage || 0
     };
-  }), [sourceLessons, watchDb, quizDb]);
+  }), [sourceLessons, watchDb, quizDb, submissionDb, studentKey]);
 
   const firstAvailable = lessons.find(lesson => lesson.status === 'active') || lessons[0];
   const [activeLessonId, setActiveLessonId] = useState(firstAvailable?.id || '');
@@ -119,15 +120,22 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
   }, [activeLesson, lessons]);
 
   useEffect(() => {
+    const selected = lessons.find(lesson => lesson.id === activeLessonId);
+    if (selected?.status === 'locked') {
+      setActiveLessonId(firstAvailable?.id || lessons[0]?.id || '');
+    }
+  }, [activeLessonId, firstAvailable?.id, lessons]);
+
+  useEffect(() => {
     let isMounted = true;
-    const token = localStorage.getItem('oophub_auth_token');
-    const user = localStorage.getItem('oophub_current_user_id');
+    const token = currentUser.token;
+    const user = currentUser.id;
     if (!token || !user) return;
 
-    progressApi.getVideoProgress(user, token)
-      .then(response => {
+    Promise.all([progressApi.getVideoProgress(user, token), progressApi.getQuizAttempts(user, token), practiceApi.listMine()])
+      .then(([videoResponse, quizResponse, submissions]) => {
         if (!isMounted) return;
-        const remoteDb = response.data.reduce((acc: WatchDb, row: any) => {
+        const remoteDb = videoResponse.data.reduce((acc: WatchDb, row: any) => {
           const record = {
             lessonId: row.video_id,
             lastPosition: Number(row.last_position || 0),
@@ -141,18 +149,16 @@ export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, o
           };
           return acc;
         }, {});
-        setWatchDb(prev => {
-          const next = { ...prev, ...remoteDb };
-          setStoredJson(WATCH_KEY, next);
-          return next;
-        });
+        setWatchDb(remoteDb);
+        setQuizDb(quizResponse.data.reduce((acc: QuizDb, row: any) => ({ ...acc, [row.assessment_id]: { assessmentId: row.assessment_id, lessonId: row.lesson_id || '', score: row.score, total: row.total, percentage: Number(row.percentage || 0), attemptNumber: row.attempt_number, passed: Boolean(row.passed) } }), {}));
+        setSubmissionDb(submissions.data.reduce((acc: SubmissionDb, row: any) => ({ ...acc, [`${user}:${row.challenge_id}`]: { score: Number(row.score || 0), compileStatus: row.compile_status } }), {}));
       })
       .catch(error => console.warn('Unable to load video progress from backend:', error));
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser.id, currentUser.token]);
 
   useEffect(() => {
     if (!activeLesson) return;

@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
-import { getSwingCourseProgress } from '../data/javaSwingCourse';
 import { getCurrentPracticeChallenge, PRACTICE_CHALLENGES } from '../data/practiceChallenges';
 import type { StudentResultsData } from '../services/interpretation';
 import RecommendationCard from './RecommendationCard';
@@ -112,18 +111,11 @@ export default function StudentDashboard({
   const pendingRequests = monitoringRequests.filter(
     req => req.studentEmail.toLowerCase() === currentUser.email.toLowerCase() && req.status === 'pending'
   );
-  const watchDb = getStoredJson<Record<string, any>>('oophub_oop_video_progress', {});
-  const quizDb = getStoredJson<Record<string, any>>('oophub_oop_quiz_attempts', {});
-  const submissionDb = getStoredJson<Record<string, any>>('oophub_practice_submissions', {});
   const activePractice = getCurrentPracticeChallenge();
   const activeLesson = OOP_COURSE_LESSONS.find(lesson => lesson.id === activePractice.lessonId) || OOP_COURSE_LESSONS[0];
   const activeAssessment = OOP_ASSESSMENTS.find(assessment => assessment.id === activePractice.assessmentId) || OOP_ASSESSMENTS[0];
-  const nextLesson = OOP_COURSE_LESSONS.find(lesson => !watchDb[lesson.id]?.completed) || OOP_COURSE_LESSONS[OOP_COURSE_LESSONS.length - 1];
-  const currentLesson = OOP_COURSE_LESSONS.find(lesson => {
-    const watch = watchDb[lesson.id];
-    const assessment = OOP_ASSESSMENTS.find(item => item.lessonId === lesson.id);
-    return !watch?.completed || !quizDb[assessment?.id || '']?.passed;
-  }) || nextLesson;
+  const nextLesson = OOP_COURSE_LESSONS.find(lesson => !studentResults?.oopTopics?.find(topic => topic.id === lesson.id)?.lessonCompleted) || OOP_COURSE_LESSONS[OOP_COURSE_LESSONS.length - 1];
+  const currentLesson = nextLesson;
   const authoritativeCurrentTopic = studentResults?.oopTopics?.find(topic => !topic.lessonCompleted)
     || studentResults?.oopTopics?.find(topic => topic.attempted)
     || null;
@@ -133,35 +125,49 @@ export default function StudentDashboard({
   const dashboardCurrentModuleLabel = `Module ${dashboardCurrentLesson.sequence}: ${dashboardCurrentLesson.title}`;
   const dashboardPractice = PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === dashboardCurrentLesson.id) || activePractice;
   const dashboardAssessment = OOP_ASSESSMENTS.find(assessment => assessment.lessonId === dashboardCurrentLesson.id) || activeAssessment;
+  const currentTopicEvidence = studentResults?.oopTopics?.find(topic => topic.id === dashboardCurrentLesson.id);
+  const practiceSubmission = currentTopicEvidence?.practiceScore !== null && currentTopicEvidence?.practiceScore !== undefined
+    ? { submittedAt: '' }
+    : null;
+  const practiceScore = Number(currentTopicEvidence?.practiceScore || 0);
+  const practiceUnlocked = Boolean(currentTopicEvidence?.videoCompleted && currentTopicEvidence?.quizPassed);
   const currentModuleLabel = `Module ${currentLesson.sequence}: ${currentLesson.title}`;
   const nextPractice = PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === nextLesson.id) || activePractice;
   const nextAssessment = OOP_ASSESSMENTS.find(assessment => assessment.lessonId === nextLesson.id) || activeAssessment;
-  const practiceKey = `${currentUser.id || currentUser.userId || currentUser.email}:${activePractice.id}`;
-  const practiceSubmission = submissionDb[practiceKey];
-  const practiceWatch = watchDb[activePractice.lessonId];
-  const practiceQuiz = quizDb[activePractice.assessmentId];
-  const practiceUnlocked = Boolean(practiceWatch?.completed && practiceQuiz?.passed && practiceQuiz?.percentage >= 80);
-  const practiceScore = Number(practiceSubmission?.score || 0);
-  const performanceIndex = Math.round((0.4 * Number(practiceQuiz?.percentage || 0)) + (0.5 * practiceScore) + (0.1 * moduleProgress));
+  const performanceIndex = studentResults
+    ? Math.round((studentResults.averageQuizScore + studentResults.averagePracticeScore + moduleProgress) / 3)
+    : 0;
   const learningState = performanceIndex >= 85 ? 'Mastered' : performanceIndex >= 60 ? 'Developing' : 'Beginner';
   const learningStateClass = performanceIndex >= 85 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : performanceIndex >= 60 ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-sky-100 text-sky-800 border border-sky-200';
   const performanceClass = performanceIndex >= 85 ? 'Mastered' : performanceIndex >= 70 ? 'Completed' : 'In Progress';
-  const swingProgress = getSwingCourseProgress();
+  const swingTopicState = studentResults?.swingTopics || [];
+  const swingProgress = {
+    unlocked: Boolean(studentResults?.swingUnlocked),
+    completedLessons: swingTopicState.filter(topic => topic.contentCompleted && topic.videoCompleted && topic.quizPassed && topic.exerciseCompleted).length,
+    passedQuizzes: swingTopicState.filter(topic => topic.quizPassed).length,
+    completedExercises: swingTopicState.filter(topic => topic.exerciseCompleted).length,
+    overall: studentResults?.swingUnlocked
+      ? Math.round((swingTopicState.filter(topic => topic.contentCompleted && topic.videoCompleted && topic.quizPassed && topic.exerciseCompleted).length / Math.max(1, swingTopicState.length)) * 100)
+      : 0
+  };
   const pendingAssessments = OOP_ASSESSMENTS
     .map(assessment => {
       const lesson = OOP_COURSE_LESSONS.find(item => item.id === assessment.lessonId);
-      const attempt = quizDb[assessment.id];
+      const topic = studentResults?.oopTopics?.find(item => item.id === lesson?.id);
+      const attempt = topic?.quizPercentage === null ? undefined : topic;
       const previousLesson = lesson?.sequence && lesson.sequence > 1
         ? OOP_COURSE_LESSONS.find(item => item.sequence === lesson.sequence - 1)
         : undefined;
       const previousAssessment = previousLesson
         ? OOP_ASSESSMENTS.find(item => item.lessonId === previousLesson.id)
         : undefined;
-      const needsPreviousVideo = Boolean(previousLesson && !watchDb[previousLesson.id]?.completed);
-      const needsPreviousAssessment = Boolean(previousAssessment && !quizDb[previousAssessment.id]?.passed);
-      const needsCurrentVideo = Boolean(lesson && !watchDb[lesson.id]?.completed);
+      const previousTopic = studentResults?.oopTopics?.find(item => item.id === previousLesson?.id);
+      const currentTopic = studentResults?.oopTopics?.find(item => item.id === lesson?.id);
+      const needsPreviousVideo = Boolean(previousLesson && !previousTopic?.videoCompleted);
+      const needsPreviousAssessment = Boolean(previousAssessment && !previousTopic?.quizPassed);
+      const needsCurrentVideo = Boolean(lesson && !currentTopic?.videoCompleted);
       const isLocked = needsPreviousVideo || needsPreviousAssessment || needsCurrentVideo;
-      const status = attempt && !attempt.passed
+      const status = attempt && !attempt.quizPassed
         ? 'Retry'
         : isLocked
           ? 'Locked'
@@ -174,7 +180,7 @@ export default function StudentDashboard({
         sequence: lesson?.sequence || 999,
         status,
         color: status === 'Ready Now' ? 'border-l-emerald-600' : status === 'Retry' ? 'border-l-amber-500' : 'border-l-slate-400',
-        isPassed: Boolean(attempt?.passed)
+        isPassed: Boolean(attempt?.quizPassed)
       };
     })
     .filter(item => !item.isPassed)
@@ -438,7 +444,7 @@ export default function StudentDashboard({
               {[
                 ['Status', practiceUnlocked ? 'Ready' : 'Locked'],
                 ['Practice Score', practiceSubmission ? `${practiceScore}%` : '--'],
-                ['Submitted', practiceSubmission ? new Date(practiceSubmission.submittedAt).toLocaleDateString() : '--'],
+                    ['Submitted', practiceSubmission?.submittedAt ? new Date(practiceSubmission.submittedAt).toLocaleDateString() : '--'],
                 ['PI', `${performanceIndex}% ${performanceClass}`]
               ].map(([label, value]) => (
                 <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-3">

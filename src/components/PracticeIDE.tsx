@@ -1,10 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, Code2, Lock, Play, RotateCcw, Send, Terminal } from 'lucide-react';
 import { AdaptiveRecommendation, AuthenticatedUser, PracticeSubmission } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson } from '../data/oopCourse';
 import { getPracticeChallengeForLesson, gradePracticeSource, PRACTICE_CHALLENGES } from '../data/practiceChallenges';
 import RecommendationCard from './RecommendationCard';
-import { practiceApi } from '../services/api';
+import { practiceApi, progressApi } from '../services/api';
 
 interface PracticeIDEProps {
   currentUser: AuthenticatedUser;
@@ -41,9 +41,9 @@ const formatDateTime = (value: string) =>
 
 export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, activeRecommendation }: PracticeIDEProps) {
   const isDark = theme === 'dark';
-  const [watchDb] = useState<WatchDb>(() => getStoredJson(WATCH_KEY, {}));
-  const [quizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
-  const [submissionDb, setSubmissionDb] = useState<SubmissionDb>(() => getStoredJson(SUBMISSIONS_KEY, {}));
+  const [watchDb, setWatchDb] = useState<WatchDb>({});
+  const [quizDb, setQuizDb] = useState<QuizDb>({});
+  const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
   const [draftDb, setDraftDb] = useState<DraftDb>(() => getStoredJson(DRAFT_KEY, {}));
   const [activeChallengeId, setActiveChallengeId] = useState(() => PRACTICE_CHALLENGES[0].id);
   const activeChallenge = PRACTICE_CHALLENGES.find(challenge => challenge.id === activeChallengeId) || PRACTICE_CHALLENGES[0];
@@ -65,6 +65,36 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
 
   const activeLesson = OOP_COURSE_LESSONS.find(lesson => lesson.id === activeChallenge.lessonId);
   const activeAssessment = OOP_ASSESSMENTS.find(assessment => assessment.id === activeChallenge.assessmentId);
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([
+      progressApi.getVideoProgress(currentUser.id, currentUser.token),
+      progressApi.getQuizAttempts(currentUser.id, currentUser.token),
+      practiceApi.listMine()
+    ]).then(([videoResponse, quizResponse, submissionResponse]) => {
+      if (!mounted) return;
+      setWatchDb(videoResponse.data.reduce((acc: WatchDb, row: any) => ({ ...acc, [row.video_id]: { lessonId: row.video_id, completionPercentage: Number(row.completion_percentage || 0), completed: Boolean(row.completed) } }), {}));
+      setQuizDb(quizResponse.data.reduce((acc: QuizDb, row: any) => ({ ...acc, [row.assessment_id]: { assessmentId: row.assessment_id, lessonId: row.lesson_id || '', percentage: Number(row.percentage || 0), passed: Boolean(row.passed) } }), {}));
+      const remote = submissionResponse.data.reduce((acc: SubmissionDb, row: any) => ({ ...acc, [`${currentUser.id}:${row.challenge_id}`]: {
+        ...row,
+        challengeId: row.challenge_id,
+        sourceCode: row.source_code,
+        compileStatus: row.compile_status,
+        programOutput: row.program_output,
+        memoryUsage: row.memory_usage,
+        submittedAt: row.submitted_at,
+        testResults: row.test_results || []
+      } }), {});
+      setSubmissionDb(remote);
+      const current = remote[`${currentUser.id}:${activeChallenge.id}`];
+      if (current) {
+        setSourceCode(current.sourceCode || draftDb[submissionKey] || activeChallenge.starterCode);
+        setLastResult({ compileStatus: current.compileStatus, score: current.score, runtime: current.runtime, memoryUsage: current.memoryUsage || 0, programOutput: current.programOutput, errorMessage: current.errorMessage || '', testResults: current.testResults || [] });
+      }
+    }).catch(error => console.warn('Unable to load practice progress from backend:', error));
+    return () => { mounted = false; };
+  }, [currentUser.id, currentUser.token]);
 
   const lockReason = useMemo(() => {
     const currentLessonSequence = activeLesson?.sequence || 1;

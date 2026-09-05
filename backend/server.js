@@ -1986,7 +1986,9 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 lessonCompleted: Boolean(evidence?.completed)
             };
         }));
-        const oopComplete = oopTopicRows.length > 0 && oopTopicRows.every(topic => topic.lessonCompleted && topic.quizPassed === true);
+        const completedLessons = oopTopicRows.filter(topic => topic.lessonCompleted).length;
+        const effectiveTotalLessons = oopTopicRows.length || totalLessons;
+        const oopComplete = effectiveTotalLessons > 0 && completedLessons === effectiveTotalLessons;
         const swingTopicRows = swingTopics.rows.map(topic => ({
             id: topic.id,
             title: topic.title,
@@ -1999,15 +2001,15 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             exerciseCompleted: Boolean(topic.exercise_completed),
             submissionScore: topic.submission_score === null ? null : Number(topic.submission_score)
         }));
-        const overallProgress = totalLessons
-            ? Math.round((Number(row.completed_lessons || 0) / totalLessons) * 100)
+        const overallProgress = effectiveTotalLessons
+            ? Math.round((completedLessons / effectiveTotalLessons) * 100)
             : 0;
         res.json({
             success: true,
             data: {
                 overallProgress,
-                completedLessons: Number(row.completed_lessons || 0),
-                totalLessons,
+                completedLessons,
+                totalLessons: effectiveTotalLessons,
                 completedVideos: Number(row.completed_videos || 0),
                 totalVideos,
                 videoPercentage: Number(row.video_percentage || 0),
