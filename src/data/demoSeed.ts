@@ -369,6 +369,22 @@ export const seedDemoStudentProgress = () => {
   try {
     const timestamp = '2026-08-26T18:00:00.000Z';
 
+    // Demo accounts must start from real progress, not fabricated completion records.
+    const storedVideoProgress = JSON.parse(localStorage.getItem('oophub_oop_video_progress') || '{}');
+    const legacySeededVideos = OOP_COURSE_LESSONS.every(lesson => {
+      const record = storedVideoProgress[lesson.id];
+      return record?.completed === true && record?.completionPercentage === 100 && record?.lastPosition === 900;
+    });
+    if (legacySeededVideos) {
+      localStorage.removeItem('oophub_oop_video_progress');
+      localStorage.removeItem('oophub_oop_quiz_attempts');
+      localStorage.removeItem('oophub_practice_submissions');
+      localStorage.removeItem('oophub_swing_quiz_attempts');
+      localStorage.removeItem('oophub_swing_lesson_progress');
+      localStorage.removeItem('oophub_swing_submissions');
+    }
+    return;
+
     // 1. OOP Video Watch Progress (11/11 Lessons Complete)
     const oopVideoProgress: Record<string, { completed: boolean; completionPercentage: number; lastPosition: number }> = {};
     OOP_COURSE_LESSONS.forEach(lesson => {

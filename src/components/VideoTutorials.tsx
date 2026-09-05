@@ -37,6 +37,19 @@ type QuizDb = Record<string, { passed: boolean; percentage: number; score: numbe
 const WATCH_KEY = 'oophub_oop_video_progress';
 const QUIZ_KEY = 'oophub_oop_quiz_attempts';
 
+const readWatchProgress = (): WatchDb => {
+  const stored = getStoredJson<WatchDb>(WATCH_KEY, {});
+  const isLegacySeed = Object.keys(stored).length > 0 && Object.values(stored).every(record =>
+    record.completed && record.completionPercentage === 100 && record.lastPosition === 900
+  );
+  if (isLegacySeed) {
+    localStorage.removeItem(WATCH_KEY);
+    localStorage.removeItem(QUIZ_KEY);
+    return {};
+  }
+  return stored;
+};
+
 const formatTime = (seconds: number) => {
   if (!Number.isFinite(seconds)) return '00:00';
   const mins = Math.floor(seconds / 60);
@@ -57,7 +70,7 @@ const getLessonAccess = (lesson: VideoLesson, allLessons: VideoLesson[], watchDb
 };
 
 export default function VideoTutorials({ lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress }: VideoTutorialsProps) {
-  const [watchDb, setWatchDb] = useState<WatchDb>(() => getStoredJson(WATCH_KEY, {}));
+  const [watchDb, setWatchDb] = useState<WatchDb>(readWatchProgress);
   const [quizDb] = useState<QuizDb>(() => getStoredJson(QUIZ_KEY, {}));
   const lessons = useMemo(() => sourceLessons.map(lesson => {
     const watch = watchDb[lesson.id];
