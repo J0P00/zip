@@ -1,0 +1,128 @@
+Assessment: Java Abstraction with Abstract Classes 
+1. What is the main purpose of abstraction in object-oriented programming? 
+A. To make code run faster 
+B. To hide unnecessary details and show only essential information 
+C. To increase the number of classes in a program 
+D. To remove the need for classes 
+2. Which real-world example was used in the video to explain abstraction? 
+A. A car engine 
+B. A television screen 
+C. A remote control 
+D. A computer keyboard 
+3. Which keyword is used to declare an abstract class in Java? 
+A. final 
+B. static 
+C. abstract 
+D. private 
+4. In the video's example, why was the `Animal` class made abstract? 
+A. Because it had too many methods 
+B. Because 'animal' is a general idea, not a specific/concrete object 
+C. Because Java requires all base classes to be abstract 
+D. Because it had no fields 
+5. What happens when you try to instantiate an abstract class directly (e.g., `new Animal()`)? 
+A. It runs normally 
+B. It creates an empty object 
+C. The compiler throws an error: 'Cannot instantiate the type Animal' 
+D. It automatically converts to a Dog object 
+6. Which of the following classes could be instantiated directly in the video's example? 
+A. Animal 
+B. Dog 
+C. Both Animal and Dog 
+D. Neither Animal nor Dog 
+7. What is an abstract method? 
+A. A method with a body but no name 
+B. A method declared without a body, ending with a semicolon 
+C. A method that can only return void 
+D. A private method inside an interface 
+8. In the video, which method was declared as abstract inside the `Animal` class? 
+A. walk() 
+B. getName() 
+C. makeSound() 
+D. run() 
+9. What error appears if you try to declare an abstract method inside a class that is NOT abstract? 
+A. 'Class not found' 
+B. 'The abstract method makeSound in type Animal can only be defined by an abstract class' 
+C. 'Missing semicolon' 
+D. No error occurs 
+10. What is required of a subclass (like Dog or Cat) that extends an abstract class with an abstract method? 
+A. It must override the abstract method or the class must also be abstract 
+B. It must delete the abstract method 
+C. It must make the method private 
+D. Nothing is required 
+11. According to the video, why is it useful that Java forces subclasses to override abstract methods? 
+A. It makes the program run faster 
+B. It prevents programmers from forgetting to implement important methods 
+C. It reduces the number of classes needed 
+D. It removes the need for constructors 
+12. Can an abstract class contain regular (non-abstract) methods with a body? 
+A. No, all methods must be abstract 
+B. Yes, abstract classes can have both abstract and regular methods 
+C. Only if the class has no fields 
+D. Only in the Dog and Cat subclasses 
+13. Can an abstract class have a constructor? 
+A. No, abstract classes cannot have constructors 
+B. Yes, and it can be called from a subclass using super() 
+C. Yes, but it can never be used 
+D. Only if the class has no abstract methods 
+14. In the video, why didn't the `Dog` and `Cat` classes need to override the method for getting an animal's 
+name? 
+A. Because naming is not important 
+B. Because all animals get their name the same way, so there's no need to make it different per subclass 
+C. Because names cannot be inherited 
+D. Because it was already private 
+15. What new abstract method did the instructor add near the end of the video (besides makeSound)? 
+A. eat() 
+B. sleep() 
+C. walk() 
+D. jump() 
+16. What topic did the instructor say would be covered in the next episode? 
+A. Abstraction using interfaces 
+B. Exception handling 
+C. Multithreading 
+D. File input/output 
+17. Which statement best describes the difference between an 'abstract idea' and a 'concrete idea' as 
+explained in the video? 
+A. Abstract ideas are always faster to compile 
+B. An abstract idea (like 'animal') is general and not tied to a specific object, while a concrete idea (like 'dog') is 
+specific and usable 
+C. Concrete ideas cannot have methods 
+D. There is no real difference 
+18. What does `class Dog extends Animal` represent in this example? 
+A. Dog is unrelated to Animal 
+B. Dog is a subclass that inherits from the abstract class Animal 
+C. Animal is a subclass of Dog 
+D. Dog replaces the Animal class 
+19. Why is it 'useless,' according to the video, to create an object directly from the Animal class? 
+A. Because Animal has no name 
+B. Because Animal represents a general concept with no specific real-world implementation on its own 
+C. Because Java does not allow base classes 
+D. Because Dog and Cat already exist 
+20. Overall, what is the main lesson the video teaches about abstract classes and abstract methods? 
+A. They make programs slower but more secure 
+B. They let a general/base class define required behavior without implementing it, while forcing subclasses to 
+provide the specific implementation 
+C. They remove the need for inheritance 
+D. They are only used for naming variables 
+
+Answer Key 
+1 B
+2 C
+3 C
+4 B
+5 C
+6 B
+7 B
+8 C
+9 B
+10 A
+11 B
+12 B
+13 B
+14 B
+15 C
+16 A
+17 B
+18 B
+19 B
+20 B
+

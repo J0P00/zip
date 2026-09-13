@@ -3103,5 +3103,187 @@ export const OOP_PARSED_QUESTIONS: Record<string, CourseQuestion[]> = {
       "explanation": "To represent a fixed, predefined set of constant values (optionally with their own associated data), making\ncode safer and clearer especially in decision-making is the correct answer for the Enum assessment.",
       "difficulty": "Hard"
     }
+  ],
+  "oop_lesson_12": [
+    {
+      "id": "oop_lesson_12_q01",
+      "lessonId": "oop_lesson_12",
+      "question": "What is an enum in Java?",
+      "options": ["A resizable array", "A special class containing constant values", "A method returning multiple values", "A loop"],
+      "correctAnswer": "A special class containing constant values",
+      "explanation": "A Java enum represents a fixed collection of named constant values.",
+      "difficulty": "Easy"
+    },
+    {
+      "id": "oop_lesson_12_q02",
+      "lessonId": "oop_lesson_12",
+      "question": "Which keyword declares an enum?",
+      "options": ["class", "enum", "interface", "struct"],
+      "correctAnswer": "enum",
+      "explanation": "The enum keyword declares an enumeration type.",
+      "difficulty": "Easy"
+    },
+    {
+      "id": "oop_lesson_12_q03",
+      "lessonId": "oop_lesson_12",
+      "question": "What naming style is conventionally used for enum constants?",
+      "options": ["lowercase", "camelCase", "ALL CAPS", "PascalCase"],
+      "correctAnswer": "ALL CAPS",
+      "explanation": "Enum constants conventionally use uppercase names.",
+      "difficulty": "Easy"
+    },
+    {
+      "id": "oop_lesson_12_q04",
+      "lessonId": "oop_lesson_12",
+      "question": "Which declaration is valid Java enum syntax?",
+      "options": ["class Level { EASY, HARD }", "enum Level { EASY, HARD }", "interface Level(EASY, HARD)", "enum Level = [EASY, HARD]"],
+      "correctAnswer": "enum Level { EASY, HARD }",
+      "explanation": "Enum constants are declared inside braces after the enum name.",
+      "difficulty": "Easy"
+    },
+    {
+      "id": "oop_lesson_12_q05",
+      "lessonId": "oop_lesson_12",
+      "question": "How do you access the HARD constant in an enum named Level?",
+      "options": ["Level.get(HARD)", "Level->HARD", "Level.HARD", "new Level(HARD)"],
+      "correctAnswer": "Level.HARD",
+      "explanation": "Enum constants are accessed with the enum type and dot operator.",
+      "difficulty": "Easy"
+    },
+    {
+      "id": "oop_lesson_12_q06",
+      "lessonId": "oop_lesson_12",
+      "question": "Which operator is used to compare enum values for equality?",
+      "options": ["<", ">", "==", "~="],
+      "correctAnswer": "==",
+      "explanation": "Enum values can be compared with the equality operator.",
+      "difficulty": "Easy"
+    },
+    {
+      "id": "oop_lesson_12_q07",
+      "lessonId": "oop_lesson_12",
+      "question": "In a switch statement over an enum, how is a case usually written?",
+      "options": ["case Level.EASY", "case EASY", "case enum EASY", "case 'EASY'"],
+      "correctAnswer": "case EASY",
+      "explanation": "The switch expression already establishes the enum type, so the constant name is sufficient.",
+      "difficulty": "Medium"
+    },
+    {
+      "id": "oop_lesson_12_q08",
+      "lessonId": "oop_lesson_12",
+      "question": "Why are enums useful in decision-making code?",
+      "options": ["They compile faster", "They restrict values to a predefined set", "They sort data automatically", "They remove variables"],
+      "correctAnswer": "They restrict values to a predefined set",
+      "explanation": "Enums help prevent invalid values and spelling mistakes.",
+      "difficulty": "Medium"
+    },
+    {
+      "id": "oop_lesson_12_q09",
+      "lessonId": "oop_lesson_12",
+      "question": "Can an enum have fields and methods?",
+      "options": ["No", "Yes", "Only in abstract enums", "Only in interfaces"],
+      "correctAnswer": "Yes",
+      "explanation": "Enums are class-like types and can define fields, constructors, and methods.",
+      "difficulty": "Medium"
+    },
+    {
+      "id": "oop_lesson_12_q10",
+      "lessonId": "oop_lesson_12",
+      "question": "What can an enum constructor associate with each constant?",
+      "options": ["A separate value", "A new enum type", "A loop", "A package"],
+      "correctAnswer": "A separate value",
+      "explanation": "A constructor can assign data such as a numeric value to each constant.",
+      "difficulty": "Medium"
+    },
+    {
+      "id": "oop_lesson_12_q11",
+      "lessonId": "oop_lesson_12",
+      "question": "Why might an enum field need a getter?",
+      "options": ["To make the enum compile", "To expose a private value safely", "To create constants", "To enable switch statements"],
+      "correctAnswer": "To expose a private value safely",
+      "explanation": "A getter provides controlled access to a private enum field.",
+      "difficulty": "Medium"
+    },
+    {
+      "id": "oop_lesson_12_q12",
+      "lessonId": "oop_lesson_12",
+      "question": "Can an array store enum values?",
+      "options": ["No", "Yes", "Only without constructors", "Only with two values"],
+      "correctAnswer": "Yes",
+      "explanation": "Enum values can be stored in arrays like other reference values.",
+      "difficulty": "Medium"
+    },
+    {
+      "id": "oop_lesson_12_q13",
+      "lessonId": "oop_lesson_12",
+      "question": "Which loop is commonly used to process every value in an enum array?",
+      "options": ["while", "for-each", "do-while", "recursion"],
+      "correctAnswer": "for-each",
+      "explanation": "A for-each loop visits each enum value in the array.",
+      "difficulty": "Medium"
+    },
+    {
+      "id": "oop_lesson_12_q14",
+      "lessonId": "oop_lesson_12",
+      "question": "What does the values() method on an enum provide?",
+      "options": ["All declared enum constants", "Only the first constant", "A random constant", "A string only"],
+      "correctAnswer": "All declared enum constants",
+      "explanation": "values() returns an array containing every enum constant.",
+      "difficulty": "Medium"
+    },
+    {
+      "id": "oop_lesson_12_q15",
+      "lessonId": "oop_lesson_12",
+      "question": "What happens when an invalid enum value is assigned?",
+      "options": ["It is silently accepted", "It is restricted by the enum type", "It becomes zero", "It creates a new constant"],
+      "correctAnswer": "It is restricted by the enum type",
+      "explanation": "Enums allow only the constants declared by their type.",
+      "difficulty": "Hard"
+    },
+    {
+      "id": "oop_lesson_12_q16",
+      "lessonId": "oop_lesson_12",
+      "question": "What is a key benefit of enums over plain strings?",
+      "options": ["They use no memory", "They provide type safety", "They never need imports", "They replace classes"],
+      "correctAnswer": "They provide type safety",
+      "explanation": "Enum types prevent arbitrary values from being used where only known constants are valid.",
+      "difficulty": "Hard"
+    },
+    {
+      "id": "oop_lesson_12_q17",
+      "lessonId": "oop_lesson_12",
+      "question": "Can an enum have more than one constructor?",
+      "options": ["No", "Yes, constructors can be overloaded", "Only if it is abstract", "Only with interfaces"],
+      "correctAnswer": "Yes, constructors can be overloaded",
+      "explanation": "Enum constructors support normal constructor overloading rules.",
+      "difficulty": "Hard"
+    },
+    {
+      "id": "oop_lesson_12_q18",
+      "lessonId": "oop_lesson_12",
+      "question": "Which example is appropriate for an enum?",
+      "options": ["A changing age", "Fixed directions such as NORTH and SOUTH", "An unlimited username list", "Random numbers"],
+      "correctAnswer": "Fixed directions such as NORTH and SOUTH",
+      "explanation": "Enums model a known, fixed set of choices.",
+      "difficulty": "Hard"
+    },
+    {
+      "id": "oop_lesson_12_q19",
+      "lessonId": "oop_lesson_12",
+      "question": "What does an enum constant represent?",
+      "options": ["A fixed instance of the enum type", "A local variable", "A method parameter only", "A package name"],
+      "correctAnswer": "A fixed instance of the enum type",
+      "explanation": "Each declared enum constant is an instance of that enum type.",
+      "difficulty": "Hard"
+    },
+    {
+      "id": "oop_lesson_12_q20",
+      "lessonId": "oop_lesson_12",
+      "question": "What is the overall purpose of Java enums?",
+      "options": ["Replace every class", "Represent a fixed set of safe, clear constant values", "Remove all loops", "Store frequently changing data"],
+      "correctAnswer": "Represent a fixed set of safe, clear constant values",
+      "explanation": "Enums make fixed choices safer and clearer, especially in if and switch statements.",
+      "difficulty": "Hard"
+    }
   ]
 };

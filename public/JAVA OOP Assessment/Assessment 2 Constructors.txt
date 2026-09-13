@@ -1,0 +1,142 @@
+1. What is the main purpose of a constructor in Java? 
+A. To delete an object 
+B. To initialize an object 
+C. To print output 
+D. To compare objects 
+2. When is a constructor automatically called? 
+A. When a variable is declared 
+B. When a class is compiled 
+C. When an object is created 
+D. When the program ends 
+3. Which statement correctly creates an object using a constructor? 
+A. 
+Dog(); 
+B. 
+new Dog; 
+C. 
+Dog dog1 = new Dog(); 
+D. 
+Dog = dog1(); 
+4. A constructor must have the same name as the ________. 
+A. Variable 
+B. Method 
+C. Package 
+D. Class 
+5. Which constructor has no parameters? 
+A. Static Constructor 
+B. Default Constructor 
+C. Main Constructor 
+D. Private Constructor 
+6. What type of constructor accepts values when creating an object? 
+A. Empty Constructor 
+B. Static Constructor 
+C. Parameterized Constructor 
+D. Main Constructor 
+7. Which of the following is a valid default constructor? 
+A. 
+public void Dog(){} 
+B. 
+public Dog(){} 
+C. 
+Dog void(){} 
+D. 
+public constructor(){} 
+8. Which keyword creates a new object in Java? 
+A. class 
+B. public 
+C. this 
+D. new 
+9. What will happen when this code executes? 
+Dog dog1 = new Dog(); 
+A. A constructor is automatically called. 
+B. The object is deleted. 
+C. The class is removed. 
+D. Nothing happens. 
+10. What is initialized inside a constructor? 
+A. Packages 
+B. Attributes of an object 
+C. Methods 
+D. Libraries 
+11. Which constructor allows different objects to have different values? 
+A. Default Constructor 
+B. Parameterized Constructor 
+C. Empty Constructor 
+D. Static Constructor 
+12. Which constructor is shown below? 
+public Dog(String n, int a) 
+A. Default Constructor 
+B. Parameterized Constructor 
+C. Main Method 
+D. Setter Method 
+13. What is the output after creating this object? 
+public Dog(){ 
+name = "Buddy"; 
+} 
+Dog dog1 = new Dog(); 
+System.out.println(dog1.name); 
+A. null 
+B. Buddy 
+C. Dog 
+D. Error 
+14. What is the purpose of parameters in a constructor? 
+A. To delete variables 
+B. To store packages 
+C. To pass values during object creation 
+D. To stop the program 
+15. Which statement creates an object using a parameterized constructor? 
+A. 
+Dog dog1 = new Dog(); 
+B. 
+Dog dog1 = new Dog("Buddy",3); 
+C. 
+Dog("Buddy",3); 
+D. 
+new Dog; 
+16. Which statement about constructors is TRUE? 
+A. Constructors have a return type. 
+B. Constructors always return int. 
+C. Constructors do not have a return type. 
+D. Constructors return void. 
+17. What is wrong with this constructor? 
+public void Dog(){} 
+A. Nothing 
+B. Constructor names cannot be public. 
+C. Constructors cannot have a return type. 
+D. Dog should be lowercase. 
+18. If no constructor is written in a class, Java automatically provides a ________. 
+A. Parameterized Constructor 
+B. Default Constructor 
+C. Main Method 
+D. Setter Method 
+19. Which of the following best describes a constructor? 
+A. A loop 
+B. A special method for initializing objects 
+C. A variable 
+D. A package 
+20. Why are constructors useful? 
+A. They make object creation easier and initialize values automatically. 
+B. They delete objects automatically. 
+C. They replace classes. 
+D. They prevent objects from being created. 
+Answer Key 
+No. Answer 
+1 B 
+2 C 
+3 C 
+4 D 
+5 B 
+6 C 
+7 B 
+8 D 
+9 A 
+10 B 
+11 B 
+12 B 
+13 B 
+14 C 
+15 B 
+16 C 
+17 C 
+18 B 
+19 B 
+20 A 

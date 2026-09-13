@@ -1,0 +1,130 @@
+Assessment: Java Abstraction Using Interface 
+1. What are the two ways to achieve abstraction in Java, as mentioned in the video? 
+A. Inheritance and polymorphism 
+B. Abstract classes and interfaces 
+C. Constructors and destructors 
+D. Public and private methods 
+2. Which keyword is used to apply an interface to a class? 
+A. extends 
+B. implements 
+C. imports 
+D. abstracts 
+3. According to the video, an interface is best described as: 
+A. A class that cannot have any methods 
+B. A full abstract class — a special class meant to be implemented by other classes 
+C. A subclass of Object 
+D. A method with no return type 
+4. By default, what type of methods are declared inside an interface? 
+A. Private methods 
+B. Static methods only 
+C. Abstract methods 
+D. Final methods 
+5. What modifier can be used in an interface to create a method that has a body? 
+A. abstract 
+B. default 
+C. static (as the only option) 
+D. protected 
+6. What is true about variables declared inside an interface? 
+A. They are static and final by default 
+B. They must always be private 
+C. They can be changed anytime 
+D. They cannot be declared at all 
+7. How is the `implements` keyword different from `extends`? 
+A. They are exactly the same 
+B. `extends` is used for inheritance, while `implements` is used to apply an interface 
+C. `implements` can only be used with abstract classes 
+D. `extends` is only used for interfaces 
+8. What happens if a class implements an interface but does not override one of its methods? 
+A. Nothing happens; it compiles fine 
+B. The method is automatically deleted 
+C. It causes a compiler error since the method must be implemented 
+D. The interface is ignored 
+9. In the video's example, which classes implemented the `Animal` interface? 
+A. Cat, Fish, Bird 
+B. Dog, Bird, Frog 
+C. Dog, Cat, Fish 
+D. Bird, Frog, Snake 
+10. What error occurs when trying to instantiate the `Animal` interface directly (`new Animal()`)? 
+A. No error occurs 
+B. 'Cannot instantiate the type Animal' since interfaces can't be instantiated 
+C. A warning only, not an error 
+D. The program runs but produces no sound 
+11. Can a class implement more than one interface in Java? 
+A. No, only one interface is allowed per class 
+B. Yes, a class can implement multiple interfaces 
+C. Only if the interfaces have the same method names 
+D. Only abstract classes can do this 
+12. Why did the instructor create separate `AirAnimal`, `LandAnimal`, and `WaterAnimal` interfaces? 
+A. Because Java requires at least three interfaces per project 
+B. Because not all animals can do the same things (e.g., not all animals can fly or swim) 
+C. To make the program run faster 
+D. Because the Animal interface was deleted 
+13. Which interfaces did the `Bird` class implement in the video? 
+A. Animal and WaterAnimal only 
+B. Animal, AirAnimal, and LandAnimal 
+C. Animal and LandAnimal only 
+D. AirAnimal only 
+14. Which interfaces did the `Frog` class implement? 
+A. Animal, WaterAnimal, and LandAnimal 
+B. Animal and AirAnimal only 
+C. WaterAnimal only 
+D. Animal, AirAnimal, WaterAnimal, and LandAnimal 
+15. What real-world analogy did the instructor use to explain multiple interface implementation, aside from 
+animals? 
+A. Bank account systems 
+B. Game development (enemy types with different abilities) 
+C. Online shopping carts 
+D. School enrollment systems 
+16. What did the instructor demonstrate about `AirAnimal extends LandAnimal`? 
+A. It causes an error because interfaces cannot extend each other 
+B. It makes air animals automatically require the walk() method too, since interfaces can inherit from other 
+interfaces 
+C. It removes the fly() method requirement 
+D. It converts the interface into an abstract class 
+17. What mistake did the instructor warn against regarding instantiation? 
+A. Declaring an object as `Animal d = new Dog()` when not doing polymorphism, which limits access to only 
+the Animal interface's methods 
+B. Using lowercase class names 
+C. Creating too many objects 
+D. Forgetting to add a main method 
+18. Aside from abstract methods, what else can be declared inside an interface (as shown near the end of the 
+video)? 
+A. Constructors only 
+B. Constants (static final fields) and default methods with a body 
+C. Private variables that can change 
+D. Nested classes only 
+19. What did the instructor recommend if you want a method in an interface to have a body and be reusable 
+across many classes? 
+A. Avoid using interfaces altogether and use inheritance instead 
+B. Always make it abstract 
+C. Never give it a body 
+D. Use the extends keyword inside the method 
+20. What is the overall takeaway of the video regarding abstraction with interfaces? 
+A. Interfaces are only useful for animal-related programs 
+B. Interfaces let you define required behaviors that multiple, often unrelated classes must implement, offering 
+more flexibility than single inheritance 
+C. Interfaces replace the need for classes entirely 
+D. Interfaces can only have one method each 
+
+Answer Key 
+
+1 B
+2 B
+3 B
+4 C
+5 B
+6 A
+7 B
+8 C
+9 B
+10 B
+11 B
+12 B
+13 B
+14 A
+15 B
+16 B
+17 A
+18 B
+19 A
+20 B

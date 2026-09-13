@@ -1,0 +1,173 @@
+1. What is the main purpose of a method in Java? 
+A. To create a package 
+B. To perform a specific task 
+C. To delete an object 
+D. To declare a variable 
+2. In Object-Oriented Programming, methods represent an object's ________. 
+A. Color 
+B. Size 
+C. Behaviors 
+D. Memory 
+3. Which keyword indicates that a method does not return a value? 
+A. int 
+B. return 
+C. void 
+D. new 
+4. Which of the following is a correctly declared method? 
+A. 
+public void bark(){ 
+} 
+B. 
+public bark(){ 
+} 
+C. 
+void public bark(){ 
+} 
+D. 
+method bark(){ 
+} 
+5. Which part of a method identifies its name? 
+public void bark(){ 
+} 
+A. public 
+B. void 
+C. bark 
+D. () 
+6. Which statement correctly calls the method bark()? 
+A. 
+Dog.bark(); 
+B. 
+bark.Dog(); 
+C. 
+dog1.bark(); 
+D. 
+Dog(); 
+7. What will be displayed? 
+void bark(){ 
+System.out.println("Woof!"); 
+} 
+dog1.bark(); 
+A. 
+Dog 
+B. 
+Woof! 
+C. 
+bark 
+D. 
+Error 
+8. What is required before calling an object's method? 
+A. Creating an object 
+B. Deleting the class 
+C. Importing JavaFX 
+D. Closing the program 
+9. What is a parameter? 
+A. A package 
+B. An input given to a method 
+C. A class 
+D. An object 
+10. Which method contains one parameter? 
+A. 
+void bark() 
+B. 
+void bark(String name) 
+C. 
+void bark(int,String) 
+D. 
+void bark(void) 
+11. What is the output? 
+void greet(String name){ 
+System.out.println(name); 
+} 
+dog1.greet("Buddy"); 
+A. 
+Dog 
+B. 
+name 
+C. 
+Buddy 
+D. 
+Error 
+12. Why are parameters useful? 
+A. They make methods work with different values. 
+B. They create new classes. 
+C. They remove variables. 
+D. They stop the program. 
+13. Which keyword sends a value back from a method? 
+A. new 
+B. void 
+C. return 
+D. public 
+14. Which method returns an integer? 
+A. 
+void getAge() 
+B. 
+String getAge() 
+C. 
+int getAge() 
+D. 
+public getAge() 
+15. What is the output? 
+int getAge(){ 
+return 5; 
+} 
+System.out.println(getAge()); 
+A. 
+0 
+B. 
+5 
+C. 
+Age 
+D. 
+Error 
+16. What does the following statement do? 
+int age = dog1.getAge(); 
+A. Deletes the object 
+B. Stores the returned value into the variable age 
+C. Creates another class 
+D. Displays the age automatically 
+17. Which statement about methods is TRUE? 
+A. Methods can only be called once. 
+B. Methods can perform specific tasks. 
+C. Methods cannot have parameters. 
+D. Methods must always return a value. 
+18. Which of the following uses the dot operator correctly? 
+A. 
+dog1.bark(); 
+B. 
+Dog->bark(); 
+C. 
+bark.dog1(); 
+D. 
+Dog::bark(); 
+19. Why are methods important in Java? 
+A. They reduce code repetition and organize programs. 
+B. They replace constructors. 
+C. They create packages. 
+D. They delete variables. 
+20. Which statement best describes a method? 
+A. A variable inside a class 
+B. A special block of code that performs a specific task 
+C. A package used in Java 
+D. A constructor that always returns a value 
+Answer Key 
+No. Answer 
+1 B 
+2 C 
+3 C 
+4 A 
+5 C 
+6 C 
+7 B 
+8 A 
+9 B 
+10 B 
+11 C 
+12 A 
+13 C 
+14 C 
+15 B 
+16 B 
+17 B 
+18 A 
+19 A 
+20 B 

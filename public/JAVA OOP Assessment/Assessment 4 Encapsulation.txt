@@ -1,0 +1,133 @@
+Assessment: Java Encapsulation
+1. What is encapsulation, as defined in the video?
+A. The process of creating multiple classes at once
+B. The concept of binding data (variables) together with the methods that access them
+C. Awayto make a program run faster
+D. The ability of a class to inherit from another class
+2. In the video's example class 'Student', which two elements represent what an object 'knows' and what
+an object 'does'?
+A. Constructors and packages
+B. Variables (what it knows) and methods (what it does)
+C. Interfaces and abstract classes
+D. Loops and conditionals
+3. According to the video, what is the correct way to access or modify an object's variables?
+A. Directly through the variable name from the main method (e.g., s1.rollNumber = 2;)
+B. Only through methods, such as getters and setters
+C. By deleting the class and recreating it
+D. Variables should never be accessed at all
+4. What is the purpose of a setter method?
+A. To fetch/return the value of a variable
+B. To set or assign a value to a variable
+C. To delete a variable
+D. To print the class name
+5. What is the purpose of a getter method?
+A. To assign a new value to a variable
+B. To fetch/return the current value of a variable
+C. To make a variable public
+D. To create a new object
+6. In the video's example, what is the correct method signature style used for a setter of 'rollNumber'?
+A. public int setRollNumber()
+B. public void setRollNumber(int r)
+C. private void getRollNumber()
+D. public String setRollNumber()
+7. In the video's example, what is the correct method signature style used for a getter of 'rollNumber'?
+A. public void getRollNumber(int r)
+B. public int getRollNumber()
+C. private int setRollNumber()
+D. public String getRollNumber(int r)
+8. Inside the setter method (e.g., setRollNumber(int r)), what does the line 'rollNumber = r;' do?
+A. It returns the value of r
+B. It assigns the value of the parameter r to the class's rollNumber variable
+C. It deletes the rollNumber variable
+D. It compares r to rollNumber
+9. According to the video, what access modifier should class variables (fields) have in encapsulation?
+A. public
+B. private
+C. static
+D. final
+10. According to the video, what access modifier should the getter and setter methods have?
+A. private
+B. public
+C. protected only
+D. They must be static
+11. What error occurs in the video when trying to directly access a private field (like 'name') from outside
+the class, e.g., s1.name = "Navin";?
+A. No error occurs
+B. An error stating that the field is not visible/accessible
+C. The program automatically converts it to a public field
+D. ANullPointerException
+12. In Eclipse (or similar IDEs), what feature did the video mention that can automatically generate
+getters and setters for selected variables?
+A. Auto-format code
+B. Source > Generate Getters and Setters
+C. Refactor > Rename
+D. Debug > Step Into
+13. What is the main reason encapsulation is used, according to the second part of the video?
+A. To make the code shorter
+B. To keep the data safe by controlling how it is accessed or modified
+C. To allow multiple classes to share the same variable
+D. To remove the need for constructors
+14. What extra action did the video demonstrate you could do inside a setter method, aside from just
+assigning the value?
+A. Delete the class
+B. Print/maintain a log file whenever the value is changed
+C. Automatically create a new object
+D. Convert the variable into a constant
+15. Why is maintaining a log file inside a setter useful, based on the video's explanation?
+A. It helps track when and how data was changed, which is common in server-level programming
+B. It makes the variable public
+C. It deletes old values automatically
+D. It prevents the method from being called
+16. Whatothertypeofcheckdidthevideomentioncouldbeaddedinsideagettermethodbeforereturning
+a value?
+A. Checking if the user is currently logged into the system
+B. Checking the current date only
+C. Automatically renaming the variable
+D. Converting the value to a different data type
+17. Whycan't these kinds of checks (like logging or login verification) be done if a variable is made public
+and accessed directly?
+A. Because directly accessing a public variable bypasses any method, so no extra code (like logging) can
+run
+B. Public variables automatically log every access
+C. Public variables cannot store any data
+D. Public variables require a getter by default
+18. Whatistherelationshipbetweenprivatevariablesandpublicgetter/settermethodsinencapsulation?
+A. Private variables are protected from direct outside access, while public methods provide a controlled
+way to access or modify them
+B. Private variables can be accessed directly from anywhere
+C. Public methods make the variables less secure
+D. There is no relationship between them
+19. In the video's example, after generating getters and setters, which method was used to properly set the
+'name' field instead of accessing it directly?
+A. s1.name("Navin");
+B. s1.setName("Navin");
+C. name = "Navin";
+D. s1.getName("Navin");
+20. What is the overall takeaway of this video regarding encapsulation?
+A. Encapsulation means making all variables and methods public for easy access
+B. Encapsulation binds data (private variables) with methods (public getters/setters), providing controlled,
+safe access to an object's data
+C. Encapsulation is only used for creating arrays
+D. Encapsulation removes the need for classes and objects
+Answer Key
+Item No. Answer
+1 B
+2 B
+3 B
+4 B
+5 B
+6 B
+7 B
+8 B
+9 B
+10 B
+11 B
+12 B
+13 B
+14 B
+15 A
+16 A
+17 A
+18 A
+19 B
+20 B

@@ -6,7 +6,6 @@ import {
   Check,
   CheckCircle2,
   Code2,
-  ExternalLink,
   Film,
   GraduationCap,
   LayoutGrid,
@@ -158,7 +157,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
   const practiceLockedReason = quizLockedReason || (!quizDb[activeAssessment.id]?.passed ? 'Pass this lesson quiz with 80% or higher to unlock programming practice.' : '');
   const passedRun = Boolean(lastResult && lastResult.score >= activeExercise.passingScore && lastResult.compileStatus === 'success');
 
-  const selectLesson = (lesson: SwingLesson) => {
+  const selectLesson = (lesson: SwingLesson, nextTab: SwingTab = 'lessons') => {
     const reason = getSwingLessonLockReason(lesson);
     if (reason) {
       setNotice(reason);
@@ -167,7 +166,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
     }
     setActiveLessonId(lesson.id);
     setQuizMode('idle');
-    setActiveTab('lessons');
+    setActiveTab(nextTab);
   };
 
   const markLessonComplete = (field: 'contentCompleted' | 'videoCompleted') => {
@@ -433,57 +432,95 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
   );
 
   const renderVideos = () => (
-    <section className="space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <section className="space-y-5 animate-fade-in">
+      <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="text-xl font-extrabold text-slate-900">Recommended Java Swing Videos</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Watch the embedded tutorials, then mark the active lesson video complete.</p>
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700">Course Syllabus</span>
+            <h2 className="mt-3 text-2xl font-extrabold text-slate-900">Java Swing Fundamentals</h2>
+            <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500">Five Java Swing video lessons covering windows, controls, events, layouts, and dialogs.</p>
           </div>
-          <button
-            type="button"
-            disabled={Boolean(lessonLockReason) || progressDb[activeLesson.id]?.videoCompleted}
-            onClick={() => markLessonComplete('videoCompleted')}
-            className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white disabled:bg-slate-300"
-          >
-            {progressDb[activeLesson.id]?.videoCompleted ? 'Video Complete' : 'Mark Active Video Complete'}
-          </button>
+          <div className="w-full rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 lg:w-56">
+            <div className="flex items-center justify-between text-xs font-black text-slate-700">
+              <span>Overall Progress</span>
+              <span className="font-mono text-emerald-700">{Math.round((JAVA_SWING_LESSONS.filter(lesson => progressDb[lesson.id]?.videoCompleted).length / JAVA_SWING_LESSONS.length) * 100)}%</span>
+            </div>
+            <div className="mt-3 h-2 rounded-full bg-white">
+              <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${(JAVA_SWING_LESSONS.filter(lesson => progressDb[lesson.id]?.videoCompleted).length / JAVA_SWING_LESSONS.length) * 100}%` }} />
+            </div>
+          </div>
         </div>
       </div>
-      <div className="grid gap-5 lg:grid-cols-2">
-        {JAVA_SWING_VIDEOS.map(video => (
-          <article key={video.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="aspect-video bg-slate-950">
-              {video.embedUrl.endsWith('.mp4') ? (
-                <video
-                  src={video.embedUrl}
-                  controls
-                  className="h-full w-full"
-                />
-              ) : (
-                <iframe
-                  src={video.embedUrl}
-                  title={video.title}
-                  className="h-full w-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              )}
+
+      <div className="grid gap-6 lg:grid-cols-12">
+        <section className="lg:col-span-8">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm">
+            <div className="aspect-video bg-black">
+              {(() => {
+                const video = JAVA_SWING_VIDEOS.find(item => item.lessonId === activeLesson.id) || JAVA_SWING_VIDEOS[0];
+                return video.embedUrl.endsWith('.mp4') ? (
+                  <video key={video.id} src={video.embedUrl} controls className="h-full w-full object-contain" />
+                ) : (
+                  <iframe src={video.embedUrl} title={video.title} className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                );
+              })()}
             </div>
-            <div className="p-5">
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="text-sm font-extrabold text-slate-900">{video.title}</h3>
-                <span className="rounded-lg bg-slate-100 px-2 py-1 font-mono text-[10px] font-black text-slate-500">{video.duration}</span>
+            <div className="border-t border-slate-800 bg-white p-5">
+              <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  <span className="font-mono text-[10px] font-black uppercase text-slate-400">Lesson {activeLesson.sequence}</span>
+                  <h3 className="mt-1 text-lg font-extrabold text-slate-900">{activeLesson.title}</h3>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{activeLesson.introduction}</p>
+                </div>
+                <button type="button" disabled={Boolean(lessonLockReason) || progressDb[activeLesson.id]?.videoCompleted} onClick={() => markLessonComplete('videoCompleted')} className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto">
+                  {progressDb[activeLesson.id]?.videoCompleted ? 'Video Complete' : 'Mark Video Complete'}
+                </button>
               </div>
-              <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{video.description}</p>
-              {!video.embedUrl.endsWith('.mp4') && (
-                <a href={video.embedUrl.replace('/embed/', '/watch?v=')} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-[11px] font-black text-emerald-700">
-                  Open on YouTube <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              )}
+              <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                {activeLesson.topics.slice(0, 4).map(topic => (
+                  <div key={topic} className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    {topic}
+                  </div>
+                ))}
+              </div>
             </div>
-          </article>
-        ))}
+          </div>
+        </section>
+
+        <aside className="space-y-4 lg:col-span-4">
+          <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-tight text-slate-900"><BookOpen className="h-4 w-4 text-emerald-600" /> Lesson Queue</h3>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">5 Lessons</span>
+            </div>
+            <div className="max-h-[620px] space-y-2 overflow-y-auto pr-1">
+              {JAVA_SWING_LESSONS.map(lesson => {
+                const reason = getSwingLessonLockReason(lesson);
+                const isActive = lesson.id === activeLesson.id;
+                const completed = progressDb[lesson.id]?.videoCompleted;
+                const statusLabel = reason ? 'Locked' : completed ? 'Complete' : 'Ready';
+                return (
+                  <button key={lesson.id} type="button" onClick={() => selectLesson(lesson, 'videos')} className={`w-full rounded-2xl border p-3 text-left transition-all ${isActive ? 'border-emerald-500 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-200' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'} ${reason ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-1 flex items-center gap-2"><span className="inline-flex min-w-[2.2rem] items-center justify-center rounded-md bg-slate-100 px-1.5 py-1 font-mono text-[10px] font-black uppercase text-slate-700">{lesson.sequence}</span><span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Java Swing</span></div>
+                        <h4 className="truncate text-sm font-extrabold text-slate-900">{lesson.title}</h4>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2"><span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${reason ? 'bg-slate-100 text-slate-500' : completed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{statusLabel}</span>{reason ? <Lock className="h-4 w-4 text-slate-400" /> : completed ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Play className="h-4 w-4 text-slate-500" />}</div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500"><span>{JAVA_SWING_VIDEOS.find(video => video.lessonId === lesson.id)?.duration}</span><span>{reason ? 'Unavailable' : completed ? '100% watched' : 'Not started'}</span></div>
+                    <div className="mt-2 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: completed ? '100%' : '0%' }} /></div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white/80 p-5 text-xs font-semibold leading-6 text-slate-500 shadow-sm backdrop-blur-md">
+            <h3 className="mb-2 text-sm font-extrabold text-slate-900">Unlock Rule</h3>
+            Complete the current video and lesson content before moving to the next Java Swing lesson. Pass the quiz to unlock its programming exercise.
+          </div>
+        </aside>
       </div>
     </section>
   );

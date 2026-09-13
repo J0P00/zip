@@ -1,0 +1,131 @@
+Assessment: Java Inheritance 
+1. What is inheritance in Object-Oriented Programming? 
+A. A way to hide implementation details 
+B. A mechanism where a class acquires the properties and behaviors (fields and methods) of another class 
+C. A method that returns multiple values 
+D. A way to create arrays of objects 
+2. Which keyword is used in Java to make one class inherit from another? 
+A. implements 
+B. inherits 
+C. extends 
+D. super 
+3. In inheritance, what is the class being inherited from called? 
+A. Subclass 
+B. Child class 
+C. Superclass (or parent/base class) 
+D. Derived class 
+4. What is the class that inherits from another class called? 
+A. Superclass 
+B. Base class 
+C. Parent class 
+D. Subclass (or child/derived class) 
+5. What is the main advantage of using inheritance in a program? 
+A. It makes variables private automatically 
+B. It promotes code reusability by allowing subclasses to reuse fields and methods from the superclass 
+C. It prevents classes from having constructors 
+D. It removes the need for objects 
+6. Which of the following is a correct example of inheritance syntax in Java? 
+A. class Dog implements Animal { } 
+B. class Dog extends Animal { } 
+C. class Dog inherits Animal { } 
+D. class Dog : Animal { } 
+7. Does Java support multiple inheritance of classes (a class extending more than one class directly)? 
+A. Yes, a class can extend as many classes as needed 
+B. No, Java only allows a class to extend one superclass directly 
+C. Yes, but only up to three classes 
+D. Java has no concept of inheritance 
+8. What keyword is used inside a subclass to call or access the superclass's constructor or methods? 
+A. this 
+B. super 
+C. base 
+D. parent 
+9. What happens to a superclass's private fields when inherited by a subclass? 
+A. They are directly accessible in the subclass like public fields 
+B. They are inherited but not directly accessible in the subclass; access is typically done through public 
+getters/setters 
+C. They are automatically deleted 
+D. They become static 
+10. What is method overriding in the context of inheritance? 
+A. Creating two methods with the same name but different parameters 
+B. When a subclass provides its own specific implementation of a method already defined in its superclass 
+C. Declaring a method as private 
+D. Deleting a method from the superclass 
+11. For a subclass to properly override a superclass method, what must generally match? 
+A. Only the method name 
+B. The method name, return type, and parameter list 
+C. Only the return type 
+D. Nothing needs to match 
+12. What is the purpose of calling super() as the first line inside a subclass's constructor? 
+A. To delete the superclass's constructor 
+B. To call and execute the superclass's constructor, so its initialization logic runs before the subclass's own 
+C. To make the subclass abstract 
+D. To override a method 
+13. If a subclass constructor does not explicitly call super(...), what does Java do by default? 
+A. It causes a compile-time error always 
+B. Java automatically calls the superclass's no-argument constructor first 
+C. Java skips the superclass constructor entirely 
+D. Java deletes the subclass constructor 
+14. What type of relationship does inheritance typically represent between a subclass and superclass? 
+A. A 'has-a' relationship 
+B. An 'is-a' relationship (e.g., a Dog IS-A Animal) 
+C. A 'uses-a' relationship 
+D. No particular relationship 
+15. Which of the following best demonstrates an appropriate use of inheritance? 
+A. class Car extends Engine (a car IS-A engine) 
+B. class SportsCar extends Car (a sports car IS-A car) 
+C. class Car extends Wheel (a car IS-A wheel) 
+D. class Engine extends Car (an engine IS-A car) 
+16. Can a subclass add new fields or methods that are not present in its superclass? 
+A. No, subclasses can only use inherited members 
+B. Yes, a subclass can have its own additional fields and methods beyond what it inherits 
+C. Only if the superclass is abstract 
+D. Only if the field is static 
+17. What does the term 'multilevel inheritance' mean? 
+A. A class inheriting from two unrelated classes at once 
+B. A chain of inheritance where a class inherits from a subclass, which itself inherits from another superclass 
+(e.g., C extends B, B extends A) 
+C. A class that has no superclass 
+D. A method that calls itself repeatedly 
+18. In Java, what is the ultimate superclass that all classes inherit from, directly or indirectly? 
+A. System 
+B. Main 
+C. Object 
+D. Class 
+19. What happens if a subclass method has the same name as a superclass method but with a different 
+parameter list? 
+A. This is method overriding 
+B. This is considered method overloading, not overriding, since the parameters differ 
+C. It causes a compile-time error 
+D. The superclass method is deleted 
+20. Why is inheritance considered one of the four pillars of Object-Oriented Programming (along with 
+encapsulation, polymorphism, and abstraction)? 
+A. Because it prevents classes from communicating with each other 
+B. Because it allows classes to build upon existing classes, promoting reusability and establishing 
+hierarchical relationships that support polymorphism 
+C. Because it removes the need for methods entirely 
+D. Because it only applies to abstract classes 
+
+Answer Key 
+1 B
+2 C
+3 C
+4 D
+5 B
+6 B
+7 B
+8 B
+9 B
+10 B
+11 B
+12 B
+13 B
+14 B
+15 B
+16 B
+17 B
+18 C
+19 B
+20 B
+
+
+

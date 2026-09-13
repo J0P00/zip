@@ -1,0 +1,130 @@
+Assessment: Abstract Class
+1. What is an abstract class in Java?
+A. Aclass that cannot have any methods
+B. Aclass that cannot be instantiated on its own and may contain abstract (unimplemented) methods
+C. Aclass that must be static
+D. Aclass that automatically implements all interfaces
+2. Which keyword is used to declare an abstract class?
+A. interface
+B. abstract
+C. static
+D. final
+3. Can an abstract class be instantiated directly (e.g., new AbstractClass())?
+A. Yes, always
+B. No, abstract classes cannot be instantiated directly
+C. Only if it has no methods
+D. Only in the main method
+4. What is an abstract method?
+A. Amethod with a full implementation and body
+B. Amethod declared without a body, ending with a semicolon, that subclasses must implement
+C. Aprivate method that cannot be inherited
+D. Amethod that only returns void
+5. Where can an abstract method be declared?
+A. In any regular class
+B. Only inside an abstract class or an interface
+C. Only inside the main method
+D. Abstract methods cannot be declared anywhere
+6. What must a subclass do if it extends an abstract class containing abstract methods?
+A. Nothing, abstract methods are optional to implement
+B. It mustoverride/implement all inherited abstract methods, or the subclass must also be declared abstract
+C. It must delete the abstract methods
+D. It must make all its own methods abstract too
+7. Can an abstract class contain regular (non-abstract) methods with a full body?
+A. No, all methods must be abstract
+B. Yes, an abstract class can have a mix of abstract and concrete (fully implemented) methods
+C. Only static methods are allowed
+D. Only private methods are allowed
+8. Can an abstract class have a constructor?
+A. No, abstract classes cannot have constructors
+B. Yes, and it can be called by a subclass's constructor using super()
+C. Yes, but it can never actually run
+D. Only if the abstract class has no fields
+9. Can an abstract class have instance fields (variables)?
+A. No, abstract classes cannot have any fields
+B. Yes, abstract classes can have instance fields just like regular classes
+C. Only static final fields are allowed
+D. Only if the field is also abstract
+10. Why would a programmer choose to make a class abstract instead of a regular (concrete) class?
+A. To prevent the class from ever being used
+B. To represent a general/incomplete concept that shouldn't be instantiated on its own, while still providing
+shared code and requiring subclasses to fill in specific behavior
+C. To make the class run faster
+D. To avoid writing a constructor
+11. What error occurs if you try to instantiate an abstract class directly?
+A. Aruntime NullPointerException
+B. Acompile-time error stating the class cannot be instantiated because it is abstract
+C. No error occurs at all
+D. An ArrayIndexOutOfBoundsException
+12. If class B extends abstract class A but does not implement all of A's abstract methods, what must be
+true about class B?
+A. Class B will not compile unless it is also declared abstract
+B. Class B is automatically allowed to skip the methods
+C. Class B becomes an interface
+D. Class B's constructor is deleted
+13. Which of the following is TRUE about abstract classes and multiple inheritance in Java?
+A. Aclass can extend multiple abstract classes directly
+B. A class can only extend one abstract (or any) class directly, following Java's single inheritance rule for
+classes
+C. Abstract classes eliminate the single inheritance restriction
+D. Abstract classes cannot be extended at all
+14. What is a key difference between an abstract class and a regular (concrete) class?
+A. Abstract classes cannot have any subclasses
+B. An abstract class may contain unimplemented (abstract) methods and cannot be instantiated, while a
+concrete class must have all methods fully implemented and can be instantiated
+C. Concrete classes cannot have constructors
+D. There is no real difference
+15. Which scenario is the best real-world use case for an abstract class?
+A. Autility class with only static helper methods
+B. Ageneral 'Shape' class with an abstract calculateArea() method, extended by specific shapes like Circle
+and Square that each implement their own area formula
+C. Aclass meant to store a single constant value
+D. Afinal class that should never be extended
+16. Can an abstract method have a body/implementation?
+A. Yes, all abstract methods must have a body
+B. No, an abstract method has no body — it ends with a semicolon after the method signature
+C. Only if it's also declared static
+D. Only if the class is not abstract
+17. What access modifiers can be used on an abstract method?
+A. Only private
+B. Any modifier except private (since private methods cannot be overridden by subclasses)
+C. Only public
+D. Abstract methods cannot have access modifiers
+18. Inanabstractclasshierarchy,whichpartofthedesignistypicallylefttobedefinedbythesubclasses?
+A. The general structure and shared behavior
+B. The specific implementation details of the abstract methods
+C. The class name
+D. The package declaration
+19. Which best describes the relationship between abstraction (the OOP concept) and abstract classes?
+A. They are unrelated concepts
+B. Abstract classes are one of the tools used to achieve abstraction, by hiding implementation details and
+exposing only what subclasses need to define
+C. Abstract classes remove the need for abstraction entirely
+D. Abstraction only applies to interfaces, never abstract classes
+20. What is the overall purpose of an abstract class in object-oriented design?
+A. Toserve as a template that defines common structure/behavior for related subclasses, while forcing each
+subclass to implement its own specific details for certain methods
+B. To store only static and final constants
+C. To completely prevent any code reuse between classes
+D. To replace the need for regular classes entirely
+Answer Key
+Item No. Answer
+1 B
+2 B
+3 B
+4 B
+5 B
+6 B
+7 B
+8 B
+9 B
+10 B
+11 B
+12 A
+13 B
+14 B
+15 B
+16 B
+17 B
+18 B
+19 B
+20 A
