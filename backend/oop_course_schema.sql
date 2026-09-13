@@ -1,4 +1,4 @@
--- OOP Hub PostgreSQL/Supabase schema
+-- OOP Hub PostgreSQL schema
 -- This file is intentionally idempotent. It can be run against a fresh
 -- database or an older Render-era database without dropping existing tables.
 
