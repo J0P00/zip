@@ -1669,7 +1669,7 @@ export default function App() {
 
             {persona === 'student' && studentTab === 'leaderboard' && (
               <Leaderboard 
-                users={studentVisibleLeaderboardUsers}
+                currentUser={displayUser}
               />
             )}
 

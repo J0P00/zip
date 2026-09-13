@@ -327,6 +327,13 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
 CREATE INDEX IF NOT EXISTS idx_quiz_attempts_student ON quiz_attempts(student_user_id, date_completed DESC);
 CREATE INDEX IF NOT EXISTS idx_quiz_attempts_assessment ON quiz_attempts(assessment_id, attempt_number DESC, date_completed DESC);
 
+CREATE TABLE IF NOT EXISTS ranking_state (
+  student_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  current_rank INTEGER NOT NULL,
+  previous_rank INTEGER,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS programming_challenges (
   id TEXT PRIMARY KEY,
   topic_id TEXT NOT NULL,

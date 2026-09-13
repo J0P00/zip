@@ -205,6 +205,27 @@ export interface LeaderboardUser {
   }[];
 }
 
+export interface RankingEntry {
+  studentId: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  rank: number;
+  previousRank?: number | null;
+  movement: 'up' | 'down' | 'stable' | 'new';
+  movementAmount: number;
+  learningScore: number;
+  oopProgress: number;
+  quizScore: number;
+  practiceScore: number;
+  status: 'Not Started' | 'In Progress' | 'Completed';
+  completedLessons: number;
+  totalLessons: number;
+  milestones: string[];
+  recentActivity: string;
+  updatedAt?: string;
+}
+
 export interface PendingSubmission {
   id: string;
   studentName: string;

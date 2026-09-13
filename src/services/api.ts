@@ -1,4 +1,4 @@
-import { AdaptiveRecommendation, AuthenticatedUser, Persona } from '../types';
+import { AdaptiveRecommendation, AuthenticatedUser, Persona, RankingEntry } from '../types';
 
 export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://oop-backend-j0oj.onrender.com')
@@ -105,6 +105,11 @@ export const progressApi = {
       method: 'POST',
       body: JSON.stringify(body)
     })
+};
+
+export const rankingApi = {
+  list: (token?: string) =>
+    apiRequest<{ success: boolean; data: RankingEntry[] }>('/api/rankings', { token })
 };
 
 export const lessonApi = {

@@ -1253,7 +1253,7 @@ export default function TeacherPortal({
             <h3 id="student-ranking-heading" className="text-lg font-black">Student Ranking</h3>
             <p className="mt-1 text-xs text-slate-500">Compare enrolled students by OOP progress, quiz performance, and Practice IDE activity.</p>
           </div>
-          <Leaderboard users={visibleLeaderboardUsers} />
+          <Leaderboard currentUser={currentUser} />
         </section>
       )}
 

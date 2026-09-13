@@ -412,6 +412,12 @@ const initializeDatabase = async () => {
           answers JSONB NOT NULL DEFAULT '{}'::jsonb,
           date_completed TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+                CREATE TABLE IF NOT EXISTS ranking_state (
+                    student_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                    current_rank INTEGER NOT NULL,
+                    previous_rank INTEGER,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
         CREATE TABLE IF NOT EXISTS programming_challenges (
           id TEXT PRIMARY KEY,
           topic_id TEXT NOT NULL,
@@ -804,11 +810,22 @@ const seedLessons = async () => {
         ],
         [
             "oop_lesson_11",
-            "Enum",
+            "Array of Objects",
             "Advanced OOP",
             11,
             "15:25",
-            "/videos/lesson11.mp4",
+            "/JAVA%20OOP%20Video%20Lesson/Lesson%2011%20Array%20Of%20Object.mp4",
+            "Shows how arrays can store object references, how each element must be initialized, and how loops process object collections.",
+            JSON.stringify(["Object reference array", "Element initialization", "Null elements", "Array traversal", "Object state per element"]),
+            "Published"
+        ],
+        [
+            "oop_lesson_12",
+            "Enum",
+            "Advanced OOP",
+            12,
+            "15:25",
+            "/JAVA%20OOP%20Video%20Lesson/Lesson%2012%20Enum.mp4",
             "Explains Java enums as type-safe named constants that can also contain fields, constructors, and methods.",
             JSON.stringify(["enum keyword", "Named constants", "Type safety", "switch with enum", "Enum fields and methods"]),
             "Published"
@@ -1565,6 +1582,130 @@ app.get("/api/users", requireAuth, requireRole(["admin", "teacher", "student"]),
         }
         
         res.json({ success: true, data: users });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/rankings", requireAuth, requireRole(["admin", "teacher", "student"]), async (_req, res, next) => {
+    try {
+        const result = await pool.query(`
+            WITH lesson_totals AS (
+                SELECT COUNT(*)::int AS total_lessons
+                FROM lessons
+                WHERE status <> 'Archived'
+            ),
+            best_quizzes AS (
+                SELECT DISTINCT ON (student_user_id, assessment_id)
+                       student_user_id, assessment_id, percentage, date_completed
+                FROM quiz_attempts
+                ORDER BY student_user_id, assessment_id, percentage DESC, date_completed DESC
+            ),
+            best_practice AS (
+                SELECT DISTINCT ON (ps.student_id, ps.challenge_id)
+                       ps.student_id::uuid AS student_id, ps.challenge_id, ps.score, ps.submitted_at
+                FROM practice_submissions ps
+                ORDER BY ps.student_id, ps.challenge_id, ps.score DESC, ps.submitted_at DESC
+            ),
+            video_metrics AS (
+                SELECT student_user_id,
+                       COUNT(*) FILTER (WHERE completed)::int AS completed_lessons,
+                       COALESCE(SUM(completion_percentage), 0) AS total_completion,
+                       MAX(updated_at) AS updated_at
+                FROM student_progress
+                GROUP BY student_user_id
+            ),
+            metrics AS (
+                SELECT
+                    u.id AS student_id,
+                    u.name,
+                    u.email,
+                    u.avatar,
+                    lt.total_lessons,
+                    COALESCE(vm.completed_lessons, 0)::int AS completed_lessons,
+                    COALESCE(ROUND(vm.total_completion / NULLIF(lt.total_lessons, 0)), 0)::int AS oop_progress,
+                    COALESCE(ROUND(AVG(bq.percentage)), 0)::int AS quiz_score,
+                    COALESCE(ROUND(AVG(bp.score)), 0)::int AS practice_score,
+                    GREATEST(
+                        COALESCE(vm.updated_at, to_timestamp(0)),
+                        COALESCE(MAX(bq.date_completed), to_timestamp(0)),
+                        COALESCE(MAX(bp.submitted_at), to_timestamp(0))
+                    ) AS updated_at
+                FROM users u
+                CROSS JOIN lesson_totals lt
+                LEFT JOIN student_progress sp ON sp.student_user_id = u.id
+                LEFT JOIN video_metrics vm ON vm.student_user_id = u.id
+                LEFT JOIN best_quizzes bq ON bq.student_user_id = u.id
+                LEFT JOIN best_practice bp ON bp.student_id = u.id
+                WHERE u.role = 'student' AND u.account_status = 'Active'
+                GROUP BY u.id, u.name, u.email, u.avatar, lt.total_lessons, vm.completed_lessons, vm.total_completion, vm.updated_at
+            ),
+            ranked AS (
+                SELECT metrics.*,
+                       ROUND((oop_progress * 0.40) + (quiz_score * 0.30) + (practice_score * 0.30), 2) AS learning_score,
+                       ROW_NUMBER() OVER (
+                           ORDER BY
+                             ((oop_progress * 0.40) + (quiz_score * 0.30) + (practice_score * 0.30)) DESC,
+                             updated_at DESC,
+                             LOWER(name),
+                             student_id
+                       )::int AS rank
+                FROM metrics
+            )
+            SELECT ranked.*, rs.current_rank AS previous_rank
+            FROM ranked
+            LEFT JOIN ranking_state rs ON rs.student_id = ranked.student_id
+            ORDER BY ranked.rank
+        `);
+
+        const entries = result.rows.map(row => {
+            const rank = Number(row.rank);
+            const previousRank = row.previous_rank === null || row.previous_rank === undefined ? null : Number(row.previous_rank);
+            const movementAmount = previousRank === null ? 0 : previousRank - rank;
+            const movement = previousRank === null ? 'new' : movementAmount > 0 ? 'up' : movementAmount < 0 ? 'down' : 'stable';
+            const completedLessons = Number(row.completed_lessons || 0);
+            const totalLessons = Number(row.total_lessons || 0);
+            const oopProgress = Number(row.oop_progress || 0);
+            const quizScore = Number(row.quiz_score || 0);
+            const practiceScore = Number(row.practice_score || 0);
+            const learningScore = Number(row.learning_score || 0);
+            const milestones = [];
+            if (completedLessons > 0) milestones.push('First Lesson');
+            if (quizScore > 0) milestones.push('First Quiz');
+            if (practiceScore > 0) milestones.push('First Practice IDE');
+            if (completedLessons === totalLessons && totalLessons > 0) milestones.push('OOP Complete');
+            return {
+                studentId: row.student_id,
+                name: row.name,
+                email: row.email,
+                avatar: row.avatar || '',
+                rank,
+                previousRank,
+                movement,
+                movementAmount: Math.abs(movementAmount),
+                learningScore,
+                oopProgress,
+                quizScore,
+                practiceScore,
+                status: learningScore >= 100 ? 'Completed' : learningScore > 0 ? 'In Progress' : 'Not Started',
+                completedLessons,
+                totalLessons,
+                milestones,
+                recentActivity: row.updated_at ? new Date(row.updated_at).toISOString() : '',
+                updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ''
+            };
+        });
+
+        await Promise.all(entries.map(entry => pool.query(`
+            INSERT INTO ranking_state (student_id, current_rank, previous_rank, updated_at)
+            VALUES ($1, $2, NULL, NOW())
+            ON CONFLICT (student_id) DO UPDATE SET
+              previous_rank = ranking_state.current_rank,
+              current_rank = EXCLUDED.current_rank,
+              updated_at = NOW()
+        `, [entry.studentId, entry.rank])));
+
+        res.json({ success: true, data: entries });
     } catch (error) {
         next(error);
     }
