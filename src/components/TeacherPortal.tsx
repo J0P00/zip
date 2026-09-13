@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
 import { LeaderboardUser } from '../types';
-import Leaderboard from './Leaderboard';
+import Leaderboard from './Leaderboard.tsx';
 import { progressApi, userApi } from '../services/api';
 import { generateStudentResultsInterpretation, StudentResultsData, StudentResultsInterpretation } from '../services/interpretation';
 import { generateRuleBasedRecommendation } from '../services/recommendationEngine';

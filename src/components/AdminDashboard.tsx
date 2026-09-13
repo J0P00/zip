@@ -21,13 +21,14 @@ import {
   UsersRound,
   Video
 } from 'lucide-react';
-import { adminApi, assessmentApi, practiceApi } from '../services/api';
+import { adminApi, assessmentApi, practiceApi, rankingApi } from '../services/api';
 import {
   AdaptiveRule,
   CurriculumModule,
   LeaderboardUser,
   LessonItem,
   PendingSubmission,
+  RankingEntry,
   VideoLesson
 } from '../types';
 
@@ -143,6 +144,7 @@ export default function AdminDashboard({
   const [dbPracticeActivities, setDbPracticeActivities] = useState<any[]>([]);
   const [monitoring, setMonitoring] = useState<{ students: any[]; teachers: any[] }>({ students: [], teachers: [] });
   const [reports, setReports] = useState<any>({});
+  const [learningStateCounts, setLearningStateCounts] = useState<Record<RankingEntry['learningState'], number>>({ BEGINNER: 0, DEVELOPING: 0, MASTERED: 0 });
 
   useEffect(() => {
     let isMounted = true;
@@ -170,6 +172,16 @@ export default function AdminDashboard({
     };
   }, []);
 
+  useEffect(() => {
+    rankingApi.list()
+      .then(response => {
+        const counts = { BEGINNER: 0, DEVELOPING: 0, MASTERED: 0 } as Record<RankingEntry['learningState'], number>;
+        response.data.forEach(entry => { counts[entry.learningState] += 1; });
+        setLearningStateCounts(counts);
+      })
+      .catch(error => console.warn('Unable to load learning-state summary:', error));
+  }, []);
+
   const activeVideos = videoLessons.filter(video => !video.isArchived);
   const recentActivities = overview.recentActivities || [];
   const quizRows = dbAssessments;
@@ -190,6 +202,17 @@ export default function AdminDashboard({
 
   const renderDashboard = () => (
     <div className="space-y-5">
+      <PageCard>
+        <SectionTitle icon={<GraduationCap className="h-5 w-5" />} title="Class Learning States" subtitle="Backend-computed OOP understanding levels based on learning score, quiz evidence, practice performance, and verified lesson completion." />
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          {(['MASTERED', 'DEVELOPING', 'BEGINNER'] as const).map(state => (
+            <div key={state} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">{state}</span>
+              <strong className="mt-1 block text-2xl font-black text-slate-950">{learningStateCounts[state]}</strong>
+            </div>
+          ))}
+        </div>
+      </PageCard>
       <PageCard>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <SectionTitle

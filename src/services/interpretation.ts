@@ -12,6 +12,11 @@ export interface StudentResultsData {
   totalPracticeActivities: number;
   practiceCompletionRate: number;
   averagePracticeScore: number;
+  learningScore: number;
+  learningState: 'BEGINNER' | 'DEVELOPING' | 'MASTERED';
+  learningStateInterpretation: string;
+  learningStrengths: string[];
+  learningWeaknesses: string[];
   swingSubmissions: number;
   swingCompletedActivities: number;
   swingPendingActivities: number;

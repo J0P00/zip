@@ -878,6 +878,29 @@ const seedLessons = async () => {
     `);
 };
 
+const classifyLearningState = ({ learningScore = 0, quizScore = 0, practiceScore = 0, completedLessons = 0, totalLessons = 0 }) => {
+    const score = Number(learningScore) || 0;
+    const quiz = Number(quizScore) || 0;
+    const practice = Number(practiceScore) || 0;
+    const complete = totalLessons > 0 && completedLessons >= totalLessons;
+    const learningState = score >= 80 && quiz >= 75 && practice >= 75 && complete
+        ? "MASTERED"
+        : score >= 50
+            ? "DEVELOPING"
+            : "BEGINNER";
+    const strengths = [];
+    const weaknesses = [];
+    if (quiz >= 75) strengths.push("assessment performance"); else weaknesses.push("quiz performance");
+    if (practice >= 75) strengths.push("practical programming"); else weaknesses.push("Practice IDE performance");
+    if (totalLessons > 0 && completedLessons >= totalLessons) strengths.push("lesson completion"); else weaknesses.push("OOP lesson completion");
+    let interpretation = learningState === "MASTERED"
+        ? "The student demonstrates strong understanding of the covered OOP concepts through assessment, practical activities, and completion of the required learning path."
+        : learningState === "DEVELOPING"
+            ? `The student demonstrates developing understanding of OOP concepts. ${strengths.length ? `Strengths include ${strengths.join(" and ")}. ` : ""}${weaknesses.length ? `Additional work is recommended in ${weaknesses.join(" and ")}.` : "Continued practice is recommended to strengthen mastery."}`
+            : `The student is building foundational OOP knowledge. Continued lessons, guided assessment practice, and Practice IDE activity are recommended${weaknesses.length ? `, especially in ${weaknesses.join(" and ")}` : ""}.`;
+    return { learningState, interpretation, strengths, weaknesses };
+};
+
 const seedPracticeChallenges = async () => {
     const topics = [
         ["practice_1", "classes-objects", "oop_lesson_1", "Create a Student object"],
@@ -1615,6 +1638,13 @@ app.get("/api/rankings", requireAuth, requireRole(["admin", "teacher", "student"
                 FROM student_progress
                 GROUP BY student_user_id
             ),
+            activity_metrics AS (
+                SELECT student_id,
+                       COUNT(*) FILTER (WHERE completed)::int AS completed_lessons,
+                       MAX(updated_at) AS updated_at
+                FROM lesson_progress
+                GROUP BY student_id
+            ),
             metrics AS (
                 SELECT
                     u.id AS student_id,
@@ -1622,12 +1652,12 @@ app.get("/api/rankings", requireAuth, requireRole(["admin", "teacher", "student"
                     u.email,
                     u.avatar,
                     lt.total_lessons,
-                    COALESCE(vm.completed_lessons, 0)::int AS completed_lessons,
+                    COALESCE(am.completed_lessons, 0)::int AS completed_lessons,
                     COALESCE(ROUND(vm.total_completion / NULLIF(lt.total_lessons, 0)), 0)::int AS oop_progress,
                     COALESCE(ROUND(AVG(bq.percentage)), 0)::int AS quiz_score,
                     COALESCE(ROUND(AVG(bp.score)), 0)::int AS practice_score,
                     GREATEST(
-                        COALESCE(vm.updated_at, to_timestamp(0)),
+                        COALESCE(am.updated_at, vm.updated_at, to_timestamp(0)),
                         COALESCE(MAX(bq.date_completed), to_timestamp(0)),
                         COALESCE(MAX(bp.submitted_at), to_timestamp(0))
                     ) AS updated_at
@@ -1635,10 +1665,11 @@ app.get("/api/rankings", requireAuth, requireRole(["admin", "teacher", "student"
                 CROSS JOIN lesson_totals lt
                 LEFT JOIN student_progress sp ON sp.student_user_id = u.id
                 LEFT JOIN video_metrics vm ON vm.student_user_id = u.id
+                LEFT JOIN activity_metrics am ON am.student_id = u.id
                 LEFT JOIN best_quizzes bq ON bq.student_user_id = u.id
                 LEFT JOIN best_practice bp ON bp.student_id = u.id
                 WHERE u.role = 'student' AND u.account_status = 'Active'
-                GROUP BY u.id, u.name, u.email, u.avatar, lt.total_lessons, vm.completed_lessons, vm.total_completion, vm.updated_at
+                GROUP BY u.id, u.name, u.email, u.avatar, lt.total_lessons, vm.total_completion, vm.updated_at, am.completed_lessons, am.updated_at
             ),
             ranked AS (
                 SELECT metrics.*,
@@ -1669,6 +1700,7 @@ app.get("/api/rankings", requireAuth, requireRole(["admin", "teacher", "student"
             const quizScore = Number(row.quiz_score || 0);
             const practiceScore = Number(row.practice_score || 0);
             const learningScore = Number(row.learning_score || 0);
+            const learningClassification = classifyLearningState({ learningScore, quizScore, practiceScore, completedLessons, totalLessons });
             const milestones = [];
             if (completedLessons > 0) milestones.push('First Lesson');
             if (quizScore > 0) milestones.push('First Quiz');
@@ -1688,6 +1720,10 @@ app.get("/api/rankings", requireAuth, requireRole(["admin", "teacher", "student"
                 quizScore,
                 practiceScore,
                 status: learningScore >= 100 ? 'Completed' : learningScore > 0 ? 'In Progress' : 'Not Started',
+                learningState: learningClassification.learningState,
+                interpretation: learningClassification.interpretation,
+                strengths: learningClassification.strengths,
+                weaknesses: learningClassification.weaknesses,
                 completedLessons,
                 totalLessons,
                 milestones,
@@ -2145,6 +2181,14 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         const overallProgress = effectiveTotalLessons
             ? Math.round((completedLessons / effectiveTotalLessons) * 100)
             : 0;
+        const learningScore = Math.round((overallProgress * 0.40) + (Number(row.average_quiz_score || 0) * 0.30) + (Number(row.average_practice_score || 0) * 0.30));
+        const learningClassification = classifyLearningState({
+            learningScore,
+            quizScore: Number(row.average_quiz_score || 0),
+            practiceScore: Number(row.average_practice_score || 0),
+            completedLessons,
+            totalLessons: effectiveTotalLessons
+        });
         res.json({
             success: true,
             data: {
@@ -2161,6 +2205,11 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 totalPracticeActivities,
                 practiceCompletionRate: totalPracticeActivities ? Math.round((submittedPracticeActivities / totalPracticeActivities) * 100) : 0,
                 averagePracticeScore: Number(row.average_practice_score || 0),
+                learningScore,
+                learningState: learningClassification.learningState,
+                learningStateInterpretation: learningClassification.interpretation,
+                learningStrengths: learningClassification.strengths,
+                learningWeaknesses: learningClassification.weaknesses,
                 swingSubmissions: Number(row.swing_submissions || 0),
                 swingCompletedActivities: Number(row.swing_completed_activities || 0),
                 swingPendingActivities: Number(row.swing_pending_activities || 0),

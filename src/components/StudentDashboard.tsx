@@ -134,12 +134,10 @@ export default function StudentDashboard({
   const currentModuleLabel = `Module ${currentLesson.sequence}: ${currentLesson.title}`;
   const nextPractice = PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === nextLesson.id) || activePractice;
   const nextAssessment = OOP_ASSESSMENTS.find(assessment => assessment.lessonId === nextLesson.id) || activeAssessment;
-  const performanceIndex = studentResults
-    ? Math.round((studentResults.averageQuizScore + studentResults.averagePracticeScore + moduleProgress) / 3)
-    : 0;
-  const learningState = performanceIndex >= 85 ? 'Mastered' : performanceIndex >= 60 ? 'Developing' : 'Beginner';
-  const learningStateClass = performanceIndex >= 85 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : performanceIndex >= 60 ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-sky-100 text-sky-800 border border-sky-200';
-  const performanceClass = performanceIndex >= 85 ? 'Mastered' : performanceIndex >= 70 ? 'Completed' : 'In Progress';
+  const performanceIndex = studentResults?.learningScore ?? 0;
+  const learningState = studentResults?.learningState ?? 'BEGINNER';
+  const learningStateClass = learningState === 'MASTERED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : learningState === 'DEVELOPING' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-sky-100 text-sky-800 border border-sky-200';
+  const performanceClass = studentResults?.learningState ?? 'BEGINNER';
   const swingTopicState = studentResults?.swingTopics || [];
   const swingProgress = {
     unlocked: Boolean(studentResults?.swingUnlocked),
@@ -259,6 +257,11 @@ export default function StudentDashboard({
                 </>
               )}
             </p>
+            {studentResults && (
+              <div className="mt-3 max-w-xl rounded-xl border border-slate-200 bg-white/70 p-3 text-xs font-semibold leading-5 text-slate-600">
+                <span className="font-black text-slate-800">Learning Score: {studentResults.learningScore}%.</span> {studentResults.learningStateInterpretation}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-6 pt-4 border-t border-slate-200/80 mt-4 relative z-10">

@@ -218,6 +218,10 @@ export interface RankingEntry {
   oopProgress: number;
   quizScore: number;
   practiceScore: number;
+  learningState: 'BEGINNER' | 'DEVELOPING' | 'MASTERED';
+  interpretation: string;
+  strengths: string[];
+  weaknesses: string[];
   status: 'Not Started' | 'In Progress' | 'Completed';
   completedLessons: number;
   totalLessons: number;
