@@ -1565,7 +1565,7 @@ export default function App() {
                   {persona === 'student' && studentTab === 'videos' && 'Syllabus Playlist & Lesson Lectures'}
                   {persona === 'student' && studentTab === 'assessments' && 'Interactive MCQ Scenario Simulator'}
                   {persona === 'student' && studentTab === 'swing' && 'Java Swing Programming Module'}
-                  {persona === 'student' && studentTab === 'leaderboard' && 'Active CS Cohort Rankings'}
+                  {persona === 'student' && studentTab === 'leaderboard' && 'Active CS & IT Cohort Rankings'}
                   {persona === 'teacher' && teacherTab === 'dashboard' && 'Instructor Cohort Evaluation Dashboard'}
                   {persona === 'admin' && adminViewMeta[adminTab].title}
                   {((persona === 'student' && studentTab === 'profile') ||
@@ -1577,7 +1577,7 @@ export default function App() {
                   {persona === 'student' && studentTab === 'videos' && 'View loop animations of dispatch lookups and write synchronized local study notes.'}
                   {persona === 'student' && studentTab === 'assessments' && 'Diagnose Company Fleet dispatch hierarchies to earn high achievement points.'}
                   {persona === 'student' && studentTab === 'swing' && 'Unlock desktop GUI development after completing the OOP lesson path and assessments.'}
-                  {persona === 'student' && studentTab === 'leaderboard' && 'Observe podium standings, select students profiles, and fast-track metrics.'}
+                  {persona === 'student' && studentTab === 'leaderboard' && 'Compare Computer Science and Information Technology student performance using live learning metrics.'}
                   {persona === 'teacher' && teacherTab === 'dashboard' && 'Review sandbox compiler drafts, enter academic feedbacks, and submit final grades.'}
                   {persona === 'admin' && adminViewMeta[adminTab].description}
                   {((persona === 'student' && studentTab === 'profile') ||
