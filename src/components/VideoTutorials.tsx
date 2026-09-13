@@ -418,7 +418,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 Lesson Queue
               </h3>
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">
-                11 Lessons
+                {lessons.length} Lessons
               </span>
             </div>
             <div className="max-h-[620px] space-y-2 overflow-y-auto pr-1">

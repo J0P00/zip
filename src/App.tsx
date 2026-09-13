@@ -458,18 +458,6 @@ export default function App() {
     };
 
     const loadFallbackLessons = () => {
-      try {
-        const saved = localStorage.getItem('oophub_video_lessons');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            applyLessons(parsed as VideoLesson[]);
-            return;
-          }
-        }
-      } catch {
-        // Fall back to the built-in course data when local storage is unavailable.
-      }
       applyLessons(OOP_COURSE_LESSONS);
     };
 
@@ -478,12 +466,7 @@ export default function App() {
     });
 
     appApi.getLessons()
-      .then(response => {
-        const lessons = response.data.map(mapDatabaseLessonToVideoLesson);
-        if (lessons.length > 0) {
-          applyLessons(lessons);
-          return;
-        }
+      .then(() => {
         loadFallbackLessons();
       })
       .catch(error => {
