@@ -866,7 +866,7 @@ export default function TeacherPortal({
     setSubmissionMessage(null);
     try {
       await onGradeSubmission(selectedSubmission.id, scoreText, commentText.trim(), remedialRequired);
-      setSubmissionMessage({ type: 'success', message: 'Grade and feedback were saved to the backend.' });
+      setSubmissionMessage({ type: 'success', message: 'Grade and feedback posted successfully.' });
     } catch (error) {
       setSubmissionMessage({ type: 'error', message: error instanceof Error ? error.message : 'Unable to save grade and feedback.' });
     } finally {
@@ -880,7 +880,7 @@ export default function TeacherPortal({
     setSubmissionMessage(null);
     try {
       await onReopenSubmission(selectedSubmission.id);
-      setSubmissionMessage({ type: 'success', message: 'Submission was reopened in the backend.' });
+      setSubmissionMessage({ type: 'success', message: 'Submission reopened successfully.' });
     } catch (error) {
       setSubmissionMessage({ type: 'error', message: error instanceof Error ? error.message : 'Unable to reopen submission.' });
     } finally {
