@@ -633,7 +633,9 @@ export default function TeacherPortal({
     }, index);
   });
 
-  const visibleStudents = backendStudents.length ? backendStudents : connectedStudents;
+  const visibleStudents = backendStudents.length
+    ? backendStudents.map((student, index) => student.topics?.length ? student : withTopicProgress(student, index))
+    : connectedStudents;
   const selectedStudent = visibleStudents.find(student => student.id === selectedStudentId) ?? visibleStudents[0];
   const [studentResults, setStudentResults] = useState<StudentResultsData | null>(null);
   const [resultsLoading, setResultsLoading] = useState(false);
@@ -969,7 +971,7 @@ export default function TeacherPortal({
             ['monitoring', 'Live Monitoring', Activity],
             ['ranking', 'Student Ranking', Trophy],
             ['invitations', 'Invitations', MailPlus],
-            ['topics', '11 OOP Topics', BookOpen],
+            ['topics', 'OOP Topics', BookOpen],
             ['swing', 'Java Swing', PlayCircle],
             ['assessments', 'Assessments', FileQuestion],
             ['ide', 'Practice IDE', Code2],
@@ -1357,7 +1359,7 @@ export default function TeacherPortal({
         <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-base font-black">11 Java OOP Topics Progress</h3>
+              <h3 className="text-base font-black">OOP Topics Progress</h3>
               <p className="text-xs text-slate-500">Topic-level video, assessment, IDE, unlock, and time-spent monitoring for {selectedStudent.name}.</p>
             </div>
             <select value={selectedStudent.id} onChange={event => setSelectedStudentId(event.target.value)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
