@@ -1405,9 +1405,10 @@ const getLessonAccessState = async (studentId, lessonId) => {
     );
     if (!previousResult.rowCount) return { canAccess: false, reason: "Complete the previous lesson requirements first.", current };
     const previous = await getLessonEvidence(studentId, previousResult.rows[0].id);
-    return previous?.completed
+    const previousAccessComplete = Boolean(previous?.videoCompleted && previous?.assessmentPassed);
+    return previousAccessComplete
         ? { canAccess: true, current }
-        : { canAccess: false, reason: "Complete the previous lesson requirements first.", current };
+        : { canAccess: false, reason: "Complete the previous lesson video and pass its assessment first.", current };
 };
 
 const verifyLessonCompletion = async (studentId, lessonId) => {

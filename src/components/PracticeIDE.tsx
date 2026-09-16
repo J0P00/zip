@@ -101,10 +101,8 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     if (currentLessonSequence > 1) {
       const previousLesson = OOP_COURSE_LESSONS.find(lesson => lesson.sequence === currentLessonSequence - 1);
       const previousAssessment = previousLesson && OOP_ASSESSMENTS.find(assessment => assessment.lessonId === previousLesson.id);
-      const previousChallenge = previousLesson && PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === previousLesson.id);
-      const previousSubmission = previousChallenge && submissionDb[`${currentUser.id || currentUser.userId || currentUser.email}:${previousChallenge.id}`];
-      if (!previousLesson || !watchDb[previousLesson.id]?.completed || watchDb[previousLesson.id].completionPercentage < 95 || !previousAssessment || !quizDb[previousAssessment.id]?.passed || !previousChallenge || previousSubmission?.compileStatus !== 'success' || Number(previousSubmission.score || 0) < previousChallenge.passingScore) {
-        return 'Practice IDE is locked until the previous lesson is fully completed.';
+      if (!previousLesson || !watchDb[previousLesson.id]?.completed || watchDb[previousLesson.id].completionPercentage < 95 || !previousAssessment || !quizDb[previousAssessment.id]?.passed) {
+        return 'Practice IDE is locked until the previous lesson video is completed and its assessment is passed.';
       }
     }
     const watchRecord = watchDb[activeChallenge.lessonId];

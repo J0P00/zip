@@ -60,14 +60,11 @@ const getPrerequisiteMessage = (lesson: VideoLesson, allLessons: VideoLesson[], 
   const previous = allLessons.find(item => item.sequence === lesson.sequence - 1);
   if (!previous) return 'Complete the previous lesson requirements first.';
   const previousTopic = getTopic(studentResults, previous.id);
-  if (lessonCompletedFromTopic(previousTopic)) return '';
+  if (previousTopic?.videoCompleted && previousTopic?.quizPassed) return '';
   if (!previousTopic?.videoCompleted) return `Complete the ${previous.title} video to continue.`;
-  if (!previousTopic?.quizPassed) {
-    return previousTopic?.quizPercentage !== null && previousTopic?.quizPercentage !== undefined
-      ? `Pass the ${previous.title} assessment with at least 80%.`
-      : `Complete the ${previous.title} assessment to continue.`;
-  }
-  return `Complete the ${previous.title} practice activity.`;
+  return previousTopic?.quizPercentage !== null && previousTopic?.quizPercentage !== undefined
+    ? `Pass the ${previous.title} assessment with at least 80%.`
+    : `Complete the ${previous.title} assessment to continue.`;
 };
 
 export default function VideoTutorials({ currentUser, lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress, studentResults = null }: VideoTutorialsProps) {
@@ -272,7 +269,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
             </span>
             <h2 className="mt-3 text-xl font-extrabold text-slate-900 sm:text-2xl dark:text-white">OOP Fundamentals</h2>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-              {lessons.length} Java OOP lectures loaded from the shared database. Lessons unlock only after video, assessment, and practice completion.
+              {lessons.length} Java OOP lectures loaded from the shared database. Lessons unlock after video completion and a passed assessment; practice remains available for mastery.
             </p>
           </div>
           <div className="w-full rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 sm:min-w-[220px] lg:w-auto">
@@ -462,7 +459,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
 
           <div className="rounded-xl border border-slate-200 bg-white/80 p-4 text-xs font-semibold leading-6 text-slate-500 shadow-sm backdrop-blur-md sm:rounded-2xl sm:p-5">
             <h3 className="mb-2 text-sm font-extrabold text-slate-900">Unlock Rule</h3>
-            Complete at least 95% of the current video, pass its assessment with 80% or higher, and successfully submit the practice activity. The next lesson unlocks only after all three are done.
+            Complete at least 95% of the current video and pass its assessment with 80% or higher to unlock the next lesson. Practice remains available and contributes to mastery.
             {activeQuiz && (
               <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3 font-mono text-[11px] text-slate-600">
                 Current assessment: {activeQuiz.score}/{activeQuiz.total} ({activeQuiz.percentage}%)

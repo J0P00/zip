@@ -51,11 +51,8 @@ const getAssessmentLockedReason = (lessonId: string, watchDb: WatchDb, quizDb: Q
   if (lesson.sequence > 1) {
     const previous = OOP_COURSE_LESSONS.find(item => item.sequence === lesson.sequence - 1);
     const previousAssessment = previous ? OOP_ASSESSMENTS.find(item => item.lessonId === previous.id) : undefined;
-    const previousChallenge = previous ? PRACTICE_CHALLENGES.find(item => item.lessonId === previous.id) : undefined;
-    const previousSubmission = previousChallenge ? submissionDb[`${studentKey}:${previousChallenge.id}`] : undefined;
     if (previous && !watchDb[previous.id]?.completed) return `Complete Lesson ${previous.sequence} video first.`;
     if (previousAssessment && !quizDb[previousAssessment.id]?.passed) return `Pass Assessment ${lesson.sequence - 1} first.`;
-    if (previousChallenge && !(previousSubmission?.compileStatus === 'success' && Number(previousSubmission.score || 0) >= previousChallenge.passingScore)) return `Complete Lesson ${lesson.sequence - 1} practice first.`;
   }
 
   if (!watchDb[lessonId]?.completed) return 'Watch at least 95% of this lesson video first.';

@@ -115,11 +115,15 @@ export default function StudentDashboard({
   const activeLesson = OOP_COURSE_LESSONS.find(lesson => lesson.id === activePractice.lessonId) || OOP_COURSE_LESSONS[0];
   const activeAssessment = OOP_ASSESSMENTS.find(assessment => assessment.id === activePractice.assessmentId) || OOP_ASSESSMENTS[0];
   const oopComplete = Boolean(studentResults?.oopComplete);
-  const nextLesson = OOP_COURSE_LESSONS.find(lesson => !studentResults?.oopTopics?.find(topic => topic.id === lesson.id)?.lessonCompleted) || OOP_COURSE_LESSONS[OOP_COURSE_LESSONS.length - 1];
+  const lessonAccessComplete = (lessonId: string) => {
+    const topic = studentResults?.oopTopics?.find(item => item.id === lessonId);
+    return Boolean(topic?.videoCompleted && topic?.quizPassed);
+  };
+  const nextLesson = OOP_COURSE_LESSONS.find(lesson => !lessonAccessComplete(lesson.id)) || OOP_COURSE_LESSONS[OOP_COURSE_LESSONS.length - 1];
   const currentLesson = nextLesson;
   const authoritativeCurrentTopic = oopComplete
     ? null
-    : studentResults?.oopTopics?.find(topic => !topic.lessonCompleted)
+    : studentResults?.oopTopics?.find(topic => !(topic.videoCompleted && topic.quizPassed))
       || studentResults?.oopTopics?.find(topic => topic.attempted)
       || null;
   const dashboardCurrentLesson = authoritativeCurrentTopic
@@ -163,12 +167,10 @@ export default function StudentDashboard({
       let status = 'Ready Now';
       if (attempt && !attempt.quizPassed) {
         status = 'Retry';
-      } else if (previousLesson && !previousTopic?.lessonCompleted) {
+      } else if (previousLesson && !(previousTopic?.videoCompleted && previousTopic?.quizPassed)) {
         status = !previousTopic?.videoCompleted
           ? `Complete Lesson ${previousLesson.sequence} video`
-          : !previousTopic?.quizPassed
-            ? `Pass Lesson ${previousLesson.sequence} assessment`
-            : `Complete Lesson ${previousLesson.sequence} practice`;
+          : `Pass Lesson ${previousLesson.sequence} assessment`;
       } else if (lesson && !currentTopic?.videoCompleted) {
         status = 'Complete video first';
       }
