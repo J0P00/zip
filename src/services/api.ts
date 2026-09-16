@@ -161,7 +161,7 @@ export const practiceApi = {
     apiRequest<{ success: boolean; data: any }>('/api/practice-submissions/' + encodeURIComponent(id) + '/reopen', {
       method: 'PATCH'
     }),
-  gradeSubmission: (id: string, body: { grade: number; feedback: string }) =>
+  gradeSubmission: (id: string, body: { grade: number; feedback: string; remedialRequired?: boolean }) =>
     apiRequest<{ success: boolean; data: any }>('/api/practice-submissions/' + encodeURIComponent(id) + '/grade', {
       method: 'PATCH',
       body: JSON.stringify(body)
@@ -180,6 +180,19 @@ export const practiceApi = {
     apiRequest<{ success: boolean; data: any }>(`/api/practice-challenges/${id}`, {
       method: 'DELETE'
     })
+};
+
+export const notificationApi = {
+  list: () => apiRequest<{ success: boolean; data: import('../types').NotificationItem[] }>('/api/notifications'),
+  markRead: (id: string) =>
+    apiRequest<{ success: boolean; data: import('../types').NotificationItem }>('/api/notifications/' + encodeURIComponent(id) + '/read', {
+      method: 'PATCH'
+    }),
+  markAllRead: () =>
+    apiRequest<{ success: boolean }>('/api/notifications/read-all', {
+      method: 'PATCH'
+    }),
+  streamUrl: () => API_BASE_URL + '/api/notifications/stream?token=' + encodeURIComponent(getAuthToken())
 };
 
 export const adminApi = {

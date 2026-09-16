@@ -90,7 +90,8 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     teacherScore: row.teacher_score === null || row.teacher_score === undefined ? undefined : Number(row.teacher_score),
     feedback: row.teacher_feedback || '',
     gradedAt: row.graded_at,
-    reviewStatus: row.review_status
+    reviewStatus: row.review_status,
+    remedialRequired: row.remedial_required === null || row.remedial_required === undefined ? undefined : Boolean(row.remedial_required)
   });
 
   useEffect(() => {

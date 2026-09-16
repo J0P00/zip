@@ -401,6 +401,7 @@ ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS graded_at TIMESTAMPTZ;
 ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'pending';
 ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_by UUID REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_at TIMESTAMPTZ;
+ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS remedial_required BOOLEAN DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_practice_submissions_student ON practice_submissions(student_id, submitted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_practice_submissions_challenge ON practice_submissions(challenge_id);
 
@@ -715,6 +716,33 @@ CREATE TABLE IF NOT EXISTS adaptive_recommendations (
   unlock_next_activity BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  recipient_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  notification_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  related_submission_id UUID REFERENCES practice_submissions(id) ON DELETE SET NULL,
+  related_practice_id TEXT,
+  teacher_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  teacher_name TEXT,
+  practice_title TEXT,
+  grade NUMERIC,
+  max_grade NUMERIC DEFAULT 100,
+  feedback TEXT DEFAULT '',
+  remedial_required BOOLEAN,
+  is_read BOOLEAN NOT NULL DEFAULT FALSE,
+  read_at TIMESTAMPTZ,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created ON notifications(recipient_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread ON notifications(recipient_user_id, is_read);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_recipient_type_submission_unique
+  ON notifications(recipient_user_id, notification_type, related_submission_id)
+  WHERE related_submission_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS teacher_notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

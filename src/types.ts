@@ -154,8 +154,20 @@ export interface NotificationItem {
   title: string;
   message: string;
   timestamp: string;
+  createdAt?: string;
   isRead: boolean;
-  type: 'upload' | 'update' | 'assign' | 'unlock';
+  type: string;
+  recipientUserId?: string;
+  relatedSubmissionId?: string;
+  relatedPracticeId?: string;
+  teacherId?: string;
+  teacherName?: string;
+  practiceTitle?: string;
+  grade?: number;
+  maxGrade?: number;
+  feedback?: string;
+  remedialRequired?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AssessmentQuestion {
@@ -242,6 +254,7 @@ export interface PendingSubmission {
   teacherScore?: number;
   gradedAt?: string;
   reviewStatus?: string;
+  remedialRequired?: boolean;
   studentId?: string;
   studentEmail?: string;
   section?: string;
@@ -391,6 +404,7 @@ export interface PracticeSubmission {
   feedback?: string;
   gradedAt?: string;
   reviewStatus?: string;
+  remedialRequired?: boolean;
 }
 
 export type RecommendationType = 'Remedial' | 'Continue' | 'Advanced';

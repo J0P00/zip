@@ -28,7 +28,7 @@ import {
   MonitorCog
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AuthenticatedUser, Persona } from '../types';
+import { AuthenticatedUser, NotificationItem, Persona } from '../types';
 
 interface NavbarProps {
   user: AuthenticatedUser;
@@ -37,6 +37,9 @@ interface NavbarProps {
   onNavigate: (view: string) => void;
   onUpdateProfile: (updates: Partial<AuthenticatedUser>) => void;
   onLogoutTrigger: () => void;
+  notifications: NotificationItem[];
+  onMarkNotificationRead: (id: string) => void;
+  onMarkAllNotificationsRead: () => void;
 }
 
 export default function Navbar({ 
@@ -45,7 +48,10 @@ export default function Navbar({
   setTheme, 
   onNavigate, 
   onUpdateProfile, 
-  onLogoutTrigger 
+  onLogoutTrigger,
+  notifications,
+  onMarkNotificationRead,
+  onMarkAllNotificationsRead
 }: NavbarProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -55,12 +61,18 @@ export default function Navbar({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  // Mock Notifications
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: 'Submission Graded', desc: 'Your Vehicle class override constructor assignment was marked 100/100 by Dr. Elena Vance.', read: false, time: '10m ago' },
-    { id: 2, title: 'New Adaptive Challenge', desc: 'Recommendation engine suggested Polymorphism Diagnostics Quiz based on compiler practice results.', read: false, time: '1h ago' },
-    { id: 3, title: 'Streak Milestone!', desc: 'You reached a 12-day coding consistency streak! Keep up the momentum.', read: true, time: '1d ago' }
-  ]);
+  const formatNotificationTime = (value: string) => {
+    const timestamp = new Date(value).getTime();
+    if (!Number.isFinite(timestamp)) return '';
+    const diffSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    if (diffSeconds < 60) return 'Just now';
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    if (diffMinutes < 60) return diffMinutes + 'm ago';
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return diffHours + 'h ago';
+    const diffDays = Math.floor(diffHours / 24);
+    return diffDays + 'd ago';
+  };
 
   // Dynamic Profile Completion calculation
   const calculateCompletion = (u: AuthenticatedUser): number => {
@@ -101,14 +113,14 @@ export default function Navbar({
     };
   }, []);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => !n.isRead).length;
 
-  const handleToggleRead = (id: number) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  const handleToggleRead = (id: string) => {
+    onMarkNotificationRead(id);
   };
 
   const handleMarkAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    onMarkAllNotificationsRead();
   };
 
   // Status helper colors
@@ -572,17 +584,26 @@ export default function Navbar({
                           <div 
                             key={notif.id} 
                             onClick={() => handleToggleRead(notif.id)}
-                            className={`p-4 transition-colors cursor-pointer text-left ${!notif.read ? 'bg-emerald-50/15 dark:bg-emerald-950/5 hover:bg-emerald-50/20 dark:hover:bg-emerald-950/10' : 'hover:bg-slate-50 dark:hover:bg-slate-950/40'}`}
+                            className={`p-4 transition-colors cursor-pointer text-left ${!notif.isRead ? 'bg-emerald-50/15 dark:bg-emerald-950/5 hover:bg-emerald-50/20 dark:hover:bg-emerald-950/10' : 'hover:bg-slate-50 dark:hover:bg-slate-950/40'}`}
                           >
                             <div className="flex justify-between items-start gap-2">
-                              <span className={`text-xs font-extrabold block leading-tight ${!notif.read ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                              <span className={`text-xs font-extrabold block leading-tight ${!notif.isRead ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-700 dark:text-slate-300'}`}>
                                 {notif.title}
                               </span>
-                              <span className="text-[9px] text-slate-400 font-medium shrink-0">{notif.time}</span>
+                              <span className="text-[9px] text-slate-400 font-medium shrink-0">{formatNotificationTime(notif.timestamp || notif.createdAt || '')}</span>
                             </div>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-normal">
-                              {notif.desc}
+                              {notif.message}
                             </p>
+                            {(notif.practiceTitle || notif.teacherName || notif.grade !== undefined || notif.feedback) && (
+                              <div className="mt-2 space-y-1 rounded-lg border border-slate-100 bg-white/50 p-2 text-[10px] font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-950/30 dark:text-slate-400">
+                                {notif.practiceTitle && <div>Practice: <span className="font-bold text-slate-700 dark:text-slate-300">{notif.practiceTitle}</span></div>}
+                                {notif.grade !== undefined && <div>Grade: <span className="font-bold text-slate-700 dark:text-slate-300">{notif.grade}/{notif.maxGrade ?? 100}</span></div>}
+                                {notif.teacherName && <div>Teacher: <span className="font-bold text-slate-700 dark:text-slate-300">{notif.teacherName}</span></div>}
+                                {notif.remedialRequired && <div className="text-rose-600 dark:text-rose-300">Remedial work required</div>}
+                                {notif.feedback && <div>Feedback: <span className="font-bold text-slate-700 dark:text-slate-300">{notif.feedback}</span></div>}
+                              </div>
+                            )}
                           </div>
                         ))
                       )}

@@ -89,7 +89,7 @@ import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
 import AdminVideoManager from './components/AdminVideoManager';
 import AdminTermsManager from './components/AdminTermsManager';
-import { appApi, authApi, getAuthToken, isDemoEmail, practiceApi, progressApi, recommendationApi, setAuthToken, userApi } from './services/api';
+import { appApi, authApi, getAuthToken, isDemoEmail, notificationApi, practiceApi, progressApi, recommendationApi, setAuthToken, userApi } from './services/api';
 import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
 import { getCanonicalStudentId, recommendationBelongsToStudent } from './services/identity';
 const NEW_STUDENT_PROGRESS = {
@@ -421,7 +421,8 @@ const practiceSubmissionRowToPending = (row: any): PendingSubmission => {
       ? 'Automated grader: passed hidden test cases and practice requirements. Teacher review is pending.'
       : 'Automated grader: submission recorded, but one or more hidden tests failed. Teacher review is pending.'),
     gradedAt: row.graded_at,
-    reviewStatus
+    reviewStatus,
+    remedialRequired: row.remedial_required === null || row.remedial_required === undefined ? undefined : Boolean(row.remedial_required)
   };
 };
 
@@ -652,27 +653,7 @@ export default function App() {
   // Dynamic shared database states
   const [videoLessons, setVideoLessons] = useState<VideoLesson[]>([]);
 
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('oophub_notifications');
-      return saved ? JSON.parse(saved) : [
-        {
-          id: 'n_welcome',
-          title: 'Welcome to OOP Pedagogical Hub! 🎓',
-          message: 'Explore courses, watch tutorials, and practice coding inside our Sandbox IDE.',
-          timestamp: 'Just Now',
-          isRead: false,
-          type: 'unlock'
-        }
-      ];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('oophub_notifications', JSON.stringify(notifications));
-  }, [notifications]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   const [leaderboardUsers, setLeaderboardUsers] = useState<LeaderboardUser[]>(() =>
     rankLeaderboard(readStoredJson<LeaderboardUser[]>(LEADERBOARD_KEY, []))
@@ -704,6 +685,46 @@ export default function App() {
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setNotifications([]);
+      return;
+    }
+    let cancelled = false;
+    notificationApi.list()
+      .then(response => {
+        if (!cancelled) setNotifications(response.data);
+      })
+      .catch(error => {
+        if (!cancelled) console.warn('Unable to load notifications from backend:', error);
+      });
+    const streamUrl = notificationApi.streamUrl();
+    const source = new EventSource(streamUrl);
+    source.onmessage = event => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'notification' && payload.notification) {
+          setNotifications(prev => [payload.notification, ...prev.filter(item => item.id !== payload.notification.id)]);
+        }
+      } catch (error) {
+        console.warn('Unable to parse notification stream event:', error);
+      }
+    };
+    source.onerror = () => {
+      source.close();
+    };
+    const pollId = window.setInterval(() => {
+      notificationApi.list()
+        .then(response => setNotifications(response.data))
+        .catch(error => console.warn('Unable to poll notifications from backend:', error));
+    }, 15000);
+    return () => {
+      cancelled = true;
+      source.close();
+      window.clearInterval(pollId);
+    };
+  }, [currentUser?.id, currentUser?.token]);
 
   useEffect(() => {
     if (!currentUser || !['teacher', 'admin'].includes(currentUser.role)) return;
@@ -769,16 +790,28 @@ export default function App() {
   }, [monitoringRequests]);
 
   // Video Management & Progress Handlers
-  const addNotification = (title: string, message: string, type: 'upload' | 'update' | 'assign' | 'unlock') => {
+  const addNotification = (title: string, message: string, type: string) => {
     const newNotif: NotificationItem = {
       id: `notif_${Date.now()}`,
       title,
       message,
-      timestamp: 'Just Now',
+      timestamp: new Date().toISOString(),
       isRead: false,
       type
     };
     setNotifications(prev => [newNotif, ...prev]);
+  };
+
+  const handleMarkNotificationRead = (id: string) => {
+    notificationApi.markRead(id)
+      .then(response => setNotifications(prev => prev.map(item => item.id === id ? response.data : item)))
+      .catch(error => console.warn('Unable to mark notification as read:', error));
+  };
+
+  const handleMarkAllNotificationsRead = () => {
+    notificationApi.markAllRead()
+      .then(() => setNotifications(prev => prev.map(item => ({ ...item, isRead: true }))))
+      .catch(error => console.warn('Unable to mark all notifications as read:', error));
   };
 
   const publishRecommendation = (recommendation: AdaptiveRecommendation) => {
@@ -1125,8 +1158,8 @@ export default function App() {
   };
 
   // 3. When teacher drafts score reviews inside Instructor grading panels
-  const handleGradeSubmission = async (submissionId: string, gradeScore: number, feedbackNotes: string) => {
-    const response = await practiceApi.gradeSubmission(submissionId, { grade: gradeScore, feedback: feedbackNotes });
+  const handleGradeSubmission = async (submissionId: string, gradeScore: number, feedbackNotes: string, remedialRequired = false) => {
+    const response = await practiceApi.gradeSubmission(submissionId, { grade: gradeScore, feedback: feedbackNotes, remedialRequired });
     const updated = practiceSubmissionRowToPending(response.data);
     setPendingSubmissions(prev => [updated, ...prev.filter(s => s.id !== submissionId)]);
 
@@ -1433,6 +1466,9 @@ export default function App() {
             }}
             onUpdateProfile={handleUpdateProfile}
             onLogoutTrigger={() => setShowLogoutConfirm(true)}
+            notifications={notifications}
+            onMarkNotificationRead={handleMarkNotificationRead}
+            onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
           />
           <div className="flex-grow flex flex-col md:flex-row">
             
@@ -1633,7 +1669,7 @@ export default function App() {
                 onRejectRequest={handleRejectMonitoringRequest}
                 theme={theme}
                 notifications={notifications}
-                onMarkNotificationRead={(id) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n))}
+                onMarkNotificationRead={handleMarkNotificationRead}
                 activeRecommendation={activeRecommendation}
                 recommendationHistory={recommendationHistory.filter(item => recommendationBelongsToStudent(item, displayUser))}
                 studentResults={studentResults}

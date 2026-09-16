@@ -36,7 +36,7 @@ import { getCanonicalStudentId } from '../services/identity';
 
 interface TeacherPortalProps {
   submissions: PendingSubmission[];
-  onGradeSubmission: (id: string, grade: number, feedback: string) => Promise<PendingSubmission | void> | void;
+  onGradeSubmission: (id: string, grade: number, feedback: string, remedialRequired?: boolean) => Promise<PendingSubmission | void> | void;
   onSelectPersona: (persona: Persona) => void;
   currentUser: AuthenticatedUser;
   monitoringRequests: MonitoringRequest[];
@@ -500,6 +500,7 @@ export default function TeacherPortal({
   const [selectedSubId, setSelectedSubId] = useState<string>('');
   const [commentText, setCommentText] = useState('');
   const [scoreText, setScoreText] = useState(90);
+  const [remedialRequired, setRemedialRequired] = useState(false);
   const [submissionAction, setSubmissionAction] = useState<'reopen' | 'grade' | null>(null);
   const [submissionMessage, setSubmissionMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const acceptedRequests = useMemo(
@@ -823,8 +824,9 @@ export default function TeacherPortal({
     setSelectedSubId(selectedSubmission.id);
     setCommentText(selectedSubmission.feedback || '');
     setScoreText(Number(selectedSubmission.grade ?? selectedSubmission.score ?? 90));
+    setRemedialRequired(Boolean(selectedSubmission.remedialRequired));
     setSubmissionMessage(null);
-  }, [selectedSubmission?.id, selectedSubmission?.feedback, selectedSubmission?.grade, selectedSubmission?.score]);
+  }, [selectedSubmission?.id, selectedSubmission?.feedback, selectedSubmission?.grade, selectedSubmission?.score, selectedSubmission?.remedialRequired]);
 
   const handleSendRequestSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -863,7 +865,7 @@ export default function TeacherPortal({
     setSubmissionAction('grade');
     setSubmissionMessage(null);
     try {
-      await onGradeSubmission(selectedSubmission.id, scoreText, commentText.trim());
+      await onGradeSubmission(selectedSubmission.id, scoreText, commentText.trim(), remedialRequired);
       setSubmissionMessage({ type: 'success', message: 'Grade and feedback were saved to the backend.' });
     } catch (error) {
       setSubmissionMessage({ type: 'error', message: error instanceof Error ? error.message : 'Unable to save grade and feedback.' });
@@ -1637,6 +1639,10 @@ export default function TeacherPortal({
                 <div className="shrink-0 space-y-3 border-t border-slate-800 pt-4">
                   <input type="number" min="0" max="100" value={scoreText} onChange={event => setScoreText(parseInt(event.target.value) || 0)} className="w-28 rounded-xl border border-slate-800 bg-slate-900 p-2 text-xs font-black outline-none focus:border-emerald-500" />
                   <textarea value={commentText} onChange={event => setCommentText(event.target.value)} placeholder="Teacher feedback and adaptive remediation notes..." className="h-20 w-full resize-none rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs outline-none focus:border-emerald-500" />
+                  <label className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 p-3 text-[11px] font-bold text-slate-300">
+                    <input type="checkbox" checked={remedialRequired} onChange={event => setRemedialRequired(event.target.checked)} className="h-4 w-4 accent-rose-500" />
+                    Remedial work required
+                  </label>
                   {submissionMessage && (
                     <div className={`rounded-xl border px-3 py-2 text-[11px] font-bold ${submissionMessage.type === 'success' ? 'border-emerald-800 bg-emerald-950/40 text-emerald-200' : 'border-rose-800 bg-rose-950/40 text-rose-200'}`}>
                       {submissionMessage.message}

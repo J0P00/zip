@@ -28,6 +28,15 @@ app.use(cors({
 app.options(/.*/, cors());
 app.use(express.json({ limit: "10mb" }));
 
+const notificationStreams = new Map();
+
+const sendNotificationEvent = (userId, notification) => {
+    const clients = notificationStreams.get(String(userId));
+    if (!clients) return;
+    const payload = "data: " + JSON.stringify({ type: "notification", notification }) + "\n\n";
+    for (const client of clients) client.write(payload);
+};
+
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const isProduction = process.env.NODE_ENV === "production";
@@ -116,6 +125,94 @@ const toClientRecommendation = (row) => ({
     codingAttempts: row.coding_attempts,
     progressPercentage: row.progress_percentage === null ? undefined : Number(row.progress_percentage)
 });
+
+const toClientNotification = (row) => ({
+    id: row.id,
+    recipientUserId: row.recipient_user_id,
+    type: row.notification_type,
+    title: row.title,
+    message: row.message,
+    timestamp: row.created_at,
+    createdAt: row.created_at,
+    isRead: row.is_read,
+    readAt: row.read_at || undefined,
+    relatedSubmissionId: row.related_submission_id || undefined,
+    relatedPracticeId: row.related_practice_id || undefined,
+    teacherId: row.teacher_id || undefined,
+    teacherName: row.teacher_name || row.metadata?.teacherName || undefined,
+    practiceTitle: row.practice_title || row.metadata?.practiceTitle || undefined,
+    grade: row.grade === null || row.grade === undefined ? undefined : Number(row.grade),
+    maxGrade: row.max_grade === null || row.max_grade === undefined ? undefined : Number(row.max_grade),
+    feedback: row.feedback || row.metadata?.feedback || undefined,
+    remedialRequired: row.remedial_required === null || row.remedial_required === undefined ? undefined : Boolean(row.remedial_required),
+    metadata: row.metadata || {}
+});
+
+const createOrUpdateNotification = async (client, payload) => {
+    const existing = await client.query(`
+        SELECT id FROM notifications
+        WHERE recipient_user_id = $1
+          AND related_submission_id = $3
+          AND (
+            notification_type = $2
+            OR (
+              $2 IN ('submission_graded', 'submission_passed', 'remedial_required')
+              AND notification_type IN ('submission_graded', 'submission_passed', 'remedial_required')
+            )
+          )
+        LIMIT 1
+    `, [payload.recipientUserId, payload.type, payload.relatedSubmissionId || null]);
+
+    const values = [
+        payload.recipientUserId,
+        payload.type,
+        payload.title,
+        payload.message,
+        payload.relatedSubmissionId || null,
+        payload.relatedPracticeId || null,
+        payload.teacherId || null,
+        payload.teacherName || null,
+        payload.practiceTitle || null,
+        payload.grade ?? null,
+        payload.maxGrade ?? 100,
+        payload.feedback || "",
+        payload.remedialRequired ?? null,
+        JSON.stringify(payload.metadata || {})
+    ];
+
+    const result = existing.rowCount
+        ? await client.query(`
+            UPDATE notifications
+            SET notification_type = $2,
+                title = $3,
+                message = $4,
+                related_practice_id = $6,
+                teacher_id = $7,
+                teacher_name = $8,
+                practice_title = $9,
+                grade = $10,
+                max_grade = $11,
+                feedback = $12,
+                remedial_required = $13,
+                metadata = $14::jsonb,
+                is_read = FALSE,
+                read_at = NULL,
+                created_at = NOW()
+            WHERE id = $15
+            RETURNING *
+        `, [...values, existing.rows[0].id])
+        : await client.query(`
+            INSERT INTO notifications (
+              recipient_user_id, notification_type, title, message, related_submission_id,
+              related_practice_id, teacher_id, teacher_name, practice_title, grade, max_grade,
+              feedback, remedial_required, metadata
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb)
+            RETURNING *
+        `, values);
+
+    return toClientNotification(result.rows[0]);
+};
 
 const toClientLesson = (row) => ({
     id: row.id,
@@ -477,6 +574,32 @@ const initializeDatabase = async () => {
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'pending';
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_by UUID REFERENCES users(id) ON DELETE SET NULL;
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_at TIMESTAMPTZ;
+        ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS remedial_required BOOLEAN DEFAULT FALSE;
+        CREATE TABLE IF NOT EXISTS notifications (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          recipient_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          notification_type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          related_submission_id UUID REFERENCES practice_submissions(id) ON DELETE SET NULL,
+          related_practice_id TEXT,
+          teacher_id UUID REFERENCES users(id) ON DELETE SET NULL,
+          teacher_name TEXT,
+          practice_title TEXT,
+          grade NUMERIC,
+          max_grade NUMERIC DEFAULT 100,
+          feedback TEXT DEFAULT '',
+          remedial_required BOOLEAN,
+          is_read BOOLEAN NOT NULL DEFAULT FALSE,
+          read_at TIMESTAMPTZ,
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created ON notifications(recipient_user_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread ON notifications(recipient_user_id, is_read);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_recipient_type_submission_unique
+          ON notifications(recipient_user_id, notification_type, related_submission_id)
+          WHERE related_submission_id IS NOT NULL;
         CREATE TABLE IF NOT EXISTS recommendation_history (
           id TEXT PRIMARY KEY,
           student_id TEXT NOT NULL,
@@ -1573,6 +1696,79 @@ app.post("/api/auth/login", async (req, res, next) => {
         res.json({ success: true, message: "Login successful.", token, user: toClientUser(user) });
     } catch (error) {
         next(error);
+    }
+});
+
+app.get("/api/notifications", requireAuth, async (req, res, next) => {
+    try {
+        const result = await pool.query(`
+            SELECT * FROM notifications
+            WHERE recipient_user_id = $1
+            ORDER BY created_at DESC
+            LIMIT 50
+        `, [req.authUser.id]);
+        res.json({ success: true, data: result.rows.map(toClientNotification) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.patch("/api/notifications/:id/read", requireAuth, async (req, res, next) => {
+    try {
+        const result = await pool.query(`
+            UPDATE notifications
+            SET is_read = TRUE, read_at = COALESCE(read_at, NOW())
+            WHERE id = $1 AND recipient_user_id = $2
+            RETURNING *
+        `, [req.params.id, req.authUser.id]);
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Notification not found." });
+        res.json({ success: true, data: toClientNotification(result.rows[0]) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.patch("/api/notifications/read-all", requireAuth, async (req, res, next) => {
+    try {
+        await pool.query(`
+            UPDATE notifications
+            SET is_read = TRUE, read_at = COALESCE(read_at, NOW())
+            WHERE recipient_user_id = $1 AND is_read = FALSE
+        `, [req.authUser.id]);
+        res.json({ success: true });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/notifications/stream", async (req, res) => {
+    const token = req.query.token || "";
+    try {
+        const payload = jwt.verify(String(token), JWT_SECRET);
+        const result = await pool.query("SELECT id FROM users WHERE id = $1", [payload.id]);
+        if (!result.rowCount) return res.status(401).end();
+
+        res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+            "X-Accel-Buffering": "no"
+        });
+        res.write("data: " + JSON.stringify({ type: "connected" }) + "\n\n");
+
+        const userId = String(payload.id);
+        const clients = notificationStreams.get(userId) || new Set();
+        clients.add(res);
+        notificationStreams.set(userId, clients);
+
+        req.on("close", () => {
+            const current = notificationStreams.get(userId);
+            if (!current) return;
+            current.delete(res);
+            if (!current.size) notificationStreams.delete(userId);
+        });
+    } catch {
+        res.status(401).end();
     }
 });
 
@@ -2791,7 +2987,7 @@ app.get("/api/practice-submissions/me", requireAuth, requireRole(["student"]), a
     try {
         const result = await pool.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
-                   ps.teacher_score, ps.teacher_feedback, ps.graded_at, ps.review_status
+                   ps.teacher_score, ps.teacher_feedback, ps.graded_at, ps.review_status, ps.remedial_required
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
             WHERE ps.student_id = $1::text
@@ -2822,7 +3018,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
         }
 
         const prerequisite = await pool.query(`
-            SELECT pc.lesson_id,
+            SELECT pc.lesson_id, pc.title AS challenge_title,
                    EXISTS (
                        SELECT 1
                        FROM quiz_attempts qa
@@ -2875,7 +3071,8 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
               graded_at = NULL,
               review_status = 'pending',
               reopened_by = NULL,
-              reopened_at = NULL
+              reopened_at = NULL,
+              remedial_required = FALSE
             RETURNING *
         `, [
             req.authUser.id,
@@ -2890,6 +3087,39 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             JSON.stringify(Array.isArray(testResults) ? testResults : [])
         ]);
         await verifyLessonCompletion(req.authUser.id, prerequisite.rows[0].lesson_id);
+        try {
+            const notificationClient = await pool.connect();
+            try {
+                await notificationClient.query("BEGIN");
+                const teachers = await notificationClient.query(
+                    "SELECT teacher_id FROM monitoring_requests WHERE student_id = $1 AND status = 'accepted'",
+                    [req.authUser.id]
+                );
+                for (const teacher of teachers.rows) {
+                    const notification = await createOrUpdateNotification(notificationClient, {
+                        recipientUserId: teacher.teacher_id,
+                        type: "new_practice_submission",
+                        title: "New Practice Submission",
+                        message: (req.authUser.email || "A student") + " submitted " + (prerequisite.rows[0].challenge_title || cleanText(challengeId, 120)) + " practice.",
+                        relatedSubmissionId: result.rows[0].id,
+                        relatedPracticeId: cleanText(challengeId, 120),
+                        practiceTitle: prerequisite.rows[0].challenge_title || cleanText(challengeId, 120),
+                        grade: clampNumber(score, 0, 100),
+                        maxGrade: 100,
+                        metadata: { studentId: req.authUser.id, studentEmail: req.authUser.email || "" }
+                    });
+                    sendNotificationEvent(teacher.teacher_id, notification);
+                }
+                await notificationClient.query("COMMIT");
+            } catch (notificationError) {
+                await notificationClient.query("ROLLBACK");
+                console.warn("Unable to create teacher submission notification:", notificationError);
+            } finally {
+                notificationClient.release();
+            }
+        } catch (notificationError) {
+            console.warn("Unable to initialize teacher submission notification:", notificationError);
+        }
         res.status(201).json({ success: true, data: result.rows[0] });
     } catch (error) {
         next(error);
@@ -2897,10 +3127,25 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
 });
 
 app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
+    const client = await pool.connect();
+    let notification = null;
+    let updated = null;
     try {
-        const existing = await selectPracticeSubmissionById(req.params.id);
-        if (!existing) return res.status(404).json({ success: false, message: "Submission not found." });
-        await pool.query(`
+        await client.query("BEGIN");
+        const existingResult = await client.query(`
+            SELECT ps.*, pc.title AS challenge_title, u.name AS student_name, u.email AS student_email, teacher.name AS teacher_name
+            FROM practice_submissions ps
+            JOIN programming_challenges pc ON pc.id = ps.challenge_id
+            LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
+            LEFT JOIN users teacher ON teacher.id = $2
+            WHERE ps.id = $1
+        `, [req.params.id, req.authUser.id]);
+        const existing = existingResult.rows[0];
+        if (!existing) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ success: false, message: "Submission not found." });
+        }
+        await client.query(`
             UPDATE practice_submissions
             SET is_locked = FALSE,
                 review_status = 'reopened',
@@ -2908,17 +3153,47 @@ app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["tea
                 reopened_at = NOW()
             WHERE id = $1
         `, [req.params.id, req.authUser.id]);
-        const updated = await selectPracticeSubmissionById(req.params.id);
-        res.json({ success: true, data: updated });
+        const updatedResult = await client.query(`
+            SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
+                   u.name AS student_name, u.email AS student_email,
+                   reopener.name AS graded_by_name
+            FROM practice_submissions ps
+            JOIN programming_challenges pc ON pc.id = ps.challenge_id
+            LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
+            LEFT JOIN users reopener ON reopener.id = ps.reopened_by
+            WHERE ps.id = $1
+        `, [req.params.id]);
+        updated = updatedResult.rows[0];
+        const teacherName = existing.teacher_name || req.authUser.email || "your teacher";
+        const practiceTitle = existing.challenge_title || existing.challenge_id;
+        notification = await createOrUpdateNotification(client, {
+            recipientUserId: existing.student_id,
+            type: "practice_reopened",
+            title: "Practice Submission Reopened",
+            message: "Your " + practiceTitle + " practice submission has been reopened by " + teacherName + ". You have another attempt available.",
+            relatedSubmissionId: existing.id,
+            relatedPracticeId: existing.challenge_id,
+            teacherId: req.authUser.id,
+            teacherName,
+            practiceTitle,
+            metadata: { studentName: existing.student_name || "", studentEmail: existing.student_email || "" }
+        });
+        await client.query("COMMIT");
+        sendNotificationEvent(existing.student_id, notification);
+        res.json({ success: true, data: updated, notification });
     } catch (error) {
+        await client.query("ROLLBACK");
         next(error);
+    } finally {
+        client.release();
     }
 });
 
 app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
+    const client = await pool.connect();
+    let notification = null;
+    let updated = null;
     try {
-        const existing = await selectPracticeSubmissionById(req.params.id);
-        if (!existing) return res.status(404).json({ success: false, message: "Submission not found." });
         const body = req.body || {};
         const grade = Number(body.grade ?? body.score);
         if (!Number.isFinite(grade) || grade < 0 || grade > 100) {
@@ -2928,19 +3203,74 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
         if (!feedback) {
             return res.status(400).json({ success: false, message: "Teacher feedback is required." });
         }
-        await pool.query(`
+        const remedialRequired = Boolean(body.remedialRequired ?? body.remedial_required ?? false);
+        await client.query("BEGIN");
+        const existingResult = await client.query(`
+            SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
+                   u.name AS student_name, u.email AS student_email,
+                   teacher.name AS teacher_name
+            FROM practice_submissions ps
+            JOIN programming_challenges pc ON pc.id = ps.challenge_id
+            LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
+            LEFT JOIN users teacher ON teacher.id = $2
+            WHERE ps.id = $1
+        `, [req.params.id, req.authUser.id]);
+        const existing = existingResult.rows[0];
+        if (!existing) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ success: false, message: "Submission not found." });
+        }
+        await client.query(`
             UPDATE practice_submissions
             SET teacher_score = $2,
                 teacher_feedback = $3,
                 graded_by = $4,
                 graded_at = NOW(),
-                review_status = 'reviewed'
+                review_status = 'reviewed',
+                remedial_required = $5
             WHERE id = $1
-        `, [req.params.id, grade, feedback, req.authUser.id]);
-        const updated = await selectPracticeSubmissionById(req.params.id);
-        res.json({ success: true, data: updated });
+        `, [req.params.id, grade, feedback, req.authUser.id, remedialRequired]);
+        const updatedResult = await client.query(`
+            SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
+                   u.name AS student_name, u.email AS student_email,
+                   grader.name AS graded_by_name
+            FROM practice_submissions ps
+            JOIN programming_challenges pc ON pc.id = ps.challenge_id
+            LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
+            LEFT JOIN users grader ON grader.id = ps.graded_by
+            WHERE ps.id = $1
+        `, [req.params.id]);
+        updated = updatedResult.rows[0];
+        const teacherName = existing.teacher_name || req.authUser.email || "your teacher";
+        const practiceTitle = existing.challenge_title || existing.challenge_id;
+        const title = remedialRequired ? "Remedial Required" : grade >= 80 ? "Practice Submission Passed" : "Practice Submission Graded";
+        const message = remedialRequired
+            ? "Your " + practiceTitle + " practice submission received " + grade + "/100. Remedial work is required. Teacher feedback: " + feedback
+            : "Your " + practiceTitle + " practice submission was graded " + grade + "/100 by " + teacherName + ".";
+        notification = await createOrUpdateNotification(client, {
+            recipientUserId: existing.student_id,
+            type: remedialRequired ? "remedial_required" : grade >= 80 ? "submission_passed" : "submission_graded",
+            title,
+            message,
+            relatedSubmissionId: existing.id,
+            relatedPracticeId: existing.challenge_id,
+            teacherId: req.authUser.id,
+            teacherName,
+            practiceTitle,
+            grade,
+            maxGrade: 100,
+            feedback,
+            remedialRequired,
+            metadata: { studentName: existing.student_name || "", studentEmail: existing.student_email || "" }
+        });
+        await client.query("COMMIT");
+        sendNotificationEvent(existing.student_id, notification);
+        res.json({ success: true, data: updated, notification });
     } catch (error) {
+        await client.query("ROLLBACK");
         next(error);
+    } finally {
+        client.release();
     }
 });
 
