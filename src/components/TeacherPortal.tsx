@@ -1497,42 +1497,93 @@ export default function TeacherPortal({
       )}
 
       {activeTab === 'assessments' && (
-        <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
-          <h3 className="text-base font-black">Assessment Monitoring</h3>
-          <p className="mt-1 text-xs text-slate-500">Attempts, score ranges, question analysis, and completion time for connected students.</p>
-          <div className="mt-5 grid gap-4 lg:grid-cols-3">
-            {visibleStudents.map(student => {
-              const incorrect = Math.max(1, Math.round((100 - student.quizScore) / 8));
-              const correct = 25 - incorrect;
-              return (
-                <div key={student.id} className={`rounded-2xl border p-4 ${mutedPanel}`}>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-black">{student.name}</p>
-                      <p className="text-[11px] text-slate-500">{student.currentTopic} assessment history</p>
-                    </div>
-                    <ClipboardCheck className="h-5 w-5 text-emerald-600" />
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                    {[
-                      ['Attempts', 2 + (student.quizScore % 3)],
-                      ['Highest', `${Math.min(100, student.quizScore + 8)}%`],
-                      ['Average', `${student.quizScore}%`],
-                      ['Lowest', `${Math.max(0, student.quizScore - 14)}%`],
-                      ['Correct', correct],
-                      ['Incorrect', incorrect],
-                      ['Completion', `${18 + (student.quizScore % 10)} min`],
-                      ['Status', student.quizScore >= 70 ? 'Passed' : 'Review']
-                    ].map(([label, value]) => (
-                      <div key={label as string} className="rounded-xl bg-white p-2 shadow-sm">
-                        <span className="block text-[9px] font-black uppercase text-slate-400">{label as string}</span>
-                        <strong className="mt-1 block">{value}</strong>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+        <div className="space-y-5">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {[
+              ['Connected Students', visibleStudents.length],
+              ['Average Quiz Score', `${averageQuiz}%`],
+              ['Passed Students', visibleStudents.filter(student => student.quizScore >= 70).length],
+              ['Needs Review', visibleStudents.filter(student => student.quizScore < 70).length],
+              ['Avg Completion', `${avg(visibleStudents.map(student => 18 + (student.quizScore % 10)))} min`]
+            ].map(([label, value]) => (
+              <div key={label as string} className={`rounded-2xl border p-4 shadow-sm ${cardClass}`}>
+                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">{label as string}</span>
+                <strong className="mt-2 block font-mono text-lg">{value}</strong>
+              </div>
+            ))}
+          </div>
+
+          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-black">Assessment Monitoring</h3>
+                <p className="mt-1 text-xs text-slate-500">Student-level attempts, score ranges, question analysis, completion time, and review status.</p>
+              </div>
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase text-emerald-700">70% Pass Mark</span>
+            </div>
+
+            <div className="mt-6 overflow-x-auto">
+              <table className="w-full min-w-[960px] text-left text-xs">
+                <thead className="bg-emerald-50/20 text-[10px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-3 py-3">Student</th>
+                    <th className="px-3 py-3">Current Topic</th>
+                    <th className="px-3 py-3">Attempts</th>
+                    <th className="px-3 py-3">Highest</th>
+                    <th className="px-3 py-3">Average</th>
+                    <th className="px-3 py-3">Lowest</th>
+                    <th className="px-3 py-3">Correct</th>
+                    <th className="px-3 py-3">Incorrect</th>
+                    <th className="px-3 py-3">Completion</th>
+                    <th className="px-3 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                  {visibleStudents.map(student => {
+                    const incorrect = Math.max(1, Math.round((100 - student.quizScore) / 8));
+                    const correct = 25 - incorrect;
+                    const attempts = 2 + (student.quizScore % 3);
+                    const highest = Math.min(100, student.quizScore + 8);
+                    const lowest = Math.max(0, student.quizScore - 14);
+                    const completion = 18 + (student.quizScore % 10);
+                    const passed = student.quizScore >= 70;
+                    return (
+                      <tr key={student.id} className={isDark ? 'hover:bg-slate-950/60' : 'hover:bg-emerald-50/10'}>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2">
+                            <ClipboardCheck className="h-4 w-4 text-emerald-600" />
+                            <div>
+                              <p className="font-black">{student.name}</p>
+                              <p className="text-[10px] font-semibold text-slate-400">{student.email}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 font-semibold text-slate-600">{student.currentTopic}</td>
+                        <td className="px-3 py-3 font-mono font-bold">{attempts}</td>
+                        <td className="px-3 py-3 font-mono font-bold">{highest}%</td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100">
+                              <div className={`h-full rounded-full ${passed ? 'bg-emerald-600' : 'bg-amber-500'}`} style={{ width: `${student.quizScore}%` }} />
+                            </div>
+                            <span className="font-mono font-bold">{student.quizScore}%</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 font-mono font-bold">{lowest}%</td>
+                        <td className="px-3 py-3 font-mono font-bold text-emerald-700">{correct}</td>
+                        <td className="px-3 py-3 font-mono font-bold text-rose-600">{incorrect}</td>
+                        <td className="px-3 py-3 font-mono text-slate-500">{completion} min</td>
+                        <td className="px-3 py-3">
+                          <span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase ${passed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                            {passed ? 'Passed' : 'Review'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
