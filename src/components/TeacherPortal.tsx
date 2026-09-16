@@ -36,13 +36,13 @@ import { getCanonicalStudentId } from '../services/identity';
 
 interface TeacherPortalProps {
   submissions: PendingSubmission[];
-  onGradeSubmission: (id: string, grade: number, feedback: string) => void;
+  onGradeSubmission: (id: string, grade: number, feedback: string) => Promise<PendingSubmission | void> | void;
   onSelectPersona: (persona: Persona) => void;
   currentUser: AuthenticatedUser;
   monitoringRequests: MonitoringRequest[];
   onSendRequest: (studentEmailOrId: string) => Promise<{ success: boolean; message: string }>;
   onRemoveConnection: (requestId: string) => void;
-  onReopenSubmission?: (id: string) => void;
+  onReopenSubmission?: (id: string) => Promise<PendingSubmission | void> | void;
   theme?: 'light' | 'dark';
   recommendationHistory?: AdaptiveRecommendation[];
   leaderboardUsers?: LeaderboardUser[];
@@ -500,6 +500,8 @@ export default function TeacherPortal({
   const [selectedSubId, setSelectedSubId] = useState<string>('');
   const [commentText, setCommentText] = useState('');
   const [scoreText, setScoreText] = useState(90);
+  const [submissionAction, setSubmissionAction] = useState<'reopen' | 'grade' | null>(null);
+  const [submissionMessage, setSubmissionMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const acceptedRequests = useMemo(
     () =>
       monitoringRequests
@@ -821,7 +823,8 @@ export default function TeacherPortal({
     setSelectedSubId(selectedSubmission.id);
     setCommentText(selectedSubmission.feedback || '');
     setScoreText(Number(selectedSubmission.grade ?? selectedSubmission.score ?? 90));
-  }, [selectedSubmission?.id]);
+    setSubmissionMessage(null);
+  }, [selectedSubmission?.id, selectedSubmission?.feedback, selectedSubmission?.grade, selectedSubmission?.score]);
 
   const handleSendRequestSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -847,17 +850,40 @@ export default function TeacherPortal({
     }
   };
 
-  const handlePostGrade = () => {
+  const handlePostGrade = async () => {
     if (!selectedSubmission) return;
     if (scoreText < 0 || scoreText > 100) {
-      alert('Please enter a grade score between 0 and 100.');
+      setSubmissionMessage({ type: 'error', message: 'Please enter a grade score between 0 and 100.' });
       return;
     }
     if (!commentText.trim()) {
-      alert('Please include teacher feedback before posting.');
+      setSubmissionMessage({ type: 'error', message: 'Please include teacher feedback before posting.' });
       return;
     }
-    onGradeSubmission(selectedSubmission.id, scoreText, commentText);
+    setSubmissionAction('grade');
+    setSubmissionMessage(null);
+    try {
+      await onGradeSubmission(selectedSubmission.id, scoreText, commentText.trim());
+      setSubmissionMessage({ type: 'success', message: 'Grade and feedback were saved to the backend.' });
+    } catch (error) {
+      setSubmissionMessage({ type: 'error', message: error instanceof Error ? error.message : 'Unable to save grade and feedback.' });
+    } finally {
+      setSubmissionAction(null);
+    }
+  };
+
+  const handleReopenSelectedSubmission = async () => {
+    if (!selectedSubmission || !onReopenSubmission) return;
+    setSubmissionAction('reopen');
+    setSubmissionMessage(null);
+    try {
+      await onReopenSubmission(selectedSubmission.id);
+      setSubmissionMessage({ type: 'success', message: 'Submission was reopened in the backend.' });
+    } catch (error) {
+      setSubmissionMessage({ type: 'error', message: error instanceof Error ? error.message : 'Unable to reopen submission.' });
+    } finally {
+      setSubmissionAction(null);
+    }
   };
 
   const avg = (values: number[]) => (values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0);
@@ -1611,9 +1637,14 @@ export default function TeacherPortal({
                 <div className="shrink-0 space-y-3 border-t border-slate-800 pt-4">
                   <input type="number" min="0" max="100" value={scoreText} onChange={event => setScoreText(parseInt(event.target.value) || 0)} className="w-28 rounded-xl border border-slate-800 bg-slate-900 p-2 text-xs font-black outline-none focus:border-emerald-500" />
                   <textarea value={commentText} onChange={event => setCommentText(event.target.value)} placeholder="Teacher feedback and adaptive remediation notes..." className="h-20 w-full resize-none rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs outline-none focus:border-emerald-500" />
+                  {submissionMessage && (
+                    <div className={`rounded-xl border px-3 py-2 text-[11px] font-bold ${submissionMessage.type === 'success' ? 'border-emerald-800 bg-emerald-950/40 text-emerald-200' : 'border-rose-800 bg-rose-950/40 text-rose-200'}`}>
+                      {submissionMessage.message}
+                    </div>
+                  )}
                   <div className="grid grid-cols-[auto_1fr] gap-2">
-                    {onReopenSubmission && <button type="button" onClick={() => onReopenSubmission(selectedSubmission.id)} className="min-h-11 rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700">Reopen</button>}
-                    <button type="button" onClick={handlePostGrade} className="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white transition hover:bg-emerald-500 active:scale-[0.99]">Post Grade & Feedback</button>
+                    {onReopenSubmission && <button type="button" onClick={handleReopenSelectedSubmission} disabled={submissionAction !== null} className="min-h-11 rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60">{submissionAction === 'reopen' ? 'Reopening...' : 'Reopen'}</button>}
+                    <button type="button" onClick={handlePostGrade} disabled={submissionAction !== null} className="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white transition hover:bg-emerald-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60">{submissionAction === 'grade' ? 'Posting...' : 'Post Grade & Feedback'}</button>
                   </div>
                 </div>
               </div>

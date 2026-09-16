@@ -150,10 +150,20 @@ export const assessmentApi = {
 
 export const practiceApi = {
   listChallenges: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-challenges'),
+  listSubmissions: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-submissions'),
   listMine: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-submissions/me'),
   submit: (body: Record<string, unknown>) =>
     apiRequest<{ success: boolean; data: any }>('/api/practice-submissions', {
       method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  reopenSubmission: (id: string) =>
+    apiRequest<{ success: boolean; data: any }>('/api/practice-submissions/' + encodeURIComponent(id) + '/reopen', {
+      method: 'PATCH'
+    }),
+  gradeSubmission: (id: string, body: { grade: number; feedback: string }) =>
+    apiRequest<{ success: boolean; data: any }>('/api/practice-submissions/' + encodeURIComponent(id) + '/grade', {
+      method: 'PATCH',
       body: JSON.stringify(body)
     }),
   createChallenge: (body: Record<string, unknown>) =>

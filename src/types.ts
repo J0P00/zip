@@ -235,10 +235,13 @@ export interface PendingSubmission {
   studentName: string;
   challengeName: string;
   submittedAt: string;
-  status: 'pending' | 'reviewed';
+  status: 'pending' | 'reviewed' | 'reopened';
   code: string;
   grade?: number;
   feedback?: string;
+  teacherScore?: number;
+  gradedAt?: string;
+  reviewStatus?: string;
   studentId?: string;
   studentEmail?: string;
   section?: string;
@@ -384,6 +387,10 @@ export interface PracticeSubmission {
   isLocked: boolean;
   errorMessage?: string;
   testResults: ChallengeTestResult[];
+  teacherScore?: number;
+  feedback?: string;
+  gradedAt?: string;
+  reviewStatus?: string;
 }
 
 export type RecommendationType = 'Remedial' | 'Continue' | 'Advanced';

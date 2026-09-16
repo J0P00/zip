@@ -240,8 +240,6 @@ const mergeCurrentProgressIntoLeaderboard = (
 };
 const SESSION_USER_KEY = 'oophub_current_user';
 const SESSION_VIEW_KEY = 'oophub_workspace_view';
-const PRACTICE_SUBMISSIONS_KEY = 'oophub_practice_submissions';
-const PENDING_SUBMISSIONS_KEY = 'oophub_teacher_pending_submissions';
 const LEADERBOARD_KEY = 'oophub_leaderboard_users';
 const PERSONAS: Persona[] = ['public', 'student', 'teacher', 'admin'];
 const STUDENT_TABS: StudentSubView[] = ['dashboard', 'ide', 'videos', 'assessments', 'swing', 'leaderboard', 'profile'];
@@ -387,12 +385,44 @@ const practiceSubmissionToPending = (submission: PracticeSubmission): PendingSub
     : 'Automated grader: submission recorded, but one or more hidden tests failed. Teacher review is pending.'
 });
 
-const readPracticePendingSubmissions = (): PendingSubmission[] => {
-  const savedPending = readStoredJson<PendingSubmission[]>(PENDING_SUBMISSIONS_KEY, []);
-  const practiceDb = readStoredJson<Record<string, PracticeSubmission>>(PRACTICE_SUBMISSIONS_KEY, {});
-  const practicePending = Object.values(practiceDb).map(practiceSubmissionToPending);
-  const merged = [...savedPending, ...practicePending];
-  return merged.filter((submission, index, list) => list.findIndex(item => item.id === submission.id) === index);
+const practiceSubmissionRowToPending = (row: any): PendingSubmission => {
+  const autoScore = Number(row.score ?? 0);
+  const teacherScore = row.teacher_score === null || row.teacher_score === undefined ? undefined : Number(row.teacher_score);
+  const reviewStatus = String(row.review_status || (teacherScore === undefined ? 'pending' : 'reviewed'));
+  const status: PendingSubmission['status'] = reviewStatus === 'reviewed'
+    ? 'reviewed'
+    : reviewStatus === 'reopened'
+      ? 'reopened'
+      : 'pending';
+
+  return {
+    id: String(row.id),
+    studentId: row.student_id || '',
+    studentEmail: row.student_email || row.student_id || '',
+    studentName: row.student_name || row.student_email || row.student_id || 'Student',
+    section: row.section || 'Unassigned',
+    challengeName: row.challenge_title || row.challenge_id || 'Practice Challenge',
+    submittedAt: row.submitted_at || '',
+    status,
+    code: row.source_code || '',
+    grade: teacherScore ?? autoScore,
+    score: autoScore,
+    teacherScore,
+    topicId: row.topic_id,
+    topicTitle: row.lesson_id || row.topic_id || 'Practice IDE',
+    compileStatus: row.compile_status || 'not_run',
+    runtime: row.runtime === null || row.runtime === undefined ? undefined : Number(row.runtime),
+    memoryUsage: row.memory_usage === null || row.memory_usage === undefined ? undefined : Number(row.memory_usage),
+    programOutput: row.program_output || '',
+    errorMessage: row.error_message || '',
+    isLocked: Boolean(row.is_locked),
+    testResults: row.test_results || [],
+    feedback: row.teacher_feedback || (autoScore >= 70
+      ? 'Automated grader: passed hidden test cases and practice requirements. Teacher review is pending.'
+      : 'Automated grader: submission recorded, but one or more hidden tests failed. Teacher review is pending.'),
+    gradedAt: row.graded_at,
+    reviewStatus
+  };
 };
 
 export default function App() {
@@ -647,7 +677,7 @@ export default function App() {
   const [leaderboardUsers, setLeaderboardUsers] = useState<LeaderboardUser[]>(() =>
     rankLeaderboard(readStoredJson<LeaderboardUser[]>(LEADERBOARD_KEY, []))
   );
-  const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>(() => readPracticePendingSubmissions());
+  const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>([]);
   const [curriculumModules, setCurriculumModules] = useState<CurriculumModule[]>([]);
   const [lessonItems, setLessonItems] = useState<LessonItem[]>([]);
   const [adaptiveRules, setAdaptiveRules] = useState<AdaptiveRule[]>([]);
@@ -659,14 +689,7 @@ export default function App() {
   }, [leaderboardUsers]);
 
   useEffect(() => {
-    saveStoredJson(PENDING_SUBMISSIONS_KEY, pendingSubmissions);
-  }, [pendingSubmissions]);
-
-  useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === PRACTICE_SUBMISSIONS_KEY || event.key === PENDING_SUBMISSIONS_KEY) {
-        setPendingSubmissions(readPracticePendingSubmissions());
-      }
       if (event.key === LEADERBOARD_KEY) {
         setLeaderboardUsers(rankLeaderboard(readStoredJson<LeaderboardUser[]>(LEADERBOARD_KEY, [])));
       }
@@ -681,6 +704,21 @@ export default function App() {
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
+  useEffect(() => {
+    if (!currentUser || !['teacher', 'admin'].includes(currentUser.role)) return;
+    let cancelled = false;
+    practiceApi.listSubmissions()
+      .then(response => {
+        if (!cancelled) setPendingSubmissions(response.data.map(practiceSubmissionRowToPending));
+      })
+      .catch(error => {
+        if (!cancelled) console.warn('Unable to load Practice IDE submissions from backend:', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.role, currentUser?.token]);
 
   // Live reviews returned from Dr. Elena Vance
   const [recentStudentGrade, setRecentStudentGrade] = useState<{ grade: number; feedback: string; challenge: string } | null>(
@@ -1087,13 +1125,10 @@ export default function App() {
   };
 
   // 3. When teacher drafts score reviews inside Instructor grading panels
-  const handleGradeSubmission = (submissionId: string, gradeScore: number, feedbackNotes: string) => {
-    setPendingSubmissions(prev => prev.map(s => {
-      if (s.id === submissionId) {
-        return { ...s, status: 'reviewed', grade: gradeScore, feedback: feedbackNotes };
-      }
-      return s;
-    }));
+  const handleGradeSubmission = async (submissionId: string, gradeScore: number, feedbackNotes: string) => {
+    const response = await practiceApi.gradeSubmission(submissionId, { grade: gradeScore, feedback: feedbackNotes });
+    const updated = practiceSubmissionRowToPending(response.data);
+    setPendingSubmissions(prev => [updated, ...prev.filter(s => s.id !== submissionId)]);
 
     // If grading the current student's submission, sync immediately with student recent portfolio records
     const targetSub = pendingSubmissions.find(s => s.id === submissionId);
@@ -1105,25 +1140,14 @@ export default function App() {
       });
       setPoints(prev => prev + 100); // Incentive
     }
+    return updated;
   };
 
-  const handleReopenPracticeSubmission = (submissionId: string) => {
-    setPendingSubmissions(prev => prev.map(s => (
-      s.id === submissionId
-        ? { ...s, status: 'pending', isLocked: false, feedback: 'Submission reopened by teacher for one additional attempt.' }
-        : s
-    )));
-
-    try {
-      const saved = localStorage.getItem('oophub_practice_submissions');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const next = Object.fromEntries(Object.entries(parsed).filter(([, value]: [string, any]) => value?.id !== submissionId));
-        localStorage.setItem('oophub_practice_submissions', JSON.stringify(next));
-      }
-    } catch {
-      // Teacher queue still reflects the reopen even if browser storage is unavailable.
-    }
+  const handleReopenPracticeSubmission = async (submissionId: string) => {
+    const response = await practiceApi.reopenSubmission(submissionId);
+    const updated = practiceSubmissionRowToPending(response.data);
+    setPendingSubmissions(prev => [updated, ...prev.filter(s => s.id !== submissionId)]);
+    return updated;
   };
 
   // 4. Admin curriculum controls

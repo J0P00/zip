@@ -461,8 +461,22 @@ const initializeDatabase = async () => {
           test_results JSONB NOT NULL DEFAULT '[]'::jsonb,
           submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           is_locked BOOLEAN NOT NULL DEFAULT TRUE,
+          teacher_score NUMERIC,
+          teacher_feedback TEXT DEFAULT '',
+          graded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+          graded_at TIMESTAMPTZ,
+          review_status TEXT NOT NULL DEFAULT 'pending',
+          reopened_by UUID REFERENCES users(id) ON DELETE SET NULL,
+          reopened_at TIMESTAMPTZ,
           UNIQUE(student_id, challenge_id)
         );
+        ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS teacher_score NUMERIC;
+        ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS teacher_feedback TEXT DEFAULT '';
+        ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS graded_by UUID REFERENCES users(id) ON DELETE SET NULL;
+        ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS graded_at TIMESTAMPTZ;
+        ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'pending';
+        ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_by UUID REFERENCES users(id) ON DELETE SET NULL;
+        ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_at TIMESTAMPTZ;
         CREATE TABLE IF NOT EXISTS recommendation_history (
           id TEXT PRIMARY KEY,
           student_id TEXT NOT NULL,
@@ -2740,12 +2754,31 @@ app.get("/api/admin/reports", requireAuth, requireRole(["admin"]), async (_req, 
     }
 });
 
+
+const selectPracticeSubmissionById = async (id) => {
+    const result = await pool.query(`
+        SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
+               u.name AS student_name, u.email AS student_email,
+               grader.name AS graded_by_name
+        FROM practice_submissions ps
+        JOIN programming_challenges pc ON pc.id = ps.challenge_id
+        LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
+        LEFT JOIN users grader ON grader.id = ps.graded_by
+        WHERE ps.id = $1
+    `, [id]);
+    return result.rows[0] || null;
+};
+
 app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin"]), async (_req, res, next) => {
     try {
         const result = await pool.query(`
-            SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id
+            SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
+                   u.name AS student_name, u.email AS student_email,
+                   grader.name AS graded_by_name
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
+            LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
+            LEFT JOIN users grader ON grader.id = ps.graded_by
             ORDER BY ps.submitted_at DESC
         `);
         res.json({ success: true, data: result.rows });
@@ -2757,7 +2790,8 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin
 app.get("/api/practice-submissions/me", requireAuth, requireRole(["student"]), async (req, res, next) => {
     try {
         const result = await pool.query(`
-            SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id
+            SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
+                   ps.teacher_score, ps.teacher_feedback, ps.graded_at, ps.review_status
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
             WHERE ps.student_id = $1::text
@@ -2834,7 +2868,14 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
               error_message = EXCLUDED.error_message,
               test_results = EXCLUDED.test_results,
               submitted_at = NOW(),
-              is_locked = TRUE
+              is_locked = TRUE,
+              teacher_score = NULL,
+              teacher_feedback = '',
+              graded_by = NULL,
+              graded_at = NULL,
+              review_status = 'pending',
+              reopened_by = NULL,
+              reopened_at = NULL
             RETURNING *
         `, [
             req.authUser.id,
@@ -2857,14 +2898,47 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
 
 app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
     try {
-        const result = await pool.query(`
+        const existing = await selectPracticeSubmissionById(req.params.id);
+        if (!existing) return res.status(404).json({ success: false, message: "Submission not found." });
+        await pool.query(`
             UPDATE practice_submissions
-            SET is_locked = FALSE
+            SET is_locked = FALSE,
+                review_status = 'reopened',
+                reopened_by = $2,
+                reopened_at = NOW()
             WHERE id = $1
-            RETURNING *
-        `, [req.params.id]);
-        if (!result.rowCount) return res.status(404).json({ success: false, message: "Submission not found." });
-        res.json({ success: true, data: result.rows[0] });
+        `, [req.params.id, req.authUser.id]);
+        const updated = await selectPracticeSubmissionById(req.params.id);
+        res.json({ success: true, data: updated });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
+    try {
+        const existing = await selectPracticeSubmissionById(req.params.id);
+        if (!existing) return res.status(404).json({ success: false, message: "Submission not found." });
+        const body = req.body || {};
+        const grade = Number(body.grade ?? body.score);
+        if (!Number.isFinite(grade) || grade < 0 || grade > 100) {
+            return res.status(400).json({ success: false, message: "Grade must be between 0 and 100." });
+        }
+        const feedback = cleanText(body.feedback || "", 5000);
+        if (!feedback) {
+            return res.status(400).json({ success: false, message: "Teacher feedback is required." });
+        }
+        await pool.query(`
+            UPDATE practice_submissions
+            SET teacher_score = $2,
+                teacher_feedback = $3,
+                graded_by = $4,
+                graded_at = NOW(),
+                review_status = 'reviewed'
+            WHERE id = $1
+        `, [req.params.id, grade, feedback, req.authUser.id]);
+        const updated = await selectPracticeSubmissionById(req.params.id);
+        res.json({ success: true, data: updated });
     } catch (error) {
         next(error);
     }

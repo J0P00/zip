@@ -47,9 +47,11 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
   const [draftDb, setDraftDb] = useState<DraftDb>(() => getStoredJson(DRAFT_KEY, {}));
   const [activeChallengeId, setActiveChallengeId] = useState(() => PRACTICE_CHALLENGES[0].id);
   const activeChallenge = PRACTICE_CHALLENGES.find(challenge => challenge.id === activeChallengeId) || PRACTICE_CHALLENGES[0];
-  const submissionKey = `${currentUser.id || currentUser.userId || currentUser.email}:${activeChallenge.id}`;
-  const submitted = submissionDb[submissionKey];
-  const [sourceCode, setSourceCode] = useState(() => submitted?.sourceCode || draftDb[submissionKey] || activeChallenge.starterCode);
+  const studentKey = currentUser.id || currentUser.userId || currentUser.email;
+  const submissionKey = `${studentKey}:${activeChallenge.id}`;
+  const currentSubmission = submissionDb[submissionKey];
+  const submitted = currentSubmission?.isLocked ? currentSubmission : undefined;
+  const [sourceCode, setSourceCode] = useState(() => currentSubmission?.sourceCode || draftDb[submissionKey] || activeChallenge.starterCode);
   const [consoleLogs, setConsoleLogs] = useState<string[]>(['Console ready. Run code as often as you need before final submission.']);
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -64,7 +66,32 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
   } : null);
 
   const activeLesson = OOP_COURSE_LESSONS.find(lesson => lesson.id === activeChallenge.lessonId);
-  const activeAssessment = OOP_ASSESSMENTS.find(assessment => assessment.id === activeChallenge.assessmentId);
+  const mapBackendSubmission = (row: any): PracticeSubmission => ({
+    ...row,
+    id: row.id,
+    studentId: row.student_id || studentKey,
+    studentName: currentUser.name,
+    studentEmail: currentUser.email,
+    section: currentUser.section || 'Unassigned',
+    challengeId: row.challenge_id,
+    challengeTitle: row.challenge_title || activeChallenge.title,
+    topicId: row.topic_id || activeChallenge.topicId,
+    topicTitle: row.lesson_id || row.topic_id || activeChallenge.topicId,
+    sourceCode: row.source_code || '',
+    compileStatus: row.compile_status,
+    programOutput: row.program_output || '',
+    memoryUsage: row.memory_usage === null || row.memory_usage === undefined ? undefined : Number(row.memory_usage),
+    runtime: Number(row.runtime || 0),
+    score: Number(row.score || 0),
+    submittedAt: row.submitted_at,
+    isLocked: Boolean(row.is_locked),
+    errorMessage: row.error_message || '',
+    testResults: row.test_results || [],
+    teacherScore: row.teacher_score === null || row.teacher_score === undefined ? undefined : Number(row.teacher_score),
+    feedback: row.teacher_feedback || '',
+    gradedAt: row.graded_at,
+    reviewStatus: row.review_status
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -76,25 +103,20 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
       if (!mounted) return;
       setWatchDb(videoResponse.data.reduce((acc: WatchDb, row: any) => ({ ...acc, [row.video_id]: { lessonId: row.video_id, completionPercentage: Number(row.completion_percentage || 0), completed: Boolean(row.completed) } }), {}));
       setQuizDb(quizResponse.data.reduce((acc: QuizDb, row: any) => ({ ...acc, [row.assessment_id]: { assessmentId: row.assessment_id, lessonId: row.lesson_id || '', percentage: Number(row.percentage || 0), passed: Boolean(row.passed) } }), {}));
-      const remote = submissionResponse.data.reduce((acc: SubmissionDb, row: any) => ({ ...acc, [`${currentUser.id}:${row.challenge_id}`]: {
-        ...row,
-        challengeId: row.challenge_id,
-        sourceCode: row.source_code,
-        compileStatus: row.compile_status,
-        programOutput: row.program_output,
-        memoryUsage: row.memory_usage,
-        submittedAt: row.submitted_at,
-        testResults: row.test_results || []
-      } }), {});
+      const remote = submissionResponse.data.reduce((acc: SubmissionDb, row: any) => {
+        const mapped = mapBackendSubmission(row);
+        return { ...acc, [`${studentKey}:${mapped.challengeId}`]: mapped };
+      }, {});
       setSubmissionDb(remote);
-      const current = remote[`${currentUser.id}:${activeChallenge.id}`];
+      const current = remote[`${studentKey}:${activeChallenge.id}`];
       if (current) {
-        setSourceCode(current.sourceCode || draftDb[submissionKey] || activeChallenge.starterCode);
-        setLastResult({ compileStatus: current.compileStatus, score: current.score, runtime: current.runtime, memoryUsage: current.memoryUsage || 0, programOutput: current.programOutput, errorMessage: current.errorMessage || '', testResults: current.testResults || [] });
+        setSourceCode(current.isLocked ? current.sourceCode : draftDb[submissionKey] || current.sourceCode || activeChallenge.starterCode);
+        setLastResult(current.isLocked ? { compileStatus: current.compileStatus, score: current.score, runtime: current.runtime, memoryUsage: current.memoryUsage || 0, programOutput: current.programOutput, errorMessage: current.errorMessage || '', testResults: current.testResults || [] } : null);
+        setConsoleLogs([current.isLocked ? 'Already Submitted. Editor is locked for this challenge.' : 'Submission reopened. You can submit another final solution.']);
       }
     }).catch(error => console.warn('Unable to load practice progress from backend:', error));
     return () => { mounted = false; };
-  }, [currentUser.id, currentUser.token]);
+  }, [activeChallenge.id, currentUser.email, currentUser.id, currentUser.name, currentUser.section, currentUser.token, currentUser.userId]);
 
   const lockReason = useMemo(() => {
     const currentLessonSequence = activeLesson?.sequence || 1;
@@ -120,17 +142,18 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     const challenge = PRACTICE_CHALLENGES.find(item => item.id === challengeId) || PRACTICE_CHALLENGES[0];
     const key = `${currentUser.id || currentUser.userId || currentUser.email}:${challenge.id}`;
     setActiveChallengeId(challenge.id);
-    setSourceCode(submissionDb[key]?.sourceCode || draftDb[key] || challenge.starterCode);
-    setLastResult(submissionDb[key] ? {
-      compileStatus: submissionDb[key].compileStatus,
-      score: submissionDb[key].score,
-      runtime: submissionDb[key].runtime,
-      memoryUsage: submissionDb[key].memoryUsage,
-      programOutput: submissionDb[key].programOutput,
-      errorMessage: submissionDb[key].errorMessage || '',
-      testResults: submissionDb[key].testResults
+    const record = submissionDb[key];
+    setSourceCode(record?.isLocked ? record.sourceCode : draftDb[key] || record?.sourceCode || challenge.starterCode);
+    setLastResult(record?.isLocked ? {
+      compileStatus: record.compileStatus,
+      score: record.score,
+      runtime: record.runtime,
+      memoryUsage: record.memoryUsage,
+      programOutput: record.programOutput,
+      errorMessage: record.errorMessage || '',
+      testResults: record.testResults
     } : null);
-    setConsoleLogs([submissionDb[key] ? 'Already Submitted. Editor is locked for this challenge.' : 'Console ready. Run code as often as you need before final submission.']);
+    setConsoleLogs([record?.isLocked ? 'Already Submitted. Editor is locked for this challenge.' : record ? 'Submission reopened. You can submit another final solution.' : 'Console ready. Run code as often as you need before final submission.']);
   };
 
   const updateSource = (value: string) => {
@@ -165,47 +188,25 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     setConsoleLogs(['Editor reset to starter code.']);
   };
 
-  const submitCode = () => {
+  const submitCode = async () => {
     if (submitted) return;
     setIsSubmitting(true);
     const result = gradePracticeSource(activeChallenge, sourceCode);
     const now = new Date().toISOString();
-    const practiceSubmission: PracticeSubmission = {
-      id: `practice_sub_${Date.now()}`,
-      studentId: currentUser.id || currentUser.userId || currentUser.email,
-      studentName: currentUser.name,
-      studentEmail: currentUser.email,
-      section: currentUser.section || 'Unassigned',
-      challengeId: activeChallenge.id,
-      challengeTitle: activeChallenge.title,
-      topicId: activeChallenge.topicId,
-      topicTitle: activeChallenge.topicId.split('-').map(part => part[0].toUpperCase() + part.slice(1)).join(' '),
-      sourceCode,
-      programOutput: result.programOutput,
-      compileStatus: result.compileStatus,
-      runtime: result.runtime,
-      memoryUsage: result.memoryUsage,
-      score: result.score,
-      submittedAt: now,
-      isLocked: true,
-      errorMessage: result.errorMessage,
-      testResults: result.testResults
-    };
-
-    practiceApi.submit({
-      challengeId: activeChallenge.id,
-      sourceCode,
-      programOutput: result.programOutput,
-      compileStatus: result.compileStatus,
-      runtime: result.runtime,
-      memoryUsage: result.memoryUsage,
-      score: result.score,
-      errorMessage: result.errorMessage,
-      testResults: result.testResults
-    }).catch(error => console.warn('Unable to sync practice submission with backend:', error));
-
-    window.setTimeout(() => {
-      const next = { ...submissionDb, [submissionKey]: practiceSubmission };
+    try {
+      const response = await practiceApi.submit({
+        challengeId: activeChallenge.id,
+        sourceCode,
+        programOutput: result.programOutput,
+        compileStatus: result.compileStatus,
+        runtime: result.runtime,
+        memoryUsage: result.memoryUsage,
+        score: result.score,
+        errorMessage: result.errorMessage,
+        testResults: result.testResults
+      });
+      const savedSubmission = mapBackendSubmission(response.data);
+      const next = { ...submissionDb, [submissionKey]: savedSubmission };
       setSubmissionDb(next);
       setStoredJson(SUBMISSIONS_KEY, next);
       setLastResult(result);
@@ -213,11 +214,17 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
         'Final submission saved.',
         `Compile status: ${result.compileStatus}`,
         `Final score: ${result.score}%`,
-        `Submitted: ${formatDateTime(now)}`
+        `Submitted: ${formatDateTime(savedSubmission.submittedAt || now)}`
       ]);
-      onSubmitCompleted(practiceSubmission);
+      onSubmitCompleted(savedSubmission);
+    } catch (error) {
+      setConsoleLogs([
+        'Final submission was not saved.',
+        error instanceof Error ? error.message : 'Unable to sync practice submission with backend.'
+      ]);
+    } finally {
       setIsSubmitting(false);
-    }, 500);
+    }
   };
 
   return (
@@ -229,7 +236,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
             {PRACTICE_CHALLENGES.map((challenge, index) => {
               const lessonChallenge = getPracticeChallengeForLesson(challenge.lessonId);
               const challengeKey = `${currentUser.id || currentUser.userId || currentUser.email}:${challenge.id}`;
-              const done = Boolean(submissionDb[challengeKey]);
+              const done = Boolean(submissionDb[challengeKey]?.isLocked);
               return (
                 <button
                   key={challenge.id}
