@@ -805,9 +805,7 @@ export default function App() {
 
   const handleUpdateVideoProgress = (videoId: string, progress: number) => {
     const userEmail = currentUser?.email || 'student@oophub.edu';
-    const studentProgress = recordVideoProgress(currentUser, videoId, progress);
     void refreshStudentResults();
-    setLeaderboardUsers(prev => mergeCurrentProgressIntoLeaderboard(prev, currentUser, studentProgress, streak));
     setVideoLessons(prev => {
       const next = prev.map(video => {
         if (video.id !== videoId) return video;
@@ -1008,13 +1006,11 @@ export default function App() {
   
   // 1. When student compiles and submits vehicle code
   const handleStudentSubmitCode = (submission: PracticeSubmission) => {
-    const studentProgress = recordPracticeSubmission(currentUser, submission);
     void refreshStudentResults();
     // Increment points & complete lessons count
     const xpAward = Math.max(25, Math.round(submission.score * 1.5));
     setPoints(prev => prev + xpAward);
     setStreak(prev => prev + 1);
-    setCompletedLessonsCount(studentProgress.completedLessons);
 
     // Append new active row inside Instructor queue review pending
     const newSub = practiceSubmissionToPending(submission);
@@ -1022,7 +1018,6 @@ export default function App() {
     setPendingSubmissions(prev => [newSub, ...prev.filter(item => item.id !== newSub.id)]);
 
     // Lift leaderboard rankings score dynamically on the current student row
-    setLeaderboardUsers(prev => mergeCurrentProgressIntoLeaderboard(prev, currentUser, studentProgress, streak + 1));
 
     setRecentStudentGrade({
       grade: submission.score,
@@ -1046,7 +1041,7 @@ export default function App() {
       lessonCompleted: submission.score >= 70,
       codingScore: submission.score,
       codingAttempts: 1,
-      progressPercentage: studentProgress.overallProgress
+      progressPercentage: studentResults?.overallProgress ?? 0
     }));
 
   };
@@ -1059,14 +1054,9 @@ export default function App() {
     passed: boolean;
     attemptNumber: number;
   }) => {
-    const studentProgress = recordQuizAttempt(currentUser, attempt.lessonId, attempt.percentage, attempt.passed);
     void refreshStudentResults();
     if (xpAward > 0) setPoints(prev => prev + xpAward);
     setStreak(prev => prev + 1);
-    setCompletedLessonsCount(studentProgress.completedLessons);
-
-    // Bump user points row in leaderboard ranking
-    setLeaderboardUsers(prev => mergeCurrentProgressIntoLeaderboard(prev, currentUser, studentProgress, streak + 1));
 
     const lesson = OOP_COURSE_LESSONS.find(item => item.id === attempt.lessonId);
     const recommendation = generateRuleBasedRecommendation({
@@ -1078,7 +1068,7 @@ export default function App() {
       videoCompleted: true,
       quizScore: attempt.percentage,
       quizAttempts: attempt.attemptNumber,
-      progressPercentage: studentProgress.overallProgress
+      progressPercentage: studentResults?.overallProgress ?? 0
     });
     publishRecommendation(recommendation);
 
@@ -1643,6 +1633,7 @@ export default function App() {
                 lessons={videoLessons} 
                 onNavigateTo={handleDirectNavigation}
                 onUpdateVideoProgress={handleUpdateVideoProgress}
+                studentResults={studentResults}
               />
             )}
 

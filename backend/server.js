@@ -2040,7 +2040,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         const [course, videos, quizzes, practice, swing, oopTopics, swingTopics] = await Promise.all([
             pool.query(`
                 SELECT COUNT(*)::int AS total_lessons,
-                       COUNT(*) FILTER (WHERE sp.completed AND COALESCE(qa.passed, FALSE) AND COALESCE(ps.score, 0) >= 70)::int AS completed_lessons
+                       COUNT(*) FILTER (WHERE sp.completed AND COALESCE(qa.passed, FALSE) AND COALESCE(ps.score, 0) >= 70 AND COALESCE(ps.compile_status, '') = 'success')::int AS completed_lessons
                 FROM lessons l
                 LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND sp.video_id = l.id
                 LEFT JOIN LATERAL (
@@ -2048,7 +2048,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                   ORDER BY attempt_number DESC, date_completed DESC LIMIT 1
                 ) qa ON TRUE
                 LEFT JOIN LATERAL (
-                  SELECT ps.score FROM practice_submissions ps
+                  SELECT ps.score, ps.compile_status FROM practice_submissions ps
                   JOIN programming_challenges pc ON pc.id = ps.challenge_id
                                     WHERE ps.student_id = $1::text AND pc.lesson_id = l.id
                   ORDER BY ps.submitted_at DESC LIMIT 1
@@ -2072,7 +2072,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             pool.query(`
                 SELECT COUNT(pc.id)::int AS total_practice_activities,
                        COUNT(ps.id)::int AS submitted_practice_activities,
-                      COUNT(ps.id) FILTER (WHERE ps.score >= 70)::int AS completed_practice_activities,
+                      COUNT(ps.id) FILTER (WHERE ps.score >= 70 AND ps.compile_status = 'success')::int AS completed_practice_activities,
                       COALESCE(ROUND(AVG(ps.score)), 0)::int AS average_practice_score
                 FROM programming_challenges pc
                 LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND ps.student_id = $1::text

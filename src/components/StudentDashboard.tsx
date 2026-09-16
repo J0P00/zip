@@ -114,15 +114,20 @@ export default function StudentDashboard({
   const activePractice = getCurrentPracticeChallenge();
   const activeLesson = OOP_COURSE_LESSONS.find(lesson => lesson.id === activePractice.lessonId) || OOP_COURSE_LESSONS[0];
   const activeAssessment = OOP_ASSESSMENTS.find(assessment => assessment.id === activePractice.assessmentId) || OOP_ASSESSMENTS[0];
+  const oopComplete = Boolean(studentResults?.oopComplete);
   const nextLesson = OOP_COURSE_LESSONS.find(lesson => !studentResults?.oopTopics?.find(topic => topic.id === lesson.id)?.lessonCompleted) || OOP_COURSE_LESSONS[OOP_COURSE_LESSONS.length - 1];
   const currentLesson = nextLesson;
-  const authoritativeCurrentTopic = studentResults?.oopTopics?.find(topic => !topic.lessonCompleted)
-    || studentResults?.oopTopics?.find(topic => topic.attempted)
-    || null;
+  const authoritativeCurrentTopic = oopComplete
+    ? null
+    : studentResults?.oopTopics?.find(topic => !topic.lessonCompleted)
+      || studentResults?.oopTopics?.find(topic => topic.attempted)
+      || null;
   const dashboardCurrentLesson = authoritativeCurrentTopic
     ? OOP_COURSE_LESSONS.find(lesson => lesson.id === authoritativeCurrentTopic.id) || currentLesson
     : currentLesson;
-  const dashboardCurrentModuleLabel = `Module ${dashboardCurrentLesson.sequence}: ${dashboardCurrentLesson.title}`;
+  const dashboardCurrentModuleLabel = oopComplete
+    ? 'OOP completed - Java Swing available'
+    : `Module ${dashboardCurrentLesson.sequence}: ${dashboardCurrentLesson.title}`;
   const dashboardPractice = PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === dashboardCurrentLesson.id) || activePractice;
   const dashboardAssessment = OOP_ASSESSMENTS.find(assessment => assessment.lessonId === dashboardCurrentLesson.id) || activeAssessment;
   const currentTopicEvidence = studentResults?.oopTopics?.find(topic => topic.id === dashboardCurrentLesson.id);
@@ -131,9 +136,6 @@ export default function StudentDashboard({
     : null;
   const practiceScore = Number(currentTopicEvidence?.practiceScore || 0);
   const practiceUnlocked = Boolean(currentTopicEvidence?.videoCompleted && currentTopicEvidence?.quizPassed);
-  const currentModuleLabel = `Module ${currentLesson.sequence}: ${currentLesson.title}`;
-  const nextPractice = PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === nextLesson.id) || activePractice;
-  const nextAssessment = OOP_ASSESSMENTS.find(assessment => assessment.lessonId === nextLesson.id) || activeAssessment;
   const performanceIndex = studentResults?.learningScore ?? 0;
   const learningState = studentResults?.learningState ?? 'BEGINNER';
   const learningStateClass = learningState === 'MASTERED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : learningState === 'DEVELOPING' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-sky-100 text-sky-800 border border-sky-200';
@@ -156,20 +158,20 @@ export default function StudentDashboard({
       const previousLesson = lesson?.sequence && lesson.sequence > 1
         ? OOP_COURSE_LESSONS.find(item => item.sequence === lesson.sequence - 1)
         : undefined;
-      const previousAssessment = previousLesson
-        ? OOP_ASSESSMENTS.find(item => item.lessonId === previousLesson.id)
-        : undefined;
       const previousTopic = studentResults?.oopTopics?.find(item => item.id === previousLesson?.id);
       const currentTopic = studentResults?.oopTopics?.find(item => item.id === lesson?.id);
-      const needsPreviousVideo = Boolean(previousLesson && !previousTopic?.videoCompleted);
-      const needsPreviousAssessment = Boolean(previousAssessment && !previousTopic?.quizPassed);
-      const needsCurrentVideo = Boolean(lesson && !currentTopic?.videoCompleted);
-      const isLocked = needsPreviousVideo || needsPreviousAssessment || needsCurrentVideo;
-      const status = attempt && !attempt.quizPassed
-        ? 'Retry'
-        : isLocked
-          ? 'Locked'
-          : 'Ready Now';
+      let status = 'Ready Now';
+      if (attempt && !attempt.quizPassed) {
+        status = 'Retry';
+      } else if (previousLesson && !previousTopic?.lessonCompleted) {
+        status = !previousTopic?.videoCompleted
+          ? `Complete Lesson ${previousLesson.sequence} video`
+          : !previousTopic?.quizPassed
+            ? `Pass Lesson ${previousLesson.sequence} assessment`
+            : `Complete Lesson ${previousLesson.sequence} practice`;
+      } else if (lesson && !currentTopic?.videoCompleted) {
+        status = 'Complete video first';
+      }
 
       return {
         id: assessment.id,

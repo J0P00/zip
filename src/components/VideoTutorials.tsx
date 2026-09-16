@@ -14,15 +14,17 @@ import {
   VolumeX
 } from 'lucide-react';
 import { AuthenticatedUser, StudentSubView, VideoLesson } from '../types';
-import { getStoredJson, OOP_ASSESSMENTS, setStoredJson } from '../data/oopCourse';
+import { OOP_ASSESSMENTS } from '../data/oopCourse';
 import { PRACTICE_CHALLENGES } from '../data/practiceChallenges';
 import { practiceApi, progressApi } from '../services/api';
+import type { StudentResultsData, StudentTopicResult } from '../services/interpretation';
 
 interface VideoTutorialsProps {
   currentUser: AuthenticatedUser;
   lessons: VideoLesson[];
   onNavigateTo: (view: StudentSubView) => void;
   onUpdateVideoProgress: (id: string, progress: number) => void;
+  studentResults?: StudentResultsData | null;
 }
 
 interface WatchRecord {
@@ -36,21 +38,8 @@ interface WatchRecord {
 type WatchDb = Record<string, WatchRecord>;
 type QuizDb = Record<string, { passed: boolean; percentage: number; score: number; total: number; attemptNumber: number; dateCompleted?: string }>;
 
-const WATCH_KEY = 'oophub_oop_video_progress';
-const QUIZ_KEY = 'oophub_oop_quiz_attempts';
-
 const isInvalidLegacyCompletion = (record: Partial<WatchRecord>) =>
   record.completed === true && record.completionPercentage === 100 && record.lastPosition === 900;
-
-const readWatchProgress = (): WatchDb => {
-  const stored = getStoredJson<WatchDb>(WATCH_KEY, {});
-  const cleaned = Object.fromEntries(Object.entries(stored).filter(([, record]) => !isInvalidLegacyCompletion(record)));
-  if (Object.keys(cleaned).length !== Object.keys(stored).length) {
-    setStoredJson(WATCH_KEY, cleaned);
-    localStorage.removeItem(QUIZ_KEY);
-  }
-  return cleaned;
-};
 
 const formatTime = (seconds: number) => {
   if (!Number.isFinite(seconds)) return '00:00';
@@ -61,24 +50,27 @@ const formatTime = (seconds: number) => {
 
 type SubmissionDb = Record<string, { score?: number; compileStatus?: string }>;
 
-const getLessonAccess = (lesson: VideoLesson, allLessons: VideoLesson[], watchDb: WatchDb, quizDb: QuizDb, submissionDb: SubmissionDb, studentKey: string) => {
-  if (lesson.sequence === 1) return 'active';
+const getTopic = (results: StudentResultsData | null | undefined, lessonId: string) =>
+  results?.oopTopics?.find(topic => topic.id === lessonId);
+
+const lessonCompletedFromTopic = (topic?: StudentTopicResult) => Boolean(topic?.lessonCompleted);
+
+const getPrerequisiteMessage = (lesson: VideoLesson, allLessons: VideoLesson[], studentResults?: StudentResultsData | null) => {
+  if (lesson.sequence === 1) return '';
   const previous = allLessons.find(item => item.sequence === lesson.sequence - 1);
-  if (!previous) return 'locked';
-
-  const previousWatch = watchDb[previous.id];
-  const previousAssessment = OOP_ASSESSMENTS.find(item => item.lessonId === previous.id);
-  const previousQuiz = previousAssessment ? quizDb[previousAssessment.id] : undefined;
-  const previousChallenge = PRACTICE_CHALLENGES.find(item => item.lessonId === previous.id);
-  const previousSubmission = previousChallenge ? submissionDb[`${studentKey}:${previousChallenge.id}`] : undefined;
-
-  const previousCompleted = previousWatch?.completed && previousWatch.completionPercentage >= 95
-    && previousQuiz?.passed && previousQuiz.percentage >= 80
-    && (!previousChallenge || (previousSubmission?.compileStatus === 'success' && Number(previousSubmission.score || 0) >= previousChallenge.passingScore));
-  return previousCompleted ? 'active' : 'locked';
+  if (!previous) return 'Complete the previous lesson requirements first.';
+  const previousTopic = getTopic(studentResults, previous.id);
+  if (lessonCompletedFromTopic(previousTopic)) return '';
+  if (!previousTopic?.videoCompleted) return `Complete the ${previous.title} video to continue.`;
+  if (!previousTopic?.quizPassed) {
+    return previousTopic?.quizPercentage !== null && previousTopic?.quizPercentage !== undefined
+      ? `Pass the ${previous.title} assessment with at least 80%.`
+      : `Complete the ${previous.title} assessment to continue.`;
+  }
+  return `Complete the ${previous.title} practice activity.`;
 };
 
-export default function VideoTutorials({ currentUser, lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress }: VideoTutorialsProps) {
+export default function VideoTutorials({ currentUser, lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress, studentResults = null }: VideoTutorialsProps) {
   const [watchDb, setWatchDb] = useState<WatchDb>({});
   const [quizDb, setQuizDb] = useState<QuizDb>({});
   const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
@@ -88,24 +80,17 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     const assessment = OOP_ASSESSMENTS.find(item => item.lessonId === lesson.id);
     const challenge = PRACTICE_CHALLENGES.find(item => item.lessonId === lesson.id);
     const submission = challenge ? submissionDb[`${studentKey}:${challenge.id}`] : undefined;
-    const completed = Boolean(watch?.completed && watch.completionPercentage >= 95 && assessment && quizDb[assessment.id]?.passed && (!challenge || (submission?.compileStatus === 'success' && Number(submission.score || 0) >= challenge.passingScore)));
-    const access = getLessonAccess(lesson, sourceLessons, watchDb, quizDb, submissionDb, studentKey);
-    const previous = sourceLessons.find(item => item.sequence === lesson.sequence - 1);
-    const previousAssessment = previous ? OOP_ASSESSMENTS.find(item => item.lessonId === previous.id) : undefined;
-    const previousChallenge = previous ? PRACTICE_CHALLENGES.find(item => item.lessonId === previous.id) : undefined;
-    const previousSubmission = previousChallenge ? submissionDb[`${studentKey}:${previousChallenge.id}`] : undefined;
-    const previousCompleted = lesson.sequence === 1 || Boolean(
-      previous &&
-      watchDb[previous.id]?.completed && watchDb[previous.id].completionPercentage >= 95 &&
-      previousAssessment && quizDb[previousAssessment.id]?.passed && quizDb[previousAssessment.id].percentage >= 80 &&
-      (!previousChallenge || (previousSubmission?.compileStatus === 'success' && Number(previousSubmission.score || 0) >= previousChallenge.passingScore))
-    );
+    const topic = getTopic(studentResults, lesson.id);
+    const completed = topic
+      ? topic.lessonCompleted
+      : Boolean(watch?.completed && watch.completionPercentage >= 95 && assessment && quizDb[assessment.id]?.passed && (!challenge || (submission?.compileStatus === 'success' && Number(submission.score || 0) >= challenge.passingScore)));
+    const access = getPrerequisiteMessage(lesson, sourceLessons, studentResults) ? 'locked' : 'active';
     return {
       ...lesson,
       status: completed ? 'completed' as const : access as VideoLesson['status'],
-      progressPercent: previousCompleted || completed ? watch?.completionPercentage || 0 : 0
+      progressPercent: access === 'active' || completed ? topic?.videoPercentage ?? watch?.completionPercentage ?? 0 : 0
     };
-  }), [sourceLessons, watchDb, quizDb, submissionDb, studentKey]);
+  }), [sourceLessons, watchDb, quizDb, submissionDb, studentKey, studentResults]);
 
   const firstAvailable = lessons.find(lesson => lesson.status === 'active') || lessons[0];
   const [activeLessonId, setActiveLessonId] = useState(firstAvailable?.id || '');
@@ -121,9 +106,9 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
 
-  const completedLessons = lessons.filter(lesson => watchDb[lesson.id]?.completed).length;
+  const completedLessons = studentResults?.completedLessons ?? lessons.filter(lesson => lesson.status === 'completed').length;
   const passedAssessments = OOP_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
-  const courseProgress = lessons.length ? Math.round(((completedLessons + passedAssessments) / (lessons.length * 2)) * 100) : 0;
+  const courseProgress = studentResults?.overallProgress ?? (lessons.length ? Math.round((completedLessons / lessons.length) * 100) : 0);
 
   useEffect(() => {
     if (!activeLesson && lessons[0]) setActiveLessonId(lessons[0].id);
@@ -215,7 +200,6 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     };
 
     setWatchDb(nextDb);
-    setStoredJson(WATCH_KEY, nextDb);
     progressApi.saveVideoProgress({
       videoId: activeLesson.id,
       lastPosition: position,
@@ -288,7 +272,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
             </span>
             <h2 className="mt-3 text-xl font-extrabold text-slate-900 sm:text-2xl dark:text-white">OOP Fundamentals</h2>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-              {lessons.length} Java OOP lectures loaded from the shared database. Lessons unlock only after video completion and a passed assessment.
+              {lessons.length} Java OOP lectures loaded from the shared database. Lessons unlock only after video, assessment, and practice completion.
             </p>
           </div>
           <div className="w-full rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 sm:min-w-[220px] lg:w-auto">
@@ -426,9 +410,19 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 const isActive = lesson.id === activeLesson.id;
                 const isLocked = lesson.status === 'locked';
                 const progress = lesson.progressPercent || 0;
-                const quiz = OOP_ASSESSMENTS.find(item => item.lessonId === lesson.id);
-                const quizPassed = quiz ? quizDb[quiz.id]?.passed : false;
-                const statusLabel = isLocked ? 'Locked' : quizPassed ? 'Passed' : progress > 0 ? 'In progress' : 'Ready';
+                const topic = getTopic(studentResults, lesson.id);
+                const videoDone = Boolean(topic?.videoCompleted || watchDb[lesson.id]?.completed);
+                const quizPassed = Boolean(topic?.quizPassed);
+                const statusLabel = isLocked
+                  ? 'Locked'
+                  : lesson.status === 'completed'
+                    ? 'Lesson completed'
+                    : quizPassed
+                      ? 'Assessment passed'
+                      : videoDone
+                        ? 'Video completed'
+                        : progress > 0 ? 'In progress' : 'Ready';
+                const lockReason = getPrerequisiteMessage(lesson, lessons, studentResults);
 
                 return (
                   <button
@@ -447,15 +441,15 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                         <h4 className="truncate text-sm font-extrabold text-slate-900 dark:text-white">{lesson.title}</h4>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${isLocked ? 'bg-slate-100 text-slate-500' : quizPassed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${isLocked ? 'bg-slate-100 text-slate-500' : lesson.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : videoDone || quizPassed ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
                           {statusLabel}
                         </span>
-                        {isLocked ? <Lock className="h-4 w-4 text-slate-400" /> : watchDb[lesson.id]?.completed && quizPassed ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <Play className="h-4 w-4 text-slate-500" />}
+                        {isLocked ? <Lock className="h-4 w-4 text-slate-400" /> : lesson.status === 'completed' ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <Play className="h-4 w-4 text-slate-500" />}
                       </div>
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
                       <span>{lesson.duration}</span>
-                      <span>{isLocked ? 'Unavailable' : `${progress}% watched`}</span>
+                      <span>{isLocked ? lockReason : `${progress}% watched`}</span>
                     </div>
                     <div className="mt-2 h-1.5 rounded-full bg-slate-100">
                       <div className="h-full rounded-full bg-emerald-500" style={{ width: `${isLocked ? 0 : progress}%` }} />
@@ -468,7 +462,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
 
           <div className="rounded-xl border border-slate-200 bg-white/80 p-4 text-xs font-semibold leading-6 text-slate-500 shadow-sm backdrop-blur-md sm:rounded-2xl sm:p-5">
             <h3 className="mb-2 text-sm font-extrabold text-slate-900">Unlock Rule</h3>
-            Complete at least 95% of the current video and pass its assessment with 80% or higher. The next lesson unlocks automatically after both are done.
+            Complete at least 95% of the current video, pass its assessment with 80% or higher, and successfully submit the practice activity. The next lesson unlocks only after all three are done.
             {activeQuiz && (
               <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3 font-mono text-[11px] text-slate-600">
                 Current assessment: {activeQuiz.score}/{activeQuiz.total} ({activeQuiz.percentage}%)
