@@ -151,12 +151,12 @@ const toClientNotification = (row) => ({
 const createOrUpdateNotification = async (client, payload) => {
     const existing = await client.query(`
         SELECT id FROM notifications
-        WHERE recipient_user_id = $1
-          AND related_submission_id = $3
+        WHERE recipient_user_id = $1::uuid
+          AND related_submission_id = $3::uuid
           AND (
-            notification_type = $2
+            notification_type = $2::text
             OR (
-              $2 IN ('submission_graded', 'submission_passed', 'remedial_required')
+              $2::text IN ('submission_graded', 'submission_passed', 'remedial_required')
               AND notification_type IN ('submission_graded', 'submission_passed', 'remedial_required')
             )
           )
@@ -183,22 +183,22 @@ const createOrUpdateNotification = async (client, payload) => {
     const result = existing.rowCount
         ? await client.query(`
             UPDATE notifications
-            SET notification_type = $2,
-                title = $3,
-                message = $4,
-                related_practice_id = $6,
-                teacher_id = $7,
-                teacher_name = $8,
-                practice_title = $9,
-                grade = $10,
-                max_grade = $11,
-                feedback = $12,
-                remedial_required = $13,
+            SET notification_type = $2::text,
+                title = $3::text,
+                message = $4::text,
+                related_practice_id = $6::text,
+                teacher_id = $7::uuid,
+                teacher_name = $8::text,
+                practice_title = $9::text,
+                grade = $10::numeric,
+                max_grade = $11::numeric,
+                feedback = $12::text,
+                remedial_required = $13::boolean,
                 metadata = $14::jsonb,
                 is_read = FALSE,
                 read_at = NULL,
                 created_at = NOW()
-            WHERE id = $15
+            WHERE id = $15::uuid
             RETURNING *
         `, [...values, existing.rows[0].id])
         : await client.query(`
@@ -207,7 +207,7 @@ const createOrUpdateNotification = async (client, payload) => {
               related_practice_id, teacher_id, teacher_name, practice_title, grade, max_grade,
               feedback, remedial_required, metadata
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb)
+            VALUES ($1::uuid, $2::text, $3::text, $4::text, $5::uuid, $6::text, $7::uuid, $8::text, $9::text, $10::numeric, $11::numeric, $12::text, $13::boolean, $14::jsonb)
             RETURNING *
         `, values);
 
