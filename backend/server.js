@@ -183,24 +183,38 @@ const createOrUpdateNotification = async (client, payload) => {
     const result = existing.rowCount
         ? await client.query(`
             UPDATE notifications
-            SET notification_type = $2::text,
-                title = $3::text,
-                message = $4::text,
-                related_practice_id = $6::text,
-                teacher_id = $7::uuid,
-                teacher_name = $8::text,
-                practice_title = $9::text,
-                grade = $10::numeric,
-                max_grade = $11::numeric,
-                feedback = $12::text,
-                remedial_required = $13::boolean,
-                metadata = $14::jsonb,
+            SET notification_type = $1::text,
+                title = $2::text,
+                message = $3::text,
+                related_practice_id = $4::text,
+                teacher_id = $5::uuid,
+                teacher_name = $6::text,
+                practice_title = $7::text,
+                grade = $8::numeric,
+                max_grade = $9::numeric,
+                feedback = $10::text,
+                remedial_required = $11::boolean,
+                metadata = $12::jsonb,
                 is_read = FALSE,
                 read_at = NULL,
                 created_at = NOW()
-            WHERE id = $15::uuid
+            WHERE id = $13::uuid
             RETURNING *
-        `, [...values, existing.rows[0].id])
+        `, [
+            payload.type,
+            payload.title,
+            payload.message,
+            payload.relatedPracticeId || null,
+            payload.teacherId || null,
+            payload.teacherName || null,
+            payload.practiceTitle || null,
+            payload.grade ?? null,
+            payload.maxGrade ?? 100,
+            payload.feedback || "",
+            payload.remedialRequired ?? null,
+            JSON.stringify(payload.metadata || {}),
+            existing.rows[0].id
+        ])
         : await client.query(`
             INSERT INTO notifications (
               recipient_user_id, notification_type, title, message, related_submission_id,
