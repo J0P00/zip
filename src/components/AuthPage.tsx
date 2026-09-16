@@ -277,6 +277,15 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     setNotification({ type, message });
   };
 
+  const isDuplicateEmailNotice = Boolean(notification?.message.toLowerCase().includes('email already exists'));
+
+  const switchToSignInFromNotice = () => {
+    setLoginEmail(regEmail.trim());
+    setLoginPassword('');
+    setIsLogin(true);
+    setNotification(null);
+  };
+
   const openTermsModal = (tab: 'terms' | 'privacy' = 'terms', mode: 'registration' | 'reauth' | 'view' = 'registration') => {
     setPublishedPolicy(getPublishedPolicy());
     setTermsInitialTab(tab);
@@ -678,20 +687,48 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                className={`mb-4 flex items-start gap-2 rounded-xl border px-3.5 py-3 text-xs font-semibold ${
+                className={`mb-4 rounded-2xl border p-4 text-sm shadow-sm ${
                   notification.type === 'success'
-                    ? 'border-emerald-100 bg-emerald-50/50 text-emerald-800'
-                    : 'border-rose-100 bg-rose-50/50 text-rose-700'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                    : 'border-rose-200 bg-rose-50 text-rose-900'
                 }`}
-                role="status"
-                aria-live="polite"
+                role={notification.type === 'error' ? 'alert' : 'status'}
+                aria-live={notification.type === 'error' ? 'assertive' : 'polite'}
               >
-                {notification.type === 'success' ? (
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                ) : (
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
-                )}
-                <span>{notification.message}</span>
+                <div className="flex items-start gap-3">
+                  {notification.type === 'success' ? (
+                    <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                  ) : (
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+                  )}
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <p className="break-words text-sm font-bold leading-5">
+                      {notification.message}
+                    </p>
+                    {isDuplicateEmailNotice && (
+                      <button
+                        type="button"
+                        onClick={switchToSignInFromNotice}
+                        className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-rose-700"
+                      >
+                        Sign in with this email
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setNotification(null)}
+                    className={`shrink-0 rounded-lg px-2 py-1 text-sm font-black transition ${
+                      notification.type === 'success'
+                        ? 'text-emerald-700 hover:bg-emerald-100'
+                        : 'text-rose-700 hover:bg-rose-100'
+                    }`}
+                    aria-label="Dismiss notification"
+                  >
+                    x
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
