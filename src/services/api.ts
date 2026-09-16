@@ -1,7 +1,7 @@
 import { AdaptiveRecommendation, AuthenticatedUser, Persona, RankingEntry } from '../types';
 
 export const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://oop-backend-j0oj.onrender.com')
+  (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://oop-backend-new.onrender.com')
     .replace(/\/+$/, '');
 
 const TOKEN_KEY = 'oophub_auth_token';
