@@ -3,20 +3,27 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
+  Check,
   CheckCircle2,
   Code2,
   ExternalLink,
   Eye,
   EyeOff,
   FileText,
+  KeyRound,
   Loader2,
   Lock,
   Mail,
+  Search,
+  Shield,
+  ShieldAlert,
   ShieldCheck,
   User,
   GraduationCap,
   Sparkles,
-  BookOpen
+  BookOpen,
+  HelpCircle,
+  RotateCcw
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { AccountSource, AuthenticatedUser, Persona, UserTermsAgreement } from '../types';
@@ -86,6 +93,44 @@ const demoAccounts: StoredUser[] = [];
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isValidEmail = (value: string) => emailPattern.test(value.trim());
 
+export interface PasswordSecurityCheck {
+  minLength: boolean;
+  hasUpper: boolean;
+  hasLower: boolean;
+  hasNumber: boolean;
+  hasSpecial: boolean;
+}
+
+export const checkPasswordSecurity = (pwd: string): PasswordSecurityCheck => ({
+  minLength: pwd.length >= 8,
+  hasUpper: /[A-Z]/.test(pwd),
+  hasLower: /[a-z]/.test(pwd),
+  hasNumber: /[0-9]/.test(pwd),
+  hasSpecial: /[^A-Za-z0-9]/.test(pwd)
+});
+
+export const isStrongPassword = (pwd: string): boolean => {
+  const check = checkPasswordSecurity(pwd);
+  return check.minLength && check.hasUpper && check.hasLower && check.hasNumber && check.hasSpecial;
+};
+
+export const getPasswordStrengthMeter = (pwd: string) => {
+  if (!pwd) return { score: 0, label: 'None', color: 'bg-slate-200', textClass: 'text-slate-400' };
+  const check = checkPasswordSecurity(pwd);
+  const passed = Object.values(check).filter(Boolean).length;
+
+  if (passed <= 2) {
+    return { score: 1, label: 'Weak', color: 'bg-rose-500', textClass: 'text-rose-600' };
+  }
+  if (passed <= 3) {
+    return { score: 2, label: 'Fair', color: 'bg-amber-500', textClass: 'text-amber-600' };
+  }
+  if (passed === 4) {
+    return { score: 3, label: 'Good', color: 'bg-blue-500', textClass: 'text-blue-600' };
+  }
+  return { score: 4, label: 'Strong', color: 'bg-emerald-500', textClass: 'text-emerald-600' };
+};
+
 const buildUserId = (email: string, role: Persona) => {
   const seed = email
     .trim()
@@ -101,6 +146,14 @@ const readStoredUsers = (): StoredUser[] => {
     return saved ? JSON.parse(saved) : [];
   } catch {
     return [];
+  }
+};
+
+const writeStoredUsers = (users: StoredUser[]) => {
+  try {
+    localStorage.setItem('oophub_users', JSON.stringify(users));
+  } catch {
+    // Local storage fallback
   }
 };
 
@@ -131,18 +184,84 @@ const updateStoredUserTermsMetadata = (user: StoredUser, acceptance: UserTermsAg
         : stored;
     });
 
-    localStorage.setItem('oophub_users', JSON.stringify(nextUsers));
+    writeStoredUsers(nextUsers);
   } catch {
     // Consent audit still lives in the agreement table if profile metadata cannot be mirrored.
   }
 };
 
+/** Reusable visual password strength meter and interactive checklist */
+function PasswordStrengthPanel({ password }: { password: string }) {
+  const check = checkPasswordSecurity(password);
+  const strength = getPasswordStrengthMeter(password);
+
+  if (!password) return null;
+
+  return (
+    <div className="mt-2.5 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-xs space-y-2.5">
+      <div className="flex items-center justify-between">
+        <span className="font-bold text-slate-600">Password Strength:</span>
+        <span className={`font-black uppercase tracking-wider text-[10px] ${strength.textClass}`}>
+          {strength.label}
+        </span>
+      </div>
+
+      {/* 4-bar indicator */}
+      <div className="grid grid-cols-4 gap-1.5 h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+        <div className={`h-full transition-all duration-300 ${strength.score >= 1 ? strength.color : 'bg-transparent'}`} />
+        <div className={`h-full transition-all duration-300 ${strength.score >= 2 ? strength.color : 'bg-transparent'}`} />
+        <div className={`h-full transition-all duration-300 ${strength.score >= 3 ? strength.color : 'bg-transparent'}`} />
+        <div className={`h-full transition-all duration-300 ${strength.score >= 4 ? strength.color : 'bg-transparent'}`} />
+      </div>
+
+      {/* Criteria checklist */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 text-[11px]">
+        <div className={`flex items-center gap-1.5 font-medium transition-colors ${check.minLength ? 'text-emerald-700 font-bold' : 'text-slate-500'}`}>
+          <div className={`flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] ${check.minLength ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'}`}>
+            ✓
+          </div>
+          <span>At least 8 characters</span>
+        </div>
+        <div className={`flex items-center gap-1.5 font-medium transition-colors ${check.hasUpper ? 'text-emerald-700 font-bold' : 'text-slate-500'}`}>
+          <div className={`flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] ${check.hasUpper ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'}`}>
+            ✓
+          </div>
+          <span>1 uppercase letter (A-Z)</span>
+        </div>
+        <div className={`flex items-center gap-1.5 font-medium transition-colors ${check.hasLower ? 'text-emerald-700 font-bold' : 'text-slate-500'}`}>
+          <div className={`flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] ${check.hasLower ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'}`}>
+            ✓
+          </div>
+          <span>1 lowercase letter (a-z)</span>
+        </div>
+        <div className={`flex items-center gap-1.5 font-medium transition-colors ${check.hasNumber ? 'text-emerald-700 font-bold' : 'text-slate-500'}`}>
+          <div className={`flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] ${check.hasNumber ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'}`}>
+            ✓
+          </div>
+          <span>1 numeric digit (0-9)</span>
+        </div>
+        <div className={`flex items-center gap-1.5 font-medium transition-colors ${check.hasSpecial ? 'text-emerald-700 font-bold' : 'text-slate-500'}`}>
+          <div className={`flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] ${check.hasSpecial ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'}`}>
+            ✓
+          </div>
+          <span>1 special symbol (!@#$...)</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthPageProps) {
   const rememberedEmail = localStorage.getItem('oophub_remembered_email') || '';
   const [isLogin, setIsLogin] = useState(initialMode === 'login');
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [notification, setNotification] = useState<Notice>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Independent password visibility states
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
   const [publishedPolicy, setPublishedPolicy] = useState(() => getPublishedPolicy());
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
   const [termsModalMode, setTermsModalMode] = useState<'registration' | 'reauth' | 'view'>('registration');
@@ -188,6 +307,32 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
   const [isRegSuccess, setIsRegSuccess] = useState(false);
   const [countdown, setCountdown] = useState(3);
 
+  // Forgot Password / Account Recovery States
+  const [forgotRecoveryTab, setForgotRecoveryTab] = useState<'reset' | 'lookup'>('reset');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotEmailVerified, setForgotEmailVerified] = useState(false);
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
+  const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
+  const [showForgotConfirmPassword, setShowForgotConfirmPassword] = useState(false);
+  const [forgotTouched, setForgotTouched] = useState({
+    email: false,
+    password: false,
+    confirmPassword: false,
+    lookup: false
+  });
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+
+  // Account Lookup States
+  const [lookupQuery, setLookupQuery] = useState('');
+  const [lookupResult, setLookupResult] = useState<{
+    name: string;
+    email: string;
+    role: string;
+    studentNumber?: string;
+    employeeId?: string;
+  } | null>(null);
+
   // Auto redirect countdown effect
   useEffect(() => {
     if (!isRegSuccess) return;
@@ -223,8 +368,9 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
   // Registration Validations
   const isRegUsernameValid = regUsername.trim().length >= 3;
   const isRegEmailValid = isValidEmail(regEmail);
-  const isRegPasswordValid = regPassword.length >= 6;
-  const isRegConfirmPasswordValid = regConfirmPassword.length > 0 && regConfirmPassword === regPassword;
+  const isRegPasswordStrong = isStrongPassword(regPassword);
+  const isRegConfirmPasswordValid =
+    regConfirmPassword.length > 0 && regConfirmPassword === regPassword;
   const isRegSectionValid = regRole === 'student' ? regSection.trim().length > 0 : true;
   const isRegStudentNumberValid = regRole === 'student' ? regStudentNumber.trim().length > 0 : true;
   const isRegTeacherIdValid = regRole === 'teacher' ? regTeacherId.trim().length > 0 : true;
@@ -238,12 +384,12 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       ? 'Valid email address is required.'
       : '';
   const registerPasswordError =
-    registerTouched.password && !isRegPasswordValid
-      ? 'Password must be at least 6 characters.'
+    registerTouched.password && !isRegPasswordStrong
+      ? 'Password must meet all strong security criteria below.'
       : '';
   const registerConfirmPasswordError =
     registerTouched.confirmPassword && !isRegConfirmPasswordValid
-      ? 'Passwords do not match.'
+      ? regConfirmPassword ? 'Passwords do not match.' : 'Please confirm your password.'
       : '';
   const registerSectionError =
     regRole === 'student' && registerTouched.section && !isRegSectionValid
@@ -265,13 +411,21 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
   const canRegisterDetails =
     isRegUsernameValid &&
     isRegEmailValid &&
-    isRegPasswordValid &&
+    isRegPasswordStrong &&
     isRegConfirmPasswordValid &&
     isRegSectionValid &&
     isRegStudentNumberValid &&
     isRegTeacherIdValid;
 
   const canRegister = canRegisterDetails && termsAccepted && !isSubmitting;
+
+  // Forgot password validations
+  const isForgotEmailValid = isValidEmail(forgotEmail);
+  const isForgotNewPasswordStrong = isStrongPassword(forgotNewPassword);
+  const isForgotConfirmPasswordValid =
+    forgotConfirmPassword.length > 0 && forgotConfirmPassword === forgotNewPassword;
+  const canResetPassword =
+    forgotEmailVerified && isForgotNewPasswordStrong && isForgotConfirmPasswordValid && !isSubmitting;
 
   const showNotice = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -283,6 +437,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     setLoginEmail(regEmail.trim());
     setLoginPassword('');
     setIsLogin(true);
+    setIsForgotPassword(false);
     setNotification(null);
   };
 
@@ -499,7 +654,13 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     }
 
     if (!canRegisterDetails) {
-      showNotice('error', 'Complete the required account details.');
+      if (!isRegPasswordStrong) {
+        showNotice('error', 'Please make sure your password is strong and meets all security criteria.');
+      } else if (!isRegConfirmPasswordValid) {
+        showNotice('error', 'Passwords do not match. Please re-enter.');
+      } else {
+        showNotice('error', 'Complete the required account details.');
+      }
       return;
     }
 
@@ -584,7 +745,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
 
         const existingUsers = readStoredUsers();
         existingUsers.push(newLocalUser);
-        localStorage.setItem('oophub_users', JSON.stringify(existingUsers));
+        writeStoredUsers(existingUsers);
 
         setLoginEmail(newLocalUser.email);
         setLoginPassword('');
@@ -599,8 +760,145 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     }
   };
 
+  // Verify Email for Password Reset
+  const handleVerifyForgotEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotTouched(prev => ({ ...prev, email: true }));
+
+    if (!isForgotEmailValid) {
+      showNotice('error', 'Please enter a valid email address.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const normalized = forgotEmail.trim().toLowerCase();
+
+    try {
+      // Try backend first
+      await authApi.forgotPassword(normalized);
+      setForgotEmailVerified(true);
+      setIsSubmitting(false);
+      showNotice('success', 'Email verified! Please enter your new strong password below.');
+    } catch (err) {
+      // Check local storage accounts
+      const localAccount = findExistingUserByEmail(normalized);
+      if (localAccount) {
+        setForgotEmailVerified(true);
+        setIsSubmitting(false);
+        showNotice('success', 'Account identified! Please set your new strong password below.');
+        return;
+      }
+
+      setIsSubmitting(false);
+      showNotice('error', err instanceof Error ? err.message : 'No registered account found with this email.');
+    }
+  };
+
+  // Submit Password Reset
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotTouched(prev => ({ ...prev, password: true, confirmPassword: true }));
+
+    if (!isForgotNewPasswordStrong) {
+      showNotice('error', 'Your new password must satisfy all strong password security requirements.');
+      return;
+    }
+
+    if (forgotNewPassword !== forgotConfirmPassword) {
+      showNotice('error', 'New passwords do not match. Please verify.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const normalized = forgotEmail.trim().toLowerCase();
+
+    try {
+      // Try backend update
+      await authApi.resetPassword(normalized, forgotNewPassword);
+    } catch {
+      // Backend may be offline in dev, continue to update local users
+    }
+
+    // Update local storage record if exists
+    try {
+      const usersList = readStoredUsers();
+      const updated = usersList.map(u => {
+        if (u.email.toLowerCase() === normalized) {
+          return { ...u, password: forgotNewPassword };
+        }
+        return u;
+      });
+      writeStoredUsers(updated);
+    } catch {}
+
+    setIsSubmitting(false);
+    setForgotSuccess(true);
+    setLoginEmail(normalized);
+    setLoginPassword('');
+    showNotice('success', 'Your password has been successfully reset! You can now sign in.');
+  };
+
+  // Handle Account Lookup
+  const handleAccountLookupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotTouched(prev => ({ ...prev, lookup: true }));
+
+    const query = lookupQuery.trim();
+    if (!query) {
+      showNotice('error', 'Enter your Student Number, Teacher ID, or Username.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setLookupResult(null);
+
+    try {
+      // Try backend endpoint
+      const res = await authApi.lookupAccount(query);
+      if (res.user) {
+        setLookupResult(res.user);
+        setIsSubmitting(false);
+        showNotice('success', 'Account located!');
+        return;
+      }
+    } catch {}
+
+    // Check local accounts
+    const localUsers = readStoredUsers();
+    const queryLower = query.toLowerCase();
+    const found = localUsers.find(
+      u =>
+        u.name.toLowerCase() === queryLower ||
+        (u.studentNumber && u.studentNumber.toLowerCase() === queryLower) ||
+        (u.employeeId && u.employeeId.toLowerCase() === queryLower) ||
+        u.email.toLowerCase() === queryLower
+    );
+
+    if (found) {
+      const [uPart, domain] = found.email.split('@');
+      const maskedEmail =
+        uPart.length <= 2
+          ? `${uPart[0]}*@${domain}`
+          : `${uPart[0]}${'*'.repeat(Math.min(uPart.length - 2, 6))}${uPart.slice(-1)}@${domain}`;
+
+      setLookupResult({
+        name: found.name,
+        email: maskedEmail,
+        role: found.role,
+        studentNumber: found.studentNumber,
+        employeeId: found.employeeId
+      });
+      setIsSubmitting(false);
+      showNotice('success', 'Account located from system records!');
+      return;
+    }
+
+    setIsSubmitting(false);
+    showNotice('error', 'No matching account found with the provided details. Please verify and try again.');
+  };
+
   const inputBase =
-    'w-full rounded-xl border bg-white px-10 py-2.5 text-sm text-slate-905 outline-none transition-all placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 shadow-xs';
+    'w-full rounded-xl border bg-white px-10 py-2.5 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 shadow-xs';
   const inputNormal = 'border-slate-200 hover:border-slate-300';
   const inputError = 'border-rose-350 focus:border-rose-500 focus:ring-rose-100/50';
 
@@ -641,43 +939,49 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
           {/* Header */}
           <div className="flex flex-col items-center text-center mb-6">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-sm mb-3">
-              <GraduationCap className="h-6 w-6" />
+              {isForgotPassword ? <KeyRound className="h-6 w-6" /> : <GraduationCap className="h-6 w-6" />}
             </div>
-            <h1 className="text-xl font-black tracking-tight text-slate-900">OOP Pedagogical Hub</h1>
-            <p className="text-[10px] font-bold text-emerald-700/85 tracking-widest uppercase mt-0.5">Programming LMS Workspace</p>
+            <h1 className="text-xl font-black tracking-tight text-slate-900">
+              {isForgotPassword ? 'Account Recovery' : 'OOP Pedagogical Hub'}
+            </h1>
+            <p className="text-[10px] font-bold text-emerald-700/85 tracking-widest uppercase mt-0.5">
+              {isForgotPassword ? 'Password & Credentials Assistance' : 'Programming LMS Workspace'}
+            </p>
           </div>
 
-          {/* Mode Switcher */}
-          <div className="mb-6 flex rounded-full bg-slate-100 p-1 border border-slate-200/50" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={isLogin}
-              onClick={() => {
-                setIsLogin(true);
-                setNotification(null);
-              }}
-              className={`min-h-9 flex-1 rounded-full px-4 text-xs font-bold transition-all focus:outline-none cursor-pointer ${
-                isLogin ? 'bg-white text-slate-900 shadow-xs border border-slate-200/20' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!isLogin}
-              onClick={() => {
-                setIsLogin(false);
-                setNotification(null);
-              }}
-              className={`min-h-9 flex-1 rounded-full px-4 text-xs font-bold transition-all focus:outline-none cursor-pointer ${
-                !isLogin ? 'bg-white text-slate-900 shadow-xs border border-slate-200/20' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Create Account
-            </button>
-          </div>
+          {/* Mode Switcher (When not in forgot password) */}
+          {!isForgotPassword && (
+            <div className="mb-6 flex rounded-full bg-slate-100 p-1 border border-slate-200/50" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={isLogin}
+                onClick={() => {
+                  setIsLogin(true);
+                  setNotification(null);
+                }}
+                className={`min-h-9 flex-1 rounded-full px-4 text-xs font-bold transition-all focus:outline-none cursor-pointer ${
+                  isLogin ? 'bg-white text-slate-900 shadow-xs border border-slate-200/20' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!isLogin}
+                onClick={() => {
+                  setIsLogin(false);
+                  setNotification(null);
+                }}
+                className={`min-h-9 flex-1 rounded-full px-4 text-xs font-bold transition-all focus:outline-none cursor-pointer ${
+                  !isLogin ? 'bg-white text-slate-900 shadow-xs border border-slate-200/20' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
+          )}
 
           {/* Notification Banner */}
           <AnimatePresence mode="wait">
@@ -709,7 +1013,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                       <button
                         type="button"
                         onClick={switchToSignInFromNotice}
-                        className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-rose-700"
+                        className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-rose-700 cursor-pointer"
                       >
                         Sign in with this email
                         <ArrowRight className="h-3.5 w-3.5" />
@@ -719,14 +1023,14 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                   <button
                     type="button"
                     onClick={() => setNotification(null)}
-                    className={`shrink-0 rounded-lg px-2 py-1 text-sm font-black transition ${
+                    className={`shrink-0 rounded-lg px-2 py-1 text-sm font-black transition cursor-pointer ${
                       notification.type === 'success'
                         ? 'text-emerald-700 hover:bg-emerald-100'
                         : 'text-rose-700 hover:bg-rose-100'
                     }`}
                     aria-label="Dismiss notification"
                   >
-                    x
+                    ✕
                   </button>
                 </div>
               </motion.div>
@@ -735,7 +1039,326 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
 
           {/* Forms switcher */}
           <AnimatePresence mode="wait">
-            {isRegSuccess ? (
+            {isForgotPassword ? (
+              /* Forgot Password / Account Recovery View */
+              <motion.div
+                key="forgot-password-view"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-5"
+              >
+                {/* Forgot Sub-tab selector */}
+                <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200/50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotRecoveryTab('reset');
+                      setNotification(null);
+                    }}
+                    className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      forgotRecoveryTab === 'reset'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Reset Password
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotRecoveryTab('lookup');
+                      setNotification(null);
+                    }}
+                    className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      forgotRecoveryTab === 'lookup'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Forgot Email / ID
+                  </button>
+                </div>
+
+                {forgotSuccess ? (
+                  /* Success State after Password Reset */
+                  <div className="space-y-5 text-center py-4">
+                    <div className="mx-auto w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100 shadow-sm">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-base font-bold text-slate-900">Password Updated Successfully!</h3>
+                      <p className="text-xs text-slate-500">
+                        You can now sign in to your OOP Pedagogical Hub account with your new secure password.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsForgotPassword(false);
+                        setIsLogin(true);
+                        setForgotSuccess(false);
+                        setForgotEmailVerified(false);
+                        setForgotNewPassword('');
+                        setForgotConfirmPassword('');
+                        setNotification(null);
+                      }}
+                      className="w-full flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-sm font-extrabold text-white transition-all shadow-xs cursor-pointer"
+                    >
+                      Sign In with New Password
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : forgotRecoveryTab === 'reset' ? (
+                  /* Tab 1: Reset Password via Email */
+                  <div className="space-y-4 text-left">
+                    {!forgotEmailVerified ? (
+                      /* Step 1: Verify Email */
+                      <form onSubmit={handleVerifyForgotEmail} className="space-y-4" noValidate>
+                        <div className="space-y-1">
+                          <label htmlFor="forgot-email" className="text-xs font-bold text-slate-700">
+                            Registered Email Address
+                          </label>
+                          <div className="relative">
+                            <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                              id="forgot-email"
+                              type="email"
+                              value={forgotEmail}
+                              onChange={e => setForgotEmail(e.target.value)}
+                              onBlur={() => setForgotTouched(prev => ({ ...prev, email: true }))}
+                              placeholder="Enter your registered email"
+                              className={`${inputBase} ${
+                                forgotTouched.email && !isForgotEmailValid ? inputError : inputNormal
+                              }`}
+                              aria-label="Registered email address"
+                            />
+                          </div>
+                          {forgotTouched.email && !isForgotEmailValid && (
+                            <p className="text-xs font-semibold text-rose-600 mt-1 flex items-center gap-1">
+                              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                              Please enter a valid email address.
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={!isForgotEmailValid || isSubmitting}
+                          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 transition-all text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 cursor-pointer"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Verifying Account...
+                            </>
+                          ) : (
+                            <>
+                              Verify & Continue
+                              <ArrowRight className="h-4 w-4" />
+                            </>
+                          )}
+                        </button>
+                      </form>
+                    ) : (
+                      /* Step 2: Set New Strong Password */
+                      <form onSubmit={handleResetPasswordSubmit} className="space-y-4" noValidate>
+                        <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200/70 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2 text-emerald-800 font-semibold">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                            <span className="truncate max-w-[240px] font-mono">{forgotEmail}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setForgotEmailVerified(false);
+                              setForgotNewPassword('');
+                              setForgotConfirmPassword('');
+                            }}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                          >
+                            Change
+                          </button>
+                        </div>
+
+                        {/* New Password */}
+                        <div className="space-y-1">
+                          <label htmlFor="forgot-new-password" className="text-xs font-bold text-slate-700">
+                            New Strong Password
+                          </label>
+                          <div className="relative">
+                            <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                              id="forgot-new-password"
+                              type={showForgotNewPassword ? 'text' : 'password'}
+                              value={forgotNewPassword}
+                              onChange={e => setForgotNewPassword(e.target.value)}
+                              onBlur={() => setForgotTouched(prev => ({ ...prev, password: true }))}
+                              placeholder="Create strong password"
+                              className={`${inputBase} pr-12 ${
+                                forgotTouched.password && !isForgotNewPasswordStrong ? inputError : inputNormal
+                              }`}
+                              aria-label="New Password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowForgotNewPassword(prev => !prev)}
+                              className="absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 focus:outline-none cursor-pointer"
+                              aria-label={showForgotNewPassword ? 'Hide password' : 'Show password'}
+                            >
+                              {showForgotNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                          <PasswordStrengthPanel password={forgotNewPassword} />
+                        </div>
+
+                        {/* Confirm New Password with Eye Icon */}
+                        <div className="space-y-1">
+                          <label htmlFor="forgot-confirm-password" className="text-xs font-bold text-slate-700">
+                            Confirm New Password
+                          </label>
+                          <div className="relative">
+                            <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                              id="forgot-confirm-password"
+                              type={showForgotConfirmPassword ? 'text' : 'password'}
+                              value={forgotConfirmPassword}
+                              onChange={e => setForgotConfirmPassword(e.target.value)}
+                              onBlur={() => setForgotTouched(prev => ({ ...prev, confirmPassword: true }))}
+                              placeholder="Confirm new password"
+                              className={`${inputBase} pr-12 ${
+                                forgotTouched.confirmPassword && !isForgotConfirmPasswordValid ? inputError : inputNormal
+                              }`}
+                              aria-label="Confirm New Password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowForgotConfirmPassword(prev => !prev)}
+                              className="absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 focus:outline-none cursor-pointer"
+                              aria-label={showForgotConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                            >
+                              {showForgotConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                          {forgotTouched.confirmPassword && !isForgotConfirmPasswordValid && (
+                            <p className="text-xs font-semibold text-rose-600 mt-1 flex items-center gap-1">
+                              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                              {forgotConfirmPassword ? 'Passwords do not match.' : 'Please confirm your new password.'}
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={!canResetPassword}
+                          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 transition-all text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 mt-4 cursor-pointer"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Updating Password...
+                            </>
+                          ) : (
+                            <>
+                              Update & Save Password
+                              <ArrowRight className="h-4 w-4" />
+                            </>
+                          )}
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                ) : (
+                  /* Tab 2: Account Lookup by Student Number / Employee ID / Username */
+                  <form onSubmit={handleAccountLookupSubmit} className="space-y-4 text-left" noValidate>
+                    <div className="space-y-1">
+                      <label htmlFor="lookup-query" className="text-xs font-bold text-slate-700">
+                        Student No. / Employee ID / Username
+                      </label>
+                      <div className="relative">
+                        <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                          id="lookup-query"
+                          type="text"
+                          value={lookupQuery}
+                          onChange={e => setLookupQuery(e.target.value)}
+                          placeholder="e.g. 2024-0012, T-0912, or Full Name"
+                          className={`${inputBase} ${inputNormal}`}
+                          aria-label="Student number, Employee ID, or Username"
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-400 pt-0.5">
+                        We will search our database to retrieve your registered account email.
+                      </p>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={!lookupQuery.trim() || isSubmitting}
+                      className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 transition-all text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 cursor-pointer"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Searching...
+                        </>
+                      ) : (
+                        <>
+                          Find Account
+                          <Search className="h-4 w-4" />
+                        </>
+                      )}
+                    </button>
+
+                    {lookupResult && (
+                      <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/60 space-y-2 mt-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-slate-800">{lookupResult.name}</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                            {lookupResult.role}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600">
+                          <span className="font-semibold text-slate-500">Registered Email: </span>
+                          <span className="font-mono font-bold text-slate-900">{lookupResult.email}</span>
+                        </div>
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setForgotRecoveryTab('reset');
+                              setForgotEmail(lookupResult.email.includes('*') ? '' : lookupResult.email);
+                              setNotification(null);
+                            }}
+                            className="text-xs font-bold text-emerald-700 hover:text-emerald-800 underline cursor-pointer"
+                          >
+                            Proceed to Reset Password →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </form>
+                )}
+
+                {/* Back to Sign In Link */}
+                <div className="pt-2 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsForgotPassword(false);
+                      setIsLogin(true);
+                      setNotification(null);
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition focus:outline-none cursor-pointer"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back to Sign In
+                  </button>
+                </div>
+              </motion.div>
+            ) : isRegSuccess ? (
+              /* Success Screen after Registration */
               <motion.div
                 key="success"
                 initial={{ opacity: 0, scale: 0.96 }}
@@ -748,8 +1371,8 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                 </div>
                 <div className="space-y-1.5">
                   <h2 className="text-xl font-bold text-slate-900">Account Created!</h2>
-                  <p className="text-xs text-slate-550 max-w-xs mx-auto leading-relaxed">
-                    Welcome to the OOP Pedagogical Hub. Your role-based workspace has been initialized.
+                  <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">
+                    Welcome to the OOP Pedagogical Hub. Your secure role-based workspace has been initialized.
                   </p>
                 </div>
                 <div className="py-3 px-5 bg-slate-50 rounded-xl border border-slate-100 inline-block">
@@ -767,6 +1390,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                 </div>
               </motion.div>
             ) : isLogin ? (
+              /* Sign In Form */
               <motion.div
                 key="login"
                 initial={{ opacity: 0, y: 10 }}
@@ -851,11 +1475,23 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                         type="checkbox"
                         checked={rememberMe}
                         onChange={e => setRememberMe(e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                         aria-label="Remember me"
                       />
                       Remember Me
                     </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsForgotPassword(true);
+                        setForgotEmail(loginEmail.trim());
+                        setNotification(null);
+                      }}
+                      className="font-bold text-emerald-600 hover:text-emerald-700 hover:underline transition focus:outline-none cursor-pointer"
+                    >
+                      Forgot Password?
+                    </button>
                   </div>
 
                   <button
@@ -867,7 +1503,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                     {isSubmitting ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Signing In
+                        Signing In...
                       </>
                     ) : (
                       <>
@@ -893,6 +1529,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                 </form>
               </motion.div>
             ) : (
+              /* Create Account Form */
               <motion.form
                 key="register"
                 initial={{ opacity: 0, y: 10 }}
@@ -1001,6 +1638,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                       )}
                     </div>
 
+                    {/* Password Field with Eye Toggle & Real-time Security Checklist */}
                     <div className="space-y-1 text-left">
                       <label htmlFor="reg-password" className="text-xs font-bold text-slate-700">
                         Password
@@ -1026,6 +1664,10 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
+
+                      {/* Password Security Strength Checklist & Progress Meter */}
+                      <PasswordStrengthPanel password={regPassword} />
+
                       {registerPasswordError && (
                         <p className="text-xs font-semibold text-rose-600 mt-1 flex items-center gap-1">
                           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
@@ -1034,6 +1676,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                       )}
                     </div>
 
+                    {/* Confirm Password Field with Dedicated Eye Toggle */}
                     <div className="space-y-1 text-left">
                       <label htmlFor="reg-confirm-password" className="text-xs font-bold text-slate-700">
                         Confirm Password
@@ -1042,7 +1685,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                         <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
                           id="reg-confirm-password"
-                          type={showPassword ? 'text' : 'password'}
+                          type={showConfirmPassword ? 'text' : 'password'}
                           value={regConfirmPassword}
                           onBlur={() => setRegisterTouched(prev => ({ ...prev, confirmPassword: true }))}
                           onChange={e => setRegConfirmPassword(e.target.value)}
@@ -1050,6 +1693,14 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
                           className={`${inputBase} pr-12 ${registerConfirmPasswordError ? inputError : inputNormal}`}
                           aria-label="Confirm Password"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(prev => !prev)}
+                          className="absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 focus:outline-none cursor-pointer"
+                          aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                        >
+                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
                       </div>
                       {registerConfirmPasswordError && (
                         <p className="text-xs font-semibold text-rose-600 mt-1 flex items-center gap-1">

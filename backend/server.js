@@ -1612,6 +1612,16 @@ app.get("/api/test", async (_req, res) => {
     }
 });
 
+const isStrongPassword = (pwd) => {
+    if (!pwd || typeof pwd !== "string") return false;
+    const hasMinLength = pwd.length >= 8;
+    const hasUpper = /[A-Z]/.test(pwd);
+    const hasLower = /[a-z]/.test(pwd);
+    const hasNumber = /[0-9]/.test(pwd);
+    const hasSpecial = /[^A-Za-z0-9]/.test(pwd);
+    return hasMinLength && hasUpper && hasLower && hasNumber && hasSpecial;
+};
+
 app.post("/api/auth/register", async (req, res, next) => {
     const client = await pool.connect();
     try {
@@ -1637,8 +1647,11 @@ app.post("/api/auth/register", async (req, res, next) => {
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
             return res.status(400).json({ success: false, message: "A valid email address is required." });
         }
-        if (!password || String(password).length < 6) {
-            return res.status(400).json({ success: false, message: "Password must be at least 6 characters." });
+        if (!password || !isStrongPassword(password)) {
+            return res.status(400).json({
+                success: false,
+                message: "Password must be strong: at least 8 characters long and contain uppercase, lowercase, a number, and a special character."
+            });
         }
         if (!["student", "teacher", "admin"].includes(role)) {
             return res.status(400).json({ success: false, message: "Role must be student, teacher, or admin." });
@@ -1708,6 +1721,93 @@ app.post("/api/auth/login", async (req, res, next) => {
 
         const token = signToken(user);
         res.json({ success: true, message: "Login successful.", token, user: toClientUser(user) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/auth/forgot-password", async (req, res, next) => {
+    try {
+        const { email } = req.body || {};
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+            return res.status(400).json({ success: false, message: "Valid email address is required.", exists: false });
+        }
+        const user = await findUserByEmail(email);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "No account found with this email address.", exists: false });
+        }
+        return res.json({ success: true, message: "Account verified. You can now reset your password.", exists: true });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/auth/reset-password", async (req, res, next) => {
+    try {
+        const { email, newPassword } = req.body || {};
+        if (!email || !newPassword) {
+            return res.status(400).json({ success: false, message: "Email and new password are required." });
+        }
+        if (!isStrongPassword(newPassword)) {
+            return res.status(400).json({
+                success: false,
+                message: "New password must be strong: at least 8 characters long and contain uppercase, lowercase, a number, and a special character."
+            });
+        }
+        const user = await findUserByEmail(email);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Account not found." });
+        }
+
+        const passwordHash = await bcrypt.hash(newPassword, 12);
+        await pool.query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [passwordHash, user.id]);
+        return res.json({ success: true, message: "Password has been successfully updated. You can now sign in." });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/auth/lookup-account", async (req, res, next) => {
+    try {
+        const { identifier } = req.body || {};
+        const term = String(identifier || "").trim().toLowerCase();
+        if (!term) {
+            return res.status(400).json({ success: false, message: "Please provide a username, student number, or teacher ID." });
+        }
+
+        const result = await pool.query(`
+            SELECT u.name, u.email, u.role, s.student_number, t.employee_id
+            FROM users u
+            LEFT JOIN students s ON s.user_id = u.id
+            LEFT JOIN teachers t ON t.user_id = u.id
+            WHERE LOWER(u.email) = $1
+               OR LOWER(u.name) = $1
+               OR LOWER(COALESCE(s.student_number, '')) = $1
+               OR LOWER(COALESCE(t.employee_id, '')) = $1
+            LIMIT 1
+        `, [term]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ success: false, message: "No matching account found with the provided details." });
+        }
+
+        const row = result.rows[0];
+        const [userPart, domain] = row.email.split("@");
+        const maskedEmail = userPart.length <= 2
+            ? `${userPart[0]}*@${domain}`
+            : `${userPart[0]}${"*".repeat(Math.min(userPart.length - 2, 6))}${userPart.slice(-1)}@${domain}`;
+
+        return res.json({
+            success: true,
+            message: "Account found.",
+            user: {
+                name: row.name,
+                email: maskedEmail,
+                role: row.role,
+                studentNumber: row.student_number,
+                employeeId: row.employee_id
+            }
+        });
     } catch (error) {
         next(error);
     }

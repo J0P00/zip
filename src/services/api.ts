@@ -70,6 +70,21 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify({ email, password })
     }),
+  forgotPassword: (email: string) =>
+    apiRequest<{ success: boolean; message: string; exists: boolean }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    }),
+  resetPassword: (email: string, newPassword: string) =>
+    apiRequest<{ success: boolean; message: string }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, newPassword })
+    }),
+  lookupAccount: (identifier: string) =>
+    apiRequest<{ success: boolean; message: string; user?: { name: string; email: string; role: string; studentNumber?: string; employeeId?: string } }>('/api/auth/lookup-account', {
+      method: 'POST',
+      body: JSON.stringify({ identifier })
+    }),
   me: (token?: string) => apiRequest<{ success: boolean; user: AuthenticatedUser }>('/api/auth/me', { token })
 };
 
