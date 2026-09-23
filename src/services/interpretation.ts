@@ -1,4 +1,14 @@
 export interface StudentResultsData {
+  studentInfo?: {
+    id: string;
+    userId?: string;
+    name: string;
+    email: string;
+    section?: string;
+    course?: string;
+    yearLevel?: string;
+    studentNumber?: string;
+  };
   overallProgress: number;
   completedLessons: number;
   totalLessons: number;

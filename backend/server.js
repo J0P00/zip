@@ -2352,16 +2352,28 @@ app.get("/api/lesson-access/:lessonId", requireAuth, requireRole(["student"]), a
 
 app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", "admin", "student"]), async (req, res, next) => {
     try {
-        if (req.authUser.role === "student" && req.authUser.id !== req.params.studentId) {
+        const studentId = req.params.studentId;
+        const identity = await pool.query(`
+            SELECT u.id, u.user_id, u.name, u.email, u.role,
+                   s.student_number, s.course, s.year_level, s.section, s.program_status
+            FROM users u
+            LEFT JOIN students s ON s.user_id = u.id
+            WHERE u.id::text = $1 OR u.user_id = $1 OR LOWER(u.email) = LOWER($1)
+            LIMIT 1
+        `, [studentId]);
+
+        if (!identity.rowCount) return res.status(404).json({ success: false, message: "Student not found." });
+        const targetUser = identity.rows[0];
+
+        if (targetUser.role !== "student") {
+            return res.status(404).json({ success: false, message: "Student not found." });
+        }
+
+        if (req.authUser.role === "student" && req.authUser.id !== targetUser.id && req.authUser.userId !== targetUser.user_id) {
             return res.status(403).json({ success: false, message: "Students can only view their own results." });
         }
-        const studentId = req.params.studentId;
-        const identity = await pool.query(
-            "SELECT id FROM users WHERE id::text = $1 OR user_id = $1 OR LOWER(email) = LOWER($1) LIMIT 1",
-            [studentId]
-        );
-        if (!identity.rowCount) return res.status(404).json({ success: false, message: "Student not found." });
-        const dbStudentId = identity.rows[0].id;
+
+        const dbStudentId = targetUser.id;
         const [course, videos, quizzes, practice, swing, oopTopics, swingTopics] = await Promise.all([
             pool.query(`
                 SELECT COUNT(*)::int AS total_lessons,
@@ -2517,6 +2529,16 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         res.json({
             success: true,
             data: {
+                studentInfo: {
+                    id: targetUser.id,
+                    userId: targetUser.user_id,
+                    name: targetUser.name,
+                    email: targetUser.email,
+                    section: targetUser.section || "Unassigned",
+                    course: targetUser.course || "",
+                    yearLevel: targetUser.year_level || "",
+                    studentNumber: targetUser.student_number || ""
+                },
                 overallProgress,
                 completedLessons,
                 totalLessons: effectiveTotalLessons,

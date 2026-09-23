@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Activity,
+  AlertCircle,
   AlertTriangle,
+  ArrowLeft,
   BarChart3,
   BookOpen,
   CheckCircle2,
@@ -14,15 +16,19 @@ import {
   GraduationCap,
   LineChart,
   Link,
+  Loader2,
   Lock,
   MailPlus,
   PlayCircle,
+  RefreshCw,
   Search,
+  ShieldAlert,
   Sparkles,
   TrendingUp,
   Trophy,
   UserCheck,
   Users,
+  UserX,
   Wifi,
   WifiOff
 } from 'lucide-react';
@@ -130,15 +136,6 @@ const SWING_TOPICS = [
   'JOptionPane'
 ];
 
-const ACTIVITY_ROTATION = [
-  'Watching video',
-  'Taking assessment',
-  'Solving Practice IDE',
-  'Reviewing adaptive lesson',
-  'Reading current lesson',
-  'Awaiting next unlock'
-];
-
 const STAGE_ROTATION: LearningStage[] = [
   'Lesson',
   'Watch Video',
@@ -155,176 +152,6 @@ const getStudentEmailByName = (name: string): string => {
 };
 
 const baseStudents: LiveStudent[] = [];
-/* const baseStudents: LiveStudent[] = [
-  {
-    id: 'STU-0001',
-    name: 'Dmitry Vance (Alex Mercer)',
-    email: 'dmitry@oophub.edu',
-    section: 'CS-3A',
-    online: true,
-    activity: 'Completed all Java OOP & Swing Modules',
-    currentLesson: 'Completed Java OOP & Swing Track',
-    currentTopic: 'Java OOP & Swing Mastery',
-    swingLesson: 'Topic 5 JOptionPane Dialogs',
-    stage: 'Unlock Next Topic',
-    overallProgress: 100,
-    moduleProgress: 100,
-    topicProgress: 100,
-    videoCompletion: 100,
-    quizScore: 100,
-    practiceScore: 100,
-    challengesCompleted: 16,
-    performanceIndex: 100,
-    learningStatus: 'Mastered',
-    lastActivity: 'just now',
-    moduleCompletion: 100,
-    topicCompletion: 100,
-    recommendation: 'Outstanding performance: All 11 OOP topics and 5 Swing modules completed with 100% score.',
-    topics: [],
-    swingTopics: [],
-    swing: { video: 100, assessment: 100, ide: 100, miniProject: 100 }
-  },
-  {
-    id: 'STU-0002',
-    name: 'Sofia Rodriguez',
-    email: 'rodriguez@oophub.edu',
-    section: 'CS-3B',
-    online: true,
-    activity: 'Watching video',
-    currentLesson: 'Polymorphism and dynamic dispatch',
-    currentTopic: 'Polymorphism',
-    swingLesson: 'Layout managers',
-    stage: 'Watch Video',
-    overallProgress: 86,
-    moduleProgress: 88,
-    topicProgress: 90,
-    videoCompletion: 100,
-    quizScore: 94,
-    practiceScore: 91,
-    challengesCompleted: 14,
-    performanceIndex: 93,
-    learningStatus: 'Mastered',
-    lastActivity: '1 min ago',
-    moduleCompletion: 88,
-    topicCompletion: 90,
-    recommendation: 'Ready for advanced interface-driven mini project.',
-    topics: [],
-    swingTopics: [],
-    swing: { video: 82, assessment: 88, ide: 76, miniProject: 64 }
-  },
-  {
-    id: 'STU-0003',
-    name: 'Dmitry Volkov',
-    email: 'volkov@oophub.edu',
-    section: 'IT-2A',
-    online: false,
-    activity: 'Offline',
-    currentLesson: 'Constructors and object state',
-    currentTopic: 'Constructors',
-    swingLesson: 'Not started',
-    stage: 'Adaptive Recommendation',
-    overallProgress: 35,
-    moduleProgress: 42,
-    topicProgress: 38,
-    videoCompletion: 61,
-    quizScore: 58,
-    practiceScore: 52,
-    challengesCompleted: 3,
-    performanceIndex: 56,
-    learningStatus: 'At Risk',
-    lastActivity: '34 min ago',
-    moduleCompletion: 42,
-    topicCompletion: 38,
-    recommendation: 'Review constructors lesson and assign remedial Practice IDE exercise.',
-    topics: [],
-    swingTopics: [],
-    swing: { video: 0, assessment: 0, ide: 0, miniProject: 0 }
-  },
-  {
-    id: 'STU-0004',
-    name: 'J. Chen',
-    email: 'chen@oophub.edu',
-    section: 'COE-4A',
-    online: true,
-    activity: 'Taking assessment',
-    currentLesson: 'Interfaces and contracts',
-    currentTopic: 'Interfaces',
-    swingLesson: 'Event listeners',
-    stage: 'Assessment',
-    overallProgress: 74,
-    moduleProgress: 80,
-    topicProgress: 68,
-    videoCompletion: 87,
-    quizScore: 79,
-    practiceScore: 83,
-    challengesCompleted: 10,
-    performanceIndex: 81,
-    learningStatus: 'Completed',
-    lastActivity: '3 min ago',
-    moduleCompletion: 80,
-    topicCompletion: 68,
-    recommendation: 'Unlock exception handling after current assessment attempt.',
-    topics: [],
-    swingTopics: [],
-    swing: { video: 70, assessment: 66, ide: 60, miniProject: 45 }
-  },
-  {
-    id: 'STU-0005',
-    name: 'Elena Rossi',
-    email: 'rossi@oophub.edu',
-    section: 'CS-3A',
-    online: false,
-    activity: 'Offline',
-    currentLesson: 'Encapsulation and access modifiers',
-    currentTopic: 'Encapsulation',
-    swingLesson: 'JPanel composition',
-    stage: 'Lesson',
-    overallProgress: 52,
-    moduleProgress: 56,
-    topicProgress: 49,
-    videoCompletion: 77,
-    quizScore: 71,
-    practiceScore: 62,
-    challengesCompleted: 5,
-    performanceIndex: 68,
-    learningStatus: 'Needs Improvement',
-    lastActivity: '2 hr ago',
-    moduleCompletion: 56,
-    topicCompletion: 49,
-    recommendation: 'Recommend private fields and accessor methods review.',
-    topics: [],
-    swingTopics: [],
-    swing: { video: 35, assessment: 25, ide: 18, miniProject: 0 }
-  },
-  {
-    id: 'STU-0006',
-    name: 'Liam Hughes',
-    email: 'hughes@oophub.edu',
-    section: 'IT-3B',
-    online: true,
-    activity: 'Reading current lesson',
-    currentLesson: 'Abstraction and abstract classes',
-    currentTopic: 'Abstraction',
-    swingLesson: 'Basic controls',
-    stage: 'Lesson',
-    overallProgress: 58,
-    moduleProgress: 62,
-    topicProgress: 60,
-    videoCompletion: 80,
-    quizScore: 76,
-    practiceScore: 70,
-    challengesCompleted: 7,
-    performanceIndex: 74,
-    learningStatus: 'In Progress',
-    lastActivity: '5 min ago',
-    moduleCompletion: 62,
-    topicCompletion: 60,
-    recommendation: 'Proceed to abstraction assessment after video completion.',
-    topics: [],
-    swingTopics: [],
-    swing: { video: 48, assessment: 44, ide: 32, miniProject: 12 }
-  }
-]; */
 
 const getLiveSwingTopics = (studentEmail: string, fallbackVideo = 0, studentIndex = 0): SwingTopicProgress[] => {
   return SWING_TOPICS.map((topic, index) => {
@@ -458,9 +285,25 @@ const mapBackendStudent = (user: AuthenticatedUser, results: StudentResultsData)
     lastActivity: results.hasActivity ? 'synced from backend' : 'not started',
     moduleCompletion: overallProgress,
     topicCompletion: overallProgress,
-    recommendation: 'Progress is synced from Render PostgreSQL.',
-    topics: [],
-    swingTopics: [],
+    recommendation: results.learningStateInterpretation || 'Progress is synced from backend database.',
+    topics: (results.oopTopics || []).map(t => ({
+      topic: t.title,
+      video: t.videoPercentage ?? (t.videoCompleted ? 100 : 0),
+      assessment: t.quizPercentage ?? 0,
+      ideStatus: t.lessonCompleted ? 'Passed' : t.practiceScore !== null && t.practiceScore >= 70 ? 'Passed' : t.practiceScore !== null ? 'In Review' : t.attempted ? 'In Progress' : 'Not Started',
+      completion: t.lessonCompleted ? 100 : Math.round(((t.videoPercentage || 0) + (t.quizPercentage || 0) + (t.practiceScore || 0)) / 3),
+      unlocked: t.sequence <= 1 || t.attempted || t.lessonCompleted,
+      timeSpent: t.attempted ? 'Active' : '--'
+    })),
+    swingTopics: (results.swingTopics || []).map(t => ({
+      topic: t.title,
+      video: t.videoCompleted ? 100 : 0,
+      assessment: t.quizPassed ? 100 : 0,
+      ideStatus: t.exerciseCompleted ? 'Passed' : t.submissionScore !== null ? 'Submitted' : 'Not Started',
+      completion: t.overallPercentage || (t.contentCompleted ? 100 : 0),
+      unlocked: Boolean(results.swingUnlocked),
+      timeSpent: t.attempted ? 'Active' : '--'
+    })),
     swing: {
       video: results.swingCompletedActivities > 0 ? 100 : 0,
       assessment: results.swingCompletedActivities > 0 ? 100 : 0,
@@ -468,6 +311,29 @@ const mapBackendStudent = (user: AuthenticatedUser, results: StudentResultsData)
       miniProject: 0
     }
   };
+};
+
+/** Helper to parse a student ID from URL route e.g. #/teacher/students/:id/progress */
+const parseStudentIdFromRoute = (): string | null => {
+  try {
+    const hash = window.location.hash || '';
+    const hashMatch =
+      hash.match(/(?:#|\/)?teacher\/students\/([^/]+)\/progress/i) ||
+      hash.match(/(?:#|\/)?students\/([^/]+)\/progress/i);
+    if (hashMatch && hashMatch[1]) {
+      return decodeURIComponent(hashMatch[1]);
+    }
+    const searchParams = new URLSearchParams(window.location.search);
+    const paramId = searchParams.get('studentId');
+    if (paramId) {
+      return paramId;
+    }
+    const pathMatch = window.location.pathname.match(/\/teacher\/students\/([^/]+)\/progress/i);
+    if (pathMatch && pathMatch[1]) {
+      return decodeURIComponent(pathMatch[1]);
+    }
+  } catch {}
+  return null;
 };
 
 export default function TeacherPortal({
@@ -486,6 +352,19 @@ export default function TeacherPortal({
   const [activeTab, setActiveTab] = useState<TeacherTab>('monitoring');
   const [students, setStudents] = useState<LiveStudent[]>(initialStudents);
   const [backendStudents, setBackendStudents] = useState<LiveStudent[]>([]);
+  const [allRegisteredUsers, setAllRegisteredUsers] = useState<AuthenticatedUser[]>([]);
+  
+  // Dedicated route-based student progress navigation
+  const [viewingStudentId, setViewingStudentId] = useState<string | null>(() => parseStudentIdFromRoute());
+  const [viewingStudent, setViewingStudent] = useState<LiveStudent | null>(null);
+  const [viewingStudentResults, setViewingStudentResults] = useState<StudentResultsData | null>(null);
+  const [viewingStudentLoading, setViewingStudentLoading] = useState(false);
+  const [viewingStudentNotFound, setViewingStudentNotFound] = useState(false);
+  const [viewingStudentUnauthorized, setViewingStudentUnauthorized] = useState(false);
+  const [viewingStudentError, setViewingStudentError] = useState<string | null>(null);
+  const [isRefreshingProgress, setIsRefreshingProgress] = useState(false);
+
+  // Submissions and other states
   const [selectedStudentId, setSelectedStudentId] = useState(initialStudents[0]?.id ?? '');
   const [studentInput, setStudentInput] = useState('');
   const [requestFeedback, setRequestFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -503,6 +382,7 @@ export default function TeacherPortal({
   const [remedialRequired, setRemedialRequired] = useState(false);
   const [submissionAction, setSubmissionAction] = useState<'reopen' | 'grade' | null>(null);
   const [submissionMessage, setSubmissionMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   const acceptedRequests = useMemo(
     () =>
       monitoringRequests
@@ -514,11 +394,34 @@ export default function TeacherPortal({
   const teacherRequests = monitoringRequests.filter(req => req.teacherEmail.toLowerCase() === currentUser.email.toLowerCase());
   const pendingRequests = teacherRequests.filter(req => req.status === 'pending');
 
+  // Sync URL route changes (back/forward button, refresh, direct opening)
+  useEffect(() => {
+    const handleRouteSync = () => {
+      const parsedId = parseStudentIdFromRoute();
+      if (parsedId) {
+        setViewingStudentId(parsedId);
+        setActiveTab('monitoring');
+      } else {
+        setViewingStudentId(null);
+      }
+    };
+
+    window.addEventListener('hashchange', handleRouteSync);
+    window.addEventListener('popstate', handleRouteSync);
+    return () => {
+      window.removeEventListener('hashchange', handleRouteSync);
+      window.removeEventListener('popstate', handleRouteSync);
+    };
+  }, []);
+
+  // Fetch all student users on mount
   useEffect(() => {
     let cancelled = false;
     userApi.listUsers(currentUser.token)
       .then(async response => {
         const studentUsers = response.data.filter(user => user.role === 'student');
+        if (!cancelled) setAllRegisteredUsers(studentUsers);
+
         const syncedStudents = (await Promise.all(studentUsers.map(async user => {
           try {
             const results = await progressApi.getStudentResults(getCanonicalStudentId(user), currentUser.token);
@@ -528,6 +431,7 @@ export default function TeacherPortal({
             return null;
           }
         }))).filter((student): student is LiveStudent => student !== null);
+
         if (!cancelled) {
           setBackendStudents(syncedStudents);
           setSelectedStudentId(currentId => syncedStudents.some(student => student.id === currentId) ? currentId : syncedStudents[0]?.id || currentId);
@@ -536,10 +440,97 @@ export default function TeacherPortal({
       .catch(error => {
         if (!cancelled) console.warn('Unable to load the teacher roster from the backend:', error);
       });
+
     return () => {
       cancelled = true;
     };
   }, [currentUser.token]);
+
+  // Fetch specific student's latest real-time progress from backend when viewingStudentId changes
+  const fetchSpecificStudentProgress = useCallback(async (studentId: string, showRefreshAnimation = false) => {
+    if (!studentId) {
+      setViewingStudent(null);
+      setViewingStudentResults(null);
+      return;
+    }
+
+    if (showRefreshAnimation) {
+      setIsRefreshingProgress(true);
+    } else {
+      setViewingStudentLoading(true);
+    }
+    setViewingStudentError(null);
+    setViewingStudentNotFound(false);
+    setViewingStudentUnauthorized(false);
+
+    try {
+      const response = await progressApi.getStudentResults(studentId, currentUser.token);
+      const resultsData = response.data;
+      
+      // Match with known user profile or backend student info
+      const matchingUser = allRegisteredUsers.find(
+        u => u.id === studentId || u.userId === studentId || u.email.toLowerCase() === studentId.toLowerCase()
+      );
+      
+      const fallbackUser: AuthenticatedUser = matchingUser || {
+        id: resultsData.studentInfo?.id || studentId,
+        userId: resultsData.studentInfo?.userId || studentId,
+        name: resultsData.studentInfo?.name || 'Student',
+        email: resultsData.studentInfo?.email || '',
+        role: 'student',
+        accountSource: 'custom',
+        section: resultsData.studentInfo?.section || 'Unassigned',
+        course: resultsData.studentInfo?.course || '',
+        yearLevel: resultsData.studentInfo?.yearLevel || '',
+        studentNumber: resultsData.studentInfo?.studentNumber || ''
+      };
+
+      const mapped = mapBackendStudent(fallbackUser, resultsData);
+      setViewingStudent(mapped);
+      setViewingStudentResults(resultsData);
+    } catch (error: any) {
+      setViewingStudent(null);
+      setViewingStudentResults(null);
+      
+      const errorMsg = error instanceof Error ? error.message : String(error || '');
+      if (errorMsg.includes('404') || errorMsg.toLowerCase().includes('not found')) {
+        setViewingStudentNotFound(true);
+      } else if (errorMsg.includes('403') || errorMsg.toLowerCase().includes('authorized') || errorMsg.toLowerCase().includes('forbidden')) {
+        setViewingStudentUnauthorized(true);
+      } else {
+        setViewingStudentError(errorMsg || 'Unable to load student progress from backend.');
+      }
+    } finally {
+      setViewingStudentLoading(false);
+      setIsRefreshingProgress(false);
+    }
+  }, [allRegisteredUsers, currentUser.token]);
+
+  useEffect(() => {
+    if (viewingStudentId) {
+      fetchSpecificStudentProgress(viewingStudentId);
+    } else {
+      setViewingStudent(null);
+      setViewingStudentResults(null);
+      setViewingStudentNotFound(false);
+      setViewingStudentUnauthorized(false);
+      setViewingStudentError(null);
+    }
+  }, [viewingStudentId, fetchSpecificStudentProgress]);
+
+  // Navigate to student progress page
+  const handleViewStudentProgress = (studentId: string) => {
+    if (!studentId) return;
+    setViewingStudentId(studentId);
+    window.location.hash = `/teacher/students/${encodeURIComponent(studentId)}/progress`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Back to monitoring list
+  const handleBackToMonitoring = () => {
+    setViewingStudentId(null);
+    window.location.hash = '/teacher/monitoring';
+  };
 
   const connectedStudents = acceptedRequests.map((request, index) => {
     const progressUser = leaderboardUsers.find(user =>
@@ -556,7 +547,7 @@ export default function TeacherPortal({
       const syncedTopics = progressUserTopics(progressUser);
 
       const student: LiveStudent = {
-        id: request.studentEmail,
+        id: request.studentId || request.studentEmail,
         name: request.studentName,
         email: request.studentEmail,
         section: 'Unassigned',
@@ -604,7 +595,7 @@ export default function TeacherPortal({
     const performanceIndex = Math.round(quizScore * 0.35 + practiceScore * 0.4 + overallProgress * 0.25);
 
     return withTopicProgress({
-      id: request.studentEmail,
+      id: request.studentId || request.studentEmail,
       name: request.studentName,
       email: request.studentEmail,
       section: latestSubmission?.section || 'Unassigned',
@@ -636,95 +627,73 @@ export default function TeacherPortal({
   const visibleStudents = backendStudents.length
     ? backendStudents.map((student, index) => student.topics?.length ? student : withTopicProgress(student, index))
     : connectedStudents;
-  const selectedStudent = visibleStudents.find(student => student.id === selectedStudentId) ?? visibleStudents[0];
-  const [studentResults, setStudentResults] = useState<StudentResultsData | null>(null);
-  const [resultsLoading, setResultsLoading] = useState(false);
-  const [resultsError, setResultsError] = useState<string | null>(null);
-  const resultsInterpretation: StudentResultsInterpretation | null = studentResults
-    ? generateStudentResultsInterpretation(studentResults)
+
+  const activeViewingStudent = viewingStudent;
+  const activeViewingResults = viewingStudentResults;
+  const resultsInterpretation: StudentResultsInterpretation | null = activeViewingResults
+    ? generateStudentResultsInterpretation(activeViewingResults)
     : null;
 
-  useEffect(() => {
-    if (!selectedStudent?.id) {
-      setStudentResults(null);
-      return;
-    }
-    let cancelled = false;
-    setStudentResults(null);
-    setResultsLoading(true);
-    setResultsError(null);
-    progressApi.getStudentResults(selectedStudent.id, currentUser.token)
-      .then(response => {
-        if (!cancelled) setStudentResults(response.data);
-      })
-      .catch(error => {
-        if (!cancelled) {
-          setStudentResults(null);
-          setResultsError(error instanceof Error ? error.message : 'Unable to load student results.');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setResultsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab, backendStudents, currentUser.token, selectedStudent?.id]);
-  const selectedStudentKeys = selectedStudent
+  const selectedStudentKeys = activeViewingStudent
     ? [
-        selectedStudent.id,
-        selectedStudent.email,
+        activeViewingStudent.id,
+        activeViewingStudent.email,
         ...acceptedRequests
-          .filter(request => request.studentEmail.toLowerCase() === selectedStudent.email.toLowerCase())
+          .filter(request => request.studentEmail.toLowerCase() === activeViewingStudent.email.toLowerCase())
           .map(request => request.studentId)
       ]
     : [];
+
   const visibleRecommendations = recommendationHistory
-    .filter(item => selectedStudentKeys.includes(item.studentId) || item.studentId.toLowerCase() === selectedStudent?.email.toLowerCase())
+    .filter(item => selectedStudentKeys.includes(item.studentId) || item.studentId.toLowerCase() === activeViewingStudent?.email.toLowerCase())
     .sort((a, b) => new Date(b.generatedDate).getTime() - new Date(a.generatedDate).getTime());
+
   const recommendationIsCurrent = (item: AdaptiveRecommendation) => {
-    if (!selectedStudent) return false;
-    const scoreMatches = item.codingScore === undefined || item.codingScore === selectedStudent.practiceScore;
-    const quizMatches = item.quizScore === undefined || item.quizScore === selectedStudent.quizScore;
-    const progressMatches = item.progressPercentage === undefined || item.progressPercentage === selectedStudent.overallProgress;
+    if (!activeViewingStudent) return false;
+    const scoreMatches = item.codingScore === undefined || item.codingScore === activeViewingStudent.practiceScore;
+    const quizMatches = item.quizScore === undefined || item.quizScore === activeViewingStudent.quizScore;
+    const progressMatches = item.progressPercentage === undefined || item.progressPercentage === activeViewingStudent.overallProgress;
     return scoreMatches && quizMatches && progressMatches;
   };
-  const currentEvidenceTopic = studentResults?.oopTopics?.find(topic => topic.practiceScore !== null && topic.practiceScore < 60)
-    || studentResults?.oopTopics?.find(topic => !topic.lessonCompleted)
-    || studentResults?.oopTopics?.find(topic => topic.attempted);
-  const currentRecommendation = selectedStudent
-    ? studentResults && !studentResults.hasActivity
+
+  const currentEvidenceTopic = activeViewingResults?.oopTopics?.find(topic => topic.practiceScore !== null && topic.practiceScore < 60)
+    || activeViewingResults?.oopTopics?.find(topic => !topic.lessonCompleted)
+    || activeViewingResults?.oopTopics?.find(topic => topic.attempted);
+
+  const currentRecommendation = activeViewingStudent
+    ? activeViewingResults && !activeViewingResults.hasActivity
       ? 'No current learning activity is recorded. Begin with the first available lesson.'
-      : studentResults
+      : activeViewingResults
         ? generateRuleBasedRecommendation({
-            studentId: selectedStudent.id,
-            studentName: selectedStudent.name,
+            studentId: activeViewingStudent.id,
+            studentName: activeViewingStudent.name,
             lessonId: currentEvidenceTopic?.id || 'current-topic',
-            currentTopic: currentEvidenceTopic?.title || selectedStudent.currentTopic,
+            currentTopic: currentEvidenceTopic?.title || activeViewingStudent.currentTopic,
             trigger: currentEvidenceTopic?.practiceScore !== null && currentEvidenceTopic?.practiceScore !== undefined ? 'Coding Score' : 'Quiz Score',
             videoCompleted: currentEvidenceTopic?.videoCompleted || false,
             lessonCompleted: currentEvidenceTopic?.lessonCompleted || false,
-            quizScore: currentEvidenceTopic?.quizPercentage ?? studentResults.averageQuizScore,
-            codingScore: currentEvidenceTopic?.practiceScore ?? studentResults.averagePracticeScore,
-            quizAttempts: studentResults.quizAttempts,
-            codingAttempts: studentResults.submittedPracticeActivities,
-            progressPercentage: studentResults.overallProgress
+            quizScore: currentEvidenceTopic?.quizPercentage ?? activeViewingResults.averageQuizScore,
+            codingScore: currentEvidenceTopic?.practiceScore ?? activeViewingResults.averagePracticeScore,
+            quizAttempts: activeViewingResults.quizAttempts,
+            codingAttempts: activeViewingResults.submittedPracticeActivities,
+            progressPercentage: activeViewingResults.overallProgress
           }).summary
-        : selectedStudent.overallProgress === 0 && selectedStudent.quizScore === 0 && selectedStudent.practiceScore === 0
+        : activeViewingStudent.overallProgress === 0 && activeViewingStudent.quizScore === 0 && activeViewingStudent.practiceScore === 0
       ? 'No current learning activity is recorded. Begin with the first available lesson.'
       : generateRuleBasedRecommendation({
-          studentId: selectedStudent.id,
-          studentName: selectedStudent.name,
-          lessonId: selectedStudent.topics[0]?.topic || 'current-topic',
-          currentTopic: selectedStudent.currentTopic,
+          studentId: activeViewingStudent.id,
+          studentName: activeViewingStudent.name,
+          lessonId: activeViewingStudent.topics[0]?.topic || 'current-topic',
+          currentTopic: activeViewingStudent.currentTopic,
           trigger: 'Coding Score',
-          videoCompleted: selectedStudent.videoCompletion >= 95,
-          lessonCompleted: selectedStudent.overallProgress >= 100,
-          quizScore: selectedStudent.quizScore,
-          codingScore: selectedStudent.practiceScore,
-          progressPercentage: selectedStudent.overallProgress
+          videoCompleted: activeViewingStudent.videoCompletion >= 95,
+          lessonCompleted: activeViewingStudent.overallProgress >= 100,
+          quizScore: activeViewingStudent.quizScore,
+          codingScore: activeViewingStudent.practiceScore,
+          progressPercentage: activeViewingStudent.overallProgress
         }).summary
     : null;
+
   const remedialCounts = visibleRecommendations
     .filter(item => item.type === 'Remedial' && recommendationIsCurrent(item))
     .reduce<Record<string, number>>((acc, item) => {
@@ -752,125 +721,46 @@ export default function TeacherPortal({
     return matchesSearch && matchesStatus;
   });
 
-  const selectedSubmission =
-    filteredSubmissions.find(sub => sub.id === selectedSubId) ??
-    filteredSubmissions.find(sub => sub.status === 'pending') ??
-    filteredSubmissions[0];
-
-  const visibleLeaderboardUsers = leaderboardUsers.length
-    ? leaderboardUsers.map((user, index) => ({ ...user, rank: index + 1 }))
-    : [...visibleStudents]
-        .sort((a, b) => b.performanceIndex - a.performanceIndex || b.practiceScore - a.practiceScore)
-        .map((student, index) => ({
-          rank: index + 1,
-          name: student.name,
-          points: student.performanceIndex,
-          progress: student.performanceIndex,
-          videoProgress: student.videoCompletion,
-          quizScore: student.quizScore,
-          practiceScore: student.practiceScore,
-          status: student.learningStatus,
-          currentTopic: student.currentTopic,
-          badges: [
-            `${student.videoCompletion}% Video`,
-            `${student.quizScore}% Quiz`,
-            `${student.practiceScore}% Practice IDE`
-          ],
-          streak: 0,
-          avatar: '',
-          trend: student.performanceIndex >= 70 ? 'up' as const : 'stable' as const
-        }));
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      setStudents(prev =>
-        prev.map((student, index) => {
-          if (!student.online) return student;
-          const bump = index % 2 === 0 ? 1 : 2;
-          const nextStage = STAGE_ROTATION[(STAGE_ROTATION.indexOf(student.stage) + 1) % STAGE_ROTATION.length];
-          const nextActivity = ACTIVITY_ROTATION[(ACTIVITY_ROTATION.indexOf(student.activity) + 1 + index) % ACTIVITY_ROTATION.length] || 'Learning activity';
-          const nextProgress = Math.min(100, student.overallProgress + bump);
-          const nextQuiz = Math.min(100, student.quizScore + (nextStage === 'Assessment' ? 1 : 0));
-          const nextPractice = Math.min(100, student.practiceScore + (nextStage === 'Practice IDE' ? 1 : 0));
-          const nextIndex = Math.round(nextQuiz * 0.35 + nextPractice * 0.4 + nextProgress * 0.25);
-          const nextStatus: LearningStatus =
-            nextIndex >= 90 ? 'Mastered' : nextIndex >= 80 ? 'Completed' : nextIndex >= 70 ? 'In Progress' : nextIndex >= 60 ? 'Needs Improvement' : 'At Risk';
-          return withTopicProgress(
-            {
-              ...student,
-              activity: nextActivity,
-              stage: nextStage,
-              overallProgress: nextProgress,
-              moduleProgress: Math.min(100, student.moduleProgress + bump),
-              topicProgress: Math.min(100, student.topicProgress + bump),
-              topicCompletion: Math.min(100, student.topicCompletion + bump),
-              moduleCompletion: Math.min(100, student.moduleCompletion + bump),
-              quizScore: nextQuiz,
-              practiceScore: nextPractice,
-              performanceIndex: nextIndex,
-              learningStatus: nextStatus,
-              lastActivity: 'just now'
-            },
-            index
-          );
-        })
-      );
-
-    }, 9000);
-
-    return () => window.clearInterval(interval);
-  }, [visibleStudents]);
-
-  useEffect(() => {
-    if (!selectedSubmission) return;
-    setSelectedSubId(selectedSubmission.id);
-    setCommentText(selectedSubmission.feedback || '');
-    setScoreText(Number(selectedSubmission.grade ?? selectedSubmission.score ?? 90));
-    setRemedialRequired(Boolean(selectedSubmission.remedialRequired));
-    setSubmissionMessage(null);
-  }, [selectedSubmission?.id, selectedSubmission?.feedback, selectedSubmission?.grade, selectedSubmission?.score, selectedSubmission?.remedialRequired]);
-
-  const handleSendRequestSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!studentInput.trim()) return;
-    setIsSendingInvite(true);
-    try {
-      const res = await onSendRequest(studentInput.trim());
-      setRequestFeedback({ type: res.success ? 'success' : 'error', message: res.message });
-      if (res.success) setStudentInput('');
-      window.setTimeout(() => setRequestFeedback(null), 5000);
-    } finally {
-      setIsSendingInvite(false);
-    }
-  };
+  const selectedSubmission = submissions.find(sub => sub.id === selectedSubId) ?? filteredSubmissions[0];
 
   const handleCopyInvitation = async () => {
     const linkValue = `${window.location.origin}/invite/${teacherScopedCode(currentUser.email)}`;
     try {
       await navigator.clipboard.writeText(linkValue);
-      setRequestFeedback({ type: 'success', message: 'Invitation link copied to clipboard.' });
+      setRequestFeedback({ type: 'success', message: 'Invitation link copied to clipboard!' });
     } catch {
-      setRequestFeedback({ type: 'success', message: `Invitation code: ${teacherScopedCode(currentUser.email)}` });
+      setRequestFeedback({ type: 'error', message: 'Failed to copy invitation link.' });
+    }
+  };
+
+  const handleSendRequestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!studentInput.trim()) {
+      setRequestFeedback({ type: 'error', message: 'Enter a student email or ID.' });
+      return;
+    }
+    setIsSendingInvite(true);
+    setRequestFeedback(null);
+    try {
+      const res = await onSendRequest(studentInput.trim());
+      setRequestFeedback({ type: res.success ? 'success' : 'error', message: res.message });
+      if (res.success) setStudentInput('');
+    } catch (err: any) {
+      setRequestFeedback({ type: 'error', message: err?.message || 'Unable to send invitation.' });
+    } finally {
+      setIsSendingInvite(false);
     }
   };
 
   const handlePostGrade = async () => {
     if (!selectedSubmission) return;
-    if (scoreText < 0 || scoreText > 100) {
-      setSubmissionMessage({ type: 'error', message: 'Please enter a grade score between 0 and 100.' });
-      return;
-    }
-    if (!commentText.trim()) {
-      setSubmissionMessage({ type: 'error', message: 'Please include teacher feedback before posting.' });
-      return;
-    }
     setSubmissionAction('grade');
     setSubmissionMessage(null);
     try {
-      await onGradeSubmission(selectedSubmission.id, scoreText, commentText.trim(), remedialRequired);
-      setSubmissionMessage({ type: 'success', message: 'Grade and feedback posted successfully.' });
-    } catch (error) {
-      setSubmissionMessage({ type: 'error', message: error instanceof Error ? error.message : 'Unable to save grade and feedback.' });
+      await onGradeSubmission(selectedSubmission.id, scoreText, commentText, remedialRequired);
+      setSubmissionMessage({ type: 'success', message: 'Grade & feedback posted successfully.' });
+    } catch (err: any) {
+      setSubmissionMessage({ type: 'error', message: err?.message || 'Failed to post grade.' });
     } finally {
       setSubmissionAction(null);
     }
@@ -882,20 +772,20 @@ export default function TeacherPortal({
     setSubmissionMessage(null);
     try {
       await onReopenSubmission(selectedSubmission.id);
-      setSubmissionMessage({ type: 'success', message: 'Submission reopened successfully.' });
-    } catch (error) {
-      setSubmissionMessage({ type: 'error', message: error instanceof Error ? error.message : 'Unable to reopen submission.' });
+      setSubmissionMessage({ type: 'success', message: 'Submission reopened for student revision.' });
+    } catch (err: any) {
+      setSubmissionMessage({ type: 'error', message: err?.message || 'Failed to reopen submission.' });
     } finally {
       setSubmissionAction(null);
     }
   };
 
-  const avg = (values: number[]) => (values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0);
+  const avg = (nums: number[]) => (nums.length ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : 0);
   const averageQuiz = avg(visibleStudents.map(student => student.quizScore));
   const averagePractice = avg(visibleStudents.map(student => student.practiceScore));
   const averagePerformance = avg(visibleStudents.map(student => student.performanceIndex));
-  const videoCompletionRate = avg(visibleStudents.map(student => student.videoCompletion));
   const completionRate = avg(visibleStudents.map(student => student.overallProgress));
+  const videoCompletionRate = avg(visibleStudents.map(student => student.videoCompletion));
   const swingSubmissions = submissions.filter(submission =>
     submission.topicId === 'swing' || submission.challengeName.toLowerCase().includes('swing')
   );
@@ -907,6 +797,7 @@ export default function TeacherPortal({
   const studentsNeedingAttention = visibleStudents.filter(student => ['At Risk', 'Needs Help'].includes(monitoringStatus(student)));
   const rosterSections = [...new Set(visibleStudents.map(student => student.section).filter(Boolean))].sort();
   const statusPriority: Record<MonitoringStatus, number> = { 'At Risk': 0, 'Needs Help': 1, Improving: 2, 'On Track': 3, Excellent: 4 };
+
   const filteredRoster = useMemo(() => {
     const query = rosterSearch.trim().toLowerCase();
     return visibleStudents
@@ -925,10 +816,12 @@ export default function TeacherPortal({
         return statusPriority[monitoringStatus(a)] - statusPriority[monitoringStatus(b)] || a.overallProgress - b.overallProgress;
       });
   }, [rosterSearch, rosterStatus, sectionFilter, studentSort, visibleStudents]);
+
   const rosterPageSize = 20;
   const rosterPageCount = Math.max(1, Math.ceil(filteredRoster.length / rosterPageSize));
   const pagedRoster = filteredRoster.slice((rosterPage - 1) * rosterPageSize, rosterPage * rosterPageSize);
   useEffect(() => setRosterPage(1), [rosterSearch, rosterStatus, sectionFilter, studentSort]);
+
   const mostSuccessfulStudent = [...visibleStudents].sort((a, b) => b.performanceIndex - a.performanceIndex)[0];
   const mostDifficultTopic = OOP_TOPICS.map(topic => ({
     topic,
@@ -938,15 +831,27 @@ export default function TeacherPortal({
   const cardClass = isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900';
   const mutedPanel = isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-emerald-50/20 border-emerald-100/50';
 
+  // Submissions specifically for the currently viewed student
+  const studentSpecificSubmissions = useMemo(() => {
+    if (!activeViewingStudent) return [];
+    return submissions.filter(sub => {
+      const emailMatch = sub.studentEmail && sub.studentEmail.toLowerCase() === activeViewingStudent.email.toLowerCase();
+      const idMatch = sub.studentId && (sub.studentId === activeViewingStudent.id || sub.studentId === activeViewingStudent.email);
+      const nameMatch = sub.studentName && sub.studentName.toLowerCase() === activeViewingStudent.name.toLowerCase();
+      return emailMatch || idMatch || nameMatch;
+    });
+  }, [activeViewingStudent, submissions]);
+
   return (
     <div className={`space-y-5 ${isDark ? 'text-slate-100' : 'text-slate-800'}`} id="teacher-portal-root">
+      {/* Header Banner */}
       <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-600">Teacher Account Module</p>
             <h2 className="mt-1 text-xl font-black tracking-tight">Real-Time OOP Learning Command Center</h2>
             <p className="mt-1 max-w-3xl text-xs font-medium leading-relaxed text-slate-500">
-              Monitor invited students only, track adaptive learning events, review Practice IDE evidence, and follow each learner from lesson to unlock.
+              Monitor student progress, track adaptive learning events, review Practice IDE evidence, and follow each learner from lesson to unlock.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:w-[520px]">
@@ -965,6 +870,7 @@ export default function TeacherPortal({
         </div>
       </div>
 
+      {/* Tabs Bar */}
       <div className={`overflow-x-auto rounded-2xl border p-2 shadow-sm ${cardClass}`}>
         <div className="flex min-w-max gap-1">
           {[
@@ -982,8 +888,13 @@ export default function TeacherPortal({
               <button
                 key={id as string}
                 type="button"
-                onClick={() => setActiveTab(id as TeacherTab)}
-                className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-extrabold transition ${
+                onClick={() => {
+                  setActiveTab(id as TeacherTab);
+                  if (id !== 'monitoring') {
+                    setViewingStudentId(null);
+                  }
+                }}
+                className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-extrabold transition cursor-pointer ${
                   activeTab === id
                     ? 'bg-emerald-600 text-white shadow-sm'
                     : isDark
@@ -999,284 +910,521 @@ export default function TeacherPortal({
         </div>
       </div>
 
-      {activeTab === 'monitoring' && selectedStudent && (
+      {/* ========================================================================= */}
+      {/* MONITORING TAB */}
+      {/* ========================================================================= */}
+      {activeTab === 'monitoring' && (
         <div className="space-y-5">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            {[
-              ['Total Students', visibleStudents.length],
-              ['Average Progress', `${completionRate}%`],
-              ['Average Quiz Score', `${averageQuiz}%`],
-              ['Practice Completion', `${averagePractice}%`],
-              ['Needs Attention', `${studentsNeedingAttention.length} students`]
-            ].map(([label, value]) => (
-              <div key={label as string} className={`rounded-xl border p-4 shadow-sm ${label === 'Needs Attention' ? 'border-amber-300 bg-amber-50/70' : cardClass}`}>
-                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">{label as string}</span>
-                <strong className="mt-2 block font-mono text-xl">{value}</strong>
-              </div>
-            ))}
-          </div>
-
-          <section className={`rounded-2xl border p-4 shadow-sm ${cardClass}`} aria-labelledby="attention-heading">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 id="attention-heading" className="text-base font-black">Students Needing Attention</h3>
-                <p className="mt-1 text-xs text-slate-500">Prioritized from current progress, assessment, and practice activity.</p>
-              </div>
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-black text-amber-700">{studentsNeedingAttention.length} priority students</span>
-            </div>
-            {studentsNeedingAttention.length === 0 ? (
-              <p className="mt-4 rounded-xl border border-dashed border-emerald-200 bg-emerald-50/30 p-4 text-xs font-semibold text-emerald-700">No students currently meet the attention thresholds.</p>
-            ) : (
-              <div className="mt-4 grid gap-2 lg:grid-cols-2">
-                {studentsNeedingAttention.slice(0, 6).map(student => {
-                  const status = monitoringStatus(student);
-                  return (
-                    <div key={student.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 ${mutedPanel}`}>
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-black">{student.name}</p>
-                        <p className="mt-1 text-[10px] text-slate-500">{student.section} | {student.overallProgress}% progress | {student.quizScore}% quiz</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span>
-                        <button type="button" onClick={() => setSelectedStudentId(student.id)} className="min-h-9 rounded-lg bg-emerald-600 px-3 text-[10px] font-black text-white">View Progress</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section className={`rounded-2xl border shadow-sm ${cardClass}`} aria-labelledby="roster-heading">
-            <div className="border-b border-slate-200 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 id="roster-heading" className="text-base font-black">Student Monitoring</h3>
-                  <p className="mt-1 text-xs text-slate-500">Showing {filteredRoster.length ? (rosterPage - 1) * rosterPageSize + 1 : 0}-{Math.min(rosterPage * rosterPageSize, filteredRoster.length)} of {filteredRoster.length} students</p>
+          {viewingStudentId ? (
+            /* ===================================================================== */
+            /* DEDICATED STUDENT PROGRESS PAGE (/teacher/students/:studentId/progress) */
+            /* ===================================================================== */
+            <div className="space-y-5">
+              {/* Navigation Back Header & Action Controls */}
+              <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 shadow-sm ${cardClass}`}>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleBackToMonitoring}
+                    className="inline-flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3.5 py-2 text-xs font-black text-slate-700 dark:text-slate-200 transition cursor-pointer"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Students
+                  </button>
+                  <div className="hidden sm:block text-xs font-semibold text-slate-400">
+                    Student Monitoring <span className="mx-1">/</span> <span className="text-slate-700 dark:text-slate-200 font-bold">{activeViewingStudent?.name || viewingStudentId}</span>
+                  </div>
                 </div>
-                <div className="relative w-full sm:w-72">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input aria-label="Search students" value={rosterSearch} onChange={event => setRosterSearch(event.target.value)} placeholder="Search students..." className={`h-11 w-full rounded-xl border pl-9 pr-3 text-xs outline-none focus:border-emerald-600 ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`} />
-                </div>
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <select aria-label="Filter by status" value={rosterStatus} onChange={event => setRosterStatus(event.target.value as 'All' | MonitoringStatus)} className={`h-10 rounded-xl border px-3 text-xs font-bold ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`}>
-                  <option value="All">All statuses</option><option>At Risk</option><option>Needs Help</option><option>Improving</option><option>On Track</option><option>Excellent</option>
-                </select>
-                <select aria-label="Filter by section" value={sectionFilter} onChange={event => setSectionFilter(event.target.value)} className={`h-10 rounded-xl border px-3 text-xs font-bold ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`}>
-                  <option value="All">All sections</option>{rosterSections.map(section => <option key={section}>{section}</option>)}
-                </select>
-                <select aria-label="Sort students" value={studentSort} onChange={event => setStudentSort(event.target.value as StudentSort)} className={`h-10 rounded-xl border px-3 text-xs font-bold ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`}>
-                  <option value="priority">Sort: Priority</option><option value="name">Sort: Name</option><option value="progress">Sort: Progress</option><option value="quiz">Sort: Quiz score</option><option value="practice">Sort: Practice</option><option value="status">Sort: Status</option>
-                </select>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="hidden w-full min-w-[760px] text-left text-xs sm:table">
-                <thead className="bg-emerald-50/30 text-[10px] uppercase tracking-wider text-slate-500"><tr><th className="px-4 py-3">Student</th><th className="px-3 py-3">Section</th><th className="px-3 py-3">Progress</th><th className="px-3 py-3">Quiz</th><th className="px-3 py-3">Practice</th><th className="px-3 py-3">Activity</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Action</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">
-                  {pagedRoster.map(student => {
-                    const status = monitoringStatus(student);
-                    return <tr key={student.id} className="hover:bg-emerald-50/20">
-                      <td className="px-4 py-3"><button type="button" onClick={() => setSelectedStudentId(student.id)} className="text-left"><span className="block font-black">{student.name}</span><span className="block text-[10px] text-slate-500">{student.email}</span></button></td>
-                      <td className="px-3 py-3 font-semibold">{student.section}</td>
-                      <td className="px-3 py-3"><div className="flex items-center gap-2"><div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${student.overallProgress}%` }} /></div><span className="font-mono font-bold">{student.overallProgress}%</span></div></td>
-                      <td className="px-3 py-3 font-mono font-bold">{student.quizScore}%</td><td className="px-3 py-3 font-mono font-bold">{student.practiceScore}%</td>
-                      <td className="px-3 py-3 text-slate-500">{student.lastActivity}</td>
-                      <td className="px-3 py-3"><span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span></td>
-                      <td className="px-3 py-3"><button type="button" onClick={() => setSelectedStudentId(student.id)} className="min-h-9 rounded-lg border border-emerald-200 px-3 text-[10px] font-black text-emerald-700 hover:bg-emerald-50">View Progress</button></td>
-                    </tr>;
-                  })}
-                </tbody>
-              </table>
-              <div className="space-y-2 p-3 sm:hidden">
-                {pagedRoster.map(student => {
-                  const status = monitoringStatus(student);
-                  return <div key={student.id} className={`rounded-xl border p-3 ${mutedPanel}`}>
-                    <div className="flex items-start justify-between gap-3">
-                      <button type="button" onClick={() => setSelectedStudentId(student.id)} className="min-w-0 text-left"><span className="block truncate text-xs font-black">{student.name}</span><span className="mt-1 block truncate text-[10px] text-slate-500">{student.email}</span></button>
-                      <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span>
-                    </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]"><span><b className="block text-slate-400">Progress</b><strong>{student.overallProgress}%</strong></span><span><b className="block text-slate-400">Quiz</b><strong>{student.quizScore}%</strong></span><span><b className="block text-slate-400">Practice</b><strong>{student.practiceScore}%</strong></span></div>
-                    <div className="mt-3 flex items-center justify-between gap-2"><span className="truncate text-[10px] text-slate-500">{student.section} | {student.lastActivity}</span><button type="button" onClick={() => setSelectedStudentId(student.id)} className="min-h-9 shrink-0 rounded-lg bg-emerald-600 px-3 text-[10px] font-black text-white">View Progress</button></div>
-                  </div>;
-                })}
-              </div>
-              {pagedRoster.length === 0 && <p className="p-8 text-center text-xs font-semibold text-slate-500">No students match these filters.</p>}
-            </div>
-            {rosterPageCount > 1 && <div className="flex items-center justify-between border-t border-slate-200 p-3 text-xs"><button type="button" disabled={rosterPage === 1} onClick={() => setRosterPage(page => page - 1)} className="min-h-9 rounded-lg border px-3 font-black disabled:opacity-40">Previous</button><span className="font-bold text-slate-500">Page {rosterPage} of {rosterPageCount}</span><button type="button" disabled={rosterPage === rosterPageCount} onClick={() => setRosterPage(page => page + 1)} className="min-h-9 rounded-lg border px-3 font-black disabled:opacity-40">Next</button></div>}
-          </section>
 
-          <div className={`rounded-2xl border p-5 shadow-sm xl:col-span-2 ${cardClass}`}>
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-black">{selectedStudent.name}</h3>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${statusClass(selectedStudent.learningStatus)}`}>
-                    {selectedStudent.learningStatus}
+                  <span className="font-mono text-[11px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
+                    ID: {viewingStudentId}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => fetchSpecificStudentProgress(viewingStudentId, true)}
+                    disabled={viewingStudentLoading || isRefreshingProgress}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/60 dark:border-emerald-900/50 dark:bg-emerald-950/40 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100/70 transition cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingProgress ? 'animate-spin' : ''}`} />
+                    <span>{isRefreshingProgress ? 'Refreshing...' : 'Refresh'}</span>
+                  </button>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">{selectedStudent.currentLesson} | {selectedStudent.currentTopic}</p>
               </div>
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/30 px-3 py-2 text-xs font-black text-emerald-700">
-                <Sparkles className="h-4 w-4" />
-                {selectedStudent.stage}
-              </div>
-            </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {[
-                ['Overall Progress', selectedStudent.overallProgress],
-                ['Module Progress', selectedStudent.moduleProgress],
-                ['Topic Progress', selectedStudent.topicProgress],
-                ['Video Completion', selectedStudent.videoCompletion],
-                ['Quiz Score', selectedStudent.quizScore],
-                ['Practice IDE Score', selectedStudent.practiceScore],
-                ['Performance Index', selectedStudent.performanceIndex],
-                ['Topic Completion', selectedStudent.topicCompletion]
-              ].map(([label, value]) => (
-                <div key={label as string} className={`rounded-xl border p-3 ${mutedPanel}`}>
-                  <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-400">
-                    <span>{label as string}</span>
-                    <span>{value}%</span>
-                  </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80">
-                    <div className="h-full rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
-                  </div>
+              {/* Loading State */}
+              {viewingStudentLoading && (
+                <div className={`rounded-2xl border p-12 text-center shadow-sm ${cardClass}`}>
+                  <Loader2 className="mx-auto h-8 w-8 animate-spin text-emerald-600" />
+                  <h3 className="mt-3 text-base font-extrabold text-slate-900 dark:text-white">Fetching Live Student Progress</h3>
+                  <p className="mt-1 text-xs text-slate-500 font-medium">
+                    Retrieving lesson progress, quiz attempts, and programming submissions for ID <span className="font-mono font-bold text-emerald-600">{viewingStudentId}</span>...
+                  </p>
                 </div>
-              ))}
-            </div>
+              )}
 
-            <section className={`mt-5 rounded-2xl border p-5 ${isDark ? 'border-indigo-900 bg-indigo-950/30' : 'border-indigo-100 bg-indigo-50/40'}`}>
-              <div className="flex items-start gap-3">
-                <BarChart3 className="mt-0.5 h-5 w-5 shrink-0 text-indigo-600" />
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Interpretation of Results</p>
-                  <h4 className="mt-1 text-base font-black">Evidence-based learning interpretation</h4>
-                </div>
-              </div>
-              {resultsLoading && <p className="mt-4 text-xs font-semibold text-slate-500">Loading results from the student record...</p>}
-              {resultsError && <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">{resultsError}</p>}
-              {resultsInterpretation && studentResults && (
-                <div className="mt-4 grid gap-4 text-xs sm:grid-cols-2">
-                  <div className="rounded-xl bg-white/80 p-3 sm:col-span-2">
-                    <span className="font-black uppercase tracking-wider text-slate-400">Current Learning Stage</span>
-                    <p className="mt-1 text-sm font-black text-indigo-700">{resultsInterpretation.currentLearningStage}</p>
-                    <div className="mt-3 flex flex-wrap gap-2 font-black">
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">Java OOP: {resultsInterpretation.oopResult}</span>
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-600">Java Swing: {resultsInterpretation.swingStatus}</span>
-                      {resultsInterpretation.swingResult && <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">Swing Result: {resultsInterpretation.swingResult}</span>}
-                    </div>
+              {/* Student Not Found State */}
+              {!viewingStudentLoading && viewingStudentNotFound && (
+                <div className={`rounded-2xl border border-rose-200 bg-rose-50/50 dark:border-rose-900/50 dark:bg-rose-950/30 p-8 text-center shadow-sm`}>
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-400">
+                    <UserX className="h-6 w-6" />
                   </div>
-                  {[
-                    ['Learning Progress Analysis', resultsInterpretation.learningProgressAnalysis],
-                    ['Assessment Performance', resultsInterpretation.assessmentPerformance],
-                    ['Programming Practice Performance', resultsInterpretation.programmingPracticePerformance]
-                  ].map(([title, text]) => (
-                    <div key={title} className="rounded-xl bg-white/80 p-3">
-                      <span className="font-black uppercase tracking-wider text-slate-400">{title}</span>
-                      <p className="mt-1 leading-relaxed text-slate-700">{text}</p>
-                    </div>
-                  ))}
-                  <div className="rounded-xl bg-white/80 p-3 sm:col-span-2">
-                    <span className="font-black uppercase tracking-wider text-slate-400">Java OOP Topic Evidence</span>
-                    <div className="mt-2 space-y-2">
-                      {(studentResults.oopTopics || []).filter(topic => topic.attempted).map(topic => (
-                        <div key={topic.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px]">
-                          <span className="font-black">{topic.title}</span>
-                          <span className="ml-2 text-slate-600">{topic.lessonCompleted ? 'Completed' : 'In Progress'} | Video {topic.videoPercentage === null ? 'Insufficient data' : `${topic.videoPercentage}%`} | Assessment {topic.quizPercentage === null ? 'Insufficient data' : `${topic.quizPercentage}%`} | Practice {topic.practiceScore === null ? 'Insufficient data' : `${topic.practiceScore}%`}</span>
-                        </div>
-                      ))}
-                      {!(studentResults.oopTopics || []).some(topic => topic.attempted) && <p className="text-[11px] text-slate-500">No Java OOP topic has been attempted yet.</p>}
-                    </div>
-                  </div>
-                  <div className="rounded-xl bg-white/80 p-3 sm:col-span-2">
-                    <span className="font-black uppercase tracking-wider text-slate-400">Java Swing Evidence</span>
-                    <p className="mt-1 leading-relaxed text-slate-700">{resultsInterpretation.swingStatus === 'LOCKED' ? 'Java Swing is currently locked because the Java OOP prerequisite is incomplete. Locked topics are not evaluated as failures.' : (studentResults.swingTopics || []).some(topic => topic.attempted) ? `${(studentResults.swingTopics || []).filter(topic => topic.attempted).map(topic => `${topic.title} (${topic.overallPercentage === null ? 'Insufficient data' : `${topic.overallPercentage}%`})`).join(', ')}.` : 'Java Swing is unlocked, but no Swing activity has been attempted yet.'}</p>
-                  </div>
-                  <div className="rounded-xl bg-white/80 p-3">
-                    <span className="font-black uppercase tracking-wider text-slate-400">Strengths</span>
-                    <ul className="mt-2 list-disc space-y-1 pl-4 text-slate-700">{resultsInterpretation.strengths.map(item => <li key={item}>{item}</li>)}</ul>
-                  </div>
-                  <div className="rounded-xl bg-white/80 p-3">
-                    <span className="font-black uppercase tracking-wider text-slate-400">Areas for Improvement</span>
-                    <ul className="mt-2 list-disc space-y-1 pl-4 text-slate-700">{resultsInterpretation.areasForImprovement.map(item => <li key={item}>{item}</li>)}</ul>
-                  </div>
-                  <div className="rounded-xl bg-white/80 p-3 sm:col-span-2">
-                    <span className="font-black uppercase tracking-wider text-slate-400">Recommended Next Steps</span>
-                    <p className="mt-1 leading-relaxed text-slate-700">{resultsInterpretation.recommendation}</p>
+                  <h3 className="mt-3 text-base font-black text-rose-900 dark:text-rose-200">Student Not Found</h3>
+                  <p className="mx-auto mt-1 max-w-md text-xs text-rose-700 dark:text-rose-300">
+                    No active student record was found matching ID <span className="font-mono font-bold">{viewingStudentId}</span>. The student may not exist, or the link may be invalid.
+                  </p>
+                  <div className="mt-5">
+                    <button
+                      type="button"
+                      onClick={handleBackToMonitoring}
+                      className="inline-flex items-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2.5 text-xs font-black text-white transition shadow-sm cursor-pointer"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Back to Student Monitoring
+                    </button>
                   </div>
                 </div>
               )}
-            </section>
 
-            <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/15 p-4">
-              <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">Rule-Based Adaptive Learning</p>
-              <p className="mt-1 text-sm font-bold text-slate-800">{currentRecommendation}</p>
-              <div className="mt-4 grid gap-2 text-xs sm:grid-cols-4">
-                {['Save activity', 'Run adaptive rules', 'Update PI', 'Push live dashboard'].map(step => (
-                  <div key={step} className="flex items-center gap-2 rounded-xl bg-white p-2 font-bold text-slate-600 shadow-sm">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    {step}
+              {/* Unauthorized State */}
+              {!viewingStudentLoading && viewingStudentUnauthorized && (
+                <div className={`rounded-2xl border border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/30 p-8 text-center shadow-sm`}>
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400">
+                    <ShieldAlert className="h-6 w-6" />
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Recommendation History</p>
-                  <h4 className="mt-1 text-sm font-black text-slate-900">Selected Student Recommendation History</h4>
+                  <h3 className="mt-3 text-base font-black text-amber-900 dark:text-amber-200">Access Denied</h3>
+                  <p className="mx-auto mt-1 max-w-md text-xs text-amber-700 dark:text-amber-300">
+                    You are not authorized to view the progress for student <span className="font-mono font-bold">{viewingStudentId}</span>. Only students connected to your teacher roster are accessible.
+                  </p>
+                  <div className="mt-5">
+                    <button
+                      type="button"
+                      onClick={handleBackToMonitoring}
+                      className="inline-flex items-center gap-2 rounded-xl bg-amber-600 hover:bg-amber-700 px-4 py-2.5 text-xs font-black text-white transition shadow-sm cursor-pointer"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Back to Student Monitoring
+                    </button>
+                  </div>
                 </div>
-                <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[10px] font-black text-rose-700">
-                  {repeatedRemedialStudents.length} repeated remedial
-                </span>
-              </div>
-              <div className="mt-4 space-y-2">
-                {visibleRecommendations.slice(0, 4).map(item => (
-                  <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-black text-slate-900">{item.studentName || item.studentId}</p>
-                        <p className="mt-1 text-[11px] font-semibold text-slate-500">{item.lessonTitle} | {item.reason}</p>
+              )}
+
+              {/* General Fetch Error State */}
+              {!viewingStudentLoading && viewingStudentError && !viewingStudentNotFound && !viewingStudentUnauthorized && (
+                <div className={`rounded-2xl border border-rose-200 bg-rose-50/50 dark:border-rose-900/50 dark:bg-rose-950/30 p-6 text-center shadow-sm`}>
+                  <AlertCircle className="mx-auto h-8 w-8 text-rose-500" />
+                  <h3 className="mt-2 text-base font-bold text-rose-900 dark:text-rose-200">Failed to Load Progress</h3>
+                  <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">{viewingStudentError}</p>
+                  <div className="mt-4 flex items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => fetchSpecificStudentProgress(viewingStudentId)}
+                      className="rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-bold text-white transition cursor-pointer"
+                    >
+                      Retry
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBackToMonitoring}
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                    >
+                      Back to Students
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Student Progress Loaded Dashboard */}
+              {!viewingStudentLoading && activeViewingStudent && activeViewingResults && (
+                <div className={`rounded-2xl border p-5 shadow-sm xl:col-span-2 ${cardClass}`}>
+                  {/* Student Header */}
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between border-b border-slate-200/70 dark:border-slate-800 pb-5">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xl font-black">{activeViewingStudent.name}</h3>
+                        <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black ${statusClass(activeViewingStudent.learningStatus)}`}>
+                          {activeViewingStudent.learningStatus}
+                        </span>
+                        {activeViewingStudent.online && (
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Online
+                          </span>
+                        )}
                       </div>
-                      <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
-                        item.status === 'Completed' || !recommendationIsCurrent(item) ? 'bg-slate-100 text-slate-600' : item.type === 'Remedial' ? 'bg-rose-100 text-rose-700' : item.type === 'Continue' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                      }`}>
-                        {item.status === 'Completed' ? 'Resolved' : !recommendationIsCurrent(item) ? 'Historical' : item.type === 'Remedial' ? 'Active' : item.status}
+                      <p className="mt-1 text-xs text-slate-500">
+                        {activeViewingStudent.email} | Section: <span className="font-bold text-slate-700 dark:text-slate-300">{activeViewingStudent.section}</span> | {activeViewingStudent.currentLesson}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/50 dark:bg-emerald-950/40 px-3.5 py-2 text-xs font-black text-emerald-700 dark:text-emerald-400">
+                      <Sparkles className="h-4 w-4" />
+                      Stage: {activeViewingStudent.stage}
+                    </div>
+                  </div>
+
+                  {/* 8 Metric Summary Cards */}
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      ['Overall Progress', activeViewingStudent.overallProgress],
+                      ['Module Progress', activeViewingStudent.moduleProgress],
+                      ['Topic Progress', activeViewingStudent.topicProgress],
+                      ['Video Completion', activeViewingStudent.videoCompletion],
+                      ['Quiz Score', activeViewingStudent.quizScore],
+                      ['Practice IDE Score', activeViewingStudent.practiceScore],
+                      ['Performance Index', activeViewingStudent.performanceIndex],
+                      ['Topic Completion', activeViewingStudent.topicCompletion]
+                    ].map(([label, value]) => (
+                      <div key={label as string} className={`rounded-xl border p-3 ${mutedPanel}`}>
+                        <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-400">
+                          <span>{label as string}</span>
+                          <span>{value}%</span>
+                        </div>
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80 dark:bg-slate-800">
+                          <div className="h-full rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Interpretation of Results Panel */}
+                  <section className={`mt-5 rounded-2xl border p-5 ${isDark ? 'border-indigo-900 bg-indigo-950/30' : 'border-indigo-100 bg-indigo-50/40'}`}>
+                    <div className="flex items-start gap-3">
+                      <BarChart3 className="mt-0.5 h-5 w-5 shrink-0 text-indigo-600" />
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Interpretation of Results</p>
+                        <h4 className="mt-1 text-base font-black">Evidence-based learning interpretation</h4>
+                      </div>
+                    </div>
+                    {resultsInterpretation && (
+                      <div className="mt-4 grid gap-4 text-xs sm:grid-cols-2">
+                        <div className="rounded-xl bg-white/80 dark:bg-slate-900 p-3 sm:col-span-2">
+                          <span className="font-black uppercase tracking-wider text-slate-400">Current Learning Stage</span>
+                          <p className="mt-1 text-sm font-black text-indigo-700 dark:text-indigo-400">{resultsInterpretation.currentLearningStage}</p>
+                          <div className="mt-3 flex flex-wrap gap-2 font-black">
+                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">Java OOP: {resultsInterpretation.oopResult}</span>
+                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-600">Java Swing: {resultsInterpretation.swingStatus}</span>
+                            {resultsInterpretation.swingResult && <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">Swing Result: {resultsInterpretation.swingResult}</span>}
+                          </div>
+                        </div>
+                        {[
+                          ['Learning Progress Analysis', resultsInterpretation.learningProgressAnalysis],
+                          ['Assessment Performance', resultsInterpretation.assessmentPerformance],
+                          ['Programming Practice Performance', resultsInterpretation.programmingPracticePerformance]
+                        ].map(([title, text]) => (
+                          <div key={title} className="rounded-xl bg-white/80 dark:bg-slate-900 p-3">
+                            <span className="font-black uppercase tracking-wider text-slate-400">{title}</span>
+                            <p className="mt-1 leading-relaxed text-slate-700 dark:text-slate-300">{text}</p>
+                          </div>
+                        ))}
+                        <div className="rounded-xl bg-white/80 dark:bg-slate-900 p-3 sm:col-span-2">
+                          <span className="font-black uppercase tracking-wider text-slate-400">Java OOP Topic Evidence</span>
+                          <div className="mt-2 space-y-2">
+                            {(activeViewingResults.oopTopics || []).filter(topic => topic.attempted).map(topic => (
+                              <div key={topic.id} className="rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2 text-[11px]">
+                                <span className="font-black">{topic.title}</span>
+                                <span className="ml-2 text-slate-600 dark:text-slate-400">
+                                  {topic.lessonCompleted ? 'Completed' : 'In Progress'} | Video {topic.videoPercentage === null ? 'No data' : `${topic.videoPercentage}%`} | Quiz {topic.quizPercentage === null ? 'No data' : `${topic.quizPercentage}%`} | Practice {topic.practiceScore === null ? 'No data' : `${topic.practiceScore}%`}
+                                </span>
+                              </div>
+                            ))}
+                            {!(activeViewingResults.oopTopics || []).some(topic => topic.attempted) && (
+                              <p className="text-[11px] text-slate-500">No Java OOP topic has been attempted yet.</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="rounded-xl bg-white/80 dark:bg-slate-900 p-3 sm:col-span-2">
+                          <span className="font-black uppercase tracking-wider text-slate-400">Java Swing Evidence</span>
+                          <p className="mt-1 leading-relaxed text-slate-700 dark:text-slate-300">
+                            {resultsInterpretation.swingStatus === 'LOCKED'
+                              ? 'Java Swing is currently locked because Java OOP prerequisite is incomplete.'
+                              : (activeViewingResults.swingTopics || []).some(topic => topic.attempted)
+                              ? `${(activeViewingResults.swingTopics || []).filter(topic => topic.attempted).map(topic => `${topic.title} (${topic.overallPercentage === null ? 'No data' : `${topic.overallPercentage}%`})`).join(', ')}.`
+                              : 'Java Swing is unlocked, but no Swing activity has been attempted yet.'}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-white/80 dark:bg-slate-900 p-3">
+                          <span className="font-black uppercase tracking-wider text-slate-400">Strengths</span>
+                          <ul className="mt-2 list-disc space-y-1 pl-4 text-slate-700 dark:text-slate-300">
+                            {resultsInterpretation.strengths.map(item => <li key={item}>{item}</li>)}
+                          </ul>
+                        </div>
+                        <div className="rounded-xl bg-white/80 dark:bg-slate-900 p-3">
+                          <span className="font-black uppercase tracking-wider text-slate-400">Areas for Improvement</span>
+                          <ul className="mt-2 list-disc space-y-1 pl-4 text-slate-700 dark:text-slate-300">
+                            {resultsInterpretation.areasForImprovement.map(item => <li key={item}>{item}</li>)}
+                          </ul>
+                        </div>
+                        <div className="rounded-xl bg-white/80 dark:bg-slate-900 p-3 sm:col-span-2">
+                          <span className="font-black uppercase tracking-wider text-slate-400">Recommended Next Steps</span>
+                          <p className="mt-1 leading-relaxed text-slate-700 dark:text-slate-300">{resultsInterpretation.recommendation}</p>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Adaptive Recommendation Card */}
+                  <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/15 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600">Rule-Based Adaptive Learning</p>
+                    <p className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100">{currentRecommendation}</p>
+                    <div className="mt-4 grid gap-2 text-xs sm:grid-cols-4">
+                      {['Save activity', 'Run adaptive rules', 'Update PI', 'Push live dashboard'].map(step => (
+                        <div key={step} className="flex items-center gap-2 rounded-xl bg-white dark:bg-slate-900 p-2 font-bold text-slate-600 dark:text-slate-300 shadow-sm">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Recommendation History */}
+                  <div className="mt-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Recommendation History</p>
+                        <h4 className="mt-1 text-sm font-black text-slate-900 dark:text-white">Selected Student Recommendation History</h4>
+                      </div>
+                      <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[10px] font-black text-rose-700">
+                        {repeatedRemedialStudents.length} repeated remedial
                       </span>
                     </div>
-                    <div className="mt-2 grid gap-2 text-[10px] font-bold text-slate-500 sm:grid-cols-3">
-                      <span>Trigger: {item.trigger}</span>
-                      <span>Status: {item.status}</span>
-                      <span>Generated: {new Date(item.generatedDate).toLocaleDateString()}</span>
+                    <div className="mt-4 space-y-2">
+                      {visibleRecommendations.slice(0, 4).map(item => (
+                        <div key={item.id} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-black text-slate-900 dark:text-white">{item.studentName || item.studentId}</p>
+                              <p className="mt-1 text-[11px] font-semibold text-slate-500">{item.lessonTitle} | {item.reason}</p>
+                            </div>
+                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
+                              item.status === 'Completed' || !recommendationIsCurrent(item) ? 'bg-slate-100 text-slate-600' : item.type === 'Remedial' ? 'bg-rose-100 text-rose-700' : item.type === 'Continue' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                            }`}>
+                              {item.status === 'Completed' ? 'Resolved' : !recommendationIsCurrent(item) ? 'Historical' : item.type === 'Remedial' ? 'Active' : item.status}
+                            </span>
+                          </div>
+                          <div className="mt-2 grid gap-2 text-[10px] font-bold text-slate-500 sm:grid-cols-3">
+                            <span>Trigger: {item.trigger}</span>
+                            <span>Status: {item.status}</span>
+                            <span>Generated: {new Date(item.generatedDate).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {visibleRecommendations.length === 0 && (
+                        <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-5 text-center text-xs font-semibold text-slate-500">
+                          No generated recommendation records for this student yet.
+                        </div>
+                      )}
                     </div>
                   </div>
+
+                  {/* Learning Journey Timeline */}
+                  <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+                    <div className="grid grid-cols-7 bg-emerald-50/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                      {STAGE_ROTATION.map(stage => <span key={stage} className="text-center">{stage}</span>)}
+                    </div>
+                    <div className="grid grid-cols-7 gap-1 p-3">
+                      {STAGE_ROTATION.map(stage => (
+                        <div key={stage} className={`h-2 rounded-full ${stage === activeViewingStudent.stage ? 'bg-emerald-600' : 'bg-slate-200 dark:bg-slate-800'}`} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* ===================================================================== */
+            /* DEFAULT STUDENT MONITORING ROSTER & TABLE VIEW                        */
+            /* ===================================================================== */
+            <>
+              {/* Stat Cards */}
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                {[
+                  ['Total Students', visibleStudents.length],
+                  ['Average Progress', `${completionRate}%`],
+                  ['Average Quiz Score', `${averageQuiz}%`],
+                  ['Practice Completion', `${averagePractice}%`],
+                  ['Needs Attention', `${studentsNeedingAttention.length} students`]
+                ].map(([label, value]) => (
+                  <div key={label as string} className={`rounded-xl border p-4 shadow-sm ${label === 'Needs Attention' ? 'border-amber-300 bg-amber-50/70 dark:bg-amber-950/30' : cardClass}`}>
+                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">{label as string}</span>
+                    <strong className="mt-2 block font-mono text-xl">{value}</strong>
+                  </div>
                 ))}
-                {visibleRecommendations.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-xs font-semibold text-slate-500">
-                    No generated recommendation records for visible students yet.
+              </div>
+
+              {/* Students Needing Attention */}
+              <section className={`rounded-2xl border p-4 shadow-sm ${cardClass}`} aria-labelledby="attention-heading">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 id="attention-heading" className="text-base font-black">Students Needing Attention</h3>
+                    <p className="mt-1 text-xs text-slate-500">Prioritized from current progress, assessment, and practice activity.</p>
+                  </div>
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-black text-amber-700">{studentsNeedingAttention.length} priority students</span>
+                </div>
+                {studentsNeedingAttention.length === 0 ? (
+                  <p className="mt-4 rounded-xl border border-dashed border-emerald-200 bg-emerald-50/30 p-4 text-xs font-semibold text-emerald-700">No students currently meet the attention thresholds.</p>
+                ) : (
+                  <div className="mt-4 grid gap-2 lg:grid-cols-2">
+                    {studentsNeedingAttention.slice(0, 6).map(student => {
+                      const status = monitoringStatus(student);
+                      return (
+                        <div key={student.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 ${mutedPanel}`}>
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-black">{student.name}</p>
+                            <p className="mt-1 text-[10px] text-slate-500">{student.section} | {student.overallProgress}% progress | {student.quizScore}% quiz</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleViewStudentProgress(student.id)}
+                              className="min-h-9 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 text-[10px] font-black text-white transition cursor-pointer"
+                            >
+                              View Progress
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-              </div>
-            </div>
+              </section>
 
-            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
-              <div className="grid grid-cols-7 bg-emerald-50/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                {STAGE_ROTATION.map(stage => <span key={stage} className="text-center">{stage}</span>)}
-              </div>
-              <div className="grid grid-cols-7 gap-1 p-3">
-                {STAGE_ROTATION.map(stage => (
-                  <div key={stage} className={`h-2 rounded-full ${stage === selectedStudent.stage ? 'bg-emerald-600' : 'bg-slate-200'}`} />
-                ))}
-              </div>
-            </div>
-          </div>
-
+              {/* Student Monitoring Roster Table */}
+              <section className={`rounded-2xl border shadow-sm ${cardClass}`} aria-labelledby="roster-heading">
+                <div className="border-b border-slate-200 dark:border-slate-800 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 id="roster-heading" className="text-base font-black">Student Monitoring</h3>
+                      <p className="mt-1 text-xs text-slate-500">Showing {filteredRoster.length ? (rosterPage - 1) * rosterPageSize + 1 : 0}-{Math.min(rosterPage * rosterPageSize, filteredRoster.length)} of {filteredRoster.length} students</p>
+                    </div>
+                    <div className="relative w-full sm:w-72">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input aria-label="Search students" value={rosterSearch} onChange={event => setRosterSearch(event.target.value)} placeholder="Search students..." className={`h-11 w-full rounded-xl border pl-9 pr-3 text-xs outline-none focus:border-emerald-600 ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`} />
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <select aria-label="Filter by status" value={rosterStatus} onChange={event => setRosterStatus(event.target.value as 'All' | MonitoringStatus)} className={`h-10 rounded-xl border px-3 text-xs font-bold ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`}>
+                      <option value="All">All statuses</option><option>At Risk</option><option>Needs Help</option><option>Improving</option><option>On Track</option><option>Excellent</option>
+                    </select>
+                    <select aria-label="Filter by section" value={sectionFilter} onChange={event => setSectionFilter(event.target.value)} className={`h-10 rounded-xl border px-3 text-xs font-bold ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`}>
+                      <option value="All">All sections</option>{rosterSections.map(section => <option key={section}>{section}</option>)}
+                    </select>
+                    <select aria-label="Sort students" value={studentSort} onChange={event => setStudentSort(event.target.value as StudentSort)} className={`h-10 rounded-xl border px-3 text-xs font-bold ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`}>
+                      <option value="priority">Sort: Priority</option><option value="name">Sort: Name</option><option value="progress">Sort: Progress</option><option value="quiz">Sort: Quiz score</option><option value="practice">Sort: Practice</option><option value="status">Sort: Status</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="hidden w-full min-w-[760px] text-left text-xs sm:table">
+                    <thead className="bg-emerald-50/30 dark:bg-slate-800/50 text-[10px] uppercase tracking-wider text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Student</th>
+                        <th className="px-3 py-3">Section</th>
+                        <th className="px-3 py-3">Progress</th>
+                        <th className="px-3 py-3">Quiz</th>
+                        <th className="px-3 py-3">Practice</th>
+                        <th className="px-3 py-3">Activity</th>
+                        <th className="px-3 py-3">Status</th>
+                        <th className="px-3 py-3">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {pagedRoster.map(student => {
+                        const status = monitoringStatus(student);
+                        return (
+                          <tr key={student.id} className="hover:bg-emerald-50/20 dark:hover:bg-slate-800/40">
+                            <td className="px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={() => handleViewStudentProgress(student.id)}
+                                className="text-left group cursor-pointer"
+                              >
+                                <span className="block font-black group-hover:text-emerald-600 transition">{student.name}</span>
+                                <span className="block text-[10px] text-slate-500">{student.email}</span>
+                              </button>
+                            </td>
+                            <td className="px-3 py-3 font-semibold">{student.section}</td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                                  <div className="h-full rounded-full bg-emerald-600" style={{ width: `${student.overallProgress}%` }} />
+                                </div>
+                                <span className="font-mono font-bold">{student.overallProgress}%</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 font-mono font-bold">{student.quizScore}%</td>
+                            <td className="px-3 py-3 font-mono font-bold">{student.practiceScore}%</td>
+                            <td className="px-3 py-3 text-slate-500">{student.lastActivity}</td>
+                            <td className="px-3 py-3">
+                              <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span>
+                            </td>
+                            <td className="px-3 py-3">
+                              <button
+                                type="button"
+                                onClick={() => handleViewStudentProgress(student.id)}
+                                className="min-h-9 rounded-lg border border-emerald-200 dark:border-emerald-800 px-3 text-[10px] font-black text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition cursor-pointer"
+                              >
+                                View Progress
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="space-y-2 p-3 sm:hidden">
+                    {pagedRoster.map(student => {
+                      const status = monitoringStatus(student);
+                      return (
+                        <div key={student.id} className={`rounded-xl border p-3 ${mutedPanel}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <button
+                              type="button"
+                              onClick={() => handleViewStudentProgress(student.id)}
+                              className="min-w-0 text-left cursor-pointer"
+                            >
+                              <span className="block truncate text-xs font-black">{student.name}</span>
+                              <span className="mt-1 block truncate text-[10px] text-slate-500">{student.email}</span>
+                            </button>
+                            <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span>
+                          </div>
+                          <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">
+                            <span><b className="block text-slate-400">Progress</b><strong>{student.overallProgress}%</strong></span>
+                            <span><b className="block text-slate-400">Quiz</b><strong>{student.quizScore}%</strong></span>
+                            <span><b className="block text-slate-400">Practice</b><strong>{student.practiceScore}%</strong></span>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <span className="truncate text-[10px] text-slate-500">{student.section} | {student.lastActivity}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleViewStudentProgress(student.id)}
+                              className="min-h-9 shrink-0 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 text-[10px] font-black text-white transition cursor-pointer"
+                            >
+                              View Progress
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {pagedRoster.length === 0 && <p className="p-8 text-center text-xs font-semibold text-slate-500">No students match these filters.</p>}
+                </div>
+                {rosterPageCount > 1 && (
+                  <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 p-3 text-xs">
+                    <button type="button" disabled={rosterPage === 1} onClick={() => setRosterPage(page => page - 1)} className="min-h-9 rounded-lg border px-3 font-black disabled:opacity-40 cursor-pointer">Previous</button>
+                    <span className="font-bold text-slate-500">Page {rosterPage} of {rosterPageCount}</span>
+                    <button type="button" disabled={rosterPage === rosterPageCount} onClick={() => setRosterPage(page => page + 1)} className="min-h-9 rounded-lg border px-3 font-black disabled:opacity-40 cursor-pointer">Next</button>
+                  </div>
+                )}
+              </section>
+            </>
+          )}
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* STUDENT RANKING TAB */}
+      {/* ========================================================================= */}
       {activeTab === 'ranking' && (
         <section className={`space-y-4 rounded-2xl border p-5 shadow-sm ${cardClass}`} aria-labelledby="student-ranking-heading">
           <div>
@@ -1287,6 +1435,9 @@ export default function TeacherPortal({
         </section>
       )}
 
+      {/* ========================================================================= */}
+      {/* INVITATIONS TAB */}
+      {/* ========================================================================= */}
       {activeTab === 'invitations' && (
         <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
           <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
@@ -1294,16 +1445,16 @@ export default function TeacherPortal({
             <p className="mt-1 text-xs text-slate-500">Teachers can monitor only students who accept this teacher-scoped invitation.</p>
             <div className={`mt-5 rounded-2xl border p-4 ${mutedPanel}`}>
               <p className="text-[10px] font-black uppercase text-slate-400">Invitation Code</p>
-              <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-white p-3 shadow-sm">
-                <span className="font-mono text-lg font-black text-emerald-700">{teacherScopedCode(currentUser.email)}</span>
-                <button type="button" onClick={handleCopyInvitation} className="rounded-lg bg-emerald-600 p-2 text-white">
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-white dark:bg-slate-950 p-3 shadow-sm">
+                <span className="font-mono text-lg font-black text-emerald-700 dark:text-emerald-400">{teacherScopedCode(currentUser.email)}</span>
+                <button type="button" onClick={handleCopyInvitation} className="rounded-lg bg-emerald-600 hover:bg-emerald-700 p-2 text-white transition cursor-pointer">
                   <Copy className="h-4 w-4" />
                 </button>
               </div>
               <p className="mt-3 text-[11px] font-semibold text-slate-500">Invite link: /invite/{teacherScopedCode(currentUser.email)}</p>
             </div>
             <form onSubmit={handleSendRequestSubmit} className="mt-5 space-y-3">
-              <label className="text-xs font-black text-slate-700">Send direct invitation by email or student ID</label>
+              <label className="text-xs font-black text-slate-700 dark:text-slate-300">Send direct invitation by email or student ID</label>
               <div className="flex gap-2">
                 <input
                   value={studentInput}
@@ -1311,7 +1462,7 @@ export default function TeacherPortal({
                   placeholder="student@oophub.edu or STU-0001"
                   className={`min-h-11 flex-1 rounded-xl border px-3 text-sm outline-none focus:border-emerald-600 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}
                 />
-                <button type="submit" disabled={isSendingInvite} className="rounded-xl bg-emerald-600 px-4 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-60">
+                <button type="submit" disabled={isSendingInvite} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-60 transition cursor-pointer">
                   {isSendingInvite ? 'Checking...' : 'Invite'}
                 </button>
               </div>
@@ -1341,7 +1492,7 @@ export default function TeacherPortal({
                         {req.status}
                       </span>
                       {req.status === 'accepted' && (
-                        <button type="button" onClick={() => onRemoveConnection(req.id)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-black text-slate-500">
+                        <button type="button" onClick={() => onRemoveConnection(req.id)} className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 py-1 text-[10px] font-black text-slate-500 hover:text-rose-600 transition cursor-pointer">
                           Remove
                         </button>
                       )}
@@ -1355,56 +1506,68 @@ export default function TeacherPortal({
         </div>
       )}
 
-      {activeTab === 'topics' && selectedStudent && (
+      {/* ========================================================================= */}
+      {/* OOP TOPICS TAB */}
+      {/* ========================================================================= */}
+      {activeTab === 'topics' && (
         <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-base font-black">OOP Topics Progress</h3>
-              <p className="text-xs text-slate-500">Topic-level video, assessment, IDE, unlock, and time-spent monitoring for {selectedStudent.name}.</p>
+              <p className="text-xs text-slate-500">Topic-level video, assessment, IDE, unlock, and time-spent monitoring.</p>
             </div>
-            <select value={selectedStudent.id} onChange={event => setSelectedStudentId(event.target.value)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <select
+              value={selectedStudentId}
+              onChange={event => setSelectedStudentId(event.target.value)}
+              className={`rounded-xl border px-3 py-2 text-xs font-bold ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}
+            >
               {visibleStudents.map(student => <option key={student.id} value={student.id}>{student.name}</option>)}
             </select>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-left text-xs">
-              <thead className="bg-emerald-50/20 text-[10px] uppercase tracking-wider text-slate-500">
-                <tr>
-                  <th className="px-3 py-3">Topic</th>
-                  <th className="px-3 py-3">Video</th>
-                  <th className="px-3 py-3">Assessment</th>
-                  <th className="px-3 py-3">Practice IDE</th>
-                  <th className="px-3 py-3">Completion</th>
-                  <th className="px-3 py-3">Unlock</th>
-                  <th className="px-3 py-3">Time Spent</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {selectedStudent.topics.map(topic => (
-                  <tr key={topic.topic} className={isDark ? 'divide-slate-800' : ''}>
-                    <td className="px-3 py-3 font-black">{topic.topic}</td>
-                    <td className="px-3 py-3">{topic.video}%</td>
-                    <td className="px-3 py-3">{topic.assessment}%</td>
-                    <td className="px-3 py-3">{topic.ideStatus}</td>
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100">
-                          <div className="h-full rounded-full bg-emerald-600" style={{ width: `${topic.completion}%` }} />
-                        </div>
-                        <span className="font-mono font-bold">{topic.completion}%</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3">{topic.unlocked ? <UserCheck className="h-4 w-4 text-emerald-600" /> : <Lock className="h-4 w-4 text-slate-400" />}</td>
-                    <td className="px-3 py-3 font-mono text-slate-500">{topic.timeSpent}</td>
+          {visibleStudents.find(s => s.id === selectedStudentId) && (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[860px] text-left text-xs">
+                <thead className="bg-emerald-50/20 text-[10px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-3 py-3">Topic</th>
+                    <th className="px-3 py-3">Video</th>
+                    <th className="px-3 py-3">Assessment</th>
+                    <th className="px-3 py-3">Practice IDE</th>
+                    <th className="px-3 py-3">Completion</th>
+                    <th className="px-3 py-3">Unlock</th>
+                    <th className="px-3 py-3">Time Spent</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {(visibleStudents.find(s => s.id === selectedStudentId)?.topics || []).map(topic => (
+                    <tr key={topic.topic}>
+                      <td className="px-3 py-3 font-black">{topic.topic}</td>
+                      <td className="px-3 py-3">{topic.video}%</td>
+                      <td className="px-3 py-3">{topic.assessment}%</td>
+                      <td className="px-3 py-3">{topic.ideStatus}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                            <div className="h-full rounded-full bg-emerald-600" style={{ width: `${topic.completion}%` }} />
+                          </div>
+                          <span className="font-mono font-bold">{topic.completion}%</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">{topic.unlocked ? <UserCheck className="h-4 w-4 text-emerald-600" /> : <Lock className="h-4 w-4 text-slate-400" />}</td>
+                      <td className="px-3 py-3 font-mono text-slate-500">{topic.timeSpent}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
-      {activeTab === 'swing' && selectedStudent && (
+      {/* ========================================================================= */}
+      {/* JAVA SWING TAB */}
+      {/* ========================================================================= */}
+      {activeTab === 'swing' && (
         <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {[
@@ -1425,10 +1588,14 @@ export default function TeacherPortal({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-base font-black">5 Java Swing Topics Progress</h3>
-                <p className="mt-1 text-xs text-slate-500">Topic-level video, assessment, Practice IDE, unlock, and time-spent monitoring for {selectedStudent.name}.</p>
+                <p className="mt-1 text-xs text-slate-500">Topic-level video, assessment, Practice IDE, unlock, and time-spent monitoring.</p>
               </div>
               <div className="flex items-center gap-3">
-                <select value={selectedStudent.id} onChange={event => setSelectedStudentId(event.target.value)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+                <select
+                  value={selectedStudentId}
+                  onChange={event => setSelectedStudentId(event.target.value)}
+                  className={`rounded-xl border px-3 py-2 text-xs font-bold ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}
+                >
                   {visibleStudents.map(student => <option key={student.id} value={student.id}>{student.name}</option>)}
                 </select>
                 <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase text-emerald-700">80% Quiz Pass Mark</span>
@@ -1448,16 +1615,16 @@ export default function TeacherPortal({
                     <th className="px-3 py-3">Time Spent</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {(selectedStudent.swingTopics || []).map(topic => (
-                    <tr key={topic.topic} className={isDark ? 'divide-slate-800' : ''}>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {(visibleStudents.find(s => s.id === selectedStudentId)?.swingTopics || []).map(topic => (
+                    <tr key={topic.topic}>
                       <td className="px-3 py-3 font-black">{topic.topic}</td>
                       <td className="px-3 py-3">{topic.video}%</td>
                       <td className="px-3 py-3">{topic.assessment}%</td>
                       <td className="px-3 py-3">{topic.ideStatus}</td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
-                          <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100">
+                          <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                             <div className="h-full rounded-full bg-emerald-600" style={{ width: `${topic.completion}%` }} />
                           </div>
                           <span className="font-mono font-bold">{topic.completion}%</span>
@@ -1486,18 +1653,20 @@ export default function TeacherPortal({
                       <span>{label as string}</span>
                       <span>{value}%</span>
                     </div>
-                    <div className="mt-2 h-2 rounded-full bg-white">
+                    <div className="mt-2 h-2 rounded-full bg-white dark:bg-slate-800">
                       <div className="h-2 rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
                     </div>
                   </div>
-              ))}
+                ))}
               </div>
             </div>
           </div>
-
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* ASSESSMENTS TAB */}
+      {/* ========================================================================= */}
       {activeTab === 'assessments' && (
         <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -1552,31 +1721,35 @@ export default function TeacherPortal({
                     return (
                       <tr key={student.id} className={isDark ? 'hover:bg-slate-950/60' : 'hover:bg-emerald-50/10'}>
                         <td className="px-3 py-3">
-                          <div className="flex items-center gap-2">
-                            <ClipboardCheck className="h-4 w-4 text-emerald-600" />
+                          <button
+                            type="button"
+                            onClick={() => handleViewStudentProgress(student.id)}
+                            className="flex items-center gap-2 text-left cursor-pointer group"
+                          >
+                            <ClipboardCheck className="h-4 w-4 text-emerald-600 shrink-0" />
                             <div>
-                              <p className="font-black">{student.name}</p>
+                              <p className="font-black group-hover:text-emerald-600 transition">{student.name}</p>
                               <p className="text-[10px] font-semibold text-slate-400">{student.email}</p>
                             </div>
-                          </div>
+                          </button>
                         </td>
-                        <td className="px-3 py-3 font-semibold text-slate-600">{student.currentTopic}</td>
+                        <td className="px-3 py-3 font-semibold text-slate-600 dark:text-slate-400">{student.currentTopic}</td>
                         <td className="px-3 py-3 font-mono font-bold">{attempts}</td>
                         <td className="px-3 py-3 font-mono font-bold">{highest}%</td>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2">
-                            <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100">
+                            <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                               <div className={`h-full rounded-full ${passed ? 'bg-emerald-600' : 'bg-amber-500'}`} style={{ width: `${student.quizScore}%` }} />
                             </div>
                             <span className="font-mono font-bold">{student.quizScore}%</span>
                           </div>
                         </td>
                         <td className="px-3 py-3 font-mono font-bold">{lowest}%</td>
-                        <td className="px-3 py-3 font-mono font-bold text-emerald-700">{correct}</td>
-                        <td className="px-3 py-3 font-mono font-bold text-rose-600">{incorrect}</td>
+                        <td className="px-3 py-3 font-mono font-bold text-emerald-700 dark:text-emerald-400">{correct}</td>
+                        <td className="px-3 py-3 font-mono font-bold text-rose-600 dark:text-rose-400">{incorrect}</td>
                         <td className="px-3 py-3 font-mono text-slate-500">{completion} min</td>
                         <td className="px-3 py-3">
-                          <span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase ${passed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                          <span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase ${passed ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'}`}>
                             {passed ? 'Passed' : 'Review'}
                           </span>
                         </td>
@@ -1590,6 +1763,9 @@ export default function TeacherPortal({
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* PRACTICE IDE TAB */}
+      {/* ========================================================================= */}
       {activeTab === 'ide' && (
         <div className="grid gap-5 xl:grid-cols-[1fr_460px]">
           <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
@@ -1624,17 +1800,17 @@ export default function TeacherPortal({
                       key={sub.id}
                       type="button"
                       onClick={() => setSelectedSubId(sub.id)}
-                      className={`w-full rounded-xl border p-4 text-left transition ${
-                        selectedSubmission?.id === sub.id ? 'border-emerald-650 bg-emerald-50/40' : isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white hover:border-emerald-300'
+                      className={`w-full rounded-xl border p-4 text-left transition cursor-pointer ${
+                        selectedSubmission?.id === sub.id ? 'border-emerald-600 bg-emerald-50/40 dark:bg-emerald-950/40' : isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white hover:border-emerald-300'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <p className="text-xs font-black">{sub.studentName}</p>
-                          <p className="mt-1 text-xs font-bold text-slate-600">{sub.challengeName}</p>
+                          <p className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-400">{sub.challengeName}</p>
                           <p className="mt-1 text-[10px] font-mono text-slate-400">{sub.topicTitle || 'Practice IDE'} | {sub.compileStatus || 'not_run'} | {sub.submittedAt}</p>
                         </div>
-                        <span className={`rounded-full px-2 py-1 text-[10px] font-black ${score >= 70 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-black ${score >= 70 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'}`}>
                           {sub.status === 'pending' ? 'Needs Review' : `${score}%`}
                         </span>
                       </div>
@@ -1650,7 +1826,7 @@ export default function TeacherPortal({
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 pb-4">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-550">Submission Inspector</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Submission Inspector</p>
                     <h3 className="mt-1 text-sm font-black">{selectedSubmission.studentName}</h3>
                     <p className="text-[11px] text-slate-400">{selectedSubmission.challengeName}</p>
                   </div>
@@ -1702,18 +1878,29 @@ export default function TeacherPortal({
                     </div>
                   )}
                   <div className="grid grid-cols-[auto_1fr] gap-2">
-                    {onReopenSubmission && <button type="button" onClick={handleReopenSelectedSubmission} disabled={submissionAction !== null} className="min-h-11 rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60">{submissionAction === 'reopen' ? 'Reopening...' : 'Reopen'}</button>}
-                    <button type="button" onClick={handlePostGrade} disabled={submissionAction !== null} className="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white transition hover:bg-emerald-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60">{submissionAction === 'grade' ? 'Posting...' : 'Post Grade & Feedback'}</button>
+                    {onReopenSubmission && (
+                      <button type="button" onClick={handleReopenSelectedSubmission} disabled={submissionAction !== null} className="min-h-11 rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer">
+                        {submissionAction === 'reopen' ? 'Reopening...' : 'Reopen'}
+                      </button>
+                    )}
+                    <button type="button" onClick={handlePostGrade} disabled={submissionAction !== null} className="min-h-11 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-black text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer">
+                      {submissionAction === 'grade' ? 'Posting...' : 'Post Grade & Feedback'}
+                    </button>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="flex min-h-[440px] items-center justify-center text-center text-xs text-slate-500">Select a submission to inspect source code and grading details.</div>
+              <div className="flex min-h-[440px] items-center justify-center text-center text-xs text-slate-500">
+                Select a submission to inspect source code and grading details.
+              </div>
             )}
           </div>
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* ANALYTICS TAB */}
+      {/* ========================================================================= */}
       {activeTab === 'analytics' && (
         <div className="grid gap-5 lg:grid-cols-2">
           <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
@@ -1753,7 +1940,7 @@ export default function TeacherPortal({
                     <span>{label as string}</span>
                     <span>{value}%</span>
                   </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                     <div className="h-full rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
                   </div>
                 </div>
@@ -1763,13 +1950,12 @@ export default function TeacherPortal({
         </div>
       )}
 
-
       {visibleStudents.length === 0 && (
         <div className={`rounded-2xl border p-10 text-center shadow-sm ${cardClass}`}>
           <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
           <h3 className="mt-3 text-base font-black">No Connected Students</h3>
           <p className="mt-1 text-xs text-slate-500">Generate an invitation code or send an invite before monitoring student progress.</p>
-          <button type="button" onClick={() => setActiveTab('invitations')} className="mt-4 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white">
+          <button type="button" onClick={() => setActiveTab('invitations')} className="mt-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-black text-white transition cursor-pointer">
             Open Invitations
           </button>
         </div>
