@@ -310,6 +310,27 @@ async function runAllTests() {
     assert.strictEqual(res.progress.completed, true, 'Lesson unlocks when teacher approves and clears remedial status');
   });
 
+  console.log('\n--- Test Group 5: PostgreSQL Schema & SQL Query Reference Integrity ---');
+
+  test('Verify zero occurrences of invalid column reference "u.section" in backend/server.js', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const serverCode = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+
+    // Check for SQL queries with invalid u.section
+    const sqlMatches = serverCode.match(/(?:SELECT|UPDATE|INSERT|DELETE)[^;]*\bu\.section\b[^;]*/gi);
+    assert.strictEqual(sqlMatches, null, `Found invalid SQL query referencing u.section: ${JSON.stringify(sqlMatches)}`);
+  });
+
+  test('Verify practice submissions queries correctly join students table for s.section', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const serverCode = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+
+    // Ensure COALESCE(s.section, 'Unassigned') is used
+    assert.ok(serverCode.includes("COALESCE(s.section, 'Unassigned') AS section"), 'Must use COALESCE(s.section, \'Unassigned\') AS section');
+  });
+
   console.log('\n================================================================');
   console.log(`🎯 TEST RESULTS: ${passed}/${passed + failed} tests passed (${Math.round((passed / (passed + failed)) * 100)}%)`);
   console.log('================================================================\n');
@@ -320,3 +341,4 @@ async function runAllTests() {
 }
 
 runAllTests();
+

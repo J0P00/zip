@@ -3727,7 +3727,7 @@ const selectPracticeSubmissionById = async (id) => {
     const result = await pool.query(`
         SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
                u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
-               COALESCE(s.section, u.section, 'Unassigned') AS section,
+               COALESCE(s.section, 'Unassigned') AS section,
                grader.name AS graded_by_name
         FROM practice_submissions ps
         JOIN programming_challenges pc ON pc.id = ps.challenge_id
@@ -3744,7 +3744,7 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin
         const result = await pool.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
                    u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
-                   COALESCE(s.section, u.section, 'Unassigned') AS section,
+                   COALESCE(s.section, 'Unassigned') AS section,
                    grader.name AS graded_by_name
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
@@ -3980,7 +3980,7 @@ app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["tea
         const updatedResult = await client.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
                    u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
-                   COALESCE(s.section, u.section, 'Unassigned') AS section,
+                   COALESCE(s.section, 'Unassigned') AS section,
                    reopener.name AS graded_by_name
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
@@ -4064,9 +4064,9 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
         `, [req.params.id, grade, feedback, req.authUser.id, remedialRequired]);
         const updatedResult = await client.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
-                   u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
-                   COALESCE(s.section, u.section, 'Unassigned') AS section,
-                   grader.name AS graded_by_name
+               u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
+               COALESCE(s.section, 'Unassigned') AS section,
+               grader.name AS graded_by_name
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
             LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
