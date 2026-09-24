@@ -745,13 +745,33 @@ export default function TeacherPortal({
     }, {});
   const repeatedRemedialStudents = Object.entries(remedialCounts).filter(([, count]) => count >= 2);
 
+  const visibleStudentEmails = useMemo(() => {
+    const emails = new Set<string>();
+    acceptedEmails.forEach(e => emails.add(e.toLowerCase()));
+    visibleStudents.forEach(s => {
+      if (s.email) emails.add(s.email.toLowerCase());
+      if (s.id) emails.add(s.id.toLowerCase());
+    });
+    allRegisteredUsers.forEach(u => {
+      if (u.role === 'student') {
+        if (u.email) emails.add(u.email.toLowerCase());
+        if (u.id) emails.add(u.id.toLowerCase());
+      }
+    });
+    return emails;
+  }, [acceptedEmails, visibleStudents, allRegisteredUsers]);
+
   const visibleSubmissions = submissions.filter(sub => {
-    const studentEmail = sub.studentEmail || getStudentEmailByName(sub.studentName);
-    return acceptedEmails.includes(studentEmail.toLowerCase());
+    const studentEmail = (sub.studentEmail || getStudentEmailByName(sub.studentName) || sub.studentId || '').toLowerCase();
+    if (!studentEmail) return true;
+    if (visibleStudentEmails.size === 0) return true;
+    return visibleStudentEmails.has(studentEmail);
   });
 
   const filteredSubmissions = visibleSubmissions.filter(sub => {
-    const score = Number(sub.score ?? sub.grade ?? 0);
+    const score = Number(sub.teacherScore ?? sub.grade ?? sub.score ?? 0);
+    const isReviewed = sub.reviewStatus === 'reviewed' || sub.status === 'reviewed';
+    const isPending = sub.status === 'pending' || sub.reviewStatus === 'pending' || (!sub.reviewStatus && !sub.gradedAt);
     const matchesSearch =
       sub.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       sub.challengeName.toLowerCase().includes(searchQuery.toLowerCase());
@@ -759,11 +779,30 @@ export default function TeacherPortal({
       statusFilter === 'All' ||
       (statusFilter === 'Passed' && score >= 70) ||
       (statusFilter === 'Failed' && score < 70) ||
-      (statusFilter === 'Pending' && sub.status === 'pending');
+      (statusFilter === 'Pending' && isPending) ||
+      (statusFilter === 'Reviewed' && isReviewed);
     return matchesSearch && matchesStatus;
   });
 
   const selectedSubmission = submissions.find(sub => sub.id === selectedSubId) ?? filteredSubmissions[0];
+
+  useEffect(() => {
+    if (selectedSubmission) {
+      const existingScore = selectedSubmission.teacherScore ?? selectedSubmission.grade ?? selectedSubmission.score ?? 90;
+      const existingFeedback = selectedSubmission.feedback || '';
+      const existingRemedial = !!selectedSubmission.remedialRequired;
+      setScoreText(typeof existingScore === 'number' ? existingScore : 90);
+      setCommentText(existingFeedback);
+      setRemedialRequired(existingRemedial);
+    }
+  }, [
+    selectedSubmission?.id,
+    selectedSubmission?.teacherScore,
+    selectedSubmission?.grade,
+    selectedSubmission?.score,
+    selectedSubmission?.feedback,
+    selectedSubmission?.remedialRequired
+  ]);
 
   const handleCopyInvitation = async () => {
     const linkValue = `${window.location.origin}/invite/${teacherScopedCode(currentUser.email)}`;
@@ -1929,10 +1968,11 @@ export default function TeacherPortal({
                   <input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="Search submissions" className={`h-10 rounded-xl border pl-9 pr-3 text-xs outline-none ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`} />
                 </div>
                 <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className={`h-10 rounded-xl border px-3 text-xs font-bold ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
-                  <option>All</option>
-                  <option>Pending</option>
-                  <option>Passed</option>
-                  <option>Failed</option>
+                  <option value="All">All</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Reviewed">Reviewed</option>
+                  <option value="Passed">Passed</option>
+                  <option value="Failed">Failed</option>
                 </select>
               </div>
             </div>
@@ -1943,7 +1983,8 @@ export default function TeacherPortal({
                 </div>
               ) : (
                 filteredSubmissions.map(sub => {
-                  const score = Number(sub.score ?? sub.grade ?? 0);
+                  const isReviewed = sub.reviewStatus === 'reviewed' || sub.status === 'reviewed';
+                  const score = Number(sub.teacherScore ?? sub.grade ?? sub.score ?? 0);
                   return (
                     <button
                       key={sub.id}
@@ -1955,12 +1996,32 @@ export default function TeacherPortal({
                     >
                       <div className="flex items-center justify-between gap-4">
                         <div>
-                          <p className="text-xs font-black">{sub.studentName}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-black">{sub.studentName}</p>
+                            {isReviewed && (
+                              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                Reviewed
+                              </span>
+                            )}
+                            {sub.remedialRequired && (
+                              <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                                Remedial
+                              </span>
+                            )}
+                          </div>
                           <p className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-400">{sub.challengeName}</p>
                           <p className="mt-1 text-[10px] font-mono text-slate-400">{sub.topicTitle || 'Practice IDE'} | {sub.compileStatus || 'not_run'} | {sub.submittedAt}</p>
                         </div>
-                        <span className={`rounded-full px-2 py-1 text-[10px] font-black ${score >= 70 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'}`}>
-                          {sub.status === 'pending' ? 'Needs Review' : `${score}%`}
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-black ${
+                          isReviewed
+                            ? score >= 70 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                            : sub.status === 'pending'
+                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                            : score >= 70
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                            : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                        }`}>
+                          {isReviewed ? `Reviewed: ${score}%` : sub.status === 'pending' ? 'Needs Review' : `${score}%`}
                         </span>
                       </div>
                     </button>
@@ -1975,9 +2036,24 @@ export default function TeacherPortal({
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-800 pb-4">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Submission Inspector</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Submission Inspector</p>
+                      {(selectedSubmission.reviewStatus === 'reviewed' || selectedSubmission.status === 'reviewed') && (
+                        <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-400 border border-emerald-500/40">
+                          Reviewed ({selectedSubmission.teacherScore ?? selectedSubmission.grade ?? selectedSubmission.score}%)
+                        </span>
+                      )}
+                      {selectedSubmission.remedialRequired && (
+                        <span className="rounded bg-rose-500/20 px-2 py-0.5 text-[10px] font-black uppercase text-rose-400 border border-rose-500/40">
+                          Remedial Required
+                        </span>
+                      )}
+                    </div>
                     <h3 className="mt-1 text-sm font-black">{selectedSubmission.studentName}</h3>
                     <p className="text-[11px] text-slate-400">{selectedSubmission.challengeName}</p>
+                    {selectedSubmission.gradedAt && (
+                      <p className="mt-0.5 text-[10px] text-slate-400">Graded: {new Date(selectedSubmission.gradedAt).toLocaleString()}</p>
+                    )}
                   </div>
                   <Eye className="h-5 w-5 text-emerald-500" />
                 </div>

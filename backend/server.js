@@ -150,29 +150,61 @@ const toClientNotification = (row) => ({
     metadata: row.metadata || {}
 });
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const resolveUserUuid = async (clientOrPool, identifier) => {
+    if (!identifier) return null;
+    const str = String(identifier).trim();
+    if (UUID_REGEX.test(str)) {
+        return str;
+    }
+    const res = await clientOrPool.query(
+        "SELECT id FROM users WHERE id::text = $1 OR user_id = $1 OR LOWER(email) = LOWER($1) LIMIT 1",
+        [str]
+    );
+    return res.rows[0]?.id || null;
+};
+
 const createOrUpdateNotification = async (client, payload) => {
+    const recipientUserId = await resolveUserUuid(client, payload.recipientUserId);
+    if (!recipientUserId) {
+        console.warn(`[createOrUpdateNotification] Failed to resolve recipient user: ${payload.recipientUserId}`);
+        return null;
+    }
+
+    const teacherId = payload.teacherId && UUID_REGEX.test(String(payload.teacherId).trim())
+        ? String(payload.teacherId).trim()
+        : null;
+
+    const relatedSubmissionId = payload.relatedSubmissionId && UUID_REGEX.test(String(payload.relatedSubmissionId).trim())
+        ? String(payload.relatedSubmissionId).trim()
+        : null;
+
     const existing = await client.query(`
         SELECT id FROM notifications
         WHERE recipient_user_id = $1::uuid
-          AND related_submission_id = $3::uuid
+          AND (
+            ($3::uuid IS NOT NULL AND related_submission_id = $3::uuid)
+            OR ($3::uuid IS NULL AND related_practice_id = $4::text AND created_at > NOW() - INTERVAL '1 day')
+          )
           AND (
             notification_type = $2::text
             OR (
-              $2::text IN ('submission_graded', 'submission_passed', 'remedial_required')
-              AND notification_type IN ('submission_graded', 'submission_passed', 'remedial_required')
+              $2::text IN ('submission_graded', 'submission_passed', 'remedial_required', 'practice_graded', 'practice_reviewed')
+              AND notification_type IN ('submission_graded', 'submission_passed', 'remedial_required', 'practice_graded', 'practice_reviewed')
             )
           )
         LIMIT 1
-    `, [payload.recipientUserId, payload.type, payload.relatedSubmissionId || null]);
+    `, [recipientUserId, payload.type, relatedSubmissionId, payload.relatedPracticeId || null]);
 
     const values = [
-        payload.recipientUserId,
+        recipientUserId,
         payload.type,
         payload.title,
         payload.message,
-        payload.relatedSubmissionId || null,
+        relatedSubmissionId,
         payload.relatedPracticeId || null,
-        payload.teacherId || null,
+        teacherId,
         payload.teacherName || null,
         payload.practiceTitle || null,
         payload.grade ?? null,
@@ -207,7 +239,7 @@ const createOrUpdateNotification = async (client, payload) => {
             payload.title,
             payload.message,
             payload.relatedPracticeId || null,
-            payload.teacherId || null,
+            teacherId,
             payload.teacherName || null,
             payload.practiceTitle || null,
             payload.grade ?? null,
@@ -1561,13 +1593,16 @@ const getLessonEvidence = async (studentId, lessonId) => {
     );
     const challengeResult = await pool.query(`
         SELECT pc.id, pc.passing_score,
-               latest.score, latest.compile_status,
+               latest.score, latest.teacher_score, latest.compile_status,
+               latest.review_status, latest.remedial_required,
                latest.submitted_at
         FROM programming_challenges pc
         LEFT JOIN LATERAL (
-            SELECT ps.score, ps.compile_status, ps.submitted_at
+            SELECT ps.score, ps.teacher_score, ps.compile_status,
+                   ps.review_status, ps.remedial_required, ps.submitted_at
             FROM practice_submissions ps
-            WHERE ps.student_id = $1::text AND ps.challenge_id = pc.id
+            WHERE (ps.student_id = $1::text OR ps.student_id IN (SELECT user_id FROM users WHERE id::text = $1::text))
+              AND ps.challenge_id = pc.id
             ORDER BY ps.submitted_at DESC
             LIMIT 1
         ) latest ON TRUE
@@ -1579,18 +1614,25 @@ const getLessonEvidence = async (studentId, lessonId) => {
     const assessmentPassed = Boolean(quizResult.rows[0]?.passed);
     const practiceRequired = challengeResult.rowCount > 0;
     const practice = challengeResult.rows[0];
+    const effectiveScore = practice?.teacher_score !== null && practice?.teacher_score !== undefined
+        ? Number(practice.teacher_score)
+        : Number(practice?.score || 0);
+    const isRemedial = Boolean(practice?.remedial_required);
+    const passingThreshold = Number(practice?.passing_score || 70);
     const practiceCompleted = !practiceRequired || (
+        practice &&
         practice.score !== null &&
-        Number(practice.score) >= Number(practice.passing_score || 70) &&
-        practice.compile_status === 'success'
+        !isRemedial &&
+        effectiveScore >= passingThreshold &&
+        (practice.compile_status === 'success' || practice.teacher_score !== null)
     );
     return {
         ...lesson,
         videoCompleted,
         assessmentPassed,
         practiceRequired,
-        practiceCompleted,
-        completed: videoCompleted && assessmentPassed && practiceCompleted
+        practiceCompleted: Boolean(practiceCompleted),
+        completed: Boolean(videoCompleted && assessmentPassed && practiceCompleted)
     };
 };
 
@@ -3684,11 +3726,13 @@ app.get("/api/admin/reports", requireAuth, requireRole(["admin"]), async (_req, 
 const selectPracticeSubmissionById = async (id) => {
     const result = await pool.query(`
         SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
-               u.name AS student_name, u.email AS student_email,
+               u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
+               COALESCE(s.section, u.section, 'Unassigned') AS section,
                grader.name AS graded_by_name
         FROM practice_submissions ps
         JOIN programming_challenges pc ON pc.id = ps.challenge_id
         LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
+        LEFT JOIN students s ON s.user_id = u.id
         LEFT JOIN users grader ON grader.id = ps.graded_by
         WHERE ps.id = $1
     `, [id]);
@@ -3699,11 +3743,13 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin
     try {
         const result = await pool.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
-                   u.name AS student_name, u.email AS student_email,
+                   u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
+                   COALESCE(s.section, u.section, 'Unassigned') AS section,
                    grader.name AS graded_by_name
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
             LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
+            LEFT JOIN students s ON s.user_id = u.id
             LEFT JOIN users grader ON grader.id = ps.graded_by
             ORDER BY ps.submitted_at DESC
         `);
@@ -3720,9 +3766,9 @@ app.get("/api/practice-submissions/me", requireAuth, requireRole(["student"]), a
                    ps.teacher_score, ps.teacher_feedback, ps.graded_at, ps.review_status, ps.remedial_required
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
-            WHERE ps.student_id = $1::text
+            WHERE ps.student_id IN ($1::text, $2, $3)
             ORDER BY ps.submitted_at DESC
-        `, [req.authUser.id]);
+        `, [req.authUser.id, req.authUser.userId || "", req.authUser.email || ""]);
         res.json({ success: true, data: result.rows });
     } catch (error) {
         next(error);
@@ -3911,7 +3957,7 @@ app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["tea
     try {
         await client.query("BEGIN");
         const existingResult = await client.query(`
-            SELECT ps.*, pc.title AS challenge_title, u.name AS student_name, u.email AS student_email, teacher.name AS teacher_name
+            SELECT ps.*, pc.title AS challenge_title, u.id AS student_user_id, u.name AS student_name, u.email AS student_email, teacher.name AS teacher_name
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
             LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
@@ -3933,19 +3979,22 @@ app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["tea
         `, [req.params.id, req.authUser.id]);
         const updatedResult = await client.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
-                   u.name AS student_name, u.email AS student_email,
+                   u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
+                   COALESCE(s.section, u.section, 'Unassigned') AS section,
                    reopener.name AS graded_by_name
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
             LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
+            LEFT JOIN students s ON s.user_id = u.id
             LEFT JOIN users reopener ON reopener.id = ps.reopened_by
             WHERE ps.id = $1
         `, [req.params.id]);
         updated = updatedResult.rows[0];
         const teacherName = existing.teacher_name || req.authUser.email || "your teacher";
         const practiceTitle = existing.challenge_title || existing.challenge_id;
+        const studentRecipientId = existing.student_user_id || existing.student_id;
         notification = await createOrUpdateNotification(client, {
-            recipientUserId: existing.student_id,
+            recipientUserId: studentRecipientId,
             type: "practice_reopened",
             title: "Practice Submission Reopened",
             message: "Your " + practiceTitle + " practice submission has been reopened by " + teacherName + ". You have another attempt available.",
@@ -3957,8 +4006,13 @@ app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["tea
             metadata: { studentName: existing.student_name || "", studentEmail: existing.student_email || "" }
         });
         await client.query("COMMIT");
-        sendNotificationEvent(existing.student_id, notification);
-        res.json({ success: true, data: updated, notification });
+        if (studentRecipientId) {
+            sendNotificationEvent(studentRecipientId, notification);
+            if (existing.student_id && existing.student_id !== studentRecipientId) {
+                sendNotificationEvent(existing.student_id, notification);
+            }
+        }
+        res.json({ success: true, data: updated, submission: updated, notification });
     } catch (error) {
         await client.query("ROLLBACK");
         next(error);
@@ -3985,7 +4039,7 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
         await client.query("BEGIN");
         const existingResult = await client.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
-                   u.name AS student_name, u.email AS student_email,
+                   u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
                    teacher.name AS teacher_name
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
@@ -4010,26 +4064,26 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
         `, [req.params.id, grade, feedback, req.authUser.id, remedialRequired]);
         const updatedResult = await client.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
-                   u.name AS student_name, u.email AS student_email,
+                   u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
+                   COALESCE(s.section, u.section, 'Unassigned') AS section,
                    grader.name AS graded_by_name
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
             LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
+            LEFT JOIN students s ON s.user_id = u.id
             LEFT JOIN users grader ON grader.id = ps.graded_by
             WHERE ps.id = $1
         `, [req.params.id]);
         updated = updatedResult.rows[0];
         const teacherName = existing.teacher_name || req.authUser.email || "your teacher";
         const practiceTitle = existing.challenge_title || existing.challenge_id;
-        const title = remedialRequired ? "Remedial Required" : grade >= 80 ? "Practice Submission Passed" : "Practice Submission Graded";
-        const message = remedialRequired
-            ? "Your " + practiceTitle + " practice submission received " + grade + "/100. Remedial work is required. Teacher feedback: " + feedback
-            : "Your " + practiceTitle + " practice submission was graded " + grade + "/100 by " + teacherName + ".";
+        const studentRecipientId = existing.student_user_id || existing.student_id;
+        
         notification = await createOrUpdateNotification(client, {
-            recipientUserId: existing.student_id,
+            recipientUserId: studentRecipientId,
             type: remedialRequired ? "remedial_required" : grade >= 80 ? "submission_passed" : "submission_graded",
-            title,
-            message,
+            title: "Practice Reviewed",
+            message: "Your " + practiceTitle + " practice submission has been reviewed by " + teacherName + ".\nGrade: " + grade + "/100\nFeedback: " + feedback + "\nRemedial work required: " + (remedialRequired ? "Yes" : "No"),
             relatedSubmissionId: existing.id,
             relatedPracticeId: existing.challenge_id,
             teacherId: req.authUser.id,
@@ -4041,9 +4095,21 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
             remedialRequired,
             metadata: { studentName: existing.student_name || "", studentEmail: existing.student_email || "" }
         });
+
         await client.query("COMMIT");
-        sendNotificationEvent(existing.student_id, notification);
-        res.json({ success: true, data: updated, notification });
+
+        // After commit, notify student and verify lesson completion
+        if (studentRecipientId) {
+            sendNotificationEvent(studentRecipientId, notification);
+            if (existing.student_id && existing.student_id !== studentRecipientId) {
+                sendNotificationEvent(existing.student_id, notification);
+            }
+            if (existing.lesson_id) {
+                await verifyLessonCompletion(studentRecipientId, existing.lesson_id);
+            }
+        }
+
+        res.json({ success: true, data: updated, submission: updated, notification });
     } catch (error) {
         await client.query("ROLLBACK");
         next(error);
