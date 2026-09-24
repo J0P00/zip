@@ -2061,31 +2061,64 @@ export default function TeacherPortal({
                   <pre className="max-h-48 overflow-auto rounded-xl border border-slate-800 bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-emerald-300">{selectedSubmission.code}</pre>
                   <div className="grid grid-cols-3 gap-2 text-center text-xs">
                     {[
-                      ['Compile', selectedSubmission.compileStatus || 'not_run'],
+                      ['Compile', selectedSubmission.compileStatus === 'success' ? '✓ Passed' : (selectedSubmission.compileStatus === 'failed' || selectedSubmission.compileStatus === 'runtime_error') ? '✗ Failed' : (selectedSubmission.compileStatus || 'not_run')],
                       ['Runtime', selectedSubmission.runtime ? `${selectedSubmission.runtime} ms` : '--'],
                       ['Memory', selectedSubmission.memoryUsage ? `${selectedSubmission.memoryUsage} MB` : '--']
                     ].map(([label, value]) => (
                       <div key={label} className="rounded-xl border border-slate-800 bg-slate-900 p-2">
                         <span className="block text-[9px] font-black uppercase text-slate-500">{label}</span>
-                        <strong className="mt-1 block text-[10px]">{value}</strong>
+                        <strong className={`mt-1 block text-[10px] ${label === 'Compile' && selectedSubmission.compileStatus === 'success' ? 'text-emerald-400' : label === 'Compile' && (selectedSubmission.compileStatus === 'failed' || selectedSubmission.compileStatus === 'runtime_error') ? 'text-rose-400' : ''}`}>{value}</strong>
                       </div>
                     ))}
                   </div>
+
+                  {/* OOP Structural AST Validation Breakdown */}
+                  {selectedSubmission.oopValidation && (
+                    <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">OOP Structural AST Analysis</span>
+                        <span className={`rounded px-1.5 py-0.5 text-[9px] font-black ${selectedSubmission.oopValidation.passed ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-rose-950 text-rose-300 border border-rose-800'}`}>
+                          {selectedSubmission.oopValidation.passed ? '✓ All OOP Rules Met' : '✗ OOP Deficiencies Found'}
+                        </span>
+                      </div>
+                      {selectedSubmission.oopValidation.requirements && selectedSubmission.oopValidation.requirements.length > 0 && (
+                        <div className="space-y-1 pt-1">
+                          {selectedSubmission.oopValidation.requirements.map((req, idx) => (
+                            <div key={idx} className={`flex items-start justify-between gap-2 rounded px-2 py-1 text-[10px] font-bold ${req.passed ? 'bg-emerald-950/30 text-emerald-300 border border-emerald-900/40' : 'bg-rose-950/30 text-rose-300 border border-rose-900/40'}`}>
+                              <span className="leading-tight">{req.description}</span>
+                              <span className="shrink-0">{req.passed ? '✓' : '✗'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {selectedSubmission.oopValidation.feedback && selectedSubmission.oopValidation.feedback.length > 0 && (
+                        <div className="rounded bg-rose-950/20 border border-rose-900/30 p-2 text-[10px] text-rose-300 space-y-0.5">
+                          {selectedSubmission.oopValidation.feedback.map((msg, i) => (
+                            <p key={i}>• {msg}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid gap-2 sm:grid-cols-2">
                     <div>
                       <p className="mb-1 text-[9px] font-black uppercase text-slate-500">Program Output</p>
-                      <pre className="min-h-20 rounded-xl border border-slate-800 bg-slate-900 p-3 text-[10px] text-slate-300">{selectedSubmission.programOutput || 'No output captured.'}</pre>
+                      <pre className="min-h-20 rounded-xl border border-slate-800 bg-slate-900 p-3 text-[10px] text-slate-300 whitespace-pre-wrap">{selectedSubmission.programOutput || 'No output captured.'}</pre>
                     </div>
                     <div>
                       <p className="mb-1 text-[9px] font-black uppercase text-slate-500">Expected / Errors</p>
-                      <pre className="min-h-20 rounded-xl border border-slate-800 bg-slate-900 p-3 text-[10px] text-slate-300">{selectedSubmission.errorMessage || 'Expected output matched by test cases.'}</pre>
+                      <pre className="min-h-20 rounded-xl border border-slate-800 bg-slate-900 p-3 text-[10px] text-slate-300 whitespace-pre-wrap">{selectedSubmission.errorMessage || 'Expected output matched by test cases.'}</pre>
                     </div>
                   </div>
+
+                  {/* Test Cases (Public & Hidden) */}
                   <div className="space-y-1">
+                    <p className="text-[9px] font-black uppercase text-slate-500">Behavioral & Hidden Tests</p>
                     {(selectedSubmission.testResults ?? []).map(test => (
                       <div key={test.id} className={`flex justify-between rounded-lg border px-2 py-1 text-[10px] font-bold ${test.passed ? 'border-emerald-900 bg-emerald-950/30 text-emerald-300' : 'border-rose-900 bg-rose-950/30 text-rose-300'}`}>
-                        <span>{test.isHidden ? 'Hidden' : 'Sample'} test {test.id}</span>
-                        <span>{test.passed ? 'Passed' : 'Failed'}</span>
+                        <span>{test.isHidden ? 'Hidden test' : 'Sample test'} {test.id} {test.expectedOutput ? `(${test.expectedOutput})` : ''}</span>
+                        <span>{test.passed ? 'Passed ✓' : 'Failed ✗'}</span>
                       </div>
                     ))}
                   </div>

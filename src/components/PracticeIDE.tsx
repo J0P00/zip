@@ -404,19 +404,29 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
         <section className="rounded-lg border border-slate-200 bg-slate-950 p-4 shadow-sm">
           <div className="mb-2 flex items-center justify-between">
             <span className="inline-flex items-center gap-1 font-mono text-[10px] font-black uppercase text-slate-400"><Terminal className="h-3.5 w-3.5" /> Console</span>
-            {lastResult && <span className="rounded bg-slate-800 px-2 py-0.5 font-mono text-[10px] font-black text-emerald-300">{lastResult.score}%</span>}
+            {lastResult && (
+              <div className="flex items-center gap-2">
+                <span className={`rounded px-2 py-0.5 font-mono text-[10px] font-black ${lastResult.compileStatus === 'success' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-rose-950 text-rose-300 border border-rose-800'}`}>
+                  {lastResult.compileStatus === 'success' ? '✓ Compiled' : '✗ Compile Error'}
+                </span>
+                <span className="rounded bg-slate-800 px-2 py-0.5 font-mono text-[10px] font-black text-emerald-300">{lastResult.score}%</span>
+              </div>
+            )}
           </div>
           <div className="max-h-52 space-y-1 overflow-y-auto font-mono text-[11px] leading-5 text-slate-300">
             {consoleLogs.map((line, index) => <pre key={`${line}-${index}`} className="whitespace-pre-wrap">{line}</pre>)}
           </div>
           {lastResult && (
-            <div className="mt-3 space-y-1 border-t border-slate-800 pt-3">
-              {lastResult.testResults.map(test => (
-                <div key={test.id} className={`flex justify-between gap-2 text-[10px] font-bold ${test.passed ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  <span>{test.isHidden ? 'Hidden test' : 'Sample test'}</span>
-                  <span>{test.passed ? 'Passed ✓' : 'Failed ✗'}</span>
-                </div>
-              ))}
+            <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Validation Breakdown</p>
+              <div className="space-y-1">
+                {lastResult.testResults.map(test => (
+                  <div key={test.id} className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 text-[10px] font-bold ${test.passed ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-900/50' : 'bg-rose-950/40 text-rose-300 border border-rose-900/50'}`}>
+                    <span className="truncate">{test.expectedOutput || (test.isHidden ? 'Hidden validation criteria' : 'Sample test')}</span>
+                    <span className="shrink-0">{test.passed ? 'Passed ✓' : 'Failed ✗'}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           <button

@@ -123,8 +123,9 @@ class Student {
     const result = evaluateChallenge(challenge, validStudentCode, true);
     assert.strictEqual(result.compileStatus, 'success', 'Compilation should succeed');
     assert.strictEqual(result.score, 100, 'Score should be 100%');
-    assert.strictEqual(result.testResults.length, challenge.testCases.length, 'Must evaluate against all test cases');
+    assert(result.testResults.length >= challenge.testCases.length, 'Must evaluate against all test cases');
     assert(result.testResults.every(t => t.passed), 'All test cases must pass');
+    assert(result.oopValidation && result.oopValidation.passed, 'OOP validation must pass');
   });
 
   test('Server-side challenge evaluation fails incomplete or invalid code', () => {

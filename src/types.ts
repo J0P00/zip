@@ -268,6 +268,10 @@ export interface PendingSubmission {
   isLocked?: boolean;
   errorMessage?: string;
   testResults?: ChallengeTestResult[];
+  oopValidation?: OopValidationResult;
+  behavioralValidation?: BehavioralValidationResult;
+  hiddenValidation?: HiddenValidationResult;
+  educationalFeedback?: string[];
 }
 
 export interface CurriculumModule {
@@ -371,6 +375,38 @@ export interface ProgrammingChallenge {
   createdAt: string;
 }
 
+export interface OopRequirementResult {
+  id: string;
+  name: string;
+  description: string;
+  passed: boolean;
+  message: string;
+}
+
+export interface OopValidationResult {
+  passed: boolean;
+  score: number;
+  total: number;
+  passedCount: number;
+  requirements: OopRequirementResult[];
+  feedback?: string[];
+  detected?: any;
+}
+
+export interface BehavioralValidationResult {
+  passed: boolean;
+  score: number;
+  total: number;
+  passedCount: number;
+  tests: Array<{ id: string; input: string; expectedOutput: string; actualOutput: string; passed: boolean; isHidden: boolean; message: string }>;
+}
+
+export interface HiddenValidationResult {
+  passed: boolean;
+  total: number;
+  passedCount: number;
+}
+
 export interface ChallengeTestResult {
   id: string;
   isHidden: boolean;
@@ -400,6 +436,10 @@ export interface PracticeSubmission {
   isLocked: boolean;
   errorMessage?: string;
   testResults: ChallengeTestResult[];
+  oopValidation?: OopValidationResult;
+  behavioralValidation?: BehavioralValidationResult;
+  hiddenValidation?: HiddenValidationResult;
+  educationalFeedback?: string[];
   teacherScore?: number;
   feedback?: string;
   gradedAt?: string;
