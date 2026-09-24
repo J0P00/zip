@@ -912,3 +912,47 @@ CREATE INDEX IF NOT EXISTS idx_swing_videos_lesson ON swing_videos(lesson_id);
 CREATE INDEX IF NOT EXISTS idx_swing_questions_quiz ON swing_questions(quiz_id);
 CREATE INDEX IF NOT EXISTS idx_swing_submissions_student ON swing_submissions(student_id, submitted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_swing_progress_student ON swing_progress(student_id, lesson_id);
+
+-- Secure Assessment & Cheat Deterrence Sessions and Events
+CREATE TABLE IF NOT EXISTS assessment_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  assessment_id TEXT NOT NULL,
+  lesson_id TEXT NOT NULL DEFAULT '',
+  attempt_number INTEGER NOT NULL DEFAULT 1,
+  session_token TEXT UNIQUE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'expired', 'invalidated')),
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ,
+  violation_count INTEGER NOT NULL DEFAULT 0,
+  time_limit_seconds INTEGER NOT NULL DEFAULT 1200,
+  question_order JSONB NOT NULL DEFAULT '[]'::jsonb,
+  score INTEGER,
+  total INTEGER,
+  percentage NUMERIC,
+  passed BOOLEAN,
+  answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_assessment_sessions_student ON assessment_sessions(student_user_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_assessment_sessions_token ON assessment_sessions(session_token);
+CREATE INDEX IF NOT EXISTS idx_assessment_sessions_active ON assessment_sessions(student_user_id, assessment_id, status);
+
+CREATE TABLE IF NOT EXISTS assessment_security_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id UUID REFERENCES assessment_sessions(id) ON DELETE CASCADE,
+  student_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  assessment_id TEXT NOT NULL,
+  lesson_id TEXT DEFAULT '',
+  event_type TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'LOW' CHECK (severity IN ('LOW', 'MEDIUM', 'HIGH')),
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_assessment_security_events_session ON assessment_security_events(session_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_assessment_security_events_student ON assessment_security_events(student_user_id, created_at DESC);
+

@@ -160,14 +160,41 @@ export const assessmentApi = {
   remove: (id: string) =>
     apiRequest<{ success: boolean; data: any }>(`/api/assessments/${id}`, {
       method: 'DELETE'
-    })
+    }),
+  startSession: (body: { assessmentId: string; lessonId?: string; sessionToken?: string }) =>
+    apiRequest<{ success: boolean; resumed?: boolean; data: import('../types').AssessmentSessionData }>('/api/assessments/session/start', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: body.sessionToken ? { 'x-session-token': body.sessionToken } : {}
+    }),
+  getActiveSession: (assessmentId: string) =>
+    apiRequest<{ success: boolean; data: import('../types').AssessmentSessionData | null }>(`/api/assessments/session/active/${encodeURIComponent(assessmentId)}`),
+  logEvent: (sessionId: string, body: { eventType: string; metadata?: Record<string, any>; answers?: Record<string, string> }) =>
+    apiRequest<{ success: boolean; violationCount: number; severity: string; threshold: number; message: string }>(`/api/assessments/session/${encodeURIComponent(sessionId)}/event`, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  submitSession: (sessionId: string, body: { answers: Record<string, string> }) =>
+    apiRequest<{ success: boolean; data: import('../types').AssessmentSubmitResult }>(`/api/assessments/session/${encodeURIComponent(sessionId)}/submit`, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  getStudentSessions: (studentId: string, token?: string) =>
+    apiRequest<{ success: boolean; data: any[] }>(`/api/assessments/sessions/student/${encodeURIComponent(studentId)}`, { token }),
+  getSessionEvents: (sessionId: string, token?: string) =>
+    apiRequest<{ success: boolean; session: any; data: import('../types').AssessmentSecurityEvent[] }>(`/api/assessments/sessions/${encodeURIComponent(sessionId)}/events`, { token })
 };
 
 export const practiceApi = {
   listChallenges: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-challenges'),
   listSubmissions: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-submissions'),
   listMine: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-submissions/me'),
-  submit: (body: Record<string, unknown>) =>
+  runCode: (challengeId: string, sourceCode: string) =>
+    apiRequest<{ success: boolean; data: any }>(`/api/practice-challenges/${encodeURIComponent(challengeId)}/run`, {
+      method: 'POST',
+      body: JSON.stringify({ sourceCode })
+    }),
+  submit: (body: { challengeId: string; sourceCode: string }) =>
     apiRequest<{ success: boolean; data: any }>('/api/practice-submissions', {
       method: 'POST',
       body: JSON.stringify(body)

@@ -32,10 +32,10 @@ import {
   Wifi,
   WifiOff
 } from 'lucide-react';
-import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
+import { AdaptiveRecommendation, AssessmentSecurityEvent, AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
 import { LeaderboardUser } from '../types';
 import Leaderboard from './Leaderboard.tsx';
-import { progressApi, userApi } from '../services/api';
+import { assessmentApi, progressApi, userApi } from '../services/api';
 import { generateStudentResultsInterpretation, StudentResultsData, StudentResultsInterpretation } from '../services/interpretation';
 import { generateRuleBasedRecommendation } from '../services/recommendationEngine';
 import { getCanonicalStudentId } from '../services/identity';
@@ -364,6 +364,15 @@ export default function TeacherPortal({
   const [viewingStudentError, setViewingStudentError] = useState<string | null>(null);
   const [isRefreshingProgress, setIsRefreshingProgress] = useState(false);
 
+  // Assessment Security & Session Inspection state
+  const [viewingStudentSessions, setViewingStudentSessions] = useState<any[]>([]);
+  const [viewingStudentSessionsLoading, setViewingStudentSessionsLoading] = useState(false);
+  const [inspectorSession, setInspectorSession] = useState<any | null>(null);
+  const [inspectorEvents, setInspectorEvents] = useState<AssessmentSecurityEvent[]>([]);
+  const [isLoadingInspectorEvents, setIsLoadingInspectorEvents] = useState(false);
+  const [isInspectorModalOpen, setIsInspectorModalOpen] = useState(false);
+  const [inspectorStudentName, setInspectorStudentName] = useState('');
+
   // Submissions and other states
   const [selectedStudentId, setSelectedStudentId] = useState(initialStudents[0]?.id ?? '');
   const [studentInput, setStudentInput] = useState('');
@@ -488,9 +497,22 @@ export default function TeacherPortal({
       const mapped = mapBackendStudent(fallbackUser, resultsData);
       setViewingStudent(mapped);
       setViewingStudentResults(resultsData);
+
+      setViewingStudentSessionsLoading(true);
+      assessmentApi.getStudentSessions(studentId, currentUser.token)
+        .then(res => {
+          if (res.data) setViewingStudentSessions(res.data);
+          else setViewingStudentSessions([]);
+        })
+        .catch(err => {
+          console.warn('Unable to load assessment sessions for student:', err);
+          setViewingStudentSessions([]);
+        })
+        .finally(() => setViewingStudentSessionsLoading(false));
     } catch (error: any) {
       setViewingStudent(null);
       setViewingStudentResults(null);
+      setViewingStudentSessions([]);
       
       const errorMsg = error instanceof Error ? error.message : String(error || '');
       if (errorMsg.includes('404') || errorMsg.toLowerCase().includes('not found')) {
@@ -512,11 +534,31 @@ export default function TeacherPortal({
     } else {
       setViewingStudent(null);
       setViewingStudentResults(null);
+      setViewingStudentSessions([]);
       setViewingStudentNotFound(false);
       setViewingStudentUnauthorized(false);
       setViewingStudentError(null);
     }
   }, [viewingStudentId, fetchSpecificStudentProgress]);
+
+  // Inspect security events for a specific assessment session
+  const handleInspectSession = async (session: any, studentName: string) => {
+    setInspectorSession(session);
+    setInspectorStudentName(studentName);
+    setIsInspectorModalOpen(true);
+    setIsLoadingInspectorEvents(true);
+    setInspectorEvents([]);
+    try {
+      const res = await assessmentApi.getSessionEvents(session.id, currentUser.token);
+      if (res.data) {
+        setInspectorEvents(res.data);
+      }
+    } catch (err) {
+      console.warn('Unable to load session events:', err);
+    } finally {
+      setIsLoadingInspectorEvents(false);
+    }
+  };
 
   // Navigate to student progress page
   const handleViewStudentProgress = (studentId: string) => {
@@ -1214,6 +1256,113 @@ export default function TeacherPortal({
                         </div>
                       )}
                     </div>
+                  </div>
+
+                  {/* Assessment Security & Attempt History */}
+                  <div className="mt-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800">
+                          <ShieldAlert className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Assessment Integrity</p>
+                          <h4 className="mt-0.5 text-base font-black text-slate-900 dark:text-white">Assessment Security & Attempt History</h4>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1 text-xs font-bold text-slate-700 dark:text-slate-300">
+                          {viewingStudentSessions.length} total attempt{viewingStudentSessions.length === 1 ? '' : 's'}
+                        </span>
+                        {viewingStudentSessions.some(s => Number(s.security_violations_count || 0) > 0) && (
+                          <span className="rounded-full border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/50 px-3 py-1 text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Security Events Recorded
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {viewingStudentSessionsLoading ? (
+                      <div className="py-8 flex items-center justify-center gap-2 text-xs font-bold text-slate-400">
+                        <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                        Loading assessment security records...
+                      </div>
+                    ) : viewingStudentSessions.length === 0 ? (
+                      <div className="mt-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-6 text-center text-xs font-semibold text-slate-500">
+                        No assessment sessions recorded for this student yet.
+                      </div>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {viewingStudentSessions.map((session, idx) => {
+                          const violations = Number(session.security_violations_count || 0);
+                          const score = session.score !== null ? Number(session.score) : null;
+                          const passed = session.passed ?? (score !== null ? score >= 80 : false);
+                          const isTerminated = session.status === 'TERMINATED_SECURITY';
+                          const isExpired = session.status === 'EXPIRED';
+                          const isSubmitted = session.status === 'SUBMITTED';
+
+                          return (
+                            <div
+                              key={session.id || idx}
+                              className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4 transition hover:border-slate-300 dark:hover:border-slate-700"
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-900 dark:text-white">
+                                      {session.assessment_title || session.title || `Assessment #${session.assessment_id || idx + 1}`}
+                                    </span>
+                                    <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${
+                                      isSubmitted ? (passed ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300')
+                                      : isTerminated ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                      : isExpired ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                      : 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300'
+                                    }`}>
+                                      {session.status}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 font-medium">
+                                    <span>Started: {new Date(session.started_at).toLocaleString()}</span>
+                                    {session.submitted_at && <span>Submitted: {new Date(session.submitted_at).toLocaleString()}</span>}
+                                    <span>Time Limit: {session.time_limit_minutes || 20} min</span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                  <div className="text-right">
+                                    <div className="text-xs font-black text-slate-700 dark:text-slate-300">
+                                      Score: <span className={`font-mono text-sm ${score !== null && score >= 80 ? 'text-emerald-600' : 'text-slate-900 dark:text-white'}`}>{score !== null ? `${score}%` : '--'}</span>
+                                    </div>
+                                    <div className="mt-0.5">
+                                      {violations > 0 ? (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                                          <ShieldAlert className="h-3 w-3" />
+                                          {violations} Security Event{violations === 1 ? '' : 's'}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                          ✓ 0 Security Events
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleInspectSession(session, activeViewingStudent.name)}
+                                    className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 px-3 py-2 text-xs font-bold text-indigo-700 dark:text-indigo-300 transition flex items-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Inspect Events
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {/* Learning Journey Timeline */}
@@ -1958,6 +2107,131 @@ export default function TeacherPortal({
           <button type="button" onClick={() => setActiveTab('invitations')} className="mt-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-black text-white transition cursor-pointer">
             Open Invitations
           </button>
+        </div>
+      )}
+
+      {/* Assessment Security & Attempt Inspector Modal */}
+      {isInspectorModalOpen && inspectorSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="relative max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 p-5">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-indigo-50 dark:bg-indigo-950/60 p-2 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50">
+                  <ShieldAlert className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">Assessment Security & Attempt Inspector</h3>
+                  <p className="text-xs text-slate-500">
+                    Student: <span className="font-bold text-slate-700 dark:text-slate-300">{inspectorStudentName}</span> | Session: <code className="font-mono text-[10px]">{inspectorSession.id}</code>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsInspectorModalOpen(false)}
+                className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-white transition cursor-pointer font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              {/* Session Stats Header */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 bg-slate-50 dark:bg-slate-950">
+                  <span className="block text-[10px] font-black uppercase text-slate-400">Status</span>
+                  <span className="mt-1 block text-xs font-black text-slate-800 dark:text-slate-200">{inspectorSession.status}</span>
+                </div>
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 bg-slate-50 dark:bg-slate-950">
+                  <span className="block text-[10px] font-black uppercase text-slate-400">Score</span>
+                  <span className="mt-1 block text-xs font-black text-slate-800 dark:text-slate-200">{inspectorSession.score !== null ? `${inspectorSession.score}%` : 'N/A'}</span>
+                </div>
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 bg-slate-50 dark:bg-slate-950">
+                  <span className="block text-[10px] font-black uppercase text-slate-400">Security Events</span>
+                  <span className={`mt-1 block text-xs font-black ${Number(inspectorSession.security_violations_count || 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600'}`}>
+                    {inspectorSession.security_violations_count || 0}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 bg-slate-50 dark:bg-slate-950">
+                  <span className="block text-[10px] font-black uppercase text-slate-400">Session Started</span>
+                  <span className="mt-1 block text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                    {new Date(inspectorSession.started_at).toLocaleTimeString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Security Events Timeline */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">Chronological Security Event Log</h4>
+                  <span className="text-[11px] font-bold text-slate-400">{inspectorEvents.length} recorded event(s)</span>
+                </div>
+
+                {isLoadingInspectorEvents ? (
+                  <div className="py-10 text-center flex items-center justify-center gap-2 text-xs font-bold text-slate-400">
+                    <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+                    Loading security event timeline...
+                  </div>
+                ) : inspectorEvents.length === 0 ? (
+                  <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/40 dark:bg-emerald-950/20 p-6 text-center text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                    ✓ No security events or focus loss recorded during this assessment session.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                    {inspectorEvents.map((evt, idx) => {
+                      const severity = evt.severity || 'LOW';
+                      const severityClass = severity === 'HIGH'
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border-rose-300'
+                        : severity === 'MEDIUM'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-300'
+                        : 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 border-blue-300';
+
+                      return (
+                        <div key={evt.id || idx} className="p-3.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 transition">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-2.5">
+                              <span className={`rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${severityClass}`}>
+                                {severity}
+                              </span>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <strong className="text-xs font-black text-slate-900 dark:text-white font-mono">{evt.event_type || evt.eventType || 'SECURITY_EVENT'}</strong>
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    +{evt.elapsed_seconds || 0}s into session
+                                  </span>
+                                </div>
+                                {evt.metadata && Object.keys(evt.metadata).length > 0 && (
+                                  <pre className="mt-1.5 rounded-lg bg-slate-50 dark:bg-slate-950 p-2 text-[10px] font-mono text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 overflow-x-auto max-h-24">
+                                    {JSON.stringify(evt.metadata, null, 2)}
+                                  </pre>
+                                )}
+                              </div>
+                            </div>
+                            <span className="shrink-0 text-[10px] text-slate-400 font-medium">
+                              {new Date(evt.created_at || evt.createdAt || Date.now()).toLocaleTimeString()}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-slate-200 dark:border-slate-800 p-4 bg-slate-50 dark:bg-slate-950 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsInspectorModalOpen(false)}
+                className="rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 px-4 py-2 text-xs font-black text-slate-800 dark:text-white transition cursor-pointer"
+              >
+                Close Inspector
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

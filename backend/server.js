@@ -5,6 +5,8 @@ const cors = require("cors");
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const pool = require("./db");
+const { OOP_PARSED_QUESTIONS } = require("./questionBank");
+const { PRACTICE_CHALLENGES, evaluateChallenge } = require("./challengeBank");
 
 const app = express();
 
@@ -1027,6 +1029,52 @@ const seedLessons = async () => {
           read_at TIMESTAMPTZ
         )
     `);
+
+    // Create assessment_sessions table
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS assessment_sessions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          assessment_id TEXT NOT NULL,
+          lesson_id TEXT NOT NULL DEFAULT '',
+          attempt_number INTEGER NOT NULL DEFAULT 1,
+          session_token TEXT UNIQUE NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'expired', 'invalidated')),
+          started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          expires_at TIMESTAMPTZ NOT NULL,
+          completed_at TIMESTAMPTZ,
+          violation_count INTEGER NOT NULL DEFAULT 0,
+          time_limit_seconds INTEGER NOT NULL DEFAULT 1200,
+          question_order JSONB NOT NULL DEFAULT '[]'::jsonb,
+          score INTEGER,
+          total INTEGER,
+          percentage NUMERIC,
+          passed BOOLEAN,
+          answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_assessment_sessions_student ON assessment_sessions(student_user_id, started_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_assessment_sessions_token ON assessment_sessions(session_token);
+        CREATE INDEX IF NOT EXISTS idx_assessment_sessions_active ON assessment_sessions(student_user_id, assessment_id, status);
+    `);
+
+    // Create assessment_security_events table
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS assessment_security_events (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          session_id UUID REFERENCES assessment_sessions(id) ON DELETE CASCADE,
+          student_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          assessment_id TEXT NOT NULL,
+          lesson_id TEXT DEFAULT '',
+          event_type TEXT NOT NULL,
+          severity TEXT NOT NULL DEFAULT 'LOW' CHECK (severity IN ('LOW', 'MEDIUM', 'HIGH')),
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_assessment_security_events_session ON assessment_security_events(session_id, created_at ASC);
+        CREATE INDEX IF NOT EXISTS idx_assessment_security_events_student ON assessment_security_events(student_user_id, created_at DESC);
+    `);
 };
 
 const classifyLearningState = ({ learningScore = 0, quizScore = 0, practiceScore = 0, completedLessons = 0, totalLessons = 0 }) => {
@@ -1556,10 +1604,77 @@ const getLessonAccessState = async (studentId, lessonId) => {
     );
     if (!previousResult.rowCount) return { canAccess: false, reason: "Complete the previous lesson requirements first.", current };
     const previous = await getLessonEvidence(studentId, previousResult.rows[0].id);
-    const previousAccessComplete = Boolean(previous?.videoCompleted && previous?.assessmentPassed);
+    const previousAccessComplete = Boolean(previous?.completed);
     return previousAccessComplete
         ? { canAccess: true, current }
-        : { canAccess: false, reason: "Complete the previous lesson video and pass its assessment first.", current };
+        : { canAccess: false, reason: "Complete the previous lesson video, assessment, and practice first.", current };
+};
+
+const classifyEventSeverity = (eventType) => {
+    switch (eventType) {
+        case "COPY_ATTEMPT":
+        case "CUT_ATTEMPT":
+        case "CONTEXT_MENU_ATTEMPT":
+            return "LOW";
+        case "TAB_SWITCH":
+        case "WINDOW_BLUR":
+        case "WINDOW_FOCUS":
+        case "PAGE_LEAVE":
+        case "PAGE_RETURN":
+        case "PASTE_ATTEMPT":
+            return "MEDIUM";
+        case "MULTIPLE_SESSION":
+        case "INVALID_SESSION":
+        case "EXPIRED_SESSION":
+        case "SECURITY_TAMPER":
+            return "HIGH";
+        default:
+            return "LOW";
+    }
+};
+
+const shuffleArray = (array) => {
+    const copy = [...array];
+    for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+};
+
+const resolveAssessmentQuestions = (assessmentId, lessonId = "") => {
+    if (lessonId && OOP_PARSED_QUESTIONS[lessonId]) {
+        return OOP_PARSED_QUESTIONS[lessonId];
+    }
+    if (assessmentId && OOP_PARSED_QUESTIONS[assessmentId]) {
+        return OOP_PARSED_QUESTIONS[assessmentId];
+    }
+    const match = String(assessmentId).match(/oop_assessment_(\d+)/);
+    if (match) {
+        const key = `oop_lesson_${match[1]}`;
+        if (OOP_PARSED_QUESTIONS[key]) return OOP_PARSED_QUESTIONS[key];
+    }
+    const lessonMatch = String(lessonId).match(/oop_lesson_(\d+)/);
+    if (lessonMatch) {
+        const key = `oop_lesson_${lessonMatch[1]}`;
+        if (OOP_PARSED_QUESTIONS[key]) return OOP_PARSED_QUESTIONS[key];
+    }
+    return OOP_PARSED_QUESTIONS.oop_lesson_1 || [];
+};
+
+const generateSessionQuestions = (rawQuestions, maxCount = 15) => {
+    const shuffled = shuffleArray(rawQuestions).slice(0, maxCount);
+    return shuffled.map((q) => {
+        const shuffledOptions = shuffleArray(q.options || []);
+        return {
+            id: q.id,
+            lessonId: q.lessonId,
+            question: q.question,
+            options: shuffledOptions,
+            difficulty: q.difficulty || "Medium",
+            codeSnippet: q.codeSnippet || ""
+        };
+    });
 };
 
 const verifyLessonCompletion = async (studentId, lessonId) => {
@@ -2313,6 +2428,424 @@ app.delete("/api/assessments/:id", requireAuth, requireRole(["admin", "teacher"]
     }
 });
 
+// --- Secure Assessment Session Management Endpoints ---
+
+app.post("/api/assessments/session/start", requireAuth, async (req, res, next) => {
+    try {
+        if (req.authUser.role !== "student") {
+            return res.status(403).json({ success: false, message: "Only students can start assessment sessions." });
+        }
+        const { assessmentId, lessonId = "" } = req.body || {};
+        if (!assessmentId) {
+            return res.status(400).json({ success: false, message: "assessmentId is required." });
+        }
+
+        const safeAssessmentId = cleanText(assessmentId, 120);
+        const safeLessonId = cleanText(lessonId, 120);
+
+        // Check sequential progression prerequisites (must watch video >= 95%)
+        if (safeLessonId) {
+            const lessonAccess = await getLessonAccessState(req.authUser.id, safeLessonId);
+            if (!lessonAccess.canAccess || !lessonAccess.current?.videoCompleted) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Complete the current lesson video before starting its assessment."
+                });
+            }
+        }
+
+        // Check if student has an existing active session for this assessment
+        const existingActive = await pool.query(`
+            SELECT * FROM assessment_sessions
+            WHERE student_user_id = $1 AND assessment_id = $2 AND status = 'active'
+            ORDER BY started_at DESC LIMIT 1
+        `, [req.authUser.id, safeAssessmentId]);
+
+        const clientToken = req.headers["x-session-token"] || req.body?.sessionToken;
+
+        if (existingActive.rowCount > 0) {
+            const activeSession = existingActive.rows[0];
+            const now = Date.now();
+            const expiresAtMs = new Date(activeSession.expires_at).getTime();
+            const remainingSeconds = Math.max(0, Math.floor((expiresAtMs - now) / 1000));
+
+            if (remainingSeconds > 0) {
+                // If client presents matching session token (reconnect/refresh), resume it
+                if (clientToken && clientToken === activeSession.session_token) {
+                    return res.json({
+                        success: true,
+                        resumed: true,
+                        data: {
+                            sessionId: activeSession.id,
+                            sessionToken: activeSession.session_token,
+                            assessmentId: activeSession.assessment_id,
+                            lessonId: activeSession.lesson_id,
+                            startedAt: activeSession.started_at,
+                            expiresAt: activeSession.expires_at,
+                            remainingSeconds,
+                            violationCount: activeSession.violation_count,
+                            attemptNumber: activeSession.attempt_number,
+                            questions: activeSession.question_order,
+                            savedAnswers: activeSession.answers || {}
+                        }
+                    });
+                } else {
+                    // Duplicate session attempt from another tab/device
+                    await pool.query(`
+                        INSERT INTO assessment_security_events (session_id, student_user_id, assessment_id, lesson_id, event_type, severity, metadata)
+                        VALUES ($1, $2, $3, $4, 'MULTIPLE_SESSION', 'HIGH', $5::jsonb)
+                    `, [activeSession.id, req.authUser.id, safeAssessmentId, activeSession.lesson_id, JSON.stringify({ ip: req.ip, userAgent: req.headers["user-agent"] })]);
+
+                    await pool.query("UPDATE assessment_sessions SET violation_count = violation_count + 1 WHERE id = $1", [activeSession.id]);
+
+                    return res.status(409).json({
+                        success: false,
+                        errorCode: "DUPLICATE_SESSION",
+                        message: "This assessment is already active in another session.",
+                        activeSessionId: activeSession.id
+                    });
+                }
+            } else {
+                // Expire existing session
+                await pool.query("UPDATE assessment_sessions SET status = 'expired' WHERE id = $1", [activeSession.id]);
+            }
+        }
+
+        // Generate attempt number
+        const attemptResult = await pool.query(
+            "SELECT COALESCE(MAX(attempt_number), 0) + 1 AS next_attempt FROM assessment_sessions WHERE student_user_id = $1 AND assessment_id = $2",
+            [req.authUser.id, safeAssessmentId]
+        );
+        const attemptNumber = Number(attemptResult.rows[0]?.next_attempt || 1);
+
+        const sessionToken = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+        const timeLimitSeconds = 1200; // 20 minutes
+        const expiresAt = new Date(Date.now() + timeLimitSeconds * 1000);
+
+        // Fetch question bank and randomize questions and option order
+        const rawQuestions = resolveAssessmentQuestions(safeAssessmentId, safeLessonId);
+        const randomizedQuestions = generateSessionQuestions(rawQuestions, 15);
+
+        const result = await pool.query(`
+            INSERT INTO assessment_sessions (
+              student_user_id, assessment_id, lesson_id, attempt_number, session_token,
+              status, started_at, expires_at, violation_count, time_limit_seconds, question_order
+            )
+            VALUES ($1, $2, $3, $4, $5, 'active', NOW(), $6, 0, $7, $8::jsonb)
+            RETURNING *
+        `, [
+            req.authUser.id,
+            safeAssessmentId,
+            safeLessonId,
+            attemptNumber,
+            sessionToken,
+            expiresAt,
+            timeLimitSeconds,
+            JSON.stringify(randomizedQuestions)
+        ]);
+
+        const session = result.rows[0];
+
+        // Log session start event
+        await pool.query(`
+            INSERT INTO assessment_security_events (session_id, student_user_id, assessment_id, lesson_id, event_type, severity, metadata)
+            VALUES ($1, $2, $3, $4, 'SESSION_START', 'LOW', $5::jsonb)
+        `, [session.id, req.authUser.id, safeAssessmentId, safeLessonId, JSON.stringify({ attemptNumber, expiresAt })]);
+
+        res.status(201).json({
+            success: true,
+            data: {
+                sessionId: session.id,
+                sessionToken: session.session_token,
+                assessmentId: session.assessment_id,
+                lessonId: session.lesson_id,
+                startedAt: session.started_at,
+                expiresAt: session.expires_at,
+                remainingSeconds: timeLimitSeconds,
+                violationCount: 0,
+                attemptNumber,
+                questions: randomizedQuestions,
+                savedAnswers: {}
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/assessments/session/active/:assessmentId", requireAuth, async (req, res, next) => {
+    try {
+        if (req.authUser.role !== "student") {
+            return res.status(403).json({ success: false, message: "Only students have active assessment sessions." });
+        }
+        const safeAssessmentId = cleanText(req.params.assessmentId, 120);
+        const result = await pool.query(`
+            SELECT * FROM assessment_sessions
+            WHERE student_user_id = $1 AND assessment_id = $2 AND status = 'active'
+            ORDER BY started_at DESC LIMIT 1
+        `, [req.authUser.id, safeAssessmentId]);
+
+        if (!result.rowCount) {
+            return res.json({ success: true, data: null });
+        }
+
+        const session = result.rows[0];
+        const now = Date.now();
+        const expiresAtMs = new Date(session.expires_at).getTime();
+        const remainingSeconds = Math.max(0, Math.floor((expiresAtMs - now) / 1000));
+
+        if (remainingSeconds <= 0) {
+            await pool.query("UPDATE assessment_sessions SET status = 'expired' WHERE id = $1", [session.id]);
+            return res.json({ success: true, data: null });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                sessionId: session.id,
+                sessionToken: session.session_token,
+                assessmentId: session.assessment_id,
+                lessonId: session.lesson_id,
+                startedAt: session.started_at,
+                expiresAt: session.expires_at,
+                remainingSeconds,
+                violationCount: session.violation_count,
+                attemptNumber: session.attempt_number,
+                questions: session.question_order,
+                savedAnswers: session.answers || {}
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/assessments/session/:sessionId/event", requireAuth, async (req, res, next) => {
+    try {
+        const { eventType, metadata = {}, answers } = req.body || {};
+        if (!eventType) {
+            return res.status(400).json({ success: false, message: "eventType is required." });
+        }
+
+        const sessionResult = await pool.query(
+            "SELECT * FROM assessment_sessions WHERE id = $1 AND student_user_id = $2",
+            [req.params.sessionId, req.authUser.id]
+        );
+
+        if (!sessionResult.rowCount) {
+            return res.status(404).json({ success: false, message: "Active assessment session not found." });
+        }
+
+        const session = sessionResult.rows[0];
+        const severity = classifyEventSeverity(eventType);
+
+        // Optionally update saved in-progress answers if provided
+        if (answers && typeof answers === "object" && !Array.isArray(answers)) {
+            await pool.query(
+                "UPDATE assessment_sessions SET answers = $1::jsonb, updated_at = NOW() WHERE id = $2",
+                [JSON.stringify(answers), session.id]
+            );
+        }
+
+        await pool.query(`
+            INSERT INTO assessment_security_events (session_id, student_user_id, assessment_id, lesson_id, event_type, severity, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+        `, [
+            session.id,
+            req.authUser.id,
+            session.assessment_id,
+            session.lesson_id,
+            cleanText(eventType, 80),
+            severity,
+            JSON.stringify(metadata && typeof metadata === "object" ? metadata : {})
+        ]);
+
+        const updateRes = await pool.query(
+            "UPDATE assessment_sessions SET violation_count = violation_count + 1 WHERE id = $1 RETURNING violation_count",
+            [session.id]
+        );
+
+        const newViolationCount = updateRes.rows[0]?.violation_count || session.violation_count + 1;
+
+        res.json({
+            success: true,
+            violationCount: newViolationCount,
+            severity,
+            threshold: 3,
+            message: "Security event recorded."
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, res, next) => {
+    try {
+        const { answers = {} } = req.body || {};
+        const sessionResult = await pool.query(
+            "SELECT * FROM assessment_sessions WHERE id = $1 AND student_user_id = $2",
+            [req.params.sessionId, req.authUser.id]
+        );
+
+        if (!sessionResult.rowCount) {
+            return res.status(404).json({ success: false, message: "Assessment session not found." });
+        }
+
+        const session = sessionResult.rows[0];
+        if (session.status === "completed") {
+            return res.status(409).json({ success: false, message: "This assessment session has already been completed." });
+        }
+
+        const questions = Array.isArray(session.question_order) ? session.question_order : [];
+        const rawBank = resolveAssessmentQuestions(session.assessment_id, session.lesson_id);
+        const bankMap = new Map(rawBank.map(q => [q.id, q]));
+
+        let score = 0;
+        const total = questions.length || 1;
+        const review = [];
+
+        for (const q of questions) {
+            const master = bankMap.get(q.id);
+            const submittedAnswer = answers[q.id];
+            const isCorrect = Boolean(master && submittedAnswer && master.correctAnswer === submittedAnswer);
+            if (isCorrect) score += 1;
+
+            review.push({
+                id: q.id,
+                lessonId: q.lessonId || session.lesson_id,
+                question: q.question,
+                options: q.options,
+                difficulty: q.difficulty,
+                codeSnippet: q.codeSnippet,
+                selectedAnswer: submittedAnswer || "",
+                correctAnswer: master ? master.correctAnswer : "",
+                explanation: master ? master.explanation : "",
+                isCorrect
+            });
+        }
+
+        const percentage = Math.round((score / total) * 100);
+        const passed = percentage >= 80;
+        const correctAnswers = score;
+        const incorrectAnswers = total - score;
+
+        // Update session to completed
+        await pool.query(`
+            UPDATE assessment_sessions
+            SET status = 'completed', completed_at = NOW(), score = $1, total = $2,
+                percentage = $3, passed = $4, answers = $5::jsonb, updated_at = NOW()
+            WHERE id = $6
+        `, [score, total, percentage, passed, JSON.stringify(answers), session.id]);
+
+        // Insert into quiz_attempts for authoritative history
+        const attemptInsert = await pool.query(`
+            INSERT INTO quiz_attempts (
+              student_user_id, assessment_id, lesson_id, score, total, percentage,
+              correct_answers, incorrect_answers, passed, attempt_number, answers, date_completed
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, NOW())
+            RETURNING *
+        `, [
+            req.authUser.id,
+            session.assessment_id,
+            session.lesson_id,
+            score,
+            total,
+            percentage,
+            correctAnswers,
+            incorrectAnswers,
+            passed,
+            session.attempt_number,
+            JSON.stringify(answers)
+        ]);
+
+        // Award XP
+        await awardXP(req.authUser.id, 30, `Quiz Completion: ${session.assessment_id}`);
+        if (passed) {
+            await awardXP(req.authUser.id, 50, `Quiz Pass: ${session.assessment_id}`);
+        }
+
+        // Log activity
+        await logActivity(req.authUser.id, "quiz_attempt", `Completed secure quiz for ${session.lesson_id || session.assessment_id} with score ${score}/${total} (${percentage}%)`, {
+            sessionId: session.id,
+            assessmentId: session.assessment_id,
+            lessonId: session.lesson_id,
+            score,
+            total,
+            passed,
+            attemptNumber: session.attempt_number,
+            violations: session.violation_count
+        });
+
+        // Verify lesson completion
+        if (session.lesson_id) {
+            await verifyLessonCompletion(req.authUser.id, session.lesson_id);
+        }
+
+        // Check badges
+        await checkAndAwardBadges(req.authUser.id);
+
+        res.json({
+            success: true,
+            data: {
+                sessionId: session.id,
+                attempt: attemptInsert.rows[0],
+                score,
+                total,
+                percentage,
+                passed,
+                correctAnswers,
+                incorrectAnswers,
+                violationCount: session.violation_count,
+                review
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/assessments/sessions/student/:studentId", requireAuth, async (req, res, next) => {
+    try {
+        if (req.authUser.role === "student" && req.authUser.id !== req.params.studentId) {
+            return res.status(403).json({ success: false, message: "Students can only view their own assessment sessions." });
+        }
+        const result = await pool.query(`
+            SELECT s.*, 
+                   COUNT(e.id)::int AS total_security_events,
+                   COUNT(e.id) FILTER (WHERE e.severity = 'HIGH')::int AS high_severity_events
+            FROM assessment_sessions s
+            LEFT JOIN assessment_security_events e ON e.session_id = s.id
+            WHERE s.student_user_id = $1
+            GROUP BY s.id
+            ORDER BY s.started_at DESC
+        `, [req.params.studentId]);
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/assessments/sessions/:sessionId/events", requireAuth, requireRole(["teacher", "admin", "student"]), async (req, res, next) => {
+    try {
+        const sessionRes = await pool.query("SELECT * FROM assessment_sessions WHERE id = $1", [req.params.sessionId]);
+        if (!sessionRes.rowCount) {
+            return res.status(404).json({ success: false, message: "Assessment session not found." });
+        }
+        if (req.authUser.role === "student" && sessionRes.rows[0].student_user_id !== req.authUser.id) {
+            return res.status(403).json({ success: false, message: "Students can only view their own assessment events." });
+        }
+        const events = await pool.query(`
+            SELECT * FROM assessment_security_events
+            WHERE session_id = $1
+            ORDER BY created_at ASC
+        `, [req.params.sessionId]);
+        res.json({ success: true, session: sessionRes.rows[0], data: events.rows });
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.get("/lessons", async (_req, res, next) => {
     try {
         const result = await pool.query("SELECT * FROM lessons ORDER BY sequence, title");
@@ -2856,7 +3389,7 @@ app.patch("/api/recommendations/:id/complete", requireAuth, async (req, res, nex
     }
 });
 
-app.get("/api/practice-challenges", requireAuth, async (_req, res, next) => {
+app.get("/api/practice-challenges", requireAuth, async (req, res, next) => {
     try {
         const result = await pool.query(`
             SELECT c.*, COALESCE(json_agg(t.*) FILTER (WHERE t.id IS NOT NULL), '[]') AS test_cases
@@ -2865,7 +3398,68 @@ app.get("/api/practice-challenges", requireAuth, async (_req, res, next) => {
             GROUP BY c.id
             ORDER BY c.id
         `);
-        res.json({ success: true, data: result.rows.map(toClientPracticeChallenge) });
+        const challenges = result.rows.map(toClientPracticeChallenge);
+
+        // For student role, NEVER expose hidden test cases or matchers to frontend
+        if (req.authUser.role === "student") {
+            const redacted = challenges.map(c => ({
+                ...c,
+                testCases: (c.testCases || [])
+                    .filter(t => !t.isHidden && !t.is_hidden)
+                    .map(t => ({
+                        id: t.id,
+                        input: t.input || "",
+                        expectedOutput: t.expectedOutput || t.expected_output || "",
+                        isHidden: false
+                    }))
+            }));
+            return res.json({ success: true, data: redacted });
+        }
+
+        res.json({ success: true, data: challenges });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/practice-challenges/:id/run", requireAuth, async (req, res, next) => {
+    try {
+        const { sourceCode = "" } = req.body || {};
+        const challengeId = cleanText(req.params.id, 120);
+
+        // Find challenge in database or fallback
+        const result = await pool.query(`
+            SELECT c.*, COALESCE(json_agg(t.*) FILTER (WHERE t.id IS NOT NULL), '[]') AS test_cases
+            FROM programming_challenges c
+            LEFT JOIN challenge_test_cases t ON t.challenge_id = c.id
+            WHERE c.id = $1
+            GROUP BY c.id
+        `, [challengeId]);
+
+        let challenge = result.rows[0] ? toClientPracticeChallenge(result.rows[0]) : null;
+        if (!challenge) {
+            challenge = PRACTICE_CHALLENGES.find(c => c.id === challengeId) || null;
+        }
+
+        if (!challenge) {
+            return res.status(404).json({ success: false, message: "Practice challenge not found." });
+        }
+
+        // Run only public tests for the "Run" action
+        const runResult = evaluateChallenge(challenge, String(sourceCode), false);
+
+        res.json({
+            success: true,
+            data: {
+                compileStatus: runResult.compileStatus,
+                score: runResult.score,
+                runtime: runResult.runtime,
+                memoryUsage: runResult.memoryUsage,
+                programOutput: runResult.programOutput,
+                errorMessage: runResult.errorMessage,
+                testResults: runResult.testResults
+            }
+        });
     } catch (error) {
         next(error);
     }
@@ -3139,22 +3733,17 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
     try {
         const {
             challengeId,
-            sourceCode,
-            programOutput = "",
-            compileStatus = "not_run",
-            runtime = 0,
-            memoryUsage = null,
-            score = 0,
-            errorMessage = "",
-            testResults = []
+            sourceCode
         } = req.body || {};
 
         if (!challengeId || !sourceCode) {
             return res.status(400).json({ success: false, message: "challengeId and sourceCode are required." });
         }
 
+        const safeChallengeId = cleanText(challengeId, 120);
+
         const prerequisite = await pool.query(`
-            SELECT pc.lesson_id, pc.title AS challenge_title,
+            SELECT pc.id, pc.lesson_id, pc.title AS challenge_title, pc.passing_score,
                    EXISTS (
                        SELECT 1
                        FROM quiz_attempts qa
@@ -3164,10 +3753,12 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
                    ) AS quiz_passed
             FROM programming_challenges pc
             WHERE pc.id = $2 AND pc.status <> 'Archived'
-        `, [req.authUser.id, cleanText(challengeId, 120)]);
+        `, [req.authUser.id, safeChallengeId]);
+
         if (!prerequisite.rowCount) {
             return res.status(404).json({ success: false, message: "Practice challenge not found." });
         }
+
         const lessonAccess = await getLessonAccessState(req.authUser.id, prerequisite.rows[0].lesson_id);
         if (!lessonAccess.canAccess || !lessonAccess.current.videoCompleted || !lessonAccess.current.assessmentPassed) {
             return res.status(403).json({ success: false, message: "Pass the current lesson assessment before submitting practice." });
@@ -3178,11 +3769,33 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
 
         const existing = await pool.query(
             "SELECT id, is_locked FROM practice_submissions WHERE student_id = $1::text AND challenge_id = $2",
-            [req.authUser.id, cleanText(challengeId, 120)]
+            [req.authUser.id, safeChallengeId]
         );
         if (existing.rows[0]?.is_locked) {
             return res.status(409).json({ success: false, message: "This challenge has already been submitted." });
         }
+
+        // Fetch challenge with all test cases (both public and hidden) for server-side evaluation
+        const challengeDbRes = await pool.query(`
+            SELECT c.*, COALESCE(json_agg(t.*) FILTER (WHERE t.id IS NOT NULL), '[]') AS test_cases
+            FROM programming_challenges c
+            LEFT JOIN challenge_test_cases t ON t.challenge_id = c.id
+            WHERE c.id = $1
+            GROUP BY c.id
+        `, [safeChallengeId]);
+
+        let challenge = challengeDbRes.rows[0] ? toClientPracticeChallenge(challengeDbRes.rows[0]) : null;
+        if (!challenge) {
+            challenge = PRACTICE_CHALLENGES.find(c => c.id === safeChallengeId) || null;
+        }
+
+        // Authoritatively evaluate both public and hidden test cases on backend
+        const evaluation = evaluateChallenge(challenge || {
+            id: safeChallengeId,
+            passingScore: Number(prerequisite.rows[0].passing_score || 70),
+            sampleOutput: "Success",
+            testCases: []
+        }, String(sourceCode), true);
 
         const result = await pool.query(`
             INSERT INTO practice_submissions (
@@ -3212,17 +3825,45 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             RETURNING *
         `, [
             req.authUser.id,
-            cleanText(challengeId, 120),
+            safeChallengeId,
             String(sourceCode).slice(0, 50000),
-            String(programOutput).slice(0, 20000),
-            ["success", "failed", "runtime_error", "not_run"].includes(compileStatus) ? compileStatus : "not_run",
-            clampNumber(runtime, 0, 30000),
-            memoryUsage === null ? null : clampNumber(memoryUsage, 0, 4096),
-            clampNumber(score, 0, 100),
-            String(errorMessage).slice(0, 20000),
-            JSON.stringify(Array.isArray(testResults) ? testResults : [])
+            String(evaluation.programOutput).slice(0, 20000),
+            evaluation.compileStatus,
+            clampNumber(evaluation.runtime, 0, 30000),
+            clampNumber(evaluation.memoryUsage, 0, 4096),
+            clampNumber(evaluation.score, 0, 100),
+            String(evaluation.errorMessage).slice(0, 20000),
+            JSON.stringify(evaluation.testResults)
         ]);
+
+        // Award XP on successful compile & completion
+        if (evaluation.compileStatus === "success") {
+            await awardXP(req.authUser.id, 40, `Practice Challenge: ${safeChallengeId}`);
+        }
+
+        // Also record practice_results for fast coding metrics
+        await pool.query(`
+            INSERT INTO practice_results (student_id, challenge_id, started, completed, score, source_code, completion_time_seconds, completed_at)
+            VALUES ($1, $2, TRUE, $3, $4, $5, $6, CASE WHEN $3 THEN NOW() ELSE NULL END)
+            ON CONFLICT (student_id, challenge_id) DO UPDATE SET
+              completed = EXCLUDED.completed,
+              score = EXCLUDED.score,
+              source_code = EXCLUDED.source_code,
+              completion_time_seconds = EXCLUDED.completion_time_seconds,
+              completed_at = CASE WHEN EXCLUDED.completed THEN NOW() ELSE practice_results.completed_at END,
+              updated_at = NOW()
+        `, [
+            req.authUser.id,
+            safeChallengeId,
+            evaluation.compileStatus === "success" && evaluation.score >= (prerequisite.rows[0].passing_score || 70),
+            evaluation.score,
+            String(sourceCode).slice(0, 50000),
+            Math.max(15, Math.round(evaluation.runtime / 1000))
+        ]);
+
         await verifyLessonCompletion(req.authUser.id, prerequisite.rows[0].lesson_id);
+        await checkAndAwardBadges(req.authUser.id);
+
         try {
             const notificationClient = await pool.connect();
             try {
@@ -3236,11 +3877,11 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
                         recipientUserId: teacher.teacher_id,
                         type: "new_practice_submission",
                         title: "New Practice Submission",
-                        message: (req.authUser.email || "A student") + " submitted " + (prerequisite.rows[0].challenge_title || cleanText(challengeId, 120)) + " practice.",
+                        message: (req.authUser.email || "A student") + " submitted " + (prerequisite.rows[0].challenge_title || safeChallengeId) + " practice.",
                         relatedSubmissionId: result.rows[0].id,
-                        relatedPracticeId: cleanText(challengeId, 120),
-                        practiceTitle: prerequisite.rows[0].challenge_title || cleanText(challengeId, 120),
-                        grade: clampNumber(score, 0, 100),
+                        relatedPracticeId: safeChallengeId,
+                        practiceTitle: prerequisite.rows[0].challenge_title || safeChallengeId,
+                        grade: evaluation.score,
                         maxGrade: 100,
                         metadata: { studentId: req.authUser.id, studentEmail: req.authUser.email || "" }
                     });
@@ -3256,6 +3897,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
         } catch (notificationError) {
             console.warn("Unable to initialize teacher submission notification:", notificationError);
         }
+
         res.status(201).json({ success: true, data: result.rows[0] });
     } catch (error) {
         next(error);

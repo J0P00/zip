@@ -436,3 +436,83 @@ export interface AdaptiveRecommendation {
   codingAttempts?: number;
   progressPercentage?: number;
 }
+
+export type SecurityEventType =
+  | 'SESSION_START'
+  | 'TAB_SWITCH'
+  | 'WINDOW_BLUR'
+  | 'WINDOW_FOCUS'
+  | 'COPY_ATTEMPT'
+  | 'PASTE_ATTEMPT'
+  | 'CUT_ATTEMPT'
+  | 'CONTEXT_MENU_ATTEMPT'
+  | 'MULTIPLE_SESSION'
+  | 'PAGE_LEAVE'
+  | 'PAGE_RETURN'
+  | 'INVALID_SESSION'
+  | 'EXPIRED_SESSION';
+
+export type SecuritySeverity = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface AssessmentSecurityEvent {
+  id: string;
+  sessionId?: string;
+  session_id?: string;
+  studentUserId?: string;
+  student_user_id?: string;
+  assessmentId?: string;
+  assessment_id?: string;
+  lessonId?: string;
+  lesson_id?: string;
+  eventType?: SecurityEventType | string;
+  event_type?: string;
+  severity: SecuritySeverity | string;
+  metadata?: Record<string, any>;
+  createdAt?: string;
+  created_at?: string;
+  elapsed_seconds?: number;
+}
+
+export interface AssessmentSessionQuestion {
+  id: string;
+  lessonId?: string;
+  question: string;
+  options: string[];
+  difficulty?: string;
+  codeSnippet?: string;
+}
+
+export interface AssessmentReviewQuestion extends AssessmentSessionQuestion {
+  selectedAnswer: string;
+  correctAnswer: string;
+  explanation: string;
+  isCorrect: boolean;
+}
+
+export interface AssessmentSessionData {
+  sessionId: string;
+  sessionToken: string;
+  assessmentId: string;
+  lessonId: string;
+  startedAt: string;
+  expiresAt: string;
+  remainingSeconds: number;
+  violationCount: number;
+  attemptNumber: number;
+  questions: AssessmentSessionQuestion[];
+  savedAnswers: Record<string, string>;
+}
+
+export interface AssessmentSubmitResult {
+  sessionId: string;
+  attempt: any;
+  score: number;
+  total: number;
+  percentage: number;
+  passed: boolean;
+  correctAnswers: number;
+  incorrectAnswers: number;
+  violationCount: number;
+  review: AssessmentReviewQuestion[];
+}
+
