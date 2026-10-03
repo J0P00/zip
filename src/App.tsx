@@ -497,8 +497,23 @@ export default function App() {
     });
 
     appApi.getLessons()
-      .then(() => {
-        loadFallbackLessons();
+      .then(response => {
+        const backendLessons = Array.isArray(response) ? response : (response as any).data;
+        if (!Array.isArray(backendLessons) || backendLessons.length === 0) {
+          loadFallbackLessons();
+          return;
+        }
+        const normalizedLessons = backendLessons.map((lesson: any) => {
+          const fallback = OOP_COURSE_LESSONS.find(item => item.id === lesson.id);
+          return {
+            ...fallback,
+            ...lesson,
+            id: lesson.id,
+            videoUrl: lesson.videoUrl || lesson.video_url || fallback?.videoUrl || '',
+            duration: lesson.duration || fallback?.duration || ''
+          } as VideoLesson;
+        });
+        applyLessons(normalizedLessons);
       })
       .catch(error => {
         console.warn('Backend lessons check failed:', error);
