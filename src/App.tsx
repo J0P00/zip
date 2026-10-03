@@ -505,11 +505,13 @@ export default function App() {
         }
         const normalizedLessons = backendLessons.map((lesson: any) => {
           const fallback = OOP_COURSE_LESSONS.find(item => item.id === lesson.id);
+          const backendVideoUrl = lesson.videoUrl || lesson.video_url || '';
+          const usesMissingPlaceholder = backendVideoUrl.startsWith('/videos/') || backendVideoUrl.startsWith('/OOP%20Lesson/');
           return {
             ...fallback,
             ...lesson,
             id: lesson.id,
-            videoUrl: lesson.videoUrl || lesson.video_url || fallback?.videoUrl || '',
+            videoUrl: usesMissingPlaceholder ? (fallback?.videoUrl || backendVideoUrl) : (backendVideoUrl || fallback?.videoUrl || ''),
             duration: lesson.duration || fallback?.duration || ''
           } as VideoLesson;
         });
