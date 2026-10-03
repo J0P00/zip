@@ -1588,7 +1588,9 @@ const getLessonEvidence = async (studentId, lessonId) => {
         [studentId, lessonId]
     );
     const quizResult = await pool.query(
-        "SELECT EXISTS (SELECT 1 FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 AND percentage >= 80) AS passed",
+        `SELECT
+            EXISTS (SELECT 1 FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 AND percentage >= 80) AS passed,
+            (SELECT percentage FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 ORDER BY attempt_number DESC, date_completed DESC LIMIT 1) AS percentage`,
         [studentId, lessonId]
     );
     const challengeResult = await pool.query(`
@@ -1610,7 +1612,10 @@ const getLessonEvidence = async (studentId, lessonId) => {
         ORDER BY pc.id
         LIMIT 1
     `, [studentId, lessonId]);
-    const videoCompleted = Boolean(videoResult.rows[0]?.completed) && Number(videoResult.rows[0]?.completion_percentage || 0) >= 95;
+    // Completion is threshold-based. Do not trust a stale boolean flag when
+    // the persisted video percentage already satisfies the 95% requirement.
+    const videoProgress = Number(videoResult.rows[0]?.completion_percentage || 0);
+    const videoCompleted = videoProgress >= 95;
     const assessmentPassed = Boolean(quizResult.rows[0]?.passed);
     const practiceRequired = challengeResult.rowCount > 0;
     const practice = challengeResult.rows[0];
@@ -1628,10 +1633,17 @@ const getLessonEvidence = async (studentId, lessonId) => {
     );
     return {
         ...lesson,
+        videoProgress,
         videoCompleted,
+        assessmentScore: quizResult.rows[0]?.percentage === null || quizResult.rows[0]?.percentage === undefined
+            ? null
+            : Number(quizResult.rows[0].percentage),
         assessmentPassed,
         practiceRequired,
         practiceCompleted: Boolean(practiceCompleted),
+        assessmentUnlocked: videoCompleted,
+        practiceUnlocked: Boolean(videoCompleted && assessmentPassed),
+        nextLessonUnlocked: Boolean(videoCompleted && assessmentPassed && practiceCompleted),
         completed: Boolean(videoCompleted && assessmentPassed && practiceCompleted)
     };
 };
@@ -2485,10 +2497,12 @@ app.post("/api/assessments/session/start", requireAuth, async (req, res, next) =
         const safeAssessmentId = cleanText(assessmentId, 120);
         const safeLessonId = cleanText(lessonId, 120);
 
-        // Check sequential progression prerequisites (must watch video >= 95%)
+        // Assessment eligibility is based on the authoritative current-lesson
+        // evidence. Sequential access still controls lesson/video progression,
+        // while a lesson whose video is already >=95% may start its assessment.
         if (safeLessonId) {
-            const lessonAccess = await getLessonAccessState(req.authUser.id, safeLessonId);
-            if (!lessonAccess.canAccess || !lessonAccess.current?.videoCompleted) {
+            const evidence = await getLessonEvidence(req.authUser.id, safeLessonId);
+            if (!evidence?.assessmentUnlocked) {
                 return res.status(403).json({
                     success: false,
                     message: "Complete the current lesson video before starting its assessment."
@@ -2907,7 +2921,13 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
             [req.params.studentId]
         );
         const result = await pool.query(
-            "SELECT * FROM student_progress WHERE student_user_id = $1 ORDER BY updated_at DESC",
+            `SELECT sp.id, sp.student_user_id, sp.video_id, sp.last_position,
+                    sp.completion_percentage,
+                    (sp.completed OR sp.completion_percentage >= 95) AS completed,
+                    sp.date_completed, sp.notes, sp.created_at, sp.updated_at
+             FROM student_progress sp
+             WHERE sp.student_user_id = $1
+             ORDER BY sp.updated_at DESC`,
             [req.params.studentId]
         );
         res.json({ success: true, data: result.rows });
