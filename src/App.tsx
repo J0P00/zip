@@ -877,6 +877,9 @@ export default function App() {
   const handleUpdateVideoProgress = (videoId: string, progress: number) => {
     const userEmail = currentUser?.email || 'student@oophub.edu';
     void refreshStudentResults();
+    // VideoTutorials persists first and then reports the local UI event. Re-read
+    // once the write has had a chance to commit so dashboard evidence is current.
+    window.setTimeout(() => { void refreshStudentResults(); }, 500);
     setVideoLessons(prev => {
       const next = prev.map(video => {
         if (video.id !== videoId) return video;

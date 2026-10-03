@@ -70,7 +70,7 @@ export default function StudentDashboard({
   const hasProgress = Boolean(studentResults?.hasActivity) || streak > 0 || points > 0 || effectiveCompletedLessons > 0 || Boolean(recentGrade);
   const lessonCount = OOP_COURSE_LESSONS.length;
   const moduleProgress = studentResults
-    ? Math.min(100, Math.round((studentResults.completedLessons / Math.max(1, studentResults.totalLessons)) * 100))
+    ? studentResults.overallProgress
     : Math.min(100, Math.round((effectiveCompletedLessons / lessonCount) * 100));
   const badges = [
     { title: 'Quick Learner', desc: 'Finished classes lesson 1 in under 10 minutes', icon: '⚡', color: 'bg-amber-50 text-amber-700 border border-amber-100' },
@@ -315,7 +315,11 @@ export default function StudentDashboard({
                     <div className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Module {topic.sequence}</div>
                     <div className="truncate text-[11px] font-extrabold text-slate-800">{topic.title}</div>
                     <div className={`text-[10px] font-semibold ${completed ? 'text-emerald-700' : current ? 'text-slate-600' : 'text-slate-400'}`}>
-                      {completed ? 'Completed' : current ? `${topic.videoPercentage ?? 0}% — Currently Learning` : `Locked until ${journeyCurrentTopic?.title || 'the previous lesson'} is completed`}
+                      {completed
+                        ? 'Completed'
+                        : current
+                          ? `Video ${topic.videoPercentage ?? 0}% · ${topic.quizPassed ? 'Assessment passed' : 'Assessment pending'} · ${topic.quizPassed ? 'Practice required' : 'Practice locked'}`
+                          : `Locked until ${journeyCurrentTopic?.title || 'the previous lesson'} is completed`}
                     </div>
                   </div>
                 </div>

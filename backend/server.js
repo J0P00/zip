@@ -3072,6 +3072,12 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 quizPercentage: topic.quiz_percentage === null ? null : Number(topic.quiz_percentage),
                 quizPassed: topic.quiz_passed === null ? null : Boolean(topic.quiz_passed),
                 practiceScore: topic.practice_score === null ? null : Number(topic.practice_score),
+                practiceCompleted: Boolean(evidence?.practiceCompleted),
+                lessonProgress: Math.round((
+                    (Math.min(100, Math.max(0, Number(topic.video_percentage || 0)) / 95 * 100) / 100) +
+                    (evidence?.assessmentPassed ? 1 : 0) +
+                    (evidence?.practiceCompleted ? 1 : 0)
+                ) / 3 * 100),
                 lessonCompleted: Boolean(evidence?.completed)
             };
         }));
@@ -3090,8 +3096,10 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             exerciseCompleted: Boolean(topic.exercise_completed),
             submissionScore: topic.submission_score === null ? null : Number(topic.submission_score)
         }));
+        // Overall progress measures evidence across all three required stages.
+        // Mastery remains separately practice-gated through lessonCompleted.
         const overallProgress = effectiveTotalLessons
-            ? Math.round((completedLessons / effectiveTotalLessons) * 100)
+            ? Math.round(oopTopicRows.reduce((sum, topic) => sum + topic.lessonProgress, 0) / effectiveTotalLessons)
             : 0;
         const learningScore = Math.round((overallProgress * 0.40) + (Number(row.average_quiz_score || 0) * 0.30) + (Number(row.average_practice_score || 0) * 0.30));
         const learningClassification = classifyLearningState({
