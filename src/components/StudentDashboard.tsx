@@ -18,7 +18,9 @@ import {
   GraduationCap,
   Bell,
   MailOpen,
-  Check
+  Check,
+  LockKeyhole,
+  Circle
 } from 'lucide-react';
 import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
@@ -70,28 +72,12 @@ export default function StudentDashboard({
   const moduleProgress = studentResults
     ? Math.min(100, Math.round((studentResults.completedLessons / Math.max(1, studentResults.totalLessons)) * 100))
     : Math.min(100, Math.round((effectiveCompletedLessons / lessonCount) * 100));
-  const weeklyActivityHours = hasProgress
-    ? `${(completedLessonsCount * 1.4 + Math.min(streak, 7) * 0.4).toFixed(1)} hrs`
-    : '0 hrs';
-  
-  // Custom styled column heights for weekly activity metrics
-  const activityData = [
-    { day: 'Mon', h: 'h-16', label: '1.2h' },
-    { day: 'Tue', h: 'h-24', label: '1.8h' },
-    { day: 'Wed', h: 'h-8', label: '0.5h' },
-    { day: 'Thu', h: 'h-36', label: '2.5h' },
-    { day: 'Fri', h: 'h-28', label: '2.0h' },
-    { day: 'Sat', h: 'h-12', label: '0.8h' },
-    { day: 'Sun', h: 'h-32', label: '2.2h', highlight: true },
-  ];
-
   const badges = [
     { title: 'Quick Learner', desc: 'Finished classes lesson 1 in under 10 minutes', icon: '⚡', color: 'bg-amber-50 text-amber-700 border border-amber-100' },
     { title: 'Bug Hunter', desc: 'Resolved v-table hierarchy constructor errors', icon: '🐞', color: 'bg-rose-50 text-rose-700 border border-rose-100' },
     { title: 'OOP Initiate', desc: 'Completed basic class models diagnostic', icon: '🧩', color: 'bg-sky-50 text-sky-700 border border-sky-100' },
     { title: 'Rising Star', desc: 'Maintained 12-day streak multiplier', icon: '🔥', color: 'bg-emerald-50 text-emerald-800 border border-emerald-100' },
   ];
-  const visibleActivityData = hasProgress ? activityData : activityData.map(d => ({ ...d, h: 'h-2', label: '0h', highlight: false }));
   const visibleBadges = hasProgress
     ? [
         { title: 'First Steps', desc: 'Started the OOP learning path', icon: '01', color: 'bg-sky-50 text-sky-700 border border-sky-100' },
@@ -145,6 +131,20 @@ export default function StudentDashboard({
   const learningStateClass = learningState === 'MASTERED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : learningState === 'DEVELOPING' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-sky-100 text-sky-800 border border-sky-200';
   const performanceClass = studentResults?.learningState ?? 'BEGINNER';
   const swingTopicState = studentResults?.swingTopics || [];
+  const journeyTopics = studentResults?.oopTopics || [];
+  const journeyProgress = studentResults?.overallProgress ?? 0;
+  const journeyCompletedCount = journeyTopics.filter(topic => topic.lessonCompleted).length;
+  const journeyCurrentTopic = journeyTopics.find(topic => !topic.lessonCompleted) || null;
+  const journeyCurrentIndex = journeyCurrentTopic ? journeyTopics.findIndex(topic => topic.id === journeyCurrentTopic.id) : -1;
+  const journeyNextAction = !studentResults || journeyTopics.length === 0
+    ? { label: 'Continue Video', detail: 'Start the first available OOP lesson.', view: 'videos' as StudentSubView }
+    : !journeyCurrentTopic
+    ? { label: 'Completed', detail: 'All OOP lessons are complete.', view: 'swing' as StudentSubView }
+    : journeyCurrentTopic.videoPercentage === null || journeyCurrentTopic.videoPercentage < 95
+      ? { label: 'Continue Video', detail: `Continue watching “${journeyCurrentTopic.title}”.`, view: 'videos' as StudentSubView }
+      : !journeyCurrentTopic.quizPassed
+        ? { label: 'Assessment Required', detail: `Take the assessment for “${journeyCurrentTopic.title}”.`, view: 'assessments' as StudentSubView }
+        : { label: 'Practice Required', detail: `Complete the coding practice for “${journeyCurrentTopic.title}”.`, view: 'ide' as StudentSubView };
   const swingProgress = {
     unlocked: Boolean(studentResults?.swingUnlocked),
     completedLessons: swingTopicState.filter(topic => topic.contentCompleted && topic.videoCompleted && topic.quizPassed && topic.exerciseCompleted).length,
@@ -281,25 +281,64 @@ export default function StudentDashboard({
           </div>
         </div>
 
-        {/* Learning Activity Widget styled as a glassmorphic Card */}
-        <div className="lg:col-span-4 bg-white/70 backdrop-blur-md border border-slate-200 p-5 rounded-2xl flex flex-col justify-between shadow-sm" id="student-activity-card">
-          <div className="flex justify-between items-start mb-2">
+        {/* Backend-backed learning journey */}
+        <div className="lg:col-span-4 bg-white/70 backdrop-blur-md border border-slate-200 p-5 rounded-2xl shadow-sm" id="student-activity-card">
+          <div className="flex justify-between items-start gap-3">
             <div>
-              <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 uppercase tracking-tight">Active Learning Log</h3>
-              <p className="text-[10px] text-slate-405 font-semibold">Weekly aggregate practice metrics</p>
+              <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 uppercase tracking-tight">Learning Journey</h3>
+              <p className="text-[10px] text-slate-500 font-semibold">Track your progress through the OOP learning path</p>
             </div>
-            <span className="text-[10px] sm:text-xs font-bold font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">{weeklyActivityHours}</span>
+            <div className="text-right shrink-0">
+              <span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">Overall Progress</span>
+              <span className="text-lg font-black font-mono text-emerald-700">{journeyProgress}%</span>
+            </div>
           </div>
 
-          {/* Bar Charts Graph with transitions */}
-          <div className="flex items-end justify-between h-28 gap-2 px-1">
-            {visibleActivityData.map((d, index) => (
-              <div key={index} className="flex flex-col items-center flex-1 group">
-                <span className="text-[8px] font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-1 opacity-0 group-hover:opacity-100 transition-opacity mb-1 block whitespace-nowrap">{d.label}</span>
-                <div className={`w-full ${d.h} rounded-lg bg-slate-100 hover:bg-emerald-600 border border-slate-200/50 group-hover:border-emerald-600 transition-all duration-300 ${d.highlight ? 'bg-emerald-100 border-emerald-200' : ''}`}></div>
-                <span className={`text-[10px] font-mono mt-2 block ${d.highlight ? 'text-emerald-700 font-bold' : 'text-slate-400 font-semibold'}`}>{d.day}</span>
-              </div>
-            ))}
+          <div className="mt-3 h-1.5 rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all" style={{ width: `${journeyProgress}%` }} />
+          </div>
+
+          <div className="mt-4 space-y-2.5 max-h-52 overflow-y-auto pr-1">
+            {journeyTopics.length ? journeyTopics.map((topic, index) => {
+              const completed = topic.lessonCompleted;
+              const current = !completed && index === journeyCurrentIndex;
+              const locked = !completed && !current;
+              return (
+                <div key={topic.id} className={`relative flex gap-2.5 ${locked ? 'opacity-60' : ''}`}>
+                  <div className="flex flex-col items-center">
+                    <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${completed ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : current ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-slate-100 border-slate-300 text-slate-500'}`}>
+                      {completed ? <Check className="h-3.5 w-3.5" /> : current ? <Circle className="h-2.5 w-2.5 fill-current" /> : <LockKeyhole className="h-3 w-3" />}
+                    </div>
+                    {index < journeyTopics.length - 1 && <div className="mt-1 h-full min-h-3 w-px bg-slate-200" />}
+                  </div>
+                  <div className="min-w-0 pb-1">
+                    <div className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Module {topic.sequence}</div>
+                    <div className="truncate text-[11px] font-extrabold text-slate-800">{topic.title}</div>
+                    <div className={`text-[10px] font-semibold ${completed ? 'text-emerald-700' : current ? 'text-slate-600' : 'text-slate-400'}`}>
+                      {completed ? 'Completed' : current ? `${topic.videoPercentage ?? 0}% — Currently Learning` : `Locked until ${journeyCurrentTopic?.title || 'the previous lesson'} is completed`}
+                    </div>
+                  </div>
+                </div>
+              );
+            }) : (
+              <p className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-[10px] font-semibold text-slate-500">Progress is loading from your account.</p>
+            )}
+          </div>
+
+          <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+            <div className="text-[9px] font-black uppercase tracking-wide text-emerald-700">Next Step</div>
+            <div className="mt-1 text-[11px] font-extrabold text-slate-800">{journeyNextAction.label}</div>
+            <p className="mt-0.5 text-[10px] font-semibold leading-4 text-slate-600">{journeyNextAction.detail}</p>
+            <button type="button" onClick={() => onNavigateTo(journeyNextAction.view)} className="mt-2 inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 hover:text-emerald-900">
+              {journeyNextAction.view === 'swing' ? 'Start Java Swing' : 'Continue Learning'} <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-bold text-slate-500">
+            <span>{journeyTopics.length || studentResults?.totalLessons || lessonCount} Lessons</span>
+            <span className="text-emerald-700">✓ {journeyCompletedCount} Completed</span>
+            <span className="text-slate-600">● {journeyCurrentTopic ? 1 : 0} In Progress</span>
+            <span className="text-slate-500">🔒 {Math.max(0, (journeyTopics.length || studentResults?.totalLessons || lessonCount) - journeyCompletedCount - (journeyCurrentTopic ? 1 : 0))} Locked</span>
           </div>
         </div>
 
