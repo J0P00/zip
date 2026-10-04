@@ -1802,11 +1802,15 @@ app.get("/", (_req, res) => {
 
 app.get("/health", (_req, res) => {
     const java = compilerStatus();
-    res.json({
-        status: "ok",
+    const healthy = java.available && java.status === "JAVA_TOOLCHAIN_OK";
+    const payload = {
+        status: healthy ? "ok" : "error",
+        code: healthy ? undefined : JAVA_TOOLCHAIN_UNAVAILABLE,
         backend: "Render",
         timestamp: new Date().toISOString(),
-        java: {
+        java: Boolean(java.java),
+        javac: Boolean(java.javac),
+        toolchain: {
             status: java.status,
             javac: java.javac ? java.javac.version : null,
             java: java.java ? java.java.version : null,
@@ -1815,7 +1819,9 @@ app.get("/health", (_req, res) => {
             compilerAvailable: java.available,
             runtimeHealth: typeof javaRuntimeHealth === "undefined" ? null : javaRuntimeHealth
         }
-    });
+    };
+    if (healthy) delete payload.code;
+    res.status(healthy ? 200 : 503).json(payload);
 });
 
 app.get("/api/test", async (_req, res) => {
@@ -4233,11 +4239,17 @@ const PORT = process.env.PORT || 5000;
 const javaTools = compilerStatus();
 const javaRuntimeHealth = runJavaRuntimeHealthCheck();
 console.log('[java-sandbox] platform:', javaTools.platform);
-console.log('[java-sandbox] PATH configured:', Boolean(process.env.PATH));
-console.log('[java-sandbox] status:', javaTools.status);
-console.log('[java-sandbox] javac:', javaTools.javac ? `${javaTools.javac.path} (${javaTools.javac.version})` : 'UNAVAILABLE');
-console.log('[java-sandbox] java:', javaTools.java ? `${javaTools.java.path} (${javaTools.java.version})` : 'UNAVAILABLE');
-console.log('[java-sandbox] runtime health:', javaRuntimeHealth.ok ? 'JAVA_RUNTIME_OK' : `${javaRuntimeHealth.status}: ${javaRuntimeHealth.error}`);
+console.log('[java-sandbox] java executable:', javaTools.java ? javaTools.java.path : 'UNAVAILABLE');
+console.log('[java-sandbox] javac executable:', javaTools.javac ? javaTools.javac.path : 'UNAVAILABLE');
+console.log('[java-sandbox] java:', javaTools.java ? 'AVAILABLE' : 'UNAVAILABLE');
+console.log('[java-sandbox] javac:', javaTools.javac ? 'AVAILABLE' : 'UNAVAILABLE');
+console.log('[java-sandbox] java version:', javaTools.java ? javaTools.java.version : 'UNAVAILABLE');
+console.log('[java-sandbox] javac version:', javaTools.javac ? javaTools.javac.version : 'UNAVAILABLE');
+console.log('[java-sandbox] OS/platform:', `${process.platform}/${process.arch}`);
+console.log('[java-sandbox] PATH:', process.env.PATH || 'UNSET');
+console.log('[java-sandbox] JAVA_HOME:', process.env.JAVA_HOME || 'UNSET');
+console.log('[java-sandbox] Docker/runtime mode:', process.env.RENDER ? 'Render' : 'local');
+console.log('[java-sandbox] runtime health:', javaRuntimeHealth.ok ? 'JAVA_TOOLCHAIN_OK' : `${javaRuntimeHealth.status}: ${javaRuntimeHealth.error}`);
 
 initializeDatabase()
     .then(async () => {

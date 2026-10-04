@@ -310,6 +310,7 @@ const JAVA_RUNTIME_UNAVAILABLE = 'JAVA_RUNTIME_UNAVAILABLE';
 // Backward-compatible alias for callers using the earlier name.
 const RUNTIME_UNAVAILABLE = JAVA_RUNTIME_UNAVAILABLE;
 const JAVA_TOOLCHAIN_UNAVAILABLE = 'JAVA_TOOLCHAIN_UNAVAILABLE';
+const JAVA_TOOLCHAIN_OK = 'JAVA_TOOLCHAIN_OK';
 const VALIDATION_FAILED = 'VALIDATION_FAILED';
 const EXECUTION_TIMEOUT = 'TIMEOUT';
 
@@ -341,13 +342,7 @@ function resolveJavaExecutable(name) {
 function compilerStatus() {
   const javac = resolveJavaExecutable('javac');
   const java = resolveJavaExecutable('java');
-  const status = javac && java
-    ? 'JAVA_TOOLCHAIN_READY'
-    : javac
-      ? JAVA_RUNTIME_UNAVAILABLE
-      : java
-        ? COMPILER_UNAVAILABLE
-        : JAVA_TOOLCHAIN_UNAVAILABLE;
+  const status = javac && java ? JAVA_TOOLCHAIN_OK : JAVA_TOOLCHAIN_UNAVAILABLE;
   return {
     platform: process.platform,
     status,
@@ -366,36 +361,14 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
     fs.writeFileSync(sourcePath, sourceCode, 'utf8');
 
     const tools = compilerStatus();
-    if (!tools.javac && !tools.java) {
+    if (!tools.javac || !tools.java) {
       return {
         success: false,
         compileStatus: JAVA_TOOLCHAIN_UNAVAILABLE,
         executionStatus: 'unavailable',
+        errorCode: JAVA_TOOLCHAIN_UNAVAILABLE,
         output: '',
         error: 'Java execution environment unavailable. The backend requires both javac and java.',
-        runtime: 0,
-        infrastructureError: true,
-      };
-    }
-    if (!tools.javac) {
-      return {
-        success: false,
-        compileStatus: COMPILER_UNAVAILABLE,
-        executionStatus: 'not_run',
-        output: '',
-        error: 'Java compiler unavailable. The backend requires a full JDK (javac).',
-        runtime: 0,
-        infrastructureError: true,
-      };
-    }
-    if (!tools.java) {
-      return {
-        success: false,
-        compileStatus: 'success',
-        executionStatus: 'unavailable',
-        errorCode: JAVA_RUNTIME_UNAVAILABLE,
-        output: '',
-        error: 'Java runtime unavailable. The backend requires a JDK/JRE (java).',
         runtime: 0,
         infrastructureError: true,
       };
@@ -512,7 +485,7 @@ function runJavaRuntimeHealthCheck() {
   );
   return {
     ok: result.success && result.output === 'JAVA_RUNTIME_OK',
-    status: result.success ? 'JAVA_TOOLCHAIN_READY' : (result.errorCode || result.compileStatus),
+    status: result.success ? JAVA_TOOLCHAIN_OK : (result.errorCode || result.compileStatus),
     output: result.output,
     error: result.error,
     compileStatus: result.compileStatus,
@@ -909,6 +882,7 @@ module.exports = {
   RUNTIME_UNAVAILABLE,
   JAVA_RUNTIME_UNAVAILABLE,
   JAVA_TOOLCHAIN_UNAVAILABLE,
+  JAVA_TOOLCHAIN_OK,
   VALIDATION_FAILED,
   EXECUTION_TIMEOUT,
   validateOopRequirements,

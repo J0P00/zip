@@ -1,12 +1,13 @@
-FROM node:20-bookworm
+FROM eclipse-temurin:17-jdk
 
-# The evaluator needs javac, so this image deliberately installs a full JDK,
-# not only a Java runtime.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends openjdk-17-jdk \
+# Keep Node and the full JDK in the same production image. The evaluator
+# requires both java and javac; fail the image build if either is absent.
+RUN java -version && javac -version \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 WORKDIR /app
 
