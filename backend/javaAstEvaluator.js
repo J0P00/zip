@@ -1,5 +1,5 @@
 const { parse } = require('java-parser');
-const { execSync, spawnSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -300,9 +300,46 @@ function extractJavaAst(sourceCode) {
   return result;
 }
 
-/**
- * Execute real javac compilation and Java process execution safely with timeout
- */
+const COMPILER_UNAVAILABLE = 'COMPILER_UNAVAILABLE';
+const RUNTIME_UNAVAILABLE = 'RUNTIME_UNAVAILABLE';
+const EXECUTION_TIMEOUT = 'TIMEOUT';
+
+function executableCandidates(name) {
+  const configured = name === 'javac' ? process.env.JAVAC_PATH : process.env.JAVA_PATH;
+  const javaHome = process.env.JAVA_HOME;
+  const executable = process.platform === 'win32' ? `${name}.exe` : name;
+  return [
+    configured,
+    javaHome && path.join(javaHome, 'bin', executable),
+    name,
+  ].filter((value, index, values) => value && values.indexOf(value) === index);
+}
+
+function resolveJavaExecutable(name) {
+  for (const candidate of executableCandidates(name)) {
+    const probe = spawnSync(candidate, ['-version'], {
+      encoding: 'utf8',
+      timeout: 3000,
+      windowsHide: true,
+    });
+    if (!probe.error && (probe.status === 0 || probe.status === null) && (probe.stderr || probe.stdout)) {
+      return { path: candidate, version: `${probe.stdout || ''}${probe.stderr || ''}`.trim() };
+    }
+  }
+  return null;
+}
+
+function compilerStatus() {
+  const javac = resolveJavaExecutable('javac');
+  const java = resolveJavaExecutable('java');
+  return {
+    available: Boolean(javac && java),
+    javac: javac ? { path: javac.path, version: javac.version } : null,
+    java: java ? { path: java.path, version: java.version } : null,
+  };
+}
+
+/** Execute real javac compilation and Java process execution safely with timeout. */
 function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'oophub_eval_'));
   const sourcePath = path.join(tempDir, 'Main.java');
@@ -310,14 +347,47 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
   try {
     fs.writeFileSync(sourcePath, sourceCode, 'utf8');
 
+    const tools = compilerStatus();
+    if (!tools.javac) {
+      return {
+        success: false,
+        compileStatus: COMPILER_UNAVAILABLE,
+        output: '',
+        error: 'Java compiler unavailable. The backend requires a full JDK (javac).',
+        runtime: 0,
+        infrastructureError: true,
+      };
+    }
+    if (!tools.java) {
+      return {
+        success: false,
+        compileStatus: RUNTIME_UNAVAILABLE,
+        output: '',
+        error: 'Java runtime unavailable. The backend requires a JDK/JRE (java).',
+        runtime: 0,
+        infrastructureError: true,
+      };
+    }
+
     // 1. Compile Main.java
-    const compileResult = spawnSync('javac', ['Main.java'], {
+    const compileResult = spawnSync(tools.javac.path, ['Main.java'], {
       cwd: tempDir,
       timeout: timeoutMs,
-      encoding: 'utf8'
+      encoding: 'utf8',
+      windowsHide: true,
     });
 
-    if (compileResult.status !== 0 || compileResult.error) {
+    if (compileResult.error || compileResult.status !== 0) {
+      if (compileResult.error && ['ENOENT', 'EACCES', 'ETIMEDOUT'].includes(compileResult.error.code)) {
+        return {
+          success: false,
+          compileStatus: compileResult.error.code === 'ETIMEDOUT' ? EXECUTION_TIMEOUT : COMPILER_UNAVAILABLE,
+          output: '',
+          error: `Unable to execute javac (${compileResult.error.code}).`,
+          runtime: 0,
+          infrastructureError: true,
+        };
+      }
       const errMsg = compileResult.stderr || compileResult.stdout || (compileResult.error ? compileResult.error.message : 'Compilation error');
       return {
         success: false,
@@ -330,12 +400,13 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
 
     // 2. Run Main
     const startTime = Date.now();
-    const runResult = spawnSync('java', ['Main'], {
+    const runResult = spawnSync(tools.java.path, ['Main'], {
       cwd: tempDir,
       input,
       timeout: timeoutMs,
       encoding: 'utf8',
-      maxBuffer: 1024 * 1024
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
     });
 
     const runtime = Date.now() - startTime;
@@ -343,7 +414,7 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
     if (runResult.error && runResult.error.code === 'ETIMEDOUT') {
       return {
         success: false,
-        compileStatus: 'runtime_error',
+        compileStatus: EXECUTION_TIMEOUT,
         output: '',
         error: 'Execution timed out (possible infinite loop).',
         runtime: timeoutMs
@@ -351,6 +422,16 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
     }
 
     if (runResult.status !== 0) {
+      if (runResult.error && ['ENOENT', 'EACCES'].includes(runResult.error.code)) {
+        return {
+          success: false,
+          compileStatus: RUNTIME_UNAVAILABLE,
+          output: '',
+          error: `Unable to execute java (${runResult.error.code}).`,
+          runtime,
+          infrastructureError: true,
+        };
+      }
       return {
         success: false,
         compileStatus: 'runtime_error',
@@ -370,10 +451,11 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
   } catch (err) {
     return {
       success: false,
-      compileStatus: 'failed',
+      compileStatus: COMPILER_UNAVAILABLE,
       output: '',
       error: err.message || 'System error during execution',
-      runtime: 0
+      runtime: 0,
+      infrastructureError: true,
     };
   } finally {
     try {
@@ -508,11 +590,13 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
   const isCompiled = execution.compileStatus === 'success';
 
   if (!isCompiled) {
+    const infrastructureFailure = Boolean(execution.infrastructureError);
     return {
       compileStatus: execution.compileStatus || 'failed',
-      score: 0,
+      score: infrastructureFailure ? null : 0,
       passingScore: challenge.passingScore || 70,
       isPassed: false,
+      infrastructureError: infrastructureFailure,
       oopValidation,
       behavioralValidation: {
         passed: false,
@@ -526,10 +610,9 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
         total: (challenge.testCases || []).filter(t => t.isHidden).length,
         passedCount: 0
       },
-      educationalFeedback: [
-        `Compilation/Runtime Error: ${execution.error}`,
-        ...oopValidation.missingMessages
-      ],
+      educationalFeedback: infrastructureFailure
+        ? ['Java compiler unavailable. Your code was not graded. Please try again later.']
+        : [`Compilation/Runtime Error: ${execution.error}`, ...oopValidation.missingMessages],
       programOutput: execution.output,
       errorMessage: execution.error,
       runtime: execution.runtime || (Date.now() - startTime),
@@ -540,7 +623,9 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
         passed: false,
         expectedOutput: tc.isHidden ? '(hidden)' : tc.expectedOutput,
         actualOutput: '',
-        message: 'Compilation or runtime failed.'
+        message: infrastructureFailure
+          ? 'Skipped because the Java compiler/runtime was unavailable.'
+          : 'Compilation or runtime failed.'
       }))
     };
   }
@@ -674,6 +759,10 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
 module.exports = {
   extractJavaAst,
   executeJavaProgram,
+  compilerStatus,
+  COMPILER_UNAVAILABLE,
+  RUNTIME_UNAVAILABLE,
+  EXECUTION_TIMEOUT,
   validateOopRequirements,
   evaluateAdvancedJavaPractice
 };

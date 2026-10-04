@@ -7,6 +7,7 @@ const jwt = require("jsonwebtoken");
 const pool = require("./db");
 const { OOP_PARSED_QUESTIONS } = require("./questionBank");
 const { PRACTICE_CHALLENGES, evaluateChallenge } = require("./challengeBank");
+const { COMPILER_UNAVAILABLE, RUNTIME_UNAVAILABLE, compilerStatus } = require("./javaAstEvaluator");
 
 const app = express();
 
@@ -1768,7 +1769,17 @@ app.get("/", (_req, res) => {
 });
 
 app.get("/health", (_req, res) => {
-    res.json({ status: "ok", backend: "Render", timestamp: new Date().toISOString() });
+    const java = compilerStatus();
+    res.json({
+        status: "ok",
+        backend: "Render",
+        timestamp: new Date().toISOString(),
+        java: {
+            javac: java.javac ? java.javac.version : null,
+            java: java.java ? java.java.version : null,
+            compilerAvailable: java.available
+        }
+    });
 });
 
 app.get("/api/test", async (_req, res) => {
@@ -3523,6 +3534,7 @@ app.post("/api/practice-challenges/:id/run", requireAuth, async (req, res, next)
             data: {
                 compileStatus: runResult.compileStatus,
                 score: runResult.score,
+                infrastructureError: Boolean(runResult.infrastructureError),
                 runtime: runResult.runtime,
                 memoryUsage: runResult.memoryUsage,
                 programOutput: runResult.programOutput,
@@ -3871,6 +3883,23 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             testCases: []
         }, String(sourceCode), true);
 
+        // Infrastructure failures must never become zero-score student submissions.
+        // Do not persist, lock, award XP, update practice results, or progress state.
+        if (evaluation.infrastructureError || [COMPILER_UNAVAILABLE, RUNTIME_UNAVAILABLE].includes(evaluation.compileStatus)) {
+            return res.status(503).json({
+                success: false,
+                code: evaluation.compileStatus,
+                message: evaluation.errorMessage || 'Java compiler unavailable. Your code was not graded. Please try again later.',
+                data: {
+                    compileStatus: evaluation.compileStatus,
+                    infrastructureError: true,
+                    score: null,
+                    programOutput: '',
+                    errorMessage: evaluation.errorMessage
+                }
+            });
+        }
+
         const result = await pool.query(`
             INSERT INTO practice_submissions (
               student_id, challenge_id, source_code, program_output, compile_status,
@@ -4159,6 +4188,10 @@ app.use((err, _req, res, _next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+
+const javaTools = compilerStatus();
+console.log('[java-sandbox] compiler:', javaTools.javac ? javaTools.javac.version : 'UNAVAILABLE');
+console.log('[java-sandbox] runtime:', javaTools.java ? javaTools.java.version : 'UNAVAILABLE');
 
 initializeDatabase()
     .then(async () => {
