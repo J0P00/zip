@@ -7,7 +7,7 @@ const jwt = require("jsonwebtoken");
 const pool = require("./db");
 const { OOP_PARSED_QUESTIONS } = require("./questionBank");
 const { PRACTICE_CHALLENGES, evaluateChallenge } = require("./challengeBank");
-const { COMPILER_UNAVAILABLE, RUNTIME_UNAVAILABLE, compilerStatus } = require("./javaAstEvaluator");
+const { COMPILER_UNAVAILABLE, RUNTIME_UNAVAILABLE, JAVA_TOOLCHAIN_UNAVAILABLE, compilerStatus } = require("./javaAstEvaluator");
 
 const app = express();
 
@@ -3885,11 +3885,11 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
 
         // Infrastructure failures must never become zero-score student submissions.
         // Do not persist, lock, award XP, update practice results, or progress state.
-        if (evaluation.infrastructureError || [COMPILER_UNAVAILABLE, RUNTIME_UNAVAILABLE].includes(evaluation.compileStatus)) {
+        if (evaluation.infrastructureError || [COMPILER_UNAVAILABLE, RUNTIME_UNAVAILABLE, JAVA_TOOLCHAIN_UNAVAILABLE].includes(evaluation.compileStatus)) {
             return res.status(503).json({
                 success: false,
                 code: evaluation.compileStatus,
-                message: evaluation.errorMessage || 'Java compiler unavailable. Your code was not graded. Please try again later.',
+                message: evaluation.errorMessage || 'Java execution environment unavailable. Your code was not graded. Please try again later.',
                 data: {
                     compileStatus: evaluation.compileStatus,
                     infrastructureError: true,

@@ -302,6 +302,8 @@ function extractJavaAst(sourceCode) {
 
 const COMPILER_UNAVAILABLE = 'COMPILER_UNAVAILABLE';
 const RUNTIME_UNAVAILABLE = 'RUNTIME_UNAVAILABLE';
+const JAVA_TOOLCHAIN_UNAVAILABLE = 'JAVA_TOOLCHAIN_UNAVAILABLE';
+const VALIDATION_FAILED = 'VALIDATION_FAILED';
 const EXECUTION_TIMEOUT = 'TIMEOUT';
 
 function executableCandidates(name) {
@@ -348,6 +350,16 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
     fs.writeFileSync(sourcePath, sourceCode, 'utf8');
 
     const tools = compilerStatus();
+    if (!tools.javac && !tools.java) {
+      return {
+        success: false,
+        compileStatus: JAVA_TOOLCHAIN_UNAVAILABLE,
+        output: '',
+        error: 'Java execution environment unavailable. The backend requires both javac and java.',
+        runtime: 0,
+        infrastructureError: true,
+      };
+    }
     if (!tools.javac) {
       return {
         success: false,
@@ -451,7 +463,7 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
   } catch (err) {
     return {
       success: false,
-      compileStatus: COMPILER_UNAVAILABLE,
+      compileStatus: JAVA_TOOLCHAIN_UNAVAILABLE,
       output: '',
       error: err.message || 'System error during execution',
       runtime: 0,
@@ -591,6 +603,11 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
 
   if (!isCompiled) {
     const infrastructureFailure = Boolean(execution.infrastructureError);
+    const infrastructureMessage = execution.compileStatus === RUNTIME_UNAVAILABLE
+      ? 'Java runtime unavailable. Your code was not graded. Please try again later.'
+      : execution.compileStatus === JAVA_TOOLCHAIN_UNAVAILABLE
+        ? 'Java execution environment unavailable. Your code was not graded. Please try again later.'
+        : 'Java compiler unavailable. Your code was not graded. Please try again later.';
     return {
       compileStatus: execution.compileStatus || 'failed',
       score: infrastructureFailure ? null : 0,
@@ -611,7 +628,7 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
         passedCount: 0
       },
       educationalFeedback: infrastructureFailure
-        ? ['Java compiler unavailable. Your code was not graded. Please try again later.']
+        ? [infrastructureMessage]
         : [`Compilation/Runtime Error: ${execution.error}`, ...oopValidation.missingMessages],
       programOutput: execution.output,
       errorMessage: execution.error,
@@ -724,7 +741,7 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
   ];
 
   return {
-    compileStatus: isPassed ? 'success' : 'runtime_error',
+    compileStatus: isPassed ? 'success' : VALIDATION_FAILED,
     score: finalScore,
     passingScore: challenge.passingScore || 70,
     isPassed,
@@ -762,6 +779,8 @@ module.exports = {
   compilerStatus,
   COMPILER_UNAVAILABLE,
   RUNTIME_UNAVAILABLE,
+  JAVA_TOOLCHAIN_UNAVAILABLE,
+  VALIDATION_FAILED,
   EXECUTION_TIMEOUT,
   validateOopRequirements,
   evaluateAdvancedJavaPractice
