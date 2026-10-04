@@ -3824,8 +3824,24 @@ const selectPracticeSubmissionById = async (id) => {
         LEFT JOIN users grader ON grader.id = ps.graded_by
         WHERE ps.id = $1
     `, [id]);
-    return result.rows[0] || null;
+    return result.rows[0] ? normalizeSubmissionTestResults(result.rows[0]) : null;
 };
+
+const normalizeSubmissionTestResults = (row) => ({
+    ...row,
+    test_results: Array.isArray(row.test_results)
+        ? row.test_results
+        : Array.isArray(row.test_results?.requirements)
+            ? row.test_results.requirements.map((item, index) => ({
+                id: `static_${index + 1}`,
+                isHidden: false,
+                passed: Boolean(item.passed),
+                expectedOutput: item.requirement || '',
+                actualOutput: item.passed ? item.requirement || '' : '',
+                message: item.message || ''
+            }))
+            : []
+});
 
 app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
     try {
@@ -3845,7 +3861,7 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin
             ))
             ORDER BY ps.submitted_at DESC
         `, [req.authUser.role, req.authUser.id]);
-        res.json({ success: true, data: result.rows });
+        res.json({ success: true, data: result.rows.map(normalizeSubmissionTestResults) });
     } catch (error) {
         next(error);
     }
@@ -3861,7 +3877,7 @@ app.get("/api/practice-submissions/me", requireAuth, requireRole(["student"]), a
             WHERE ps.student_id IN ($1::text, $2, $3)
             ORDER BY ps.submitted_at DESC
         `, [req.authUser.id, req.authUser.userId || "", req.authUser.email || ""]);
-        res.json({ success: true, data: result.rows });
+        res.json({ success: true, data: result.rows.map(normalizeSubmissionTestResults) });
     } catch (error) {
         next(error);
     }
@@ -3958,7 +3974,14 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             0,
             null,
             validation.note,
-            JSON.stringify(validation)
+            JSON.stringify(validation.requirements.map((item, index) => ({
+                id: `static_${index + 1}`,
+                isHidden: false,
+                passed: item.passed,
+                expectedOutput: item.requirement,
+                actualOutput: item.passed ? item.requirement : '',
+                message: item.message
+            })))
         ]);
 
         try {
