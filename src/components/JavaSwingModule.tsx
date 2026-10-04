@@ -86,7 +86,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
   const [latestAttempt, setLatestAttempt] = useState<SwingQuizAttempt | null>(null);
   const [notice, setNotice] = useState('');
   const [consoleLogs, setConsoleLogs] = useState<string[]>(['Swing console ready. Run checks before final submission.']);
-  const [lastResult, setLastResult] = useState<ReturnType<typeof gradeSwingSource> | null>(null);
+  const [lastResult, setLastResult] = useState<SwingGradeResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
