@@ -1,4 +1,3 @@
-const { evaluateAdvancedJavaPractice } = require('./javaAstEvaluator');
 
 const baseChallenges = [
   {
@@ -608,11 +607,6 @@ const PRACTICE_CHALLENGES = baseChallenges.map((item) => {
   };
 });
 
-const evaluateChallenge = (challenge, sourceCode, includeHidden = false) => {
-  return evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden);
-};
-
 module.exports = {
-  PRACTICE_CHALLENGES,
-  evaluateChallenge
+  PRACTICE_CHALLENGES
 };

@@ -5,7 +5,8 @@
 
 const assert = require('assert');
 const { OOP_PARSED_QUESTIONS } = require('./questionBank');
-const { PRACTICE_CHALLENGES, evaluateChallenge } = require('./challengeBank');
+const { PRACTICE_CHALLENGES } = require('./challengeBank');
+const { validateBasicJavaStructure } = require('./basicJavaValidator');
 
 async function runSecurityTests() {
   console.log('====================================================');
@@ -94,7 +95,7 @@ async function runSecurityTests() {
     );
   });
 
-  test('Server-side challenge evaluation grades code against public AND hidden tests', () => {
+  test('Server-side submission validation is static and does not assign a grade', () => {
     const challenge = PRACTICE_CHALLENGES[0];
     // Valid solution for Student class (Challenge 1)
     const validStudentCode = `
@@ -120,15 +121,13 @@ class Student {
 }
     `;
 
-    const result = evaluateChallenge(challenge, validStudentCode, true);
-    assert.strictEqual(result.compileStatus, 'success', 'Compilation should succeed');
-    assert.strictEqual(result.score, 100, 'Score should be 100%');
-    assert(result.testResults.length >= challenge.testCases.length, 'Must evaluate against all test cases');
-    assert(result.testResults.every(t => t.passed), 'All test cases must pass');
-    assert(result.oopValidation && result.oopValidation.passed, 'OOP validation must pass');
+    const result = validateBasicJavaStructure(challenge, validStudentCode);
+    assert.strictEqual(result.compilationCheck, 'not_executed');
+    assert.strictEqual(result.oopStructureCheck, 'passed');
+    assert(result.requirements.every(t => t.passed));
   });
 
-  test('Server-side challenge evaluation fails incomplete or invalid code', () => {
+  test('Static validation reports missing structure without failing the submission itself', () => {
     const challenge = PRACTICE_CHALLENGES[0];
     const incompleteCode = `
 public class Main {
@@ -138,11 +137,10 @@ public class Main {
 }
     `;
 
-    const result = evaluateChallenge(challenge, incompleteCode, true);
-    assert.strictEqual(result.compileStatus, 'success', 'Incomplete code should still report successful compilation');
-    assert.strictEqual(result.executionStatus, 'success', 'Executable incomplete solution should run successfully');
-    assert.strictEqual(result.validationStatus, 'failed', 'Incomplete solution should fail validation');
-    assert(result.score < 70, 'Incomplete code score must be below passingScore');
+    const result = validateBasicJavaStructure(challenge, incompleteCode);
+    assert.strictEqual(result.compilationCheck, 'not_executed');
+    assert.strictEqual(result.oopStructureCheck, 'needs_review');
+    assert(result.requirements.some(item => !item.passed));
   });
 
   // ----------------------------------------------------

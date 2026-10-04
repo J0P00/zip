@@ -369,8 +369,8 @@ const practiceSubmissionToPending = (submission: PracticeSubmission): PendingSub
   submittedAt: 'Just Now',
   status: 'pending',
   code: submission.sourceCode,
-  grade: submission.score,
-  score: submission.score,
+  grade: submission.teacherScore,
+  score: submission.score ?? undefined,
   topicId: submission.topicId,
   topicTitle: submission.topicTitle,
   compileStatus: submission.compileStatus,
@@ -380,20 +380,16 @@ const practiceSubmissionToPending = (submission: PracticeSubmission): PendingSub
   errorMessage: submission.errorMessage,
   isLocked: submission.isLocked,
   testResults: submission.testResults,
-  feedback: submission.score >= 70
-    ? 'Automated grader: passed hidden test cases and practice requirements. Teacher review is pending.'
-    : 'Automated grader: submission recorded, but one or more hidden tests failed. Teacher review is pending.'
+  feedback: submission.feedback || 'Waiting for teacher review.'
 });
 
 const practiceSubmissionRowToPending = (row: any): PendingSubmission => {
-  const autoScore = Number(row.score ?? 0);
+  const autoScore = row.score === null || row.score === undefined ? undefined : Number(row.score);
   const teacherScore = row.teacher_score === null || row.teacher_score === undefined ? undefined : Number(row.teacher_score);
   const reviewStatus = String(row.review_status || (teacherScore === undefined ? 'pending' : 'reviewed'));
-  const status: PendingSubmission['status'] = reviewStatus === 'reviewed'
-    ? 'reviewed'
-    : reviewStatus === 'reopened'
-      ? 'reopened'
-      : 'pending';
+  const status: PendingSubmission['status'] = ['reviewed', 'passed', 'failed', 'reopened'].includes(reviewStatus)
+    ? reviewStatus as PendingSubmission['status']
+    : 'pending';
 
   return {
     id: String(row.id),
@@ -405,7 +401,7 @@ const practiceSubmissionRowToPending = (row: any): PendingSubmission => {
     submittedAt: row.submitted_at || '',
     status,
     code: row.source_code || '',
-    grade: teacherScore ?? autoScore,
+    grade: teacherScore,
     score: autoScore,
     teacherScore,
     topicId: row.topic_id,
@@ -417,9 +413,7 @@ const practiceSubmissionRowToPending = (row: any): PendingSubmission => {
     errorMessage: row.error_message || '',
     isLocked: Boolean(row.is_locked),
     testResults: row.test_results || [],
-    feedback: row.teacher_feedback || (autoScore >= 70
-      ? 'Automated grader: passed hidden test cases and practice requirements. Teacher review is pending.'
-      : 'Automated grader: submission recorded, but one or more hidden tests failed. Teacher review is pending.'),
+    feedback: row.teacher_feedback || 'Waiting for teacher review.',
     gradedAt: row.graded_at,
     reviewStatus,
     remedialRequired: row.remedial_required === null || row.remedial_required === undefined ? undefined : Boolean(row.remedial_required)
@@ -1098,10 +1092,6 @@ export default function App() {
   // 1. When student compiles and submits vehicle code
   const handleStudentSubmitCode = (submission: PracticeSubmission) => {
     void refreshStudentResults();
-    // Increment points & complete lessons count
-    const xpAward = Math.max(25, Math.round(submission.score * 1.5));
-    setPoints(prev => prev + xpAward);
-    setStreak(prev => prev + 1);
 
     // Append new active row inside Instructor queue review pending
     const newSub = practiceSubmissionToPending(submission);
@@ -1110,30 +1100,11 @@ export default function App() {
 
     // Lift leaderboard rankings score dynamically on the current student row
 
-    setRecentStudentGrade({
-      grade: submission.score,
-      feedback: newSub.feedback || '',
-      challenge: submission.challengeTitle
-    });
-
     addNotification(
       'Practice IDE Submitted',
-      `${submission.challengeTitle} was graded automatically with a score of ${submission.score}%.`,
-      'unlock'
+      `${submission.challengeTitle} was submitted and is waiting for teacher review.`,
+      'submission'
     );
-
-    publishRecommendation(generateRuleBasedRecommendation({
-      studentId: submission.studentId,
-      studentName: submission.studentName,
-      lessonId: submission.challengeId.replace('practice_', 'oop_lesson_'),
-      currentTopic: submission.topicTitle,
-      trigger: 'Coding Score',
-      videoCompleted: true,
-      lessonCompleted: submission.score >= 70,
-      codingScore: submission.score,
-      codingAttempts: 1,
-      progressPercentage: studentResults?.overallProgress ?? 0
-    }));
 
   };
 

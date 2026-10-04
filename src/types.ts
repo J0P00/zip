@@ -247,7 +247,7 @@ export interface PendingSubmission {
   studentName: string;
   challengeName: string;
   submittedAt: string;
-  status: 'pending' | 'reviewed' | 'reopened';
+  status: 'pending' | 'reviewed' | 'passed' | 'failed' | 'reopened';
   code: string;
   grade?: number;
   feedback?: string;
@@ -261,7 +261,7 @@ export interface PendingSubmission {
   topicId?: string;
   topicTitle?: string;
   programOutput?: string;
-  compileStatus?: 'not_run' | 'success' | 'failed' | 'runtime_error';
+  compileStatus?: 'not_run' | 'not_executed' | 'success' | 'failed' | 'runtime_error';
   runtime?: number;
   memoryUsage?: number;
   score?: number;
@@ -428,7 +428,7 @@ export interface PracticeSubmission {
   topicTitle: string;
   sourceCode: string;
   programOutput: string;
-  compileStatus: 'success' | 'failed' | 'runtime_error';
+  compileStatus: 'not_executed' | 'success' | 'failed' | 'runtime_error';
   runtime: number;
   memoryUsage?: number;
   score: number;
@@ -555,4 +555,3 @@ export interface AssessmentSubmitResult {
   violationCount: number;
   review: AssessmentReviewQuestion[];
 }
-

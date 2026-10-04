@@ -6,8 +6,8 @@ const express = require("express");
 const jwt = require("jsonwebtoken");
 const pool = require("./db");
 const { OOP_PARSED_QUESTIONS } = require("./questionBank");
-const { PRACTICE_CHALLENGES, evaluateChallenge } = require("./challengeBank");
-const { COMPILER_UNAVAILABLE, JAVA_RUNTIME_UNAVAILABLE, JAVA_TOOLCHAIN_UNAVAILABLE, compilerStatus, runJavaRuntimeHealthCheck } = require("./javaAstEvaluator");
+const { PRACTICE_CHALLENGES } = require("./challengeBank");
+const { validateBasicJavaStructure } = require("./basicJavaValidator");
 
 const app = express();
 
@@ -614,10 +614,10 @@ const initializeDatabase = async () => {
           challenge_id TEXT NOT NULL REFERENCES programming_challenges(id) ON DELETE CASCADE,
           source_code TEXT NOT NULL,
           program_output TEXT DEFAULT '',
-          compile_status TEXT NOT NULL DEFAULT 'not_run',
+          compile_status TEXT NOT NULL DEFAULT 'not_executed',
           runtime NUMERIC DEFAULT 0,
           memory_usage NUMERIC,
-          score NUMERIC NOT NULL DEFAULT 0,
+          score NUMERIC,
           error_message TEXT DEFAULT '',
           test_results JSONB NOT NULL DEFAULT '[]'::jsonb,
           submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -639,6 +639,9 @@ const initializeDatabase = async () => {
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_by UUID REFERENCES users(id) ON DELETE SET NULL;
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_at TIMESTAMPTZ;
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS remedial_required BOOLEAN DEFAULT FALSE;
+        ALTER TABLE practice_submissions ALTER COLUMN score DROP NOT NULL;
+        ALTER TABLE practice_submissions DROP CONSTRAINT IF EXISTS practice_submissions_compile_status_check;
+        ALTER TABLE practice_submissions ADD CONSTRAINT practice_submissions_compile_status_check CHECK (compile_status IN ('not_run', 'not_executed', 'success', 'failed', 'runtime_error'));
         CREATE TABLE IF NOT EXISTS notifications (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           recipient_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1348,7 +1351,9 @@ const getStudentProgressSummary = async (studentId) => {
         const practiceMap = {};
         practiceRes.rows.forEach(p => {
             const lid = p.lesson_id;
-            if (!practiceMap[lid] || Number(p.score) > Number(practiceMap[lid].score)) {
+            const pScore = p.teacher_score ?? p.score ?? -1;
+            const currentScore = practiceMap[lid] ? (practiceMap[lid].teacher_score ?? practiceMap[lid].score ?? -1) : -1;
+            if (!practiceMap[lid] || Number(pScore) > Number(currentScore)) {
                 practiceMap[lid] = p;
             }
         });
@@ -1659,7 +1664,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
     const passingThreshold = Number(practice?.passing_score || 70);
     const practiceCompleted = !practiceRequired || (
         practice &&
-        practice.score !== null &&
+        (practice.score !== null || practice.teacher_score !== null) &&
         !isRemedial &&
         effectiveScore >= passingThreshold &&
         (practice.compile_status === 'success' || practice.teacher_score !== null)
@@ -1801,27 +1806,7 @@ app.get("/", (_req, res) => {
 });
 
 app.get("/health", (_req, res) => {
-    const java = compilerStatus();
-    const healthy = java.available && java.status === "JAVA_TOOLCHAIN_OK";
-    const payload = {
-        status: healthy ? "ok" : "error",
-        code: healthy ? undefined : JAVA_TOOLCHAIN_UNAVAILABLE,
-        backend: "Render",
-        timestamp: new Date().toISOString(),
-        java: Boolean(java.java),
-        javac: Boolean(java.javac),
-        toolchain: {
-            status: java.status,
-            javac: java.javac ? java.javac.version : null,
-            java: java.java ? java.java.version : null,
-            javacPath: java.javac ? java.javac.path : null,
-            javaPath: java.java ? java.java.path : null,
-            compilerAvailable: java.available,
-            runtimeHealth: typeof javaRuntimeHealth === "undefined" ? null : javaRuntimeHealth
-        }
-    };
-    if (healthy) delete payload.code;
-    res.status(healthy ? 200 : 503).json(payload);
+    res.json({ status: "ok", backend: "Render", database: "postgresql", timestamp: new Date().toISOString() });
 });
 
 app.get("/api/test", async (_req, res) => {
@@ -3025,7 +3010,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         const [course, videos, quizzes, practice, swing, oopTopics, swingTopics] = await Promise.all([
             pool.query(`
                 SELECT COUNT(*)::int AS total_lessons,
-                       COUNT(*) FILTER (WHERE sp.completed AND COALESCE(qa.passed, FALSE) AND COALESCE(ps.score, 0) >= 70 AND COALESCE(ps.compile_status, '') = 'success')::int AS completed_lessons
+                       COUNT(*) FILTER (WHERE sp.completed AND COALESCE(qa.passed, FALSE) AND COALESCE(ps.teacher_score, ps.score, 0) >= 70 AND (ps.teacher_score IS NOT NULL OR COALESCE(ps.compile_status, '') = 'success'))::int AS completed_lessons
                 FROM lessons l
                 LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND sp.video_id = l.id
                 LEFT JOIN LATERAL (
@@ -3033,7 +3018,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                   ORDER BY attempt_number DESC, date_completed DESC LIMIT 1
                 ) qa ON TRUE
                 LEFT JOIN LATERAL (
-                  SELECT ps.score, ps.compile_status FROM practice_submissions ps
+                  SELECT ps.score, ps.teacher_score, ps.compile_status FROM practice_submissions ps
                   JOIN programming_challenges pc ON pc.id = ps.challenge_id
                                     WHERE ps.student_id = $1::text AND pc.lesson_id = l.id
                   ORDER BY ps.submitted_at DESC LIMIT 1
@@ -3057,8 +3042,8 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             pool.query(`
                 SELECT COUNT(pc.id)::int AS total_practice_activities,
                        COUNT(ps.id)::int AS submitted_practice_activities,
-                      COUNT(ps.id) FILTER (WHERE ps.score >= 70 AND ps.compile_status = 'success')::int AS completed_practice_activities,
-                      COALESCE(ROUND(AVG(ps.score)), 0)::int AS average_practice_score
+                      COUNT(ps.id) FILTER (WHERE COALESCE(ps.teacher_score, ps.score, 0) >= 70 AND (ps.teacher_score IS NOT NULL OR ps.compile_status = 'success'))::int AS completed_practice_activities,
+                      COALESCE(ROUND(AVG(ps.teacher_score)), 0)::int AS average_practice_score
                 FROM programming_challenges pc
                 LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND ps.student_id = $1::text
                 WHERE pc.status <> 'Archived'
@@ -3568,8 +3553,26 @@ app.post("/api/practice-challenges/:id/run", requireAuth, async (req, res, next)
             return res.status(404).json({ success: false, message: "Practice challenge not found." });
         }
 
-        // Run only public tests for the "Run" action
-        const runResult = evaluateChallenge(challenge, String(sourceCode), false);
+        const validation = validateBasicJavaStructure(challenge, String(sourceCode));
+        const runResult = {
+            compileStatus: validation.compilationCheck,
+            executionStatus: 'not_executed',
+            validationStatus: validation.oopStructureCheck,
+            score: null,
+            infrastructureError: false,
+            runtime: 0,
+            memoryUsage: 0,
+            programOutput: '',
+            errorMessage: validation.note,
+            testResults: validation.requirements.map((item, index) => ({
+                id: `static_${index + 1}`,
+                isHidden: false,
+                passed: item.passed,
+                expectedOutput: item.requirement,
+                actualOutput: item.passed ? item.requirement : '',
+                message: item.message
+            }))
+        };
 
         res.json({
             success: true,
@@ -3824,7 +3827,7 @@ const selectPracticeSubmissionById = async (id) => {
     return result.rows[0] || null;
 };
 
-app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin"]), async (_req, res, next) => {
+app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
     try {
         const result = await pool.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
@@ -3836,8 +3839,12 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin
             LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
             LEFT JOIN students s ON s.user_id = u.id
             LEFT JOIN users grader ON grader.id = ps.graded_by
+            WHERE ($1 = 'admin' OR EXISTS (
+                SELECT 1 FROM monitoring_requests mr
+                WHERE mr.teacher_id = $2 AND mr.student_id = u.id AND mr.status = 'accepted'
+            ))
             ORDER BY ps.submitted_at DESC
-        `);
+        `, [req.authUser.role, req.authUser.id]);
         res.json({ success: true, data: result.rows });
     } catch (error) {
         next(error);
@@ -3867,8 +3874,11 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             sourceCode
         } = req.body || {};
 
-        if (!challengeId || !sourceCode) {
-            return res.status(400).json({ success: false, message: "challengeId and sourceCode are required." });
+        if (!challengeId || typeof sourceCode !== "string" || !sourceCode.trim()) {
+            return res.status(400).json({ success: false, message: "Code submission cannot be empty." });
+        }
+        if (sourceCode.length > 50000) {
+            return res.status(413).json({ success: false, message: "Code submission cannot exceed 50,000 characters." });
         }
 
         const safeChallengeId = cleanText(challengeId, 120);
@@ -3906,46 +3916,11 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             return res.status(409).json({ success: false, message: "This challenge has already been submitted." });
         }
 
-        // Fetch challenge with all test cases (both public and hidden) for server-side evaluation
-        const challengeDbRes = await pool.query(`
-            SELECT c.*, COALESCE(json_agg(t.*) FILTER (WHERE t.id IS NOT NULL), '[]') AS test_cases
-            FROM programming_challenges c
-            LEFT JOIN challenge_test_cases t ON t.challenge_id = c.id
-            WHERE c.id = $1
-            GROUP BY c.id
-        `, [safeChallengeId]);
-
-        let challenge = challengeDbRes.rows[0] ? toClientPracticeChallenge(challengeDbRes.rows[0]) : null;
-        if (!challenge) {
-            challenge = PRACTICE_CHALLENGES.find(c => c.id === safeChallengeId) || null;
-        }
-
-        // Authoritatively evaluate both public and hidden test cases on backend
-        const evaluation = evaluateChallenge(challenge || {
-            id: safeChallengeId,
-            passingScore: Number(prerequisite.rows[0].passing_score || 70),
-            sampleOutput: "Success",
-            testCases: []
-        }, String(sourceCode), true);
-
-        // Infrastructure failures must never become zero-score student submissions.
-        // Do not persist, lock, award XP, update practice results, or progress state.
-        if (evaluation.infrastructureError || [COMPILER_UNAVAILABLE, JAVA_RUNTIME_UNAVAILABLE, JAVA_TOOLCHAIN_UNAVAILABLE].includes(evaluation.compileStatus)) {
-            return res.status(503).json({
-                success: false,
-                code: evaluation.errorCode || evaluation.compileStatus,
-                message: evaluation.errorMessage || 'Java execution environment unavailable. Your code was not graded. Please try again later.',
-                data: {
-                    compileStatus: evaluation.compileStatus,
-                    executionStatus: evaluation.executionStatus,
-                    errorCode: evaluation.errorCode || null,
-                    infrastructureError: true,
-                    score: null,
-                    programOutput: '',
-                    errorMessage: evaluation.errorMessage
-                }
-            });
-        }
+        const challengeDbRes = await pool.query("SELECT * FROM programming_challenges WHERE id = $1", [safeChallengeId]);
+        const challenge = challengeDbRes.rows[0]
+            ? toClientPracticeChallenge({ ...challengeDbRes.rows[0], test_cases: [] })
+            : PRACTICE_CHALLENGES.find(c => c.id === safeChallengeId);
+        const validation = validateBasicJavaStructure(challenge || prerequisite.rows[0], String(sourceCode));
 
         const result = await pool.query(`
             INSERT INTO practice_submissions (
@@ -3977,42 +3952,14 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             req.authUser.id,
             safeChallengeId,
             String(sourceCode).slice(0, 50000),
-            String(evaluation.programOutput).slice(0, 20000),
-            evaluation.compileStatus,
-            clampNumber(evaluation.runtime, 0, 30000),
-            clampNumber(evaluation.memoryUsage, 0, 4096),
-            clampNumber(evaluation.score, 0, 100),
-            String(evaluation.errorMessage).slice(0, 20000),
-            JSON.stringify(evaluation.testResults)
+            '',
+            'not_executed',
+            0,
+            0,
+            null,
+            validation.note,
+            JSON.stringify(validation)
         ]);
-
-        // Award XP on successful compile & completion
-        if (evaluation.compileStatus === "success") {
-            await awardXP(req.authUser.id, 40, `Practice Challenge: ${safeChallengeId}`);
-        }
-
-        // Also record practice_results for fast coding metrics
-        await pool.query(`
-            INSERT INTO practice_results (student_id, challenge_id, started, completed, score, source_code, completion_time_seconds, completed_at)
-            VALUES ($1, $2, TRUE, $3, $4, $5, $6, CASE WHEN $3 THEN NOW() ELSE NULL END)
-            ON CONFLICT (student_id, challenge_id) DO UPDATE SET
-              completed = EXCLUDED.completed,
-              score = EXCLUDED.score,
-              source_code = EXCLUDED.source_code,
-              completion_time_seconds = EXCLUDED.completion_time_seconds,
-              completed_at = CASE WHEN EXCLUDED.completed THEN NOW() ELSE practice_results.completed_at END,
-              updated_at = NOW()
-        `, [
-            req.authUser.id,
-            safeChallengeId,
-            evaluation.compileStatus === "success" && evaluation.score >= (prerequisite.rows[0].passing_score || 70),
-            evaluation.score,
-            String(sourceCode).slice(0, 50000),
-            Math.max(15, Math.round(evaluation.runtime / 1000))
-        ]);
-
-        await verifyLessonCompletion(req.authUser.id, prerequisite.rows[0].lesson_id);
-        await checkAndAwardBadges(req.authUser.id);
 
         try {
             const notificationClient = await pool.connect();
@@ -4031,7 +3978,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
                         relatedSubmissionId: result.rows[0].id,
                         relatedPracticeId: safeChallengeId,
                         practiceTitle: prerequisite.rows[0].challenge_title || safeChallengeId,
-                        grade: evaluation.score,
+                        grade: null,
                         maxGrade: 100,
                         metadata: { studentId: req.authUser.id, studentEmail: req.authUser.email || "" }
                     });
@@ -4140,6 +4087,10 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
             return res.status(400).json({ success: false, message: "Teacher feedback is required." });
         }
         const remedialRequired = Boolean(body.remedialRequired ?? body.remedial_required ?? false);
+        const allowedStatuses = new Set(['submitted', 'reviewed', 'passed', 'failed']);
+        const reviewStatus = allowedStatuses.has(String(body.status || '').toLowerCase())
+            ? String(body.status).toLowerCase()
+            : (remedialRequired || grade < 70 ? 'failed' : 'reviewed');
         await client.query("BEGIN");
         const existingResult = await client.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
@@ -4156,16 +4107,27 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
             await client.query("ROLLBACK");
             return res.status(404).json({ success: false, message: "Submission not found." });
         }
+        if (req.authUser.role !== 'admin') {
+            const authorization = await client.query(`
+                SELECT 1 FROM monitoring_requests
+                WHERE teacher_id = $1 AND student_id = $2 AND status = 'accepted'
+                LIMIT 1
+            `, [req.authUser.id, existing.student_user_id || existing.student_id]);
+            if (!authorization.rowCount) {
+                await client.query("ROLLBACK");
+                return res.status(403).json({ success: false, message: "You are not authorized to review this student's submission." });
+            }
+        }
         await client.query(`
             UPDATE practice_submissions
             SET teacher_score = $2,
                 teacher_feedback = $3,
                 graded_by = $4,
                 graded_at = NOW(),
-                review_status = 'reviewed',
+                review_status = $6,
                 remedial_required = $5
             WHERE id = $1
-        `, [req.params.id, grade, feedback, req.authUser.id, remedialRequired]);
+        `, [req.params.id, grade, feedback, req.authUser.id, remedialRequired, reviewStatus]);
         const updatedResult = await client.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
                u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
@@ -4236,20 +4198,7 @@ app.use((err, _req, res, _next) => {
 
 const PORT = process.env.PORT || 5000;
 
-const javaTools = compilerStatus();
-const javaRuntimeHealth = runJavaRuntimeHealthCheck();
-console.log('[java-sandbox] platform:', javaTools.platform);
-console.log('[java-sandbox] java executable:', javaTools.java ? javaTools.java.path : 'UNAVAILABLE');
-console.log('[java-sandbox] javac executable:', javaTools.javac ? javaTools.javac.path : 'UNAVAILABLE');
-console.log('[java-sandbox] java:', javaTools.java ? 'AVAILABLE' : 'UNAVAILABLE');
-console.log('[java-sandbox] javac:', javaTools.javac ? 'AVAILABLE' : 'UNAVAILABLE');
-console.log('[java-sandbox] java version:', javaTools.java ? javaTools.java.version : 'UNAVAILABLE');
-console.log('[java-sandbox] javac version:', javaTools.javac ? javaTools.javac.version : 'UNAVAILABLE');
-console.log('[java-sandbox] OS/platform:', `${process.platform}/${process.arch}`);
-console.log('[java-sandbox] PATH:', process.env.PATH || 'UNSET');
-console.log('[java-sandbox] JAVA_HOME:', process.env.JAVA_HOME || 'UNSET');
-console.log('[java-sandbox] Docker/runtime mode:', process.env.RENDER ? 'Render' : 'local');
-console.log('[java-sandbox] runtime health:', javaRuntimeHealth.ok ? 'JAVA_TOOLCHAIN_OK' : `${javaRuntimeHealth.status}: ${javaRuntimeHealth.error}`);
+console.log('[submission-service] runtime: Render Node.js + PostgreSQL; Java execution disabled');
 
 initializeDatabase()
     .then(async () => {

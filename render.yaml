@@ -1,11 +1,10 @@
 services:
   - type: web
     name: oop-backend-new
-    runtime: docker
-    # Paths are relative to the repository root. This service must remain a
-    # Docker web service; configuring it as a Node service bypasses the JDK.
-    dockerfilePath: backend/Dockerfile
-    dockerContext: backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
