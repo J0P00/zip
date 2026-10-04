@@ -504,6 +504,22 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
   }
 }
 
+function runJavaRuntimeHealthCheck() {
+  const result = executeJavaProgram(
+    'public class Main { public static void main(String[] args) { System.out.println("JAVA_RUNTIME_OK"); } }',
+    '',
+    4000
+  );
+  return {
+    ok: result.success && result.output === 'JAVA_RUNTIME_OK',
+    status: result.success ? 'JAVA_TOOLCHAIN_READY' : (result.errorCode || result.compileStatus),
+    output: result.output,
+    error: result.error,
+    compileStatus: result.compileStatus,
+    executionStatus: result.executionStatus
+  };
+}
+
 /**
  * Validates extracted AST against the challenge's required OOP structural rules
  */
@@ -887,6 +903,7 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
 module.exports = {
   extractJavaAst,
   executeJavaProgram,
+  runJavaRuntimeHealthCheck,
   compilerStatus,
   COMPILER_UNAVAILABLE,
   RUNTIME_UNAVAILABLE,

@@ -139,7 +139,9 @@ public class Main {
     `;
 
     const result = evaluateChallenge(challenge, incompleteCode, true);
-    assert.strictEqual(result.compileStatus, 'runtime_error', 'Incomplete code should not have success compileStatus');
+    assert.strictEqual(result.compileStatus, 'success', 'Incomplete code should still report successful compilation');
+    assert.strictEqual(result.executionStatus, 'success', 'Executable incomplete solution should run successfully');
+    assert.strictEqual(result.validationStatus, 'failed', 'Incomplete solution should fail validation');
     assert(result.score < 70, 'Incomplete code score must be below passingScore');
   });
 
