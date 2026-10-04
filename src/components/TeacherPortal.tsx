@@ -761,16 +761,14 @@ export default function TeacherPortal({
     return emails;
   }, [acceptedEmails, visibleStudents, allRegisteredUsers]);
 
-  const visibleSubmissions = submissions.filter(sub => {
-    const studentEmail = (sub.studentEmail || getStudentEmailByName(sub.studentName) || sub.studentId || '').toLowerCase();
-    if (!studentEmail) return true;
-    if (visibleStudentEmails.size === 0) return true;
-    return visibleStudentEmails.has(studentEmail);
-  });
+  // The backend already applies the authenticated teacher's authorization
+  // scope. Do not apply a second roster/local-state filter here; it can hide
+  // a real PostgreSQL submission when the student is not in the cached roster.
+  const visibleSubmissions = submissions;
 
   const filteredSubmissions = visibleSubmissions.filter(sub => {
     const score = Number(sub.teacherScore ?? sub.grade ?? sub.score ?? 0);
-    const isReviewed = sub.reviewStatus === 'reviewed' || sub.status === 'reviewed';
+    const isReviewed = ['reviewed', 'passed', 'failed'].includes(sub.reviewStatus || sub.status);
     const isPending = sub.status === 'pending' || sub.reviewStatus === 'pending' || (!sub.reviewStatus && !sub.gradedAt);
     const matchesSearch =
       sub.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||

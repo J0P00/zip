@@ -3843,9 +3843,41 @@ const normalizeSubmissionTestResults = (row) => ({
             : []
 });
 
+const normalizeTeacherSubmission = (row) => ({
+    ...normalizeSubmissionTestResults(row),
+    id: row.id,
+    studentId: row.student_user_id || row.student_id,
+    studentName: row.student_name || row.student_email || row.student_id,
+    studentEmail: row.student_email || '',
+    topicId: row.topic_id || row.challenge_id,
+    topicTitle: row.challenge_title || row.topic_id || '',
+    lessonId: row.lesson_id || '',
+    sourceCode: row.source_code || '',
+    submissionStatus: row.review_status || (row.is_locked ? 'submitted' : 'draft'),
+    compileStatus: row.compile_status || 'not_executed',
+    testResults: Array.isArray(row.test_results) ? row.test_results : [],
+    grade: row.teacher_score !== null && row.teacher_score !== undefined
+        ? Number(row.teacher_score)
+        : row.score !== null && row.score !== undefined ? Number(row.score) : null,
+    feedback: row.teacher_feedback || '',
+    submittedAt: row.submitted_at,
+    gradedAt: row.graded_at || null
+});
+
 app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
     try {
-        const result = await pool.query(`
+        const [studentCountResult, totalCountResult, result] = await Promise.all([
+            pool.query(`
+                SELECT COUNT(DISTINCT u.id)::int AS count
+                FROM users u
+                WHERE u.role = 'student'
+                  AND ($1 = 'admin' OR EXISTS (
+                    SELECT 1 FROM monitoring_requests mr
+                    WHERE mr.teacher_id = $2 AND mr.student_id = u.id AND mr.status = 'accepted'
+                  ))
+            `, [req.authUser.role, req.authUser.id]),
+            pool.query(`SELECT COUNT(*)::int AS count FROM practice_submissions`),
+            pool.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
                    u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
                    COALESCE(s.section, 'Unassigned') AS section,
@@ -3860,8 +3892,17 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin
                 WHERE mr.teacher_id = $2 AND mr.student_id = u.id AND mr.status = 'accepted'
             ))
             ORDER BY ps.submitted_at DESC
-        `, [req.authUser.role, req.authUser.id]);
-        res.json({ success: true, data: result.rows.map(normalizeSubmissionTestResults) });
+            `, [req.authUser.role, req.authUser.id])
+        ]);
+        const submissions = result.rows.map(normalizeTeacherSubmission);
+        console.info('[submission-monitoring]', {
+            teacherId: req.authUser.id,
+            teacherDatabaseId: req.authUser.id,
+            studentsFound: Number(studentCountResult.rows[0]?.count || 0),
+            submissionsFoundBeforeFiltering: Number(totalCountResult.rows[0]?.count || 0),
+            visibleSubmissions: submissions.length
+        });
+        res.json({ success: true, data: submissions });
     } catch (error) {
         next(error);
     }
