@@ -38,7 +38,9 @@ public class Main {
   const proceduralResult = evaluateChallenge(studentChallenge, proceduralCode, true);
   
   test('Procedural code compiles and runs', () => {
-    assert.strictEqual(proceduralResult.compileStatus, 'runtime_error'); // runtime_error because overall evaluation failed
+    assert.strictEqual(proceduralResult.compileStatus, 'success');
+    assert.strictEqual(proceduralResult.executionStatus, 'success');
+    assert.strictEqual(proceduralResult.validationStatus, 'failed');
   });
 
   test('Procedural code output matches text but OOP structure is FALSE', () => {

@@ -1702,7 +1702,7 @@ export default function App() {
                 currentUser={displayUser}
                 onSubmitCompleted={handleStudentSubmitCode}
                 theme={theme}
-                activeRecommendation={activeRecommendation}
+                activeRecommendation={null}
               />
             )}
 

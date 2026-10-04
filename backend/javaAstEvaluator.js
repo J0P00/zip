@@ -56,6 +56,14 @@ function extractJavaAst(sourceCode) {
     return collectTokens(node).join(' ');
   }
 
+  function getFormalParameter(parameter) {
+    const regular = parameter?.children?.variableParaRegularParameter?.[0] || parameter;
+    return {
+      type: getNodeText(regular?.children?.unannType?.[0]).trim(),
+      name: regular?.children?.variableDeclaratorId?.[0]?.children?.Identifier?.[0]?.image || ''
+    };
+  }
+
   function walkCst(node, visitors) {
     if (!node) return;
     const name = node.name;
@@ -129,19 +137,18 @@ function extractJavaAst(sourceCode) {
           const isPriv = constrModifiers.some(m => getNodeText(m).includes('private'));
 
           const constrDeclarator = directConstr.children?.constructorDeclarator?.[0];
-          const constrName = constrDeclarator?.children?.simpleTypeName?.[0]?.children?.Identifier?.[0]?.image || '';
+          const constrName = constrDeclarator?.children?.simpleTypeName?.[0]?.children?.typeIdentifier?.[0]?.children?.Identifier?.[0]?.image || '';
 
           const params = [];
           const formalParams = constrDeclarator?.children?.formalParameterList?.[0]?.children?.formalParameter || [];
           for (const fp of formalParams) {
-            const pType = getNodeText(fp.children?.unannType?.[0]).trim();
-            const pName = fp.children?.variableDeclaratorId?.[0]?.children?.Identifier?.[0]?.image || '';
-            params.push({ name: pName, type: pType });
+            params.push(getFormalParameter(fp));
           }
 
           const constrBody = getNodeText(directConstr.children?.constructorBody?.[0]);
-          const usesThis = constrBody.includes('this.');
-          const callsSuper = constrBody.includes('super(') || constrBody.includes('super (');
+          const compactConstrBody = constrBody.replace(/\s+/g, '');
+          const usesThis = compactConstrBody.includes('this.');
+          const callsSuper = compactConstrBody.includes('super(');
 
           classObj.constructors.push({
             name: constrName,
@@ -205,9 +212,7 @@ function extractJavaAst(sourceCode) {
           const params = [];
           const formalParams = methodDeclarator?.children?.formalParameterList?.[0]?.children?.formalParameter || [];
           for (const fp of formalParams) {
-            const pType = getNodeText(fp.children?.unannType?.[0]).trim();
-            const pName = fp.children?.variableDeclaratorId?.[0]?.children?.Identifier?.[0]?.image || '';
-            params.push({ name: pName, type: pType });
+            params.push(getFormalParameter(fp));
           }
 
           classObj.methods.push({
@@ -354,6 +359,7 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
       return {
         success: false,
         compileStatus: JAVA_TOOLCHAIN_UNAVAILABLE,
+        executionStatus: 'unavailable',
         output: '',
         error: 'Java execution environment unavailable. The backend requires both javac and java.',
         runtime: 0,
@@ -364,6 +370,7 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
       return {
         success: false,
         compileStatus: COMPILER_UNAVAILABLE,
+        executionStatus: 'not_run',
         output: '',
         error: 'Java compiler unavailable. The backend requires a full JDK (javac).',
         runtime: 0,
@@ -374,6 +381,7 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
       return {
         success: false,
         compileStatus: RUNTIME_UNAVAILABLE,
+        executionStatus: 'unavailable',
         output: '',
         error: 'Java runtime unavailable. The backend requires a JDK/JRE (java).',
         runtime: 0,
@@ -394,6 +402,7 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
         return {
           success: false,
           compileStatus: compileResult.error.code === 'ETIMEDOUT' ? EXECUTION_TIMEOUT : COMPILER_UNAVAILABLE,
+          executionStatus: 'not_run',
           output: '',
           error: `Unable to execute javac (${compileResult.error.code}).`,
           runtime: 0,
@@ -404,6 +413,7 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
       return {
         success: false,
         compileStatus: 'failed',
+        executionStatus: 'not_run',
         output: '',
         error: errMsg.trim(),
         runtime: 0
@@ -427,6 +437,7 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
       return {
         success: false,
         compileStatus: EXECUTION_TIMEOUT,
+        executionStatus: 'failed',
         output: '',
         error: 'Execution timed out (possible infinite loop).',
         runtime: timeoutMs
@@ -438,6 +449,7 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
         return {
           success: false,
           compileStatus: RUNTIME_UNAVAILABLE,
+          executionStatus: 'unavailable',
           output: '',
           error: `Unable to execute java (${runResult.error.code}).`,
           runtime,
@@ -447,6 +459,7 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
       return {
         success: false,
         compileStatus: 'runtime_error',
+        executionStatus: 'failed',
         output: (runResult.stdout || '').trim(),
         error: (runResult.stderr || 'Runtime error during execution.').trim(),
         runtime
@@ -456,6 +469,7 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
     return {
       success: true,
       compileStatus: 'success',
+      executionStatus: 'success',
       output: (runResult.stdout || '').trim(),
       error: '',
       runtime
@@ -464,6 +478,7 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
     return {
       success: false,
       compileStatus: JAVA_TOOLCHAIN_UNAVAILABLE,
+      executionStatus: 'unavailable',
       output: '',
       error: err.message || 'System error during execution',
       runtime: 0,
@@ -493,13 +508,30 @@ function validateOopRequirements(ast, requirements = []) {
 
   const results = [];
   const missingMessages = [];
+  const configurationErrors = [];
 
   for (const req of requirements) {
+    if (typeof req.check !== 'function') {
+      const message = `Evaluator configuration error: requirement "${req.id || req.name || 'unknown'}" has no executable check function.`;
+      configurationErrors.push(message);
+      results.push({
+        id: req.id,
+        name: req.name,
+        description: req.description,
+        passed: false,
+        checkType: typeof req.check,
+        configurationError: true,
+        message
+      });
+      continue;
+    }
     let passed = false;
+    let error = null;
     try {
       passed = Boolean(req.check(ast));
     } catch (e) {
       passed = false;
+      error = e.message || String(e);
     }
 
     results.push({
@@ -507,6 +539,8 @@ function validateOopRequirements(ast, requirements = []) {
       name: req.name,
       description: req.description,
       passed,
+      checkType: 'function',
+      error,
       message: passed ? (req.successMessage || 'Requirement satisfied.') : req.failureMessage
     });
 
@@ -524,7 +558,9 @@ function validateOopRequirements(ast, requirements = []) {
     total: requirements.length,
     passedCount,
     requirements: results,
-    missingMessages
+    missingMessages,
+    configurationErrors,
+    configurationError: configurationErrors.length > 0
   };
 }
 
@@ -597,6 +633,28 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
   // Step 2: OOP Structural Validation
   const oopValidation = validateOopRequirements(ast, challenge.oopRequirements || []);
 
+  if (oopValidation.configurationError) {
+    return {
+      compileStatus: 'not_run',
+      executionStatus: 'not_run',
+      validationStatus: 'configuration_error',
+      score: null,
+      passingScore: challenge.passingScore || 70,
+      isPassed: false,
+      infrastructureError: true,
+      configurationError: true,
+      oopValidation,
+      behavioralValidation: { passed: false, score: 0, total: 0, passedCount: 0, tests: [] },
+      hiddenValidation: { passed: false, total: 0, passedCount: 0 },
+      educationalFeedback: oopValidation.configurationErrors,
+      programOutput: '',
+      errorMessage: oopValidation.configurationErrors.join('\n'),
+      runtime: 0,
+      memoryUsage: 0,
+      testResults: []
+    };
+  }
+
   // Step 3: Real Java Execution / Behavioral Evaluation
   const execution = executeJavaProgram(sourceCode, challenge.sampleInput || '');
   const isCompiled = execution.compileStatus === 'success';
@@ -610,6 +668,8 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
         : 'Java compiler unavailable. Your code was not graded. Please try again later.';
     return {
       compileStatus: execution.compileStatus || 'failed',
+      executionStatus: execution.executionStatus || (execution.compileStatus === 'failed' ? 'not_run' : 'unavailable'),
+      validationStatus: 'not_run',
       score: infrastructureFailure ? null : 0,
       passingScore: challenge.passingScore || 70,
       isPassed: false,
@@ -652,13 +712,19 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
   const publicTests = testCases.filter(t => !t.isHidden);
   const hiddenTests = testCases.filter(t => t.isHidden);
 
-  const normalizeOutput = (str) => String(str || '').replace(/\r\n/g, '\n').trim();
+  const normalizeOutput = (str) => String(str ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map(line => line.replace(/[ \t]+$/g, ''))
+    .join('\n')
+    .trim();
   const actualTrimmed = normalizeOutput(execution.output);
 
   // Evaluate public tests
   const evaluatedPublicTests = publicTests.map(tc => {
     const expectedTrimmed = normalizeOutput(tc.expectedOutput);
-    const passed = actualTrimmed.includes(expectedTrimmed) || actualTrimmed === expectedTrimmed;
+    const passed = actualTrimmed === expectedTrimmed;
     return {
       id: tc.id,
       input: tc.input || '',
@@ -676,7 +742,7 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
   // Evaluate hidden tests (server-side only)
   const evaluatedHiddenTests = hiddenTests.map(tc => {
     const expectedTrimmed = normalizeOutput(tc.expectedOutput);
-    const outputMatches = actualTrimmed.includes(expectedTrimmed) || actualTrimmed === expectedTrimmed;
+    const outputMatches = actualTrimmed === expectedTrimmed;
     const passed = outputMatches && oopValidation.passed;
     return {
       id: tc.id,
@@ -741,7 +807,9 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
   ];
 
   return {
-    compileStatus: isPassed ? 'success' : VALIDATION_FAILED,
+    compileStatus: 'success',
+    executionStatus: 'success',
+    validationStatus: isPassed ? 'passed' : 'failed',
     score: finalScore,
     passingScore: challenge.passingScore || 70,
     isPassed,
@@ -769,7 +837,34 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
     errorMessage: isPassed ? '' : (educationalFeedback.join('\n') || 'Requirements not satisfied.'),
     runtime: execution.runtime || (Date.now() - startTime),
     memoryUsage: Math.max(32, Math.round(sourceCode.length / 30)),
-    testResults: combinedTestResults
+    testResults: combinedTestResults,
+    debug: {
+      challengeId: challenge.id,
+      challengeTitle: challenge.title,
+      compileStatus: 'success',
+      executionStatus: 'success',
+      executionOutput: execution.output,
+      executionError: execution.error,
+      normalizedActualOutput: actualTrimmed,
+      publicTests: evaluatedPublicTests.map(test => ({
+        id: test.id,
+        input: test.input,
+        expectedOutput: test.expectedOutput,
+        normalizedExpectedOutput: normalizeOutput(test.expectedOutput),
+        actualOutput: test.actualOutput,
+        normalizedActualOutput: actualTrimmed,
+        passed: test.passed
+      })),
+      oopValidation: {
+        passed: oopValidation.passed,
+        requirements: oopValidation.requirements
+      },
+      behavioralScore: publicBehaviorScore,
+      oopScore: oopValidation.score,
+      calculatedScore,
+      finalScore,
+      finalPassed: isPassed
+    }
   };
 }
 

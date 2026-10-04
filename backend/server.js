@@ -291,23 +291,38 @@ const toClientAssessment = (row) => ({
     updatedAt: row.updated_at
 });
 
-const toClientPracticeChallenge = (row) => ({
-    id: row.id,
-    topicId: row.topic_id,
-    lessonId: row.lesson_id || "",
-    title: row.title,
-    description: row.description,
-    learningObjectives: row.learning_objectives || [],
-    requirements: row.requirements || [],
-    starterCode: row.starter_code || "",
-    sampleInput: row.sample_input || "",
-    sampleOutput: row.sample_output || "",
-    passingScore: Number(row.passing_score || 70),
-    status: row.status || "Draft",
-    testCases: row.test_cases || [],
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
+const normalizeChallengeTestCase = (testCase) => ({
+    id: testCase.id,
+    input: testCase.input ?? testCase.input_data ?? "",
+    expectedOutput: testCase.expectedOutput ?? testCase.expected_output ?? "",
+    isHidden: Boolean(testCase.isHidden ?? testCase.is_hidden),
+    matcher: testCase.matcher || ""
 });
+
+const toClientPracticeChallenge = (row) => {
+    const canonical = PRACTICE_CHALLENGES.find(challenge => challenge.id === row.id);
+    return {
+        // Database rows contain data only; executable OOP checks remain in the
+        // trusted server-side challenge catalogue.
+        oopRequirements: canonical?.oopRequirements || [],
+        rubric: canonical?.rubric,
+        id: row.id,
+        topicId: row.topic_id,
+        lessonId: row.lesson_id || "",
+        title: row.title,
+        description: row.description,
+        learningObjectives: row.learning_objectives || [],
+        requirements: row.requirements || [],
+        starterCode: row.starter_code || "",
+        sampleInput: row.sample_input || "",
+        sampleOutput: row.sample_output || "",
+        passingScore: Number(row.passing_score || 70),
+        status: row.status || "Draft",
+        testCases: (row.test_cases || []).map(normalizeChallengeTestCase),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    };
+};
 
 const findUserByEmail = async (email) => {
     const result = await pool.query(`
@@ -1149,6 +1164,8 @@ const seedPracticeChallenges = async () => {
     ];
 
     for (const [id, topicId, lessonId, title] of topics) {
+        const challenge = PRACTICE_CHALLENGES.find(item => item.id === id);
+        if (!challenge) continue;
         await pool.query(`
             INSERT INTO programming_challenges (
               id, topic_id, lesson_id, title, description, learning_objectives,
@@ -1169,18 +1186,33 @@ const seedPracticeChallenges = async () => {
             topicId,
             lessonId,
             title,
-            `Automated Java practice challenge for ${topicId.replace(/-/g, " ")}.`,
-            JSON.stringify(["Apply the topic in Java", "Pass visible and hidden tests"]),
-            JSON.stringify(["Keep the class named Main", "Print the required sample output"]),
-            "public class Main {\n    public static void main(String[] args) {\n        // TODO\n    }\n}\n",
-            "Expected output depends on the published challenge."
+            challenge.description,
+            JSON.stringify(challenge.learningObjectives),
+            JSON.stringify(challenge.requirements),
+            challenge.starterCode,
+            challenge.sampleOutput
         ]);
 
-        await pool.query(`
-            INSERT INTO challenge_test_cases (id, challenge_id, expected_output, is_hidden, matcher)
-            VALUES ($1, $2, $3, FALSE, 'class\\s+Main')
-            ON CONFLICT (id) DO UPDATE SET expected_output = EXCLUDED.expected_output, matcher = EXCLUDED.matcher
-        `, [`${id}_sample`, id, "Expected output depends on the published challenge."]);
+        await pool.query("DELETE FROM challenge_test_cases WHERE challenge_id = $1", [id]);
+        for (const testCase of challenge.testCases || []) {
+            await pool.query(`
+                INSERT INTO challenge_test_cases (id, challenge_id, input, expected_output, is_hidden, matcher)
+                VALUES ($1, $2, $3, $4, $5, $6)
+            `, [
+                testCase.id,
+                id,
+                testCase.input || "",
+                testCase.expectedOutput || "",
+                Boolean(testCase.isHidden),
+                testCase.matcher || ""
+            ]);
+        }
+
+        /*
+         * Keep the legacy placeholder upsert removed: it made the database
+         * challenge disagree with the trusted evaluator catalogue, e.g. Topic 1
+         * expected "Expected output depends..." instead of the real sample.
+         */
     }
 };
 
@@ -3533,13 +3565,16 @@ app.post("/api/practice-challenges/:id/run", requireAuth, async (req, res, next)
             success: true,
             data: {
                 compileStatus: runResult.compileStatus,
+                executionStatus: runResult.executionStatus,
+                validationStatus: runResult.validationStatus,
                 score: runResult.score,
                 infrastructureError: Boolean(runResult.infrastructureError),
                 runtime: runResult.runtime,
                 memoryUsage: runResult.memoryUsage,
                 programOutput: runResult.programOutput,
                 errorMessage: runResult.errorMessage,
-                testResults: runResult.testResults
+                testResults: runResult.testResults,
+                debug: runResult.debug
             }
         });
     } catch (error) {
