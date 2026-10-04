@@ -7,7 +7,7 @@ const jwt = require("jsonwebtoken");
 const pool = require("./db");
 const { OOP_PARSED_QUESTIONS } = require("./questionBank");
 const { PRACTICE_CHALLENGES, evaluateChallenge } = require("./challengeBank");
-const { COMPILER_UNAVAILABLE, RUNTIME_UNAVAILABLE, JAVA_TOOLCHAIN_UNAVAILABLE, compilerStatus } = require("./javaAstEvaluator");
+const { COMPILER_UNAVAILABLE, JAVA_RUNTIME_UNAVAILABLE, JAVA_TOOLCHAIN_UNAVAILABLE, compilerStatus } = require("./javaAstEvaluator");
 
 const app = express();
 
@@ -1807,8 +1807,11 @@ app.get("/health", (_req, res) => {
         backend: "Render",
         timestamp: new Date().toISOString(),
         java: {
+            status: java.status,
             javac: java.javac ? java.javac.version : null,
             java: java.java ? java.java.version : null,
+            javacPath: java.javac ? java.javac.path : null,
+            javaPath: java.java ? java.java.path : null,
             compilerAvailable: java.available
         }
     });
@@ -3920,13 +3923,15 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
 
         // Infrastructure failures must never become zero-score student submissions.
         // Do not persist, lock, award XP, update practice results, or progress state.
-        if (evaluation.infrastructureError || [COMPILER_UNAVAILABLE, RUNTIME_UNAVAILABLE, JAVA_TOOLCHAIN_UNAVAILABLE].includes(evaluation.compileStatus)) {
+        if (evaluation.infrastructureError || [COMPILER_UNAVAILABLE, JAVA_RUNTIME_UNAVAILABLE, JAVA_TOOLCHAIN_UNAVAILABLE].includes(evaluation.compileStatus)) {
             return res.status(503).json({
                 success: false,
-                code: evaluation.compileStatus,
+                code: evaluation.errorCode || evaluation.compileStatus,
                 message: evaluation.errorMessage || 'Java execution environment unavailable. Your code was not graded. Please try again later.',
                 data: {
                     compileStatus: evaluation.compileStatus,
+                    executionStatus: evaluation.executionStatus,
+                    errorCode: evaluation.errorCode || null,
                     infrastructureError: true,
                     score: null,
                     programOutput: '',
@@ -4225,8 +4230,11 @@ app.use((err, _req, res, _next) => {
 const PORT = process.env.PORT || 5000;
 
 const javaTools = compilerStatus();
-console.log('[java-sandbox] compiler:', javaTools.javac ? javaTools.javac.version : 'UNAVAILABLE');
-console.log('[java-sandbox] runtime:', javaTools.java ? javaTools.java.version : 'UNAVAILABLE');
+console.log('[java-sandbox] platform:', javaTools.platform);
+console.log('[java-sandbox] PATH configured:', Boolean(process.env.PATH));
+console.log('[java-sandbox] status:', javaTools.status);
+console.log('[java-sandbox] javac:', javaTools.javac ? `${javaTools.javac.path} (${javaTools.javac.version})` : 'UNAVAILABLE');
+console.log('[java-sandbox] java:', javaTools.java ? `${javaTools.java.path} (${javaTools.java.version})` : 'UNAVAILABLE');
 
 initializeDatabase()
     .then(async () => {

@@ -306,7 +306,9 @@ function extractJavaAst(sourceCode) {
 }
 
 const COMPILER_UNAVAILABLE = 'COMPILER_UNAVAILABLE';
-const RUNTIME_UNAVAILABLE = 'RUNTIME_UNAVAILABLE';
+const JAVA_RUNTIME_UNAVAILABLE = 'JAVA_RUNTIME_UNAVAILABLE';
+// Backward-compatible alias for callers using the earlier name.
+const RUNTIME_UNAVAILABLE = JAVA_RUNTIME_UNAVAILABLE;
 const JAVA_TOOLCHAIN_UNAVAILABLE = 'JAVA_TOOLCHAIN_UNAVAILABLE';
 const VALIDATION_FAILED = 'VALIDATION_FAILED';
 const EXECUTION_TIMEOUT = 'TIMEOUT';
@@ -339,7 +341,16 @@ function resolveJavaExecutable(name) {
 function compilerStatus() {
   const javac = resolveJavaExecutable('javac');
   const java = resolveJavaExecutable('java');
+  const status = javac && java
+    ? 'JAVA_TOOLCHAIN_READY'
+    : javac
+      ? JAVA_RUNTIME_UNAVAILABLE
+      : java
+        ? COMPILER_UNAVAILABLE
+        : JAVA_TOOLCHAIN_UNAVAILABLE;
   return {
+    platform: process.platform,
+    status,
     available: Boolean(javac && java),
     javac: javac ? { path: javac.path, version: javac.version } : null,
     java: java ? { path: java.path, version: java.version } : null,
@@ -380,8 +391,9 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
     if (!tools.java) {
       return {
         success: false,
-        compileStatus: RUNTIME_UNAVAILABLE,
+        compileStatus: 'success',
         executionStatus: 'unavailable',
+        errorCode: JAVA_RUNTIME_UNAVAILABLE,
         output: '',
         error: 'Java runtime unavailable. The backend requires a JDK/JRE (java).',
         runtime: 0,
@@ -448,8 +460,9 @@ function executeJavaProgram(sourceCode, input = '', timeoutMs = 4000) {
       if (runResult.error && ['ENOENT', 'EACCES'].includes(runResult.error.code)) {
         return {
           success: false,
-          compileStatus: RUNTIME_UNAVAILABLE,
+          compileStatus: 'success',
           executionStatus: 'unavailable',
+          errorCode: JAVA_RUNTIME_UNAVAILABLE,
           output: '',
           error: `Unable to execute java (${runResult.error.code}).`,
           runtime,
@@ -658,22 +671,25 @@ function evaluateAdvancedJavaPractice(challenge, sourceCode, includeHidden = fal
   // Step 3: Real Java Execution / Behavioral Evaluation
   const execution = executeJavaProgram(sourceCode, challenge.sampleInput || '');
   const isCompiled = execution.compileStatus === 'success';
+  const executionAvailable = execution.executionStatus === 'success';
 
-  if (!isCompiled) {
+  if (!isCompiled || !executionAvailable) {
     const infrastructureFailure = Boolean(execution.infrastructureError);
-    const infrastructureMessage = execution.compileStatus === RUNTIME_UNAVAILABLE
+    const failureCode = execution.errorCode || execution.compileStatus;
+    const infrastructureMessage = failureCode === JAVA_RUNTIME_UNAVAILABLE
       ? 'Java runtime unavailable. Your code was not graded. Please try again later.'
-      : execution.compileStatus === JAVA_TOOLCHAIN_UNAVAILABLE
+      : failureCode === JAVA_TOOLCHAIN_UNAVAILABLE
         ? 'Java execution environment unavailable. Your code was not graded. Please try again later.'
         : 'Java compiler unavailable. Your code was not graded. Please try again later.';
     return {
-      compileStatus: execution.compileStatus || 'failed',
+      compileStatus: isCompiled ? 'success' : (execution.compileStatus || 'failed'),
       executionStatus: execution.executionStatus || (execution.compileStatus === 'failed' ? 'not_run' : 'unavailable'),
       validationStatus: 'not_run',
       score: infrastructureFailure ? null : 0,
       passingScore: challenge.passingScore || 70,
       isPassed: false,
       infrastructureError: infrastructureFailure,
+      errorCode: execution.errorCode || null,
       oopValidation,
       behavioralValidation: {
         passed: false,
@@ -874,6 +890,7 @@ module.exports = {
   compilerStatus,
   COMPILER_UNAVAILABLE,
   RUNTIME_UNAVAILABLE,
+  JAVA_RUNTIME_UNAVAILABLE,
   JAVA_TOOLCHAIN_UNAVAILABLE,
   VALIDATION_FAILED,
   EXECUTION_TIMEOUT,
