@@ -494,7 +494,7 @@ export default function TeacherPortal({
             id: row.id,
             name: row.name,
             email: row.email,
-            section: user?.section || 'Unassigned',
+            section: row.section || user?.section || 'Unassigned',
             online: user?.onlineStatus !== 'offline',
             activity: lastActivity,
             currentLesson: activity?.lessonTitle || (activity ? 'OOP learning path' : 'Not started'),
@@ -745,9 +745,9 @@ export default function TeacherPortal({
     }, index);
   });
 
-  const visibleStudents = backendStudents.length
-    ? backendStudents.map((student, index) => student.topics?.length ? student : withTopicProgress(student, index))
-    : connectedStudents;
+  const visibleStudents = backendStudents.map((student, index) =>
+    student.topics?.length ? student : withTopicProgress(student, index)
+  );
 
   const activeViewingStudent = viewingStudent;
   const activeViewingResults = viewingStudentResults;

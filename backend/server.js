@@ -3749,7 +3749,87 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
     try {
         const [students, teachers] = await Promise.all([
             pool.query(`
-                WITH latest_activity AS (
+                WITH lesson_totals AS (
+                    SELECT COUNT(*)::int AS total_lessons
+                    FROM lessons
+                    WHERE status <> 'Archived'
+                ),
+                lesson_evidence AS (
+                    SELECT
+                      u.id AS student_id,
+                      l.id AS lesson_id,
+                      COALESCE(sp.completion_percentage, 0) AS video_percentage,
+                      EXISTS (
+                        SELECT 1
+                        FROM quiz_attempts qa
+                        WHERE qa.student_user_id = u.id
+                          AND qa.lesson_id = l.id
+                          AND qa.percentage >= 80
+                      ) AS assessment_passed,
+                      CASE
+                        WHEN pc.id IS NULL THEN TRUE
+                        ELSE COALESCE(practice.teacher_score, practice.score, 0) >= pc.passing_score
+                          AND (practice.teacher_score IS NOT NULL OR practice.compile_status = 'success')
+                          AND COALESCE(practice.remedial_required, FALSE) = FALSE
+                      END AS practice_completed
+                    FROM users u
+                    CROSS JOIN lessons l
+                    LEFT JOIN student_progress sp
+                      ON sp.student_user_id = u.id AND sp.video_id = l.id
+                    LEFT JOIN LATERAL (
+                      SELECT pc.id, pc.passing_score
+                      FROM programming_challenges pc
+                      WHERE pc.lesson_id = l.id AND pc.status <> 'Archived'
+                      ORDER BY pc.id
+                      LIMIT 1
+                    ) pc ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT ps.score, ps.teacher_score, ps.compile_status, ps.remedial_required
+                      FROM practice_submissions ps
+                      JOIN programming_challenges pc2 ON pc2.id = ps.challenge_id
+                      WHERE ps.student_id IN (u.id::text, u.user_id, u.email)
+                        AND pc2.lesson_id = l.id
+                      ORDER BY ps.submitted_at DESC
+                      LIMIT 1
+                    ) practice ON TRUE
+                    WHERE u.role = 'student'
+                      AND l.status <> 'Archived'
+                ),
+                student_metrics AS (
+                    SELECT
+                      le.student_id,
+                      COUNT(*) FILTER (
+                        WHERE le.video_percentage >= 95
+                          AND le.assessment_passed
+                          AND le.practice_completed
+                      )::int AS completed_lessons,
+                      ROUND(AVG(le.video_percentage))::int AS video_progress
+                    FROM lesson_evidence le
+                    GROUP BY le.student_id
+                ),
+                latest_quiz AS (
+                    SELECT DISTINCT ON (qa.student_user_id, qa.assessment_id)
+                      qa.student_user_id,
+                      qa.percentage
+                    FROM quiz_attempts qa
+                    ORDER BY qa.student_user_id, qa.assessment_id, qa.attempt_number DESC, qa.date_completed DESC
+                ),
+                quiz_metrics AS (
+                    SELECT student_user_id, ROUND(AVG(percentage))::int AS quiz_average
+                    FROM latest_quiz
+                    GROUP BY student_user_id
+                ),
+                practice_metrics AS (
+                    SELECT
+                      u.id AS student_id,
+                      ROUND(AVG(COALESCE(ps.teacher_score, ps.score)))::int AS practice_average
+                    FROM users u
+                    LEFT JOIN practice_submissions ps
+                      ON ps.student_id IN (u.id::text, u.user_id, u.email)
+                    WHERE u.role = 'student'
+                    GROUP BY u.id
+                ),
+                latest_activity AS (
                     SELECT DISTINCT ON (student_id)
                       student_id, type, action, lesson_id, lesson_title, lesson_sequence, timestamp
                     FROM (
@@ -3851,10 +3931,13 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                     ORDER BY student_id, timestamp DESC, priority ASC
                 )
                 SELECT
-                  u.id, u.name, u.email, u.account_status, s.student_number, s.course, s.year_level,
-                  COALESCE(ROUND(AVG(sp.completion_percentage)), 0) AS progress,
-                  COALESCE(ROUND(AVG(qa.percentage)), 0) AS quiz_average,
-                  COALESCE(ROUND(AVG(ps.score)), 0) AS programming_score,
+                  u.id, u.name, u.email, u.account_status, s.student_number, s.course, s.year_level, s.section,
+                  CASE
+                    WHEN lt.total_lessons = 0 THEN 0
+                    ELSE ROUND((COALESCE(sm.completed_lessons, 0)::numeric / lt.total_lessons) * 100)::int
+                  END AS progress,
+                  COALESCE(qm.quiz_average, 0) AS quiz_average,
+                  COALESCE(pm.practice_average, 0) AS programming_score,
                   la.type AS activity_type,
                   la.action AS activity_action,
                   la.lesson_id AS activity_lesson_id,
@@ -3863,13 +3946,15 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                   la.timestamp AS activity_timestamp
                 FROM users u
                 JOIN students s ON s.user_id = u.id
-                LEFT JOIN student_progress sp ON sp.student_user_id = u.id
-                LEFT JOIN quiz_attempts qa ON qa.student_user_id = u.id
-                LEFT JOIN practice_submissions ps ON ps.student_id IN (u.id::text, u.user_id, u.email)
+                CROSS JOIN lesson_totals lt
+                LEFT JOIN student_metrics sm ON sm.student_id = u.id
+                LEFT JOIN quiz_metrics qm ON qm.student_user_id = u.id
+                LEFT JOIN practice_metrics pm ON pm.student_id = u.id
                 LEFT JOIN latest_activity la ON la.student_id IN (u.id::text, u.user_id, u.email)
                 WHERE u.role = 'student'
-                GROUP BY u.id, s.student_number, s.course, s.year_level,
-                         la.type, la.action, la.lesson_id, la.lesson_title, la.timestamp
+                GROUP BY u.id, s.student_number, s.course, s.year_level, s.section,
+                         lt.total_lessons, sm.completed_lessons, qm.quiz_average, pm.practice_average,
+                         la.type, la.action, la.lesson_id, la.lesson_title, la.lesson_sequence, la.timestamp
                 ORDER BY u.created_at DESC
             `),
             pool.query(`
