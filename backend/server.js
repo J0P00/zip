@@ -3969,7 +3969,42 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                          lt.total_lessons, sm.completed_lessons, qm.quiz_average, pm.practice_average,
                          la.type, la.action, la.lesson_id, la.lesson_title, la.lesson_sequence, la.timestamp
                 ORDER BY u.created_at DESC
-            `),
+            `).catch(async error => {
+                console.error("[teacher-monitoring] evidence query failed; using compatibility query", {
+                    message: error.message,
+                    code: error.code
+                });
+                return pool.query(`
+                    SELECT
+                      u.id, u.name, u.email, u.account_status,
+                      s.student_number, s.course, s.year_level, s.section,
+                      COALESCE(ROUND((
+                        SELECT AVG(sp.completion_percentage)
+                        FROM student_progress sp
+                        WHERE sp.student_user_id = u.id
+                      )), 0)::int AS progress,
+                      COALESCE(ROUND((
+                        SELECT AVG(qa.percentage)
+                        FROM quiz_attempts qa
+                        WHERE qa.student_user_id = u.id
+                      )), 0)::int AS quiz_average,
+                      COALESCE(ROUND((
+                        SELECT AVG(COALESCE(ps.teacher_score, ps.score))
+                        FROM practice_submissions ps
+                        WHERE ps.student_id IN (u.id::text, u.user_id, u.email)
+                      )), 0)::int AS programming_score,
+                      NULL::text AS activity_type,
+                      NULL::text AS activity_action,
+                      NULL::text AS activity_lesson_id,
+                      NULL::text AS activity_lesson_title,
+                      NULL::int AS activity_lesson_sequence,
+                      NULL::timestamptz AS activity_timestamp
+                    FROM users u
+                    JOIN students s ON s.user_id = u.id
+                    WHERE u.role = 'student'
+                    ORDER BY u.created_at DESC
+                `);
+            }),
             pool.query(`
                 SELECT u.id, u.name, u.email, u.account_status, t.employee_id, t.department
                 FROM users u

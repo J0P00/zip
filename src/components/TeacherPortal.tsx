@@ -397,6 +397,7 @@ export default function TeacherPortal({
   const [activeTab, setActiveTab] = useState<TeacherTab>('monitoring');
   const [students, setStudents] = useState<LiveStudent[]>(initialStudents);
   const [backendStudents, setBackendStudents] = useState<LiveStudent[]>([]);
+  const [monitoringLoadError, setMonitoringLoadError] = useState<string | null>(null);
   const [allRegisteredUsers, setAllRegisteredUsers] = useState<AuthenticatedUser[]>([]);
   
   // Dedicated route-based student progress navigation
@@ -473,8 +474,14 @@ export default function TeacherPortal({
     let cancelled = false;
     Promise.all([userApi.listUsers(currentUser.token), adminApi.monitoring(currentUser.token)])
       .then(([usersResponse, monitoringResponse]) => {
+        if (!monitoringResponse?.data || !Array.isArray(monitoringResponse.data.students)) {
+          throw new Error('Teacher monitoring returned an invalid student roster.');
+        }
         const studentUsers = usersResponse.data.filter(user => user.role === 'student');
-        if (!cancelled) setAllRegisteredUsers(studentUsers);
+        if (!cancelled) {
+          setAllRegisteredUsers(studentUsers);
+          setMonitoringLoadError(null);
+        }
 
         const monitoringStudents = (monitoringResponse.data.students || []).map((row: any): LiveStudent => {
           const user = studentUsers.find(candidate =>
@@ -529,7 +536,12 @@ export default function TeacherPortal({
         }
       })
       .catch(error => {
-        if (!cancelled) console.error('Unable to load the teacher monitoring roster from the backend:', error);
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : 'Unable to load the teacher monitoring roster.';
+          console.error('Unable to load the teacher monitoring roster from the backend:', error);
+          setMonitoringLoadError(message);
+          setBackendStudents([]);
+        }
       });
 
     return () => {
@@ -1583,6 +1595,11 @@ export default function TeacherPortal({
                   </div>
                 </div>
                 <div className="overflow-x-auto">
+                  {monitoringLoadError && (
+                    <p className="m-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">
+                      Unable to load students from the backend: {monitoringLoadError}
+                    </p>
+                  )}
                   <table className="hidden w-full min-w-[760px] text-left text-xs sm:table">
                     <thead className="bg-emerald-50/30 dark:bg-slate-800/50 text-[10px] uppercase tracking-wider text-slate-500">
                       <tr>
