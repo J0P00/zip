@@ -129,7 +129,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
       const current = remote[`${studentKey}:${activeChallenge.id}`];
       if (current) {
         setSourceCode(current.isLocked ? current.sourceCode : draftDb[submissionKey] || current.sourceCode || activeChallenge.starterCode);
-        setLastResult(current.isLocked ? { compileStatus: current.compileStatus === 'not_executed' ? 'not_run' : current.compileStatus, score: current.score, runtime: current.runtime, memoryUsage: current.memoryUsage || 0, programOutput: current.programOutput, errorMessage: current.errorMessage || '', testResults: current.testResults || [] } : null);
+        setLastResult({ compileStatus: current.compileStatus === 'not_executed' ? 'not_run' : current.compileStatus, score: current.score, runtime: current.runtime, memoryUsage: current.memoryUsage || 0, programOutput: current.programOutput, errorMessage: current.errorMessage || '', testResults: current.testResults || [] });
         setConsoleLogs([current.isLocked ? 'Practice completed. Editor is locked for this challenge.' : 'Previous attempt failed. Fix the code and submit again.']);
       }
     }).catch(error => console.warn('Unable to load practice progress from backend:', error));
@@ -162,7 +162,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     setActiveChallengeId(challenge.id);
     const record = submissionDb[key];
     setSourceCode(record?.isLocked ? record.sourceCode : draftDb[key] || record?.sourceCode || challenge.starterCode);
-    setLastResult(record?.isLocked ? {
+    setLastResult(record ? {
       compileStatus: record.compileStatus === 'not_executed' ? 'not_run' : record.compileStatus,
       score: record.score,
       runtime: record.runtime,

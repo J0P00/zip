@@ -20,7 +20,15 @@ function validateBasicJavaStructure(challenge, sourceCode) {
     checks.push(requirement('Student class exists', /\bclass\s+Student\b/.test(source), 'Student class was not detected.'));
   }
   if (topic.includes('constructor') || /\bclass\s+Student\b/.test(source)) {
-    checks.push(requirement('Constructor detected', /(?:public\s+)?[A-Za-z_$][\w$]*\s*\([^;{}]*\)\s*\{/.test(source), 'A constructor declaration was not detected.'));
+    const classMatches = [...source.matchAll(/\bclass\s+([A-Za-z_$][\w$]*)\b[^{]*\{/g)];
+    const hasRequiredConstructor = classMatches.some(match => {
+      const className = match[1];
+      const bodyStart = match.index + match[0].length;
+      const body = source.slice(bodyStart);
+      const constructorPattern = new RegExp(`(?:public\\s+|protected\\s+|private\\s+)?${className}\\s*\\([^)]*\\)\\s*\\{`);
+      return constructorPattern.test(body);
+    });
+    checks.push(requirement('Constructor detected', hasRequiredConstructor, 'A constructor matching the instantiated class was not detected.'));
   }
   if (topic.includes('encapsulat')) {
     checks.push(requirement('Private fields detected', /\bprivate\s+[\w$<>[\], ?]+\s+[A-Za-z_$][\w$]*\s*(?:=|;)/.test(source), 'Encapsulation requirement not detected: private fields are missing.'));

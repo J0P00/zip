@@ -74,8 +74,15 @@ const evaluateJavaSubmission = async (challenge, sourceCode) => {
             compilerError = String(error.stderr || error.stdout || error.message || "Java compilation failed.").trim();
         }
         if (compilerError) {
+            const requirements = validation.requirements.map(item => (
+                item.requirement === "Constructor detected"
+                    ? { ...item, passed: false, message: compilerError }
+                    : item
+            ));
             return {
                 ...validation,
+                requirements,
+                oopStructureCheck: requirements.every(item => item.passed) ? "passed" : "needs_review",
                 compilationCheck: "failed",
                 compileStatus: "failed",
                 score: 0,
@@ -121,6 +128,35 @@ const evaluateJavaSubmission = async (challenge, sourceCode) => {
 };
 
 const cleanText = (value, maxLength = 255) => String(value ?? "").trim().slice(0, maxLength);
+
+const buildEvaluationResults = (validation, challenge) => [
+    {
+        id: "compilation",
+        isHidden: false,
+        passed: validation.compileStatus === "success",
+        expectedOutput: "Compilation succeeds",
+        actualOutput: validation.compileStatus === "success" ? "Compilation succeeds" : "",
+        message: validation.compilerError || "javac compilation succeeded."
+    },
+    ...validation.requirements.map((item, index) => ({
+        id: `static_${index + 1}`,
+        isHidden: false,
+        passed: item.passed,
+        expectedOutput: item.requirement,
+        actualOutput: item.passed ? item.requirement : "",
+        message: item.message
+    })),
+    ...(validation.compileStatus === "success" && validation.programOutput !== undefined
+        ? [{
+            id: "output",
+            isHidden: false,
+            passed: validation.passed,
+            expectedOutput: String(challenge?.sampleOutput || ""),
+            actualOutput: validation.programOutput,
+            message: validation.note
+        }]
+        : [])
+];
 
 const buildUserId = (email, role) => {
     const seed = String(email)
@@ -4568,21 +4604,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             0,
             validation.score,
             validation.note,
-            JSON.stringify(validation.requirements.map((item, index) => ({
-                id: `static_${index + 1}`,
-                isHidden: false,
-                passed: item.passed,
-                expectedOutput: item.requirement,
-                actualOutput: item.passed ? item.requirement : '',
-                message: item.message
-            })).concat(validation.compilerError ? [{
-                id: 'compiler',
-                isHidden: false,
-                passed: false,
-                expectedOutput: 'Compilation succeeds',
-                actualOutput: '',
-                message: validation.compilerError
-            }] : [])),
+            JSON.stringify(buildEvaluationResults(validation, challenge)),
             validation.passed
         ]);
 
