@@ -900,6 +900,190 @@ const seedDemoUsers = async () => {
     }
 };
 
+const seedCompletedDemoStudent = async () => {
+    const email = "oop.demo.student@oophub.edu";
+    const password = "DemoStudent!2026";
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+        let userResult = await client.query("SELECT id, role FROM users WHERE LOWER(email) = LOWER($1)", [email]);
+        let studentId;
+
+        if (userResult.rowCount) {
+            if (userResult.rows[0].role !== 'student') {
+                throw new Error(`Demo student email is already used by a ${userResult.rows[0].role} account.`);
+            }
+            studentId = userResult.rows[0].id;
+        } else {
+            const passwordHash = await bcrypt.hash(password, 12);
+            const inserted = await client.query(`
+                INSERT INTO users (
+                  user_id, name, email, password_hash, role,
+                  account_status, terms_agreement_accepted, terms_accepted_at, terms_version
+                )
+                VALUES ($1, $2, LOWER($3), $4, 'student', 'Active', TRUE, NOW(), '2026.06.26')
+                RETURNING id
+            `, ["STU-DEMO-OOP-2026-9F4C", "OOP Demo Student", email, passwordHash]);
+            studentId = inserted.rows[0].id;
+        }
+
+        await client.query(`
+            INSERT INTO students (user_id, student_number, course, year_level, section, program_status)
+            VALUES ($1, 'DEMO-OOP-2026-9F4C', 'BS Computer Science', '3rd Year', 'OOP-DEMO', 'Regular')
+            ON CONFLICT (user_id) DO UPDATE SET
+              course = EXCLUDED.course,
+              year_level = EXCLUDED.year_level,
+              section = EXCLUDED.section,
+              program_status = EXCLUDED.program_status
+        `, [studentId]);
+
+        const lessons = await client.query(`
+            SELECT id, sequence
+            FROM lessons
+            WHERE status <> 'Archived'
+            ORDER BY sequence, id
+        `);
+        const challenges = await client.query(`
+            SELECT DISTINCT ON (lesson_id) id, lesson_id, passing_score
+            FROM programming_challenges
+            WHERE status <> 'Archived'
+            ORDER BY lesson_id, id
+        `);
+        const challengeByLesson = new Map(challenges.rows.map(challenge => [challenge.lesson_id, challenge]));
+
+        for (const lesson of lessons.rows) {
+            await client.query(`
+                INSERT INTO student_progress (
+                  student_user_id, video_id, last_position, completion_percentage,
+                  completed, date_completed, notes
+                )
+                VALUES ($1, $2, 900, 100, TRUE, NOW(), 'Backend demo completion')
+                ON CONFLICT (student_user_id, video_id) DO UPDATE SET
+                  last_position = 900,
+                  completion_percentage = 100,
+                  completed = TRUE,
+                  date_completed = COALESCE(student_progress.date_completed, NOW()),
+                  updated_at = NOW()
+            `, [studentId, lesson.id]);
+
+            await client.query(`
+                INSERT INTO video_progress (
+                  student_id, lesson_id, "current_time", duration, watch_percentage, completed
+                )
+                VALUES ($1, $2, 900, 900, 100, TRUE)
+                ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+                  "current_time" = 900,
+                  watch_percentage = 100,
+                  completed = TRUE,
+                  updated_at = NOW()
+            `, [studentId, lesson.id]);
+
+            await client.query(`
+                INSERT INTO quiz_attempts (
+                  student_user_id, assessment_id, lesson_id, score, total, percentage,
+                  correct_answers, incorrect_answers, passed, attempt_number, answers
+                )
+                SELECT $1, $2, $3, 100, 100, 100, 100, 0, TRUE, 1, '{}'::jsonb
+                WHERE NOT EXISTS (
+                  SELECT 1
+                  FROM quiz_attempts
+                  WHERE student_user_id = $1
+                    AND assessment_id = $2
+                )
+            `, [studentId, `demo_assessment_${lesson.id}`, lesson.id]);
+
+            const challenge = challengeByLesson.get(lesson.id);
+            if (challenge) {
+                await client.query(`
+                    INSERT INTO practice_submissions (
+                      student_id, challenge_id, source_code, program_output, compile_status,
+                      score, test_results, is_locked, teacher_score, teacher_feedback,
+                      graded_at, review_status
+                    )
+                    VALUES (
+                      $1, $2, 'public class DemoSolution {}', 'All tests passed',
+                      'success', 100, '[]'::jsonb, TRUE, 100,
+                      'Demo submission completed successfully.', NOW(), 'passed'
+                    )
+                    ON CONFLICT (student_id, challenge_id) DO UPDATE SET
+                      compile_status = 'success',
+                      score = 100,
+                      teacher_score = 100,
+                      teacher_feedback = 'Demo submission completed successfully.',
+                      graded_at = COALESCE(practice_submissions.graded_at, NOW()),
+                      review_status = 'passed',
+                      is_locked = TRUE
+                `, [studentId, challenge.id]);
+
+                await client.query(`
+                    INSERT INTO practice_results (
+                      student_id, challenge_id, started, completed, score,
+                      source_code, submission_count, completed_at
+                    )
+                    VALUES ($1, $2, TRUE, TRUE, 100, 'public class DemoSolution {}', 1, NOW())
+                    ON CONFLICT (student_id, challenge_id) DO UPDATE SET
+                      started = TRUE,
+                      completed = TRUE,
+                      score = 100,
+                      completed_at = COALESCE(practice_results.completed_at, NOW()),
+                      updated_at = NOW()
+                `, [studentId, challenge.id]);
+            }
+
+            await client.query(`
+                INSERT INTO lesson_progress (
+                  student_id, lesson_id, video_completed, quiz_passed,
+                  practice_completed, completed, completed_at
+                )
+                VALUES ($1, $2, TRUE, TRUE, $3, TRUE, NOW())
+                ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+                  video_completed = TRUE,
+                  quiz_passed = TRUE,
+                  practice_completed = EXCLUDED.practice_completed,
+                  completed = TRUE,
+                  completed_at = COALESCE(lesson_progress.completed_at, NOW()),
+                  updated_at = NOW()
+            `, [studentId, lesson.id, Boolean(challenge)]);
+        }
+
+        const teacher = await client.query(`
+            SELECT id
+            FROM users
+            WHERE role = 'teacher'
+              AND (LOWER(email) = 'elena@oophub.edu' OR name = 'Dr. Elena Vance')
+            ORDER BY CASE WHEN LOWER(email) = 'elena@oophub.edu' THEN 0 ELSE 1 END
+            LIMIT 1
+        `);
+        if (teacher.rowCount) {
+            await client.query(`
+                INSERT INTO monitoring_requests (teacher_id, student_id, status)
+                VALUES ($1, $2, 'accepted')
+                ON CONFLICT (teacher_id, student_id) DO UPDATE SET
+                  status = 'accepted',
+                  updated_at = NOW()
+            `, [teacher.rows[0].id, studentId]);
+        }
+
+        await client.query(`
+            INSERT INTO activity_logs (student_id, activity_type, activity_detail, metadata)
+            SELECT $1, 'lesson_completed', 'Completed all OOP demo lessons', $2::jsonb
+            WHERE NOT EXISTS (
+              SELECT 1
+              FROM activity_logs
+              WHERE student_id = $1
+                AND activity_type = 'lesson_completed'
+                AND activity_detail = 'Completed all OOP demo lessons'
+            )
+        `, [studentId, JSON.stringify({ lessonCount: lessons.rowCount })]);
+        await client.query("COMMIT");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+    } finally {
+        client.release();
+    }
+};
+
 const seedLessons = async () => {
     const lessons = [
         [
@@ -4565,6 +4749,7 @@ initializeDatabase()
             await seedDemoUsers();
             await seedLessons();
             await seedPracticeChallenges();
+            await seedCompletedDemoStudent();
             console.log("Database seeded successfully.");
         } catch (seedErr) {
             console.error("Database seeding failed:", seedErr);
