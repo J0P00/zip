@@ -1133,7 +1133,20 @@ const seedCompletedDemoStudent = async () => {
                 `, [studentId, challenge.id]);
 
                 await client.query(`
-                    INSERT INTO practice_results (
+                UPDATE practice_submissions
+                SET compile_status = 'success',
+                    score = 100,
+                    teacher_score = 100,
+                    teacher_feedback = 'Demo submission completed successfully.',
+                    graded_at = COALESCE(graded_at, NOW()),
+                    review_status = 'graded',
+                    remedial_required = FALSE,
+                    is_locked = TRUE
+                WHERE student_id = $1 AND challenge_id = $2
+                `, [studentId, challenge.id]);
+
+                await client.query(`
+                INSERT INTO practice_results (
                       student_id, challenge_id, started, completed, score,
                       source_code, submission_count, completed_at
                     )
@@ -1161,6 +1174,58 @@ const seedCompletedDemoStudent = async () => {
                   completed_at = COALESCE(lesson_progress.completed_at, NOW()),
                   updated_at = NOW()
             `, [studentId, lesson.id, Boolean(challenge)]);
+        }
+
+        const swingLessons = await client.query(`
+            SELECT id
+            FROM swing_lessons
+            ORDER BY sequence, id
+        `);
+        const swingExercises = await client.query(`
+            SELECT id, lesson_id, starter_code
+            FROM swing_programming_exercises
+            ORDER BY lesson_id, id
+        `);
+
+        for (const lesson of swingLessons.rows) {
+            await client.query(`
+                INSERT INTO swing_progress (
+                    student_id, lesson_id, content_completed, video_completed,
+                    quiz_passed, exercise_completed, overall_percentage
+                )
+                VALUES ($1, $2, TRUE, TRUE, TRUE, TRUE, 100)
+                ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+                    content_completed = TRUE,
+                    video_completed = TRUE,
+                    quiz_passed = TRUE,
+                    exercise_completed = TRUE,
+                    overall_percentage = 100,
+                    updated_at = NOW()
+            `, [studentId, lesson.id]);
+        }
+
+        for (const exercise of swingExercises.rows) {
+            await client.query(`
+                INSERT INTO swing_submissions (
+                    student_id, exercise_id, source_code, program_output,
+                    status, score, feedback, submitted_at, graded_at
+                )
+                SELECT $1, $2, $3, 'All Swing tests passed',
+                       'graded', 100, 'Demo Swing exercise completed successfully.', NOW(), NOW()
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM swing_submissions
+                    WHERE student_id = $1 AND exercise_id = $2
+                )
+            `, [studentId, exercise.id, exercise.starter_code || ''] );
+            await client.query(`
+                UPDATE swing_submissions
+                SET status = 'graded',
+                    score = 100,
+                    feedback = 'Demo Swing exercise completed successfully.',
+                    graded_at = COALESCE(graded_at, NOW())
+                WHERE student_id = $1 AND exercise_id = $2
+            `, [studentId, exercise.id]);
         }
 
         const teacher = await client.query(`
