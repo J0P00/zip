@@ -275,14 +275,10 @@ const statusClass = (status: LearningStatus) => {
 };
 
 const monitoringStatus = (student: LiveStudent): MonitoringStatus => {
-  const hasActivity = student.lastActivity !== 'No activity yet' && student.lastActivity !== 'Activity unavailable';
-  if (!hasActivity && student.overallProgress === 0) return 'At Risk';
-  if (hasActivity && student.overallProgress < 40) return 'Improving';
-  if (student.overallProgress < 40 || student.quizScore < 50 || student.practiceScore < 25) return 'At Risk';
-  if (student.overallProgress < 60 || student.quizScore < 65 || student.practiceScore < 50) return 'Needs Help';
-  if (student.overallProgress < 75) return 'Improving';
-  if (student.overallProgress >= 90 && student.quizScore >= 85 && student.practiceScore >= 75) return 'Excellent';
-  return 'On Track';
+  if (student.overallProgress >= 100) return 'Excellent';
+  if (student.overallProgress >= 75) return 'On Track';
+  if (student.overallProgress > 0) return student.overallProgress < 40 ? 'Improving' : 'Needs Help';
+  return 'At Risk';
 };
 
 const monitoringStatusClass = (status: MonitoringStatus, dark: boolean) => {
@@ -1608,7 +1604,6 @@ export default function TeacherPortal({
                         <th className="px-3 py-3">Progress</th>
                         <th className="px-3 py-3">Quiz</th>
                         <th className="px-3 py-3">Practice</th>
-                        <th className="px-3 py-3">Activity</th>
                         <th className="px-3 py-3">Status</th>
                         <th className="px-3 py-3">Action</th>
                       </tr>
@@ -1639,7 +1634,6 @@ export default function TeacherPortal({
                             </td>
                             <td className="px-3 py-3 font-mono font-bold">{student.quizScore}%</td>
                             <td className="px-3 py-3 font-mono font-bold">{student.practiceScore}%</td>
-                            <td className="px-3 py-3 text-slate-500">{student.lastActivity}</td>
                             <td className="px-3 py-3">
                               <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span>
                             </td>
@@ -1679,7 +1673,7 @@ export default function TeacherPortal({
                             <span><b className="block text-slate-400">Practice</b><strong>{student.practiceScore}%</strong></span>
                           </div>
                           <div className="mt-3 flex items-center justify-between gap-2">
-                            <span className="truncate text-[10px] text-slate-500">{student.section} | {student.lastActivity}</span>
+                            <span className="truncate text-[10px] text-slate-500">{student.section}</span>
                             <button
                               type="button"
                               onClick={() => handleViewStudentProgress(student.id)}
