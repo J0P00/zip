@@ -290,5 +290,5 @@ export const appApi = {
 
 export const isDemoEmail = (email: string, role?: Persona) => {
   void role;
-  return false;
+  return email.trim().toLowerCase() === 'oop.demo.student@oophub.edu';
 };

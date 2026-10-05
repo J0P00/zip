@@ -51,6 +51,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const isProduction = process.env.NODE_ENV === "production";
 const ASSESSMENT_PASSING_SCORE = 60;
+const DEMO_STUDENT_EMAIL = "oop.demo.student@oophub.edu";
+const isDemoStudentEmail = (email) => String(email || "").trim().toLowerCase() === DEMO_STUDENT_EMAIL;
 
 if (isProduction && JWT_SECRET === "change-this-secret") {
     throw new Error("JWT_SECRET must be configured in production.");
@@ -194,7 +196,7 @@ const toClientUser = (row) => ({
     name: row.name,
     email: row.email,
     role: row.role,
-    accountSource: row.account_source || "custom",
+    accountSource: row.account_source || (isDemoStudentEmail(row.email) ? "demo" : "custom"),
     registrationDate: row.created_at,
     contactNumber: row.contact_number || "",
     address: row.address || "",
@@ -1022,7 +1024,7 @@ const seedDemoUsers = async () => {
 };
 
 const seedCompletedDemoStudent = async () => {
-    const email = "oop.demo.student@oophub.edu";
+    const email = DEMO_STUDENT_EMAIL;
     const password = "DemoStudent!2026";
     const client = await pool.connect();
     try {
@@ -2236,6 +2238,10 @@ app.post("/api/auth/login", async (req, res, next) => {
 
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) return res.status(401).json({ success: false, message: "Invalid email or password." });
+
+        if (user.role === "student" && isDemoStudentEmail(user.email)) {
+            await seedCompletedDemoStudent();
+        }
 
         const token = signToken(user);
         res.json({ success: true, message: "Login successful.", token, user: toClientUser(user) });
