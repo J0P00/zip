@@ -103,7 +103,7 @@ export default function Leaderboard({ currentUser, teacherMode = false }: Leader
               Rankings combine OOP progress, quiz performance, and Practice IDE results. Learning State reflects demonstrated understanding.
             </p>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-xl border border-emerald-900/60 bg-emerald-950/40 px-3 py-2 text-[10px] font-black uppercase text-emerald-300">
+          <span className={`inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[10px] font-black uppercase ${teacherMode ? 'border-emerald-900/60 bg-emerald-950/40 text-emerald-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
             <Activity className="h-3.5 w-3.5" /> Live from database
           </span>
         </div>
@@ -111,14 +111,14 @@ export default function Leaderboard({ currentUser, teacherMode = false }: Leader
 
       {current && (
         <section className="grid gap-3 sm:grid-cols-4">
-          <div className="rounded-2xl bg-slate-950 p-4 text-white">
+          <div className={`rounded-2xl border p-4 ${teacherMode ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-800 bg-slate-900 text-white'}`}>
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Your Rank</span>
             <strong className="mt-1 block text-3xl font-black">#{current.rank}</strong>
             <span className="text-xs font-semibold text-slate-400">of {entries.length} students</span>
           </div>
           <div className={`rounded-2xl border p-4 ${mutedPanelClass}`}>
             <span className={`text-[10px] font-black uppercase ${mutedText}`}>Learning Score</span>
-            <strong className="mt-1 block text-2xl font-black text-emerald-400">{current.learningScore}%</strong>
+            <strong className={`mt-1 block text-2xl font-black ${teacherMode ? 'text-emerald-400' : 'text-emerald-700'}`}>{current.learningScore}%</strong>
             <span className={`text-xs font-semibold ${secondaryText}`}>{movement(current)} rank movement</span>
           </div>
           <div className={`rounded-2xl border p-4 ${mutedPanelClass}`}>
@@ -141,7 +141,7 @@ export default function Leaderboard({ currentUser, teacherMode = false }: Leader
           {(['MASTERED', 'DEVELOPING', 'BEGINNER'] as const).map(state => {
             const count = entries.filter(entry => entry.learningState === state).length;
             return (
-              <div key={state} className={`rounded-xl border px-4 py-3 shadow-sm ${mutedPanelClass}`}>
+              <div key={state} className={`rounded-xl border px-4 py-2.5 shadow-sm ${mutedPanelClass}`}>
                 <span className={`text-[10px] font-black uppercase tracking-wider ${mutedText}`}>Class Learning States</span>
                 <div className="mt-2 flex items-center justify-between">
                   <span className={`rounded-full px-2 py-1 text-[10px] font-black ${teacherMode ? darkStateClass(state) : stateClass(state)}`}>{state}</span>
@@ -159,13 +159,13 @@ export default function Leaderboard({ currentUser, teacherMode = false }: Leader
       {!loading && !error && entries.length > 0 && (
         <div className="grid gap-5 lg:grid-cols-12">
           <div className="space-y-5 lg:col-span-8">
-            <section className="rounded-2xl bg-slate-950 p-5 text-white shadow-sm">
+            <section className={`rounded-2xl border p-5 shadow-sm ${teacherMode ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white'}`}>
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">Top performers</span>
-                  <h3 className="mt-1 text-lg font-black">Learning performance</h3>
+                  <span className={`text-[10px] font-black uppercase tracking-wider ${teacherMode ? 'text-emerald-400' : 'text-emerald-700'}`}>Top performers</span>
+                  <h3 className={`mt-1 text-lg font-black ${primaryText}`}>Learning performance</h3>
                 </div>
-                <span className="text-[10px] font-bold text-slate-400">40% OOP + 30% Quiz + 30% IDE</span>
+                <span className={`text-[10px] font-bold ${secondaryText}`}>40% OOP + 30% Quiz + 30% IDE</span>
               </div>
               <div className="grid gap-3 md:grid-cols-3">
                 {entries.slice(0, 3).map(entry => (
@@ -176,17 +176,19 @@ export default function Leaderboard({ currentUser, teacherMode = false }: Leader
                     className={`rounded-xl border p-4 text-left transition ${
                       selectedId === entry.studentId
                         ? 'border-emerald-400 bg-emerald-950/50'
-                        : 'border-slate-800 bg-slate-900 hover:border-slate-600'
+                        : teacherMode
+                          ? 'border-slate-800 bg-slate-900 hover:border-slate-600'
+                          : 'border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/40'
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-2xl font-black text-emerald-300">#{entry.rank}</span>
-                      <span className="text-xs font-black text-slate-300">{movement(entry)}</span>
+                      <span className={`text-2xl font-black ${teacherMode ? 'text-emerald-300' : 'text-emerald-700'}`}>#{entry.rank}</span>
+                      <span className={`text-xs font-black ${secondaryText}`}>{movement(entry)}</span>
                     </div>
-                    <div className="mt-3 flex items-center gap-2">{avatar(entry)}<span className="truncate text-sm font-black">{entry.name}</span></div>
-                    <strong className="mt-4 block text-2xl font-black">{entry.learningScore}%</strong>
-                    <span className={`mt-2 inline-block rounded-full px-2 py-1 text-[10px] font-black ${darkStateClass(entry.learningState)}`}>{entry.learningState}</span>
-                    <div className="mt-2 grid grid-cols-3 gap-1 text-[10px] font-bold text-slate-400">
+                    <div className={`mt-3 flex items-center gap-2 ${primaryText}`}>{avatar(entry)}<span className="truncate text-sm font-black">{entry.name}</span></div>
+                    <strong className={`mt-4 block text-2xl font-black ${teacherMode ? 'text-white' : 'text-slate-900'}`}>{entry.learningScore}%</strong>
+                    <span className={`mt-2 inline-block rounded-full px-2 py-1 text-[10px] font-black ${teacherMode ? darkStateClass(entry.learningState) : stateClass(entry.learningState)}`}>{entry.learningState}</span>
+                    <div className={`mt-2 grid grid-cols-3 gap-1 text-[10px] font-bold ${secondaryText}`}>
                       <span>OOP {entry.oopProgress}%</span><span>Quiz {entry.quizScore}%</span><span>IDE {entry.practiceScore}%</span>
                     </div>
                   </button>
@@ -227,7 +229,9 @@ export default function Leaderboard({ currentUser, teacherMode = false }: Leader
                         <tr
                           key={entry.studentId}
                           onClick={() => setSelectedId(entry.studentId)}
-                          className={`cursor-pointer transition ${isYou ? 'bg-emerald-950/40' : selectedRow ? 'bg-slate-800/60' : 'hover:bg-slate-800/40'}`}
+                          className={`cursor-pointer transition ${teacherMode
+                            ? isYou ? 'bg-emerald-950/40' : selectedRow ? 'bg-slate-800/60' : 'hover:bg-slate-800/40'
+                            : isYou ? 'bg-emerald-50' : selectedRow ? 'bg-slate-50' : 'hover:bg-slate-50'}`}
                         >
                           <td className={`px-4 py-3 font-black ${primaryText}`}>#{entry.rank}</td>
                           <td className="px-4 py-3">
@@ -276,10 +280,10 @@ export default function Leaderboard({ currentUser, teacherMode = false }: Leader
                   </div>
                   <p className={`mt-3 text-xs font-medium leading-5 ${secondaryText}`}>{selected.interpretation}</p>
                 </div>
-                <div className="rounded-xl border border-emerald-900/60 bg-emerald-950/40 p-4">
-                  <span className="text-[10px] font-black uppercase text-emerald-400">Learning Score</span>
-                  <strong className="mt-1 block text-3xl font-black text-emerald-300">{selected.learningScore}%</strong>
-                  <p className="mt-1 text-[10px] font-semibold text-emerald-400">Independent of rank. Based on real OOP evidence.</p>
+                <div className={`rounded-xl border p-4 ${teacherMode ? 'border-emerald-900/60 bg-emerald-950/40' : 'border-emerald-100 bg-emerald-50'}`}>
+                  <span className={`text-[10px] font-black uppercase ${teacherMode ? 'text-emerald-400' : 'text-emerald-700'}`}>Learning Score</span>
+                  <strong className={`mt-1 block text-3xl font-black ${teacherMode ? 'text-emerald-300' : 'text-emerald-700'}`}>{selected.learningScore}%</strong>
+                  <p className={`mt-1 text-[10px] font-semibold ${teacherMode ? 'text-emerald-400' : 'text-emerald-700'}`}>Independent of rank. Based on real OOP evidence.</p>
                 </div>
                 <div className="space-y-3">
                   {[
@@ -289,7 +293,7 @@ export default function Leaderboard({ currentUser, teacherMode = false }: Leader
                   ].map(([label, value]) => (
                     <div key={label as string}>
                       <div className={`mb-1 flex justify-between text-xs font-bold ${secondaryText}`}><span>{label}</span><span>{value}%</span></div>
-                      <div className="h-2 rounded-full bg-slate-800"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${value}%` }} /></div>
+                      <div className={`h-2 rounded-full ${teacherMode ? 'bg-slate-800' : 'bg-slate-100'}`}><div className="h-full rounded-full bg-emerald-600" style={{ width: `${value}%` }} /></div>
                     </div>
                   ))}
                 </div>
