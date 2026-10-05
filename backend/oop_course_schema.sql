@@ -376,10 +376,10 @@ CREATE TABLE IF NOT EXISTS practice_submissions (
   challenge_id TEXT NOT NULL REFERENCES programming_challenges(id) ON DELETE CASCADE,
   source_code TEXT NOT NULL,
   program_output TEXT DEFAULT '',
-  compile_status TEXT NOT NULL DEFAULT 'not_run' CHECK (compile_status IN ('not_run', 'success', 'failed', 'runtime_error')),
+  compile_status TEXT NOT NULL DEFAULT 'not_executed' CHECK (compile_status IN ('not_run', 'not_executed', 'success', 'failed', 'runtime_error')),
   runtime NUMERIC DEFAULT 0,
   memory_usage NUMERIC,
-  score NUMERIC NOT NULL DEFAULT 0,
+  score NUMERIC,
   error_message TEXT DEFAULT '',
   test_results JSONB NOT NULL DEFAULT '[]'::jsonb,
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -390,8 +390,7 @@ CREATE TABLE IF NOT EXISTS practice_submissions (
   graded_at TIMESTAMPTZ,
   review_status TEXT NOT NULL DEFAULT 'pending',
   reopened_by UUID REFERENCES users(id) ON DELETE SET NULL,
-  reopened_at TIMESTAMPTZ,
-  UNIQUE(student_id, challenge_id)
+  reopened_at TIMESTAMPTZ
 );
 ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT TRUE;
 ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS teacher_score NUMERIC;
@@ -402,6 +401,10 @@ ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS review_status TEXT NOT
 ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_by UUID REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_at TIMESTAMPTZ;
 ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS remedial_required BOOLEAN DEFAULT FALSE;
+ALTER TABLE practice_submissions ALTER COLUMN score DROP NOT NULL;
+ALTER TABLE practice_submissions DROP CONSTRAINT IF EXISTS practice_submissions_student_id_challenge_id_key;
+ALTER TABLE practice_submissions DROP CONSTRAINT IF EXISTS practice_submissions_compile_status_check;
+ALTER TABLE practice_submissions ADD CONSTRAINT practice_submissions_compile_status_check CHECK (compile_status IN ('not_run', 'not_executed', 'success', 'failed', 'runtime_error'));
 UPDATE practice_submissions
 SET is_locked = FALSE
 WHERE compile_status IN ('failed', 'runtime_error')

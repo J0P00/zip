@@ -261,12 +261,13 @@ export interface PendingSubmission {
   studentName: string;
   challengeName: string;
   submittedAt: string;
-  status: 'pending' | 'reviewed' | 'passed' | 'failed' | 'reopened';
+  status: 'pending' | 'submitted' | 'graded' | 'returned' | 'reviewed' | 'passed' | 'failed' | 'reopened';
   code: string;
   grade?: number;
   feedback?: string;
   teacherScore?: number;
   gradedAt?: string;
+  gradedBy?: string;
   reviewStatus?: string;
   remedialRequired?: boolean;
   studentId?: string;
@@ -286,6 +287,8 @@ export interface PendingSubmission {
   behavioralValidation?: BehavioralValidationResult;
   hiddenValidation?: HiddenValidationResult;
   educationalFeedback?: string[];
+  requirements?: string[];
+  sampleOutput?: string;
 }
 
 export interface CurriculumModule {
@@ -461,7 +464,9 @@ export interface PracticeSubmission {
   teacherScore?: number;
   feedback?: string;
   gradedAt?: string;
+  gradedBy?: string;
   reviewStatus?: string;
+  submissionStatus?: 'submitted' | 'graded' | 'returned';
   remedialRequired?: boolean;
 }
 

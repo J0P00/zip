@@ -859,8 +859,8 @@ export default function TeacherPortal({
 
   const filteredSubmissions = visibleSubmissions.filter(sub => {
     const score = Number(sub.teacherScore ?? sub.grade ?? sub.score ?? 0);
-    const isReviewed = ['reviewed', 'passed', 'failed'].includes(sub.reviewStatus || sub.status);
-    const isPending = sub.status === 'pending' || sub.reviewStatus === 'pending' || (!sub.reviewStatus && !sub.gradedAt);
+    const isReviewed = ['graded', 'reviewed', 'passed', 'failed'].includes(sub.reviewStatus || sub.status);
+    const isPending = ['pending', 'submitted'].includes(sub.status) || ['pending', 'submitted'].includes(sub.reviewStatus) || (!sub.reviewStatus && !sub.gradedAt);
     const matchesSearch =
       sub.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       sub.challengeName.toLowerCase().includes(searchQuery.toLowerCase());
@@ -869,7 +869,8 @@ export default function TeacherPortal({
       (statusFilter === 'Passed' && score >= 70) ||
       (statusFilter === 'Failed' && score < 70) ||
       (statusFilter === 'Pending' && isPending) ||
-      (statusFilter === 'Reviewed' && isReviewed);
+      (statusFilter === 'Graded' && isReviewed) ||
+      (statusFilter === 'Returned' && (sub.status === 'returned' || sub.reviewStatus === 'returned'));
     return matchesSearch && matchesStatus;
   });
 
@@ -2022,9 +2023,8 @@ export default function TeacherPortal({
                 <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className={`h-10 rounded-xl border px-3 text-xs font-bold ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
                   <option value="All">All</option>
                   <option value="Pending">Pending</option>
-                  <option value="Reviewed">Reviewed</option>
-                  <option value="Passed">Passed</option>
-                  <option value="Failed">Failed</option>
+                  <option value="Graded">Graded</option>
+                  <option value="Returned">Returned</option>
                 </select>
               </div>
             </div>
@@ -2062,7 +2062,7 @@ export default function TeacherPortal({
                             )}
                           </div>
                           <p className="mt-1 text-xs font-bold text-slate-600 dark:text-slate-400">{sub.challengeName}</p>
-                          <p className="mt-1 text-[10px] font-mono text-slate-400">{sub.topicTitle || 'Practice IDE'} | {sub.compileStatus || 'not_run'} | {sub.submittedAt}</p>
+                          <p className="mt-1 text-[10px] font-mono text-slate-400">{sub.topicTitle || 'Practice IDE'} | {sub.reviewStatus || sub.status || 'submitted'} | {sub.submittedAt}</p>
                         </div>
                         <span className={`rounded-full px-2 py-1 text-[10px] font-black ${
                           isReviewed
@@ -2090,9 +2090,9 @@ export default function TeacherPortal({
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Submission Inspector</p>
-                      {(selectedSubmission.reviewStatus === 'reviewed' || selectedSubmission.status === 'reviewed') && (
+                      {['graded', 'reviewed', 'passed'].includes(selectedSubmission.reviewStatus || selectedSubmission.status) && (
                         <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-400 border border-emerald-500/40">
-                          Reviewed ({selectedSubmission.teacherScore ?? selectedSubmission.grade ?? selectedSubmission.score}%)
+                          Graded ({selectedSubmission.teacherScore ?? selectedSubmission.grade ?? 0}%)
                         </span>
                       )}
                       {selectedSubmission.remedialRequired && (
@@ -2111,15 +2111,26 @@ export default function TeacherPortal({
                 </div>
                 <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-1">
                   <pre className="max-h-48 overflow-auto rounded-xl border border-slate-800 bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-emerald-300">{selectedSubmission.code}</pre>
+                  {(selectedSubmission.requirements?.length || selectedSubmission.sampleOutput) && (
+                    <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3">
+                      <p className="text-[9px] font-black uppercase text-emerald-400">Practice requirements</p>
+                      {selectedSubmission.requirements?.length ? (
+                        <ul className="mt-2 space-y-1 text-[10px] text-slate-300">
+                          {selectedSubmission.requirements.map((requirement, index) => <li key={index}>- {requirement}</li>)}
+                        </ul>
+                      ) : null}
+                      {selectedSubmission.sampleOutput && <p className="mt-2 text-[10px] text-slate-400">Expected output: <code className="text-slate-200">{selectedSubmission.sampleOutput}</code></p>}
+                    </div>
+                  )}
                   <div className="grid grid-cols-3 gap-2 text-center text-xs">
                     {[
-                      ['Compile', selectedSubmission.compileStatus === 'success' ? '✓ Passed' : (selectedSubmission.compileStatus === 'failed' || selectedSubmission.compileStatus === 'runtime_error') ? '✗ Failed' : (selectedSubmission.compileStatus || 'not_run')],
-                      ['Runtime', selectedSubmission.runtime ? `${selectedSubmission.runtime} ms` : '--'],
-                      ['Memory', selectedSubmission.memoryUsage ? `${selectedSubmission.memoryUsage} MB` : '--']
+                      ['Review status', selectedSubmission.reviewStatus || selectedSubmission.status || 'submitted'],
+                      ['Submitted', selectedSubmission.submittedAt ? new Date(selectedSubmission.submittedAt).toLocaleString() : '--'],
+                      ['Graded', selectedSubmission.gradedAt ? new Date(selectedSubmission.gradedAt).toLocaleString() : '--']
                     ].map(([label, value]) => (
                       <div key={label} className="rounded-xl border border-slate-800 bg-slate-900 p-2">
                         <span className="block text-[9px] font-black uppercase text-slate-500">{label}</span>
-                        <strong className={`mt-1 block text-[10px] ${label === 'Compile' && selectedSubmission.compileStatus === 'success' ? 'text-emerald-400' : label === 'Compile' && (selectedSubmission.compileStatus === 'failed' || selectedSubmission.compileStatus === 'runtime_error') ? 'text-rose-400' : ''}`}>{value}</strong>
+                        <strong className="mt-1 block text-[10px]">{value}</strong>
                       </div>
                     ))}
                   </div>

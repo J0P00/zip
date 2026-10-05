@@ -13,7 +13,7 @@ const pool = require("./db");
 const { OOP_PARSED_QUESTIONS } = require("./questionBank");
 const { PRACTICE_CHALLENGES } = require("./challengeBank");
 const { validateBasicJavaStructure } = require("./basicJavaValidator");
-const { assertJavaToolchain, getJavaToolchainDiagnostics } = require("./javaToolchain");
+const { getJavaToolchainDiagnostics } = require("./javaToolchain");
 const execFileAsync = promisify(execFile);
 
 const app = express();
@@ -744,8 +744,7 @@ const initializeDatabase = async () => {
           graded_at TIMESTAMPTZ,
           review_status TEXT NOT NULL DEFAULT 'pending',
           reopened_by UUID REFERENCES users(id) ON DELETE SET NULL,
-          reopened_at TIMESTAMPTZ,
-          UNIQUE(student_id, challenge_id)
+          reopened_at TIMESTAMPTZ
         );
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS teacher_score NUMERIC;
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS teacher_feedback TEXT DEFAULT '';
@@ -755,6 +754,7 @@ const initializeDatabase = async () => {
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_by UUID REFERENCES users(id) ON DELETE SET NULL;
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_at TIMESTAMPTZ;
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS remedial_required BOOLEAN DEFAULT FALSE;
+        ALTER TABLE practice_submissions DROP CONSTRAINT IF EXISTS practice_submissions_student_id_challenge_id_key;
         ALTER TABLE practice_submissions ALTER COLUMN score DROP NOT NULL;
         ALTER TABLE practice_submissions DROP CONSTRAINT IF EXISTS practice_submissions_compile_status_check;
         ALTER TABLE practice_submissions ADD CONSTRAINT practice_submissions_compile_status_check CHECK (compile_status IN ('not_run', 'not_executed', 'success', 'failed', 'runtime_error'));
@@ -1121,19 +1121,12 @@ const seedCompletedDemoStudent = async () => {
                       score, test_results, is_locked, teacher_score, teacher_feedback,
                       graded_at, review_status
                     )
-                    VALUES (
-                      $1, $2, 'public class DemoSolution {}', 'All tests passed',
+                    SELECT $1, $2, 'public class DemoSolution {}', 'All tests passed',
                       'success', 100, '[]'::jsonb, TRUE, 100,
-                      'Demo submission completed successfully.', NOW(), 'passed'
+                      'Demo submission completed successfully.', NOW(), 'graded'
+                    WHERE NOT EXISTS (
+                      SELECT 1 FROM practice_submissions WHERE student_id = $1 AND challenge_id = $2
                     )
-                    ON CONFLICT (student_id, challenge_id) DO UPDATE SET
-                      compile_status = 'success',
-                      score = 100,
-                      teacher_score = 100,
-                      teacher_feedback = 'Demo submission completed successfully.',
-                      graded_at = COALESCE(practice_submissions.graded_at, NOW()),
-                      review_status = 'passed',
-                      is_locked = TRUE
                 `, [studentId, challenge.id]);
 
                 await client.query(`
@@ -1972,10 +1965,10 @@ const getLessonEvidence = async (studentId, lessonId) => {
     const passingThreshold = Number(practice?.passing_score || 70);
     const practiceCompleted = !practiceRequired || (
         practice &&
-        (practice.score !== null || practice.teacher_score !== null) &&
+        practice.teacher_score !== null &&
         !isRemedial &&
         effectiveScore >= passingThreshold &&
-        (practice.compile_status === 'success' || practice.teacher_score !== null)
+        practice.review_status === 'graded'
     );
     return {
         ...lesson,
@@ -4421,7 +4414,8 @@ app.get("/api/admin/reports", requireAuth, requireRole(["admin"]), async (_req, 
 
 const selectPracticeSubmissionById = async (id) => {
     const result = await pool.query(`
-        SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
+        SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id, pc.description AS challenge_description,
+               pc.requirements AS challenge_requirements, pc.sample_output AS challenge_sample_output,
                u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
                COALESCE(s.section, 'Unassigned') AS section,
                grader.name AS graded_by_name
@@ -4459,14 +4453,14 @@ const normalizeTeacherSubmission = (row) => ({
     studentEmail: row.student_email || '',
     topicId: row.topic_id || row.challenge_id,
     topicTitle: row.challenge_title || row.topic_id || '',
+    requirements: Array.isArray(row.challenge_requirements) ? row.challenge_requirements : [],
+    sampleOutput: row.challenge_sample_output || '',
     lessonId: row.lesson_id || '',
     sourceCode: row.source_code || '',
-    submissionStatus: row.review_status || (row.is_locked ? 'submitted' : 'draft'),
+    submissionStatus: row.review_status === 'graded' ? 'graded' : row.review_status === 'returned' ? 'returned' : 'submitted',
     compileStatus: row.compile_status || 'not_executed',
     testResults: Array.isArray(row.test_results) ? row.test_results : [],
-    grade: row.teacher_score !== null && row.teacher_score !== undefined
-        ? Number(row.teacher_score)
-        : row.score !== null && row.score !== undefined ? Number(row.score) : null,
+    grade: row.teacher_score !== null && row.teacher_score !== undefined ? Number(row.teacher_score) : null,
     feedback: row.teacher_feedback || '',
     submittedAt: row.submitted_at,
     gradedAt: row.graded_at || null
@@ -4487,6 +4481,8 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin
             pool.query(`SELECT COUNT(*)::int AS count FROM practice_submissions`),
             pool.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
+                   pc.description AS challenge_description, pc.requirements AS challenge_requirements,
+                   pc.sample_output AS challenge_sample_output,
                    u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
                    COALESCE(s.section, 'Unassigned') AS section,
                    grader.name AS graded_by_name
@@ -4520,9 +4516,11 @@ app.get("/api/practice-submissions/me", requireAuth, requireRole(["student"]), a
     try {
         const result = await pool.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
-                   ps.teacher_score, ps.teacher_feedback, ps.graded_at, ps.review_status, ps.remedial_required
+                   ps.teacher_score, ps.teacher_feedback, ps.graded_at, ps.review_status, ps.remedial_required,
+                   grader.name AS graded_by_name
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
+            LEFT JOIN users grader ON grader.id = ps.graded_by
             WHERE ps.student_id IN ($1::text, $2, $3)
             ORDER BY ps.submitted_at DESC
         `, [req.authUser.id, req.authUser.userId || "", req.authUser.email || ""]);
@@ -4573,58 +4571,17 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             return res.status(403).json({ success: false, message: `Pass the required assessment with ${ASSESSMENT_PASSING_SCORE}% or higher before submitting practice.` });
         }
 
-        const existing = await pool.query(
-            "SELECT id, is_locked FROM practice_submissions WHERE student_id = $1::text AND challenge_id = $2",
-            [req.authUser.id, safeChallengeId]
-        );
-        if (existing.rows[0]?.is_locked) {
-            return res.status(409).json({ success: false, message: "This challenge has already been submitted." });
-        }
-
-        const challengeDbRes = await pool.query("SELECT * FROM programming_challenges WHERE id = $1", [safeChallengeId]);
-        const challenge = challengeDbRes.rows[0]
-            ? toClientPracticeChallenge({ ...challengeDbRes.rows[0], test_cases: [] })
-            : PRACTICE_CHALLENGES.find(c => c.id === safeChallengeId);
-        const validation = await evaluateJavaSubmission(challenge || prerequisite.rows[0], String(sourceCode));
-
         const result = await pool.query(`
             INSERT INTO practice_submissions (
               student_id, challenge_id, source_code, program_output, compile_status,
-              runtime, memory_usage, score, error_message, test_results, is_locked
+              runtime, memory_usage, score, error_message, test_results, is_locked, review_status
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)
-            ON CONFLICT (student_id, challenge_id) DO UPDATE SET
-              source_code = EXCLUDED.source_code,
-              program_output = EXCLUDED.program_output,
-              compile_status = EXCLUDED.compile_status,
-              runtime = EXCLUDED.runtime,
-              memory_usage = EXCLUDED.memory_usage,
-              score = EXCLUDED.score,
-              error_message = EXCLUDED.error_message,
-              test_results = EXCLUDED.test_results,
-              submitted_at = NOW(),
-              is_locked = EXCLUDED.is_locked,
-              teacher_score = NULL,
-              teacher_feedback = '',
-              graded_by = NULL,
-              graded_at = NULL,
-              review_status = 'pending',
-              reopened_by = NULL,
-              reopened_at = NULL,
-              remedial_required = FALSE
+            VALUES ($1, $2, $3, '', 'not_executed', 0, NULL, NULL, '', '[]'::jsonb, FALSE, 'submitted')
             RETURNING *
         `, [
             req.authUser.id,
             safeChallengeId,
-            String(sourceCode).slice(0, 50000),
-            validation.programOutput || '',
-            validation.compileStatus,
-            0,
-            0,
-            validation.score,
-            validation.note,
-            JSON.stringify(buildEvaluationResults(validation, challenge)),
-            validation.passed
+            String(sourceCode).slice(0, 50000)
         ]);
 
         await logActivity(
@@ -4634,26 +4591,9 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             {
                 lessonId: prerequisite.rows[0].lesson_id || null,
                 challengeId: safeChallengeId,
-                compileStatus: validation.compileStatus,
-                practiceCompleted: validation.practiceCompleted
+                submissionStatus: 'submitted'
             }
         );
-        if (validation.compilationCheck === "success" || validation.compilationCheck === "failed") {
-            await logActivity(
-                req.authUser.id,
-                validation.compilationCheck === "success" ? "practice_compile_success" : "practice_compile_failed",
-                validation.compilationCheck === "success"
-                    ? "Practice compilation succeeded"
-                    : "Practice compilation failed",
-                {
-                    lessonId: prerequisite.rows[0].lesson_id || null,
-                    challengeId: safeChallengeId
-                }
-            );
-        }
-        if (validation.practiceCompleted) {
-            await verifyLessonCompletion(req.authUser.id, prerequisite.rows[0].lesson_id);
-        }
 
         try {
             const notificationClient = await pool.connect();
@@ -4693,11 +4633,11 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             success: true,
             data: {
                 ...result.rows[0],
-                passed: validation.passed,
-                practiceCompleted: validation.practiceCompleted,
-                canRetry: validation.canRetry,
-                editorLocked: validation.editorLocked,
-                compilerError: validation.compilerError || null
+                passed: false,
+                practiceCompleted: false,
+                canRetry: false,
+                editorLocked: true,
+                submissionStatus: 'submitted'
             }
         });
     } catch (error) {
@@ -4735,7 +4675,7 @@ app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["tea
         await client.query(`
             UPDATE practice_submissions
             SET is_locked = FALSE,
-                review_status = 'reopened',
+                review_status = 'returned',
                 reopened_by = $2,
                 reopened_at = NOW()
             WHERE id = $1
@@ -4800,9 +4740,7 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
         }
         const remedialRequired = Boolean(body.remedialRequired ?? body.remedial_required ?? false);
         const allowedStatuses = new Set(['submitted', 'reviewed', 'passed', 'failed']);
-        const reviewStatus = allowedStatuses.has(String(body.status || '').toLowerCase())
-            ? String(body.status).toLowerCase()
-            : (remedialRequired || grade < 70 ? 'failed' : 'reviewed');
+        const reviewStatus = remedialRequired || grade < 70 ? 'returned' : 'graded';
         await client.query("BEGIN");
         const existingResult = await client.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
@@ -4882,13 +4820,13 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
             if (existing.student_id && existing.student_id !== studentRecipientId) {
                 sendNotificationEvent(existing.student_id, notification);
             }
-            if (existing.lesson_id) {
+            if (existing.lesson_id && grade >= 70 && !remedialRequired) {
                 await verifyLessonCompletion(studentRecipientId, existing.lesson_id);
             }
             await logActivity(
                 studentRecipientId,
-                grade >= 70 ? "practice_passed" : "practice_failed",
-                `${grade >= 70 ? "Passed" : "Failed"} practice for ${practiceTitle}`,
+                grade >= 70 && !remedialRequired ? "practice_passed" : "practice_returned",
+                `${grade >= 70 && !remedialRequired ? "Passed" : "Returned"} practice for ${practiceTitle}`,
                 {
                     lessonId: existing.lesson_id || null,
                     challengeId: existing.challenge_id,

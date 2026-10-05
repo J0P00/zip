@@ -387,7 +387,7 @@ const practiceSubmissionRowToPending = (row: any): PendingSubmission => {
   const autoScore = row.score === null || row.score === undefined ? undefined : Number(row.score);
   const teacherScore = row.teacher_score === null || row.teacher_score === undefined ? undefined : Number(row.teacher_score);
   const reviewStatus = String(row.review_status || (teacherScore === undefined ? 'pending' : 'reviewed'));
-  const status: PendingSubmission['status'] = ['reviewed', 'passed', 'failed', 'reopened'].includes(reviewStatus)
+  const status: PendingSubmission['status'] = ['submitted', 'graded', 'returned', 'reviewed', 'passed', 'failed', 'reopened'].includes(reviewStatus)
     ? reviewStatus as PendingSubmission['status']
     : 'pending';
 
@@ -406,6 +406,8 @@ const practiceSubmissionRowToPending = (row: any): PendingSubmission => {
     teacherScore,
     topicId: row.topic_id,
     topicTitle: row.lesson_id || row.topic_id || 'Practice IDE',
+    requirements: Array.isArray(row.challenge_requirements) ? row.challenge_requirements : [],
+    sampleOutput: row.challenge_sample_output || '',
     compileStatus: row.compile_status || 'not_run',
     runtime: row.runtime === null || row.runtime === undefined ? undefined : Number(row.runtime),
     memoryUsage: row.memory_usage === null || row.memory_usage === undefined ? undefined : Number(row.memory_usage),
