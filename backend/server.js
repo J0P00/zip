@@ -2056,6 +2056,29 @@ const getLessonEvidence = async (studentId, lessonId) => {
     };
 };
 
+const getOOPCompletionStatus = async (studentId) => {
+    const lessonsResult = await pool.query(`
+        SELECT id
+        FROM lessons
+        WHERE status <> 'Archived'
+        ORDER BY sequence, id
+    `);
+    const evidence = await Promise.all(
+        lessonsResult.rows.map(lesson => getLessonEvidence(studentId, lesson.id))
+    );
+    const lessonsComplete = evidence.length > 0 && evidence.every(item => item?.completed === true);
+    const assessmentsComplete = evidence.length > 0 && evidence.every(item => item?.assessmentPassed === true);
+    const practiceComplete = evidence.length > 0 && evidence.every(item => item?.practiceCompleted === true);
+    return {
+        lessonsComplete,
+        assessmentsComplete,
+        practiceComplete,
+        oopComplete: lessonsComplete && assessmentsComplete && practiceComplete,
+        totalLessons: evidence.length,
+        completedLessons: evidence.filter(item => item?.completed === true).length
+    };
+};
+
 const getLessonAccessState = async (studentId, lessonId) => {
     const current = await getLessonEvidence(studentId, lessonId);
     if (!current) return { canAccess: false, reason: "Lesson not found." };
@@ -3445,6 +3468,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         }
 
         const dbStudentId = targetUser.id;
+        const oopCompletion = await getOOPCompletionStatus(dbStudentId);
         const [course, videos, quizzes, practice, swing, oopTopics, swingTopics] = await Promise.all([
             pool.query(`
                 SELECT COUNT(*)::int AS total_lessons,
@@ -3584,8 +3608,8 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         }));
         const completedLessons = oopTopicRows.filter(topic => topic.lessonCompleted).length;
         const effectiveTotalLessons = oopTopicRows.length || totalLessons;
-        const oopComplete = effectiveTotalLessons > 0 && completedLessons === effectiveTotalLessons;
-        const swingTopicRows = swingTopics.rows.map(topic => ({
+        const oopComplete = oopCompletion.oopComplete;
+        const swingTopicRows = oopCompletion.oopComplete ? swingTopics.rows.map(topic => ({
             id: topic.id,
             title: topic.title,
             sequence: Number(topic.sequence || 0),
@@ -3596,7 +3620,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             quizPassed: Boolean(topic.quiz_passed),
             exerciseCompleted: Boolean(topic.exercise_completed),
             submissionScore: topic.submission_score === null ? null : Number(topic.submission_score)
-        }));
+        })) : [];
         // Overall progress measures evidence across all three required stages.
         // Mastery remains separately practice-gated through lessonCompleted.
         const overallProgress = effectiveTotalLessons
@@ -3641,12 +3665,12 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 learningStateInterpretation: learningClassification.interpretation,
                 learningStrengths: learningClassification.strengths,
                 learningWeaknesses: learningClassification.weaknesses,
-                swingSubmissions: Number(row.swing_submissions || 0),
-                swingCompletedActivities: Number(row.swing_completed_activities || 0),
-                swingPendingActivities: Number(row.swing_pending_activities || 0),
-                hasActivity: oopTopicRows.some(topic => topic.attempted) || swingTopicRows.some(topic => topic.attempted),
-                oopComplete,
-                swingUnlocked: oopComplete,
+                swingSubmissions: oopCompletion.oopComplete ? Number(row.swing_submissions || 0) : 0,
+                swingCompletedActivities: oopCompletion.oopComplete ? Number(row.swing_completed_activities || 0) : 0,
+                swingPendingActivities: oopCompletion.oopComplete ? Number(row.swing_pending_activities || 0) : 0,
+                hasActivity: oopTopicRows.some(topic => topic.attempted) || (oopCompletion.oopComplete && swingTopicRows.some(topic => topic.attempted)),
+                oopComplete: oopCompletion.oopComplete,
+                swingUnlocked: oopCompletion.oopComplete,
                 oopTopics: oopTopicRows,
                 swingTopics: swingTopicRows
             }
@@ -4591,7 +4615,38 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                 ORDER BY u.created_at DESC
             `)
         ]);
-        res.json({ success: true, data: { students: students.rows, teachers: teachers.rows } });
+        const monitoredStudents = await Promise.all(students.rows.map(async student => {
+            const oopCompletion = await getOOPCompletionStatus(student.id);
+            if (!oopCompletion.oopComplete) {
+                return {
+                    ...student,
+                    oop_complete: false,
+                    swing_submissions: 0,
+                    swing_completed_activities: 0,
+                    swing_pending_activities: 0
+                };
+            }
+            const swingResult = await pool.query(`
+                SELECT
+                    COUNT(DISTINCT ss.id)::int AS swing_submissions,
+                    COUNT(DISTINCT sp.id) FILTER (
+                        WHERE sp.content_completed AND sp.video_completed
+                    )::int AS swing_completed_activities,
+                    COUNT(DISTINCT sp.id) FILTER (
+                        WHERE NOT (sp.content_completed AND sp.video_completed)
+                    )::int AS swing_pending_activities
+                FROM swing_lessons sl
+                LEFT JOIN swing_progress sp ON sp.student_id = $1::text AND sp.lesson_id = sl.id
+                LEFT JOIN swing_programming_exercises se ON se.lesson_id = sl.id
+                LEFT JOIN swing_submissions ss ON ss.student_id = $1::text AND ss.exercise_id = se.id
+            `, [student.id]);
+            return {
+                ...student,
+                oop_complete: true,
+                ...swingResult.rows[0]
+            };
+        }));
+        res.json({ success: true, data: { students: monitoredStudents, teachers: teachers.rows } });
     } catch (error) {
         next(error);
     }

@@ -337,7 +337,7 @@ const mapBackendStudent = (user: AuthenticatedUser, results: StudentResultsData)
       unlocked: Boolean(t.lessonUnlocked),
       timeSpent: t.attempted ? 'Active' : '--'
     })),
-    swingTopics: (results.swingTopics || []).map(t => ({
+    swingTopics: (results.swingUnlocked ? results.swingTopics || [] : []).map(t => ({
       topic: t.title,
       video: t.videoCompleted ? 100 : 0,
       assessment: t.quizPassed ? 100 : 0,
@@ -347,9 +347,9 @@ const mapBackendStudent = (user: AuthenticatedUser, results: StudentResultsData)
       timeSpent: t.attempted ? 'Active' : '--'
     })),
     swing: {
-      video: results.swingCompletedActivities > 0 ? 100 : 0,
-      assessment: results.swingCompletedActivities > 0 ? 100 : 0,
-      ide: results.swingSubmissions > 0 ? 100 : 0,
+      video: results.swingUnlocked && results.swingCompletedActivities > 0 ? 100 : 0,
+      assessment: results.swingUnlocked && results.swingCompletedActivities > 0 ? 100 : 0,
+      ide: results.swingUnlocked && results.swingSubmissions > 0 ? 100 : 0,
       miniProject: 0
     }
   };
@@ -506,7 +506,7 @@ export default function TeacherPortal({
             activity: lastActivity,
             currentLesson: activity?.lessonTitle || (activity ? 'OOP learning path' : 'Not started'),
             currentTopic: activity?.lessonTitle || (activity ? 'OOP learning path' : 'Not started'),
-            swingLesson: 'Not started',
+            swingLesson: row.oop_complete ? 'Not started' : 'Locked until OOP completion',
             stage: activity ? 'Lesson' : 'Watch Video',
             overallProgress: progress,
             moduleProgress: progress,
@@ -523,7 +523,12 @@ export default function TeacherPortal({
             recommendation: 'Review the latest recorded learning activity.',
             topics: [],
             swingTopics: [],
-            swing: { video: 0, assessment: 0, ide: 0, miniProject: 0 }
+            swing: {
+              video: row.oop_complete ? (Number(row.swing_completed_activities || 0) > 0 ? 100 : 0) : 0,
+              assessment: row.oop_complete ? (Number(row.swing_completed_activities || 0) > 0 ? 100 : 0) : 0,
+              ide: row.oop_complete ? (Number(row.swing_submissions || 0) > 0 ? 100 : 0) : 0,
+              miniProject: 0
+            }
           };
         });
 

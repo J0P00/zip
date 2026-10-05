@@ -130,6 +130,9 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
   }, [activeExercise.id, currentUser.email, currentUser.id, currentUser.userId, draftDb, submissionDb]);
 
   const stats = useMemo(() => {
+    if (!isUnlocked) {
+      return { completedLessons: 0, passedQuizzes: 0, completedExercises: 0, overall: 0 };
+    }
     const completedLessons = JAVA_SWING_LESSONS.filter(lesson => getLessonCompleted(lesson.id, progressDb)).length;
     const passedQuizzes = JAVA_SWING_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
     const completedExercises = JAVA_SWING_EXERCISES.filter(exercise => {
@@ -138,12 +141,12 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
     }).length;
     const overall = Math.round(((completedLessons + passedQuizzes + completedExercises) / 15) * 100);
     return { completedLessons, passedQuizzes, completedExercises, overall };
-  }, [currentUser, progressDb, quizDb, submissionDb]);
+  }, [currentUser, isUnlocked, progressDb, quizDb, submissionDb]);
 
   const isCourseComplete = stats.completedLessons === 5 && stats.passedQuizzes === 5 && stats.completedExercises === 5;
 
   const getSwingLessonLockReason = (lesson: SwingLesson) => {
-    if (!isUnlocked) return 'Complete all OOP lessons to unlock Java Swing.';
+    if (!isUnlocked) return 'Complete all OOP lessons, assessments, and coding practice to unlock Java Swing.';
     if (lesson.sequence === 1) return '';
     const previous = JAVA_SWING_LESSONS.find(item => item.sequence === lesson.sequence - 1);
     if (!previous) return '';
@@ -176,6 +179,10 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
   };
 
   const markLessonComplete = (field: 'contentCompleted' | 'videoCompleted') => {
+    if (!isUnlocked) {
+      setNotice('Complete all OOP lessons, assessments, and coding practice to unlock Java Swing.');
+      return;
+    }
     const current = progressDb[activeLesson.id] || { lessonId: activeLesson.id, contentCompleted: false, videoCompleted: false };
     const nextRecord: SwingLessonProgress = {
       ...current,
@@ -325,10 +332,10 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
       </div>
       <h2 className="mt-4 text-2xl font-extrabold text-slate-900">Java Swing Programming Locked</h2>
       <p className="mx-auto mt-2 max-w-xl text-sm font-semibold leading-6 text-slate-500">
-        Complete all OOP lessons to unlock Java Swing.
+        Complete all OOP lessons, assessments, and coding practice to unlock Java Swing.
       </p>
       <div className="mx-auto mt-6 max-w-md rounded-xl border border-slate-100 bg-slate-50 p-4 text-left text-xs font-bold text-slate-600">
-        Required before unlock: every OOP video completed and every required OOP assessment passed.
+        Required before unlock: every OOP video, assessment, and required coding practice activity must be complete.
       </div>
     </div>
   );
