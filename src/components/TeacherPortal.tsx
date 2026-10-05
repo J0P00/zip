@@ -35,7 +35,7 @@ import {
 import { AdaptiveRecommendation, AssessmentSecurityEvent, AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
 import { LeaderboardUser } from '../types';
 import Leaderboard from './Leaderboard.tsx';
-import { assessmentApi, progressApi, userApi } from '../services/api';
+import { adminApi, assessmentApi, progressApi, userApi } from '../services/api';
 import { generateStudentResultsInterpretation, StudentResultsData, StudentResultsInterpretation } from '../services/interpretation';
 import { generateRuleBasedRecommendation } from '../services/recommendationEngine';
 import { getCanonicalStudentId } from '../services/identity';
@@ -112,6 +112,38 @@ type LiveStudent = {
     ide: number;
     miniProject: number;
   };
+};
+
+type MonitoringActivity = {
+  type?: string | null;
+  action?: string | null;
+  lessonId?: string | null;
+  lessonTitle?: string | null;
+  lessonSequence?: number | null;
+  timestamp?: string | null;
+};
+
+const formatMonitoringActivity = (activity: MonitoringActivity | null | undefined): string => {
+  if (!activity?.type || !activity.timestamp) return 'No activity yet';
+  const lessonNumber = activity.lessonSequence ? ` ${activity.lessonSequence}` : activity.lessonId ? ` ${activity.lessonId}` : '';
+  switch (activity.type) {
+    case 'practice_submission':
+      return 'Submitted Practice';
+    case 'practice_passed':
+      return 'Practice Passed';
+    case 'assessment_passed':
+      return `Passed Assessment${lessonNumber}`;
+    case 'assessment_failed':
+      return `Failed Assessment${lessonNumber}`;
+    case 'video_completed':
+      return `Completed Video${lessonNumber}`;
+    case 'video_started':
+      return `Started Lesson${lessonNumber}`;
+    case 'lesson_completed':
+      return `Completed Lesson${lessonNumber}`;
+    default:
+      return 'No activity yet';
+  }
 };
 
 const OOP_TOPICS = [
@@ -282,10 +314,10 @@ const mapBackendStudent = (user: AuthenticatedUser, results: StudentResultsData)
     challengesCompleted: Number(results.completedPracticeActivities || 0),
     performanceIndex,
     learningStatus,
-    lastActivity: results.hasActivity ? 'synced from backend' : 'not started',
+    lastActivity: formatMonitoringActivity(results.lastActivity),
     moduleCompletion: overallProgress,
     topicCompletion: overallProgress,
-    recommendation: results.learningStateInterpretation || 'Progress is synced from backend database.',
+    recommendation: results.learningStateInterpretation || 'Review the latest recorded learning activity.',
     topics: (results.oopTopics || []).map(t => ({
       topic: t.title,
       video: t.videoPercentage ?? (t.videoCompleted ? 100 : 0),
@@ -426,28 +458,65 @@ export default function TeacherPortal({
   // Fetch all student users on mount
   useEffect(() => {
     let cancelled = false;
-    userApi.listUsers(currentUser.token)
-      .then(async response => {
-        const studentUsers = response.data.filter(user => user.role === 'student');
+    Promise.all([userApi.listUsers(currentUser.token), adminApi.monitoring(currentUser.token)])
+      .then(([usersResponse, monitoringResponse]) => {
+        const studentUsers = usersResponse.data.filter(user => user.role === 'student');
         if (!cancelled) setAllRegisteredUsers(studentUsers);
 
-        const syncedStudents = (await Promise.all(studentUsers.map(async user => {
-          try {
-            const results = await progressApi.getStudentResults(getCanonicalStudentId(user), currentUser.token);
-            return mapBackendStudent(user, results.data);
-          } catch (error) {
-            console.warn(`Unable to load results for ${user.email}:`, error);
-            return null;
-          }
-        }))).filter((student): student is LiveStudent => student !== null);
+        const monitoringStudents = (monitoringResponse.data.students || []).map((row: any): LiveStudent => {
+          const user = studentUsers.find(candidate =>
+            candidate.id === row.id ||
+            candidate.email.toLowerCase() === String(row.email || '').toLowerCase()
+          );
+          const activity: MonitoringActivity | null = row.activity_type ? {
+            type: row.activity_type,
+            action: row.activity_action,
+            lessonId: row.activity_lesson_id,
+            lessonTitle: row.activity_lesson_title,
+            lessonSequence: row.activity_lesson_sequence === null ? null : Number(row.activity_lesson_sequence),
+            timestamp: row.activity_timestamp
+          } : null;
+          const progress = Number(row.progress || 0);
+          const quizScore = Number(row.quiz_average || 0);
+          const practiceScore = Number(row.programming_score || 0);
+          const lastActivity = formatMonitoringActivity(activity);
+          return withTopicProgress({
+            id: row.id,
+            name: row.name,
+            email: row.email,
+            section: user?.section || 'Unassigned',
+            online: user?.onlineStatus !== 'offline',
+            activity: lastActivity,
+            currentLesson: activity?.lessonTitle || (activity ? 'OOP learning path' : 'Not started'),
+            currentTopic: activity?.lessonTitle || (activity ? 'OOP learning path' : 'Not started'),
+            swingLesson: 'Not started',
+            stage: activity ? 'Lesson' : 'Watch Video',
+            overallProgress: progress,
+            moduleProgress: progress,
+            topicProgress: progress,
+            videoCompletion: progress,
+            quizScore,
+            practiceScore,
+            challengesCompleted: practiceScore > 0 ? 1 : 0,
+            performanceIndex: Math.round((progress + quizScore + practiceScore) / 3),
+            learningStatus: progress >= 100 ? 'Mastered' : progress > 0 ? 'In Progress' : 'At Risk',
+            lastActivity,
+            moduleCompletion: progress,
+            topicCompletion: progress,
+            recommendation: 'Review the latest recorded learning activity.',
+            topics: [],
+            swingTopics: [],
+            swing: { video: 0, assessment: 0, ide: 0, miniProject: 0 }
+          }, 0);
+        });
 
         if (!cancelled) {
-          setBackendStudents(syncedStudents);
-          setSelectedStudentId(currentId => syncedStudents.some(student => student.id === currentId) ? currentId : syncedStudents[0]?.id || currentId);
+          setBackendStudents(monitoringStudents);
+          setSelectedStudentId(currentId => monitoringStudents.some(student => student.id === currentId) ? currentId : monitoringStudents[0]?.id || currentId);
         }
       })
       .catch(error => {
-        if (!cancelled) console.warn('Unable to load the teacher roster from the backend:', error);
+        if (!cancelled) console.error('Unable to load the teacher monitoring roster from the backend:', error);
       });
 
     return () => {
@@ -608,7 +677,7 @@ export default function TeacherPortal({
         challengesCompleted: practiceScore > 0 ? 1 : 0,
         performanceIndex,
         learningStatus,
-        lastActivity: 'synced',
+        lastActivity: 'Activity unavailable',
         moduleCompletion: overallProgress,
         topicCompletion: overallProgress,
         recommendation: 'Progress is synced from the student account activity.',
@@ -656,7 +725,7 @@ export default function TeacherPortal({
       challengesCompleted: latestSubmission ? 1 : 0,
       performanceIndex,
       learningStatus: performanceIndex >= 80 ? 'Completed' : performanceIndex >= 70 ? 'In Progress' : 'Needs Improvement',
-      lastActivity: latestSubmission ? 'just now' : 'connected',
+      lastActivity: latestSubmission ? 'Submitted Practice' : 'Activity unavailable',
       moduleCompletion: overallProgress,
       topicCompletion: overallProgress,
       recommendation: latestSubmission?.feedback || 'Monitor the next video, assessment, and Practice IDE submission.',

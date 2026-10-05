@@ -923,7 +923,7 @@ export default function App() {
           views: videoRequirementCompleted ? (video.views || 0) + 1 : (video.views || 0)
         };
 
-        if (videoRequirementCompleted && video.progressPercent < 95) {
+        if (videoRequirementCompleted && (video.progressPercent ?? 0) < 95) {
           setPoints(p => p + 100);
           addNotification(
             `Assessment Unlocked! 🔓`,

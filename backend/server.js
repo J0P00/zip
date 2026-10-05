@@ -3730,18 +3730,91 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
     try {
         const [students, teachers] = await Promise.all([
             pool.query(`
+                WITH latest_activity AS (
+                    SELECT DISTINCT ON (student_id)
+                      student_id, type, action, lesson_id, lesson_title, lesson_sequence, timestamp
+                    FROM (
+                      SELECT
+                        ps.student_id::text AS student_id,
+                        CASE WHEN COALESCE(ps.teacher_score, ps.score, 0) >= 70
+                                  AND (ps.teacher_score IS NOT NULL OR ps.compile_status = 'success')
+                             THEN 'practice_passed' ELSE 'practice_submission' END AS type,
+                        CASE WHEN COALESCE(ps.teacher_score, ps.score, 0) >= 70
+                                  AND (ps.teacher_score IS NOT NULL OR ps.compile_status = 'success')
+                             THEN 'passed' ELSE 'submitted' END AS action,
+                        pc.lesson_id,
+                        l.title AS lesson_title,
+                        l.sequence,
+                        CASE WHEN COALESCE(ps.teacher_score, ps.score, 0) >= 70
+                                  AND (ps.teacher_score IS NOT NULL OR ps.compile_status = 'success')
+                             THEN COALESCE(ps.graded_at, ps.submitted_at) ELSE ps.submitted_at END,
+                        1 AS priority
+                      FROM practice_submissions ps
+                      JOIN programming_challenges pc ON pc.id = ps.challenge_id
+                      LEFT JOIN lessons l ON l.id = pc.lesson_id
+                      UNION ALL
+                      SELECT
+                        qa.student_user_id::text,
+                        CASE WHEN qa.passed THEN 'assessment_passed' ELSE 'assessment_failed' END,
+                        CASE WHEN qa.passed THEN 'passed' ELSE 'failed' END,
+                        qa.lesson_id,
+                        l.title,
+                        l.sequence,
+                        qa.date_completed,
+                        2
+                      FROM quiz_attempts qa
+                      LEFT JOIN lessons l ON l.id = qa.lesson_id
+                      UNION ALL
+                      SELECT
+                        sp.student_user_id::text,
+                        CASE WHEN sp.completed OR sp.completion_percentage >= 95
+                             THEN 'video_completed' ELSE 'video_started' END,
+                        CASE WHEN sp.completed OR sp.completion_percentage >= 95
+                             THEN 'completed' ELSE 'started' END,
+                        sp.video_id,
+                        l.title,
+                        l.sequence,
+                        sp.updated_at,
+                        3
+                      FROM student_progress sp
+                      LEFT JOIN lessons l ON l.id = sp.video_id
+                      UNION ALL
+                      SELECT
+                        lp.student_id::text,
+                        'lesson_completed',
+                        'completed',
+                        lp.lesson_id,
+                        l.title,
+                        l.sequence,
+                        COALESCE(lp.completed_at, lp.updated_at),
+                        4
+                      FROM lesson_progress lp
+                      LEFT JOIN lessons l ON l.id = lp.lesson_id
+                      WHERE lp.completed = TRUE
+                    ) events
+                    WHERE timestamp IS NOT NULL
+                    ORDER BY student_id, timestamp DESC, priority ASC
+                )
                 SELECT
                   u.id, u.name, u.email, u.account_status, s.student_number, s.course, s.year_level,
                   COALESCE(ROUND(AVG(sp.completion_percentage)), 0) AS progress,
                   COALESCE(ROUND(AVG(qa.percentage)), 0) AS quiz_average,
-                  COALESCE(ROUND(AVG(ps.score)), 0) AS programming_score
+                  COALESCE(ROUND(AVG(ps.score)), 0) AS programming_score,
+                  la.type AS activity_type,
+                  la.action AS activity_action,
+                  la.lesson_id AS activity_lesson_id,
+                  la.lesson_title AS activity_lesson_title,
+                  la.lesson_sequence AS activity_lesson_sequence,
+                  la.timestamp AS activity_timestamp
                 FROM users u
                 JOIN students s ON s.user_id = u.id
                 LEFT JOIN student_progress sp ON sp.student_user_id = u.id
                 LEFT JOIN quiz_attempts qa ON qa.student_user_id = u.id
                 LEFT JOIN practice_submissions ps ON ps.student_id IN (u.id::text, u.user_id, u.email)
+                LEFT JOIN latest_activity la ON la.student_id IN (u.id::text, u.user_id, u.email)
                 WHERE u.role = 'student'
-                GROUP BY u.id, s.student_number, s.course, s.year_level
+                GROUP BY u.id, s.student_number, s.course, s.year_level,
+                         la.type, la.action, la.lesson_id, la.lesson_title, la.timestamp
                 ORDER BY u.created_at DESC
             `),
             pool.query(`

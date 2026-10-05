@@ -1,4 +1,11 @@
 export interface StudentResultsData {
+  lastActivity?: {
+    type: string;
+    action?: string;
+    lessonId?: string;
+    lessonTitle?: string;
+    timestamp: string;
+  } | null;
   studentInfo?: {
     id: string;
     userId?: string;

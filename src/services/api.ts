@@ -239,7 +239,7 @@ export const notificationApi = {
 
 export const adminApi = {
   overview: () => apiRequest<{ success: boolean; data: any }>('/api/admin/overview'),
-  monitoring: () => apiRequest<{ success: boolean; data: any }>('/api/admin/monitoring'),
+  monitoring: (token?: string) => apiRequest<{ success: boolean; data: any }>('/api/admin/monitoring', { token }),
   reports: () => apiRequest<{ success: boolean; data: any }>('/api/admin/reports')
 };
 
