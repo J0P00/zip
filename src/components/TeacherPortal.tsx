@@ -128,17 +128,27 @@ const formatMonitoringActivity = (activity: MonitoringActivity | null | undefine
   const lessonNumber = activity.lessonSequence ? ` ${activity.lessonSequence}` : activity.lessonId ? ` ${activity.lessonId}` : '';
   switch (activity.type) {
     case 'practice_submission':
+    case 'practice_submitted':
       return 'Submitted Practice';
     case 'practice_passed':
       return 'Practice Passed';
+    case 'practice_failed':
+      return 'Practice Challenge Failed';
+    case 'practice_compile_success':
+      return 'Practice Compilation Succeeded';
+    case 'practice_compile_failed':
+      return 'Practice Compilation Failed';
+    case 'assessment_submitted':
+      return `Submitted Assessment${lessonNumber}`;
     case 'assessment_passed':
       return `Passed Assessment${lessonNumber}`;
     case 'assessment_failed':
       return `Failed Assessment${lessonNumber}`;
     case 'video_completed':
       return `Completed Video${lessonNumber}`;
+    case 'video_progress':
     case 'video_started':
-      return `Started Lesson${lessonNumber}`;
+      return `Watched Lesson${lessonNumber} video`;
     case 'lesson_completed':
       return `Completed Lesson${lessonNumber}`;
     default:

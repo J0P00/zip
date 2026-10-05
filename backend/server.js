@@ -3231,6 +3231,15 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
             return res.status(403).json({ success: false, message: access.reason });
         }
 
+        const previousProgress = await pool.query(
+            "SELECT completion_percentage, completed FROM student_progress WHERE student_user_id = $1 AND video_id = $2",
+            [req.authUser.id, safeVideoId]
+        );
+        const previousPercentage = Number(previousProgress.rows[0]?.completion_percentage || 0);
+        const reachedMilestone = [25, 50, 75, 95].some(
+            milestone => previousPercentage < milestone && safeCompletionPercentage >= milestone
+        );
+
         const result = await pool.query(`
             INSERT INTO student_progress (student_user_id, video_id, last_position, completion_percentage, completed, date_completed, notes)
             VALUES ($1, $2, $3, $4, $5, CASE WHEN $5 THEN NOW() ELSE NULL END, $6)
@@ -3271,6 +3280,16 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
 
         if (safeCompleted) {
             await awardXP(req.authUser.id, 20, `Video Completion: ${safeVideoId}`);
+        }
+        if (reachedMilestone) {
+            await logActivity(
+                req.authUser.id,
+                safeCompletionPercentage >= 95 ? "video_completed" : "video_progress",
+                safeCompletionPercentage >= 95
+                    ? `Completed video for lesson ${safeVideoId}`
+                    : `Watched video for lesson ${safeVideoId} (${Math.round(safeCompletionPercentage)}%)`,
+                { lessonId: safeVideoId, completionPercentage: safeCompletionPercentage }
+            );
         }
         await verifyLessonCompletion(req.authUser.id, safeVideoId);
 
@@ -3366,7 +3385,7 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
         }
 
         // Log activity
-        await logActivity(req.authUser.id, "quiz_attempt", `Submitted quiz for ${safeLessonId || safeAssessmentId} with score ${safeScore}/${safeTotal}`, {
+        await logActivity(req.authUser.id, isPassedNow ? "assessment_passed" : "assessment_failed", `${isPassedNow ? "Passed" : "Failed"} assessment for ${safeLessonId || safeAssessmentId}`, {
             assessmentId: safeAssessmentId,
             lessonId: safeLessonId,
             score: safeScore,
@@ -3735,6 +3754,28 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                       student_id, type, action, lesson_id, lesson_title, lesson_sequence, timestamp
                     FROM (
                       SELECT
+                        al.student_id::text,
+                        CASE
+                          WHEN al.activity_type IN ('lesson_complete', 'lesson_completed') THEN 'lesson_completed'
+                          ELSE al.activity_type
+                        END AS type,
+                        al.activity_type AS action,
+                        NULLIF(al.metadata->>'lessonId', '') AS lesson_id,
+                        l.title AS lesson_title,
+                        l.sequence AS lesson_sequence,
+                        al.created_at AS timestamp,
+                        0 AS priority
+                      FROM activity_logs al
+                      LEFT JOIN lessons l ON l.id = NULLIF(al.metadata->>'lessonId', '')
+                      WHERE al.activity_type IN (
+                        'video_progress', 'video_started', 'video_completed',
+                        'assessment_submitted', 'assessment_passed', 'assessment_failed',
+                        'practice_submitted', 'practice_compile_success',
+                        'practice_compile_failed', 'practice_passed', 'practice_failed',
+                        'lesson_unlocked', 'lesson_complete', 'lesson_completed'
+                      )
+                      UNION ALL
+                      SELECT
                         ps.student_id::text AS student_id,
                         CASE WHEN COALESCE(ps.teacher_score, ps.score, 0) >= 70
                                   AND (ps.teacher_score IS NOT NULL OR ps.compile_status = 'success')
@@ -3791,6 +3832,20 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                       FROM lesson_progress lp
                       LEFT JOIN lessons l ON l.id = lp.lesson_id
                       WHERE lp.completed = TRUE
+                      UNION ALL
+                      SELECT
+                        vp.student_id::text,
+                        CASE WHEN vp.completed OR vp.watch_percentage >= 95
+                             THEN 'video_completed' ELSE 'video_progress' END,
+                        CASE WHEN vp.completed OR vp.watch_percentage >= 95
+                             THEN 'completed' ELSE 'progress_updated' END,
+                        vp.lesson_id,
+                        l.title,
+                        l.sequence,
+                        vp.updated_at,
+                        5
+                      FROM video_progress vp
+                      LEFT JOIN lessons l ON l.id = vp.lesson_id
                     ) events
                     WHERE timestamp IS NOT NULL
                     ORDER BY student_id, timestamp DESC, priority ASC
@@ -4098,6 +4153,30 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             })))
         ]);
 
+        await logActivity(
+            req.authUser.id,
+            "practice_submitted",
+            `Submitted practice for ${prerequisite.rows[0].challenge_title || safeChallengeId}`,
+            {
+                lessonId: prerequisite.rows[0].lesson_id || null,
+                challengeId: safeChallengeId,
+                compileStatus: validation.compilationCheck
+            }
+        );
+        if (validation.compilationCheck === "success" || validation.compilationCheck === "failed") {
+            await logActivity(
+                req.authUser.id,
+                validation.compilationCheck === "success" ? "practice_compile_success" : "practice_compile_failed",
+                validation.compilationCheck === "success"
+                    ? "Practice compilation succeeded"
+                    : "Practice compilation failed",
+                {
+                    lessonId: prerequisite.rows[0].lesson_id || null,
+                    challengeId: safeChallengeId
+                }
+            );
+        }
+
         try {
             const notificationClient = await pool.connect();
             try {
@@ -4310,6 +4389,16 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
             if (existing.lesson_id) {
                 await verifyLessonCompletion(studentRecipientId, existing.lesson_id);
             }
+            await logActivity(
+                studentRecipientId,
+                grade >= 70 ? "practice_passed" : "practice_failed",
+                `${grade >= 70 ? "Passed" : "Failed"} practice for ${practiceTitle}`,
+                {
+                    lessonId: existing.lesson_id || null,
+                    challengeId: existing.challenge_id,
+                    grade
+                }
+            );
         }
 
         res.json({ success: true, data: updated, submission: updated, notification });
