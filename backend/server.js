@@ -4458,6 +4458,10 @@ const normalizeTeacherSubmission = (row) => ({
     lessonId: row.lesson_id || '',
     sourceCode: row.source_code || '',
     submissionStatus: row.review_status === 'graded' ? 'graded' : row.review_status === 'returned' ? 'returned' : 'submitted',
+    reviewStatus: row.review_status || 'submitted',
+    status: row.review_status || 'submitted',
+    teacherScore: row.teacher_score === null || row.teacher_score === undefined ? null : Number(row.teacher_score),
+    teacherFeedback: row.teacher_feedback || '',
     compileStatus: row.compile_status || 'not_executed',
     testResults: Array.isArray(row.test_results) ? row.test_results : [],
     grade: row.teacher_score !== null && row.teacher_score !== undefined ? Number(row.teacher_score) : null,
@@ -4475,7 +4479,9 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin
                 WHERE u.role = 'student'
                   AND ($1 = 'admin' OR EXISTS (
                     SELECT 1 FROM monitoring_requests mr
-                    WHERE mr.teacher_id = $2 AND mr.student_id = u.id AND mr.status = 'accepted'
+                    WHERE mr.teacher_id = $2
+                      AND mr.status = 'accepted'
+                      AND mr.student_id = u.id
                   ))
             `, [req.authUser.role, req.authUser.id]),
             pool.query(`SELECT COUNT(*)::int AS count FROM practice_submissions`),
@@ -4493,7 +4499,9 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin
             LEFT JOIN users grader ON grader.id = ps.graded_by
             WHERE ($1 = 'admin' OR EXISTS (
                 SELECT 1 FROM monitoring_requests mr
-                WHERE mr.teacher_id = $2 AND mr.student_id = u.id AND mr.status = 'accepted'
+                WHERE mr.teacher_id = $2
+                  AND mr.status = 'accepted'
+                  AND (mr.student_id = u.id OR mr.student_id::text = ps.student_id)
             ))
             ORDER BY ps.submitted_at DESC
             `, [req.authUser.role, req.authUser.id])

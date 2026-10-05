@@ -386,7 +386,7 @@ const practiceSubmissionToPending = (submission: PracticeSubmission): PendingSub
 const practiceSubmissionRowToPending = (row: any): PendingSubmission => {
   const autoScore = row.score === null || row.score === undefined ? undefined : Number(row.score);
   const teacherScore = row.teacher_score === null || row.teacher_score === undefined ? undefined : Number(row.teacher_score);
-  const reviewStatus = String(row.review_status || (teacherScore === undefined ? 'pending' : 'reviewed'));
+  const reviewStatus = String(row.review_status || row.submissionStatus || (teacherScore === undefined ? 'pending' : 'reviewed'));
   const status: PendingSubmission['status'] = ['submitted', 'graded', 'returned', 'reviewed', 'passed', 'failed', 'reopened'].includes(reviewStatus)
     ? reviewStatus as PendingSubmission['status']
     : 'pending';
