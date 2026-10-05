@@ -275,6 +275,9 @@ const statusClass = (status: LearningStatus) => {
 };
 
 const monitoringStatus = (student: LiveStudent): MonitoringStatus => {
+  const hasActivity = student.lastActivity !== 'No activity yet' && student.lastActivity !== 'Activity unavailable';
+  if (!hasActivity && student.overallProgress === 0) return 'At Risk';
+  if (hasActivity && student.overallProgress < 40) return 'Improving';
   if (student.overallProgress < 40 || student.quizScore < 50 || student.practiceScore < 25) return 'At Risk';
   if (student.overallProgress < 60 || student.quizScore < 65 || student.practiceScore < 50) return 'Needs Help';
   if (student.overallProgress < 75) return 'Improving';

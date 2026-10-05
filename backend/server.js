@@ -3759,6 +3759,14 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                       u.id AS student_id,
                       l.id AS lesson_id,
                       COALESCE(sp.completion_percentage, 0) AS video_percentage,
+                      COALESCE((
+                        SELECT qa.percentage
+                        FROM quiz_attempts qa
+                        WHERE qa.student_user_id = u.id
+                          AND qa.lesson_id = l.id
+                        ORDER BY qa.attempt_number DESC, qa.date_completed DESC
+                        LIMIT 1
+                      ), 0) AS assessment_score,
                       EXISTS (
                         SELECT 1
                         FROM quiz_attempts qa
@@ -3803,7 +3811,12 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                           AND le.assessment_passed
                           AND le.practice_completed
                       )::int AS completed_lessons,
-                      ROUND(AVG(le.video_percentage))::int AS video_progress
+                      ROUND(AVG(le.video_percentage))::int AS video_progress,
+                      ROUND(AVG((
+                        (LEAST(100, GREATEST(0, le.video_percentage)) / 95.0)
+                        + CASE WHEN le.assessment_passed THEN 1 ELSE 0 END
+                        + CASE WHEN le.practice_completed THEN 1 ELSE 0 END
+                      ) / 3.0 * 100))::int AS overall_progress
                     FROM lesson_evidence le
                     GROUP BY le.student_id
                 ),
@@ -3934,7 +3947,7 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                   u.id, u.name, u.email, u.account_status, s.student_number, s.course, s.year_level, s.section,
                   CASE
                     WHEN lt.total_lessons = 0 THEN 0
-                    ELSE ROUND((COALESCE(sm.completed_lessons, 0)::numeric / lt.total_lessons) * 100)::int
+                    ELSE COALESCE(sm.overall_progress, 0)
                   END AS progress,
                   COALESCE(qm.quiz_average, 0) AS quiz_average,
                   COALESCE(pm.practice_average, 0) AS programming_score,
