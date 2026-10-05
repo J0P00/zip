@@ -4457,7 +4457,7 @@ const normalizeTeacherSubmission = (row) => ({
     sampleOutput: row.challenge_sample_output || '',
     lessonId: row.lesson_id || '',
     sourceCode: row.source_code || '',
-    submissionStatus: row.review_status === 'graded' ? 'graded' : row.review_status === 'returned' ? 'returned' : 'submitted',
+    submissionStatus: row.review_status === 'graded' ? 'graded' : row.review_status === 'returned' ? 'returned' : row.review_status === 'pending_review' ? 'pending_review' : 'submitted',
     reviewStatus: row.review_status || 'submitted',
     status: row.review_status || 'submitted',
     teacherScore: row.teacher_score === null || row.teacher_score === undefined ? null : Number(row.teacher_score),
@@ -4584,7 +4584,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
               student_id, challenge_id, source_code, program_output, compile_status,
               runtime, memory_usage, score, error_message, test_results, is_locked, review_status
             )
-            VALUES ($1, $2, $3, '', 'not_executed', 0, NULL, NULL, '', '[]'::jsonb, FALSE, 'submitted')
+            VALUES ($1, $2, $3, '', 'not_executed', 0, NULL, NULL, '', '[]'::jsonb, FALSE, 'pending_review')
             RETURNING *
         `, [
             req.authUser.id,
@@ -4599,7 +4599,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             {
                 lessonId: prerequisite.rows[0].lesson_id || null,
                 challengeId: safeChallengeId,
-                submissionStatus: 'submitted'
+                submissionStatus: 'pending_review'
             }
         );
 
@@ -4645,7 +4645,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
                 practiceCompleted: false,
                 canRetry: false,
                 editorLocked: true,
-                submissionStatus: 'submitted'
+                submissionStatus: 'pending_review'
             }
         });
     } catch (error) {
@@ -4679,6 +4679,19 @@ app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["tea
         if (!existing) {
             await client.query("ROLLBACK");
             return res.status(404).json({ success: false, message: "Submission not found." });
+        }
+        if (req.authUser.role !== 'admin') {
+            const authorization = await client.query(`
+                SELECT 1 FROM monitoring_requests
+                WHERE teacher_id = $1
+                  AND status = 'accepted'
+                  AND (student_id = $2 OR student_id::text = $3)
+                LIMIT 1
+            `, [req.authUser.id, existing.student_user_id || existing.student_id, existing.student_id]);
+            if (!authorization.rowCount) {
+                await client.query("ROLLBACK");
+                return res.status(403).json({ success: false, message: "You are not authorized to reopen this student's submission." });
+            }
         }
         await client.query(`
             UPDATE practice_submissions
@@ -4768,9 +4781,11 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
         if (req.authUser.role !== 'admin') {
             const authorization = await client.query(`
                 SELECT 1 FROM monitoring_requests
-                WHERE teacher_id = $1 AND student_id = $2 AND status = 'accepted'
+                WHERE teacher_id = $1
+                  AND status = 'accepted'
+                  AND (student_id = $2 OR student_id::text = $3)
                 LIMIT 1
-            `, [req.authUser.id, existing.student_user_id || existing.student_id]);
+            `, [req.authUser.id, existing.student_user_id || existing.student_id, existing.student_id]);
             if (!authorization.rowCount) {
                 await client.query("ROLLBACK");
                 return res.status(403).json({ success: false, message: "You are not authorized to review this student's submission." });

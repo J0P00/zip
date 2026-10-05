@@ -860,7 +860,7 @@ export default function TeacherPortal({
   const filteredSubmissions = visibleSubmissions.filter(sub => {
     const score = Number(sub.teacherScore ?? sub.grade ?? sub.score ?? 0);
     const isReviewed = ['graded', 'reviewed', 'passed', 'failed'].includes(sub.reviewStatus || sub.status);
-    const isPending = ['pending', 'submitted'].includes(sub.status) || ['pending', 'submitted'].includes(sub.reviewStatus) || (!sub.reviewStatus && !sub.gradedAt);
+    const isPending = ['pending', 'pending_review', 'submitted'].includes(sub.status) || ['pending', 'pending_review', 'submitted'].includes(sub.reviewStatus || '') || (!sub.reviewStatus && !sub.gradedAt);
     const matchesSearch =
       sub.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       sub.challengeName.toLowerCase().includes(searchQuery.toLowerCase());

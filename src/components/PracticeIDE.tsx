@@ -109,7 +109,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     gradedAt: row.graded_at,
     gradedBy: row.graded_by_name || '',
     reviewStatus: row.review_status,
-    submissionStatus: row.review_status === 'graded' ? 'graded' : row.review_status === 'returned' ? 'returned' : row.review_status ? 'submitted' : undefined,
+    submissionStatus: row.review_status === 'graded' ? 'graded' : row.review_status === 'returned' ? 'returned' : row.review_status === 'pending_review' ? 'pending_review' : row.review_status ? 'submitted' : undefined,
     remedialRequired: row.remedial_required === null || row.remedial_required === undefined ? undefined : Boolean(row.remedial_required)
   });
 

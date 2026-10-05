@@ -387,7 +387,7 @@ const practiceSubmissionRowToPending = (row: any): PendingSubmission => {
   const autoScore = row.score === null || row.score === undefined ? undefined : Number(row.score);
   const teacherScore = row.teacher_score === null || row.teacher_score === undefined ? undefined : Number(row.teacher_score);
   const reviewStatus = String(row.review_status || row.submissionStatus || (teacherScore === undefined ? 'pending' : 'reviewed'));
-  const status: PendingSubmission['status'] = ['submitted', 'graded', 'returned', 'reviewed', 'passed', 'failed', 'reopened'].includes(reviewStatus)
+  const status: PendingSubmission['status'] = ['pending_review', 'submitted', 'graded', 'returned', 'reviewed', 'passed', 'failed', 'reopened'].includes(reviewStatus)
     ? reviewStatus as PendingSubmission['status']
     : 'pending';
 
@@ -1242,7 +1242,7 @@ export default function App() {
   };
 
   // Retrieve count of pending reviews for floating badge alerts
-  const needsGradingCount = pendingSubmissions.filter(s => s.status === 'pending').length;
+  const needsGradingCount = pendingSubmissions.filter(s => ['pending', 'pending_review', 'submitted'].includes(s.status) || ['pending', 'pending_review', 'submitted'].includes(s.reviewStatus || '')).length;
   const displayUser: AuthenticatedUser = currentUser ?? {
     name: persona === 'student' ? 'Student User' : persona === 'teacher' ? 'Teacher User' : 'Admin User',
     email: persona === 'student' ? 'student@oophub.edu' : persona === 'teacher' ? 'teacher@oophub.edu' : 'admin@oophub.edu',

@@ -261,7 +261,7 @@ export interface PendingSubmission {
   studentName: string;
   challengeName: string;
   submittedAt: string;
-  status: 'pending' | 'submitted' | 'graded' | 'returned' | 'reviewed' | 'passed' | 'failed' | 'reopened';
+  status: 'pending' | 'pending_review' | 'submitted' | 'graded' | 'returned' | 'reviewed' | 'passed' | 'failed' | 'reopened';
   code: string;
   grade?: number;
   feedback?: string;
