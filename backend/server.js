@@ -4433,8 +4433,14 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                     WHEN lt.total_lessons = 0 THEN 0
                     ELSE COALESCE(sm.overall_progress, 0)
                   END AS progress,
+                  COALESCE(sm.video_progress, 0) AS video_progress,
                   COALESCE(qm.quiz_average, 0) AS quiz_average,
                   COALESCE(pm.practice_average, 0) AS programming_score,
+                  ROUND((
+                    (COALESCE(sm.overall_progress, 0) * 0.40)
+                    + (COALESCE(qm.quiz_average, 0) * 0.30)
+                    + (COALESCE(pm.practice_average, 0) * 0.30)
+                  ))::int AS learning_score,
                   la.type AS activity_type,
                   la.action AS activity_action,
                   la.lesson_id AS activity_lesson_id,
@@ -4450,7 +4456,8 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                 LEFT JOIN latest_activity la ON la.student_id IN (u.id::text, u.user_id, u.email)
                 WHERE u.role = 'student'
                 GROUP BY u.id, s.student_number, s.course, s.year_level, s.section,
-                         lt.total_lessons, sm.completed_lessons, qm.quiz_average, pm.practice_average,
+                         lt.total_lessons, sm.completed_lessons, sm.overall_progress, sm.video_progress,
+                         qm.quiz_average, pm.practice_average,
                          la.type, la.action, la.lesson_id, la.lesson_title, la.lesson_sequence, la.timestamp
                 ORDER BY u.created_at DESC
             `).catch(async error => {
@@ -4468,6 +4475,11 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                         WHERE sp.student_user_id = u.id
                       )), 0)::int AS progress,
                       COALESCE(ROUND((
+                        SELECT AVG(sp.completion_percentage)
+                        FROM student_progress sp
+                        WHERE sp.student_user_id = u.id
+                      )), 0)::int AS video_progress,
+                      COALESCE(ROUND((
                         SELECT AVG(qa.percentage)
                         FROM quiz_attempts qa
                         WHERE qa.student_user_id = u.id
@@ -4477,6 +4489,23 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                         FROM practice_submissions ps
                         WHERE ps.student_id IN (u.id::text, u.user_id, u.email)
                       )), 0)::int AS programming_score,
+                      ROUND((
+                        (COALESCE(ROUND((
+                          SELECT AVG(sp.completion_percentage)
+                          FROM student_progress sp
+                          WHERE sp.student_user_id = u.id
+                        )), 0) * 0.40)
+                        + (COALESCE(ROUND((
+                          SELECT AVG(qa.percentage)
+                          FROM quiz_attempts qa
+                          WHERE qa.student_user_id = u.id
+                        )), 0) * 0.30)
+                        + (COALESCE(ROUND((
+                          SELECT AVG(COALESCE(ps.teacher_score, ps.score))
+                          FROM practice_submissions ps
+                          WHERE ps.student_id IN (u.id::text, u.user_id, u.email)
+                        )), 0) * 0.30)
+                      ))::int AS learning_score,
                       NULL::text AS activity_type,
                       NULL::text AS activity_action,
                       NULL::text AS activity_lesson_id,

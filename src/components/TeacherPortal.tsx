@@ -300,7 +300,7 @@ const mapBackendStudent = (user: AuthenticatedUser, results: StudentResultsData)
   const videoCompletion = Number(results.videoPercentage || 0);
   const quizScore = Number(results.averageQuizScore || 0);
   const practiceScore = Number(results.averagePracticeScore || 0);
-  const performanceIndex = Math.round((overallProgress + videoCompletion + quizScore + practiceScore) / 4);
+  const performanceIndex = Number(results.learningScore || 0);
   const learningStatus: LearningStatus =
     performanceIndex >= 100 ? 'Mastered' : performanceIndex >= 70 ? 'Completed' : performanceIndex > 0 ? 'In Progress' : 'At Risk';
 
@@ -497,7 +497,7 @@ export default function TeacherPortal({
           const quizScore = Number(row.quiz_average || 0);
           const practiceScore = Number(row.programming_score || 0);
           const lastActivity = formatMonitoringActivity(activity);
-          return withTopicProgress({
+          return {
             id: row.id,
             name: row.name,
             email: row.email,
@@ -511,11 +511,11 @@ export default function TeacherPortal({
             overallProgress: progress,
             moduleProgress: progress,
             topicProgress: progress,
-            videoCompletion: progress,
+            videoCompletion: Number(row.video_progress || 0),
             quizScore,
             practiceScore,
             challengesCompleted: practiceScore > 0 ? 1 : 0,
-            performanceIndex: Math.round((progress + quizScore + practiceScore) / 3),
+            performanceIndex: Number(row.learning_score || 0),
             learningStatus: progress >= 100 ? 'Mastered' : progress > 0 ? 'In Progress' : 'At Risk',
             lastActivity,
             moduleCompletion: progress,
@@ -524,7 +524,7 @@ export default function TeacherPortal({
             topics: [],
             swingTopics: [],
             swing: { video: 0, assessment: 0, ide: 0, miniProject: 0 }
-          }, 0);
+          };
         });
 
         if (!cancelled) {
@@ -1575,7 +1575,7 @@ export default function TeacherPortal({
                       <tr>
                         <th className="px-4 py-3">Student</th>
                         <th className="px-3 py-3">Section</th>
-                        <th className="px-3 py-3">Progress</th>
+                        <th className="px-3 py-3">Overall Progress</th>
                         <th className="px-3 py-3">Quiz</th>
                         <th className="px-3 py-3">Practice</th>
                         <th className="px-3 py-3">Status</th>
@@ -1642,7 +1642,7 @@ export default function TeacherPortal({
                             <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span>
                           </div>
                           <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">
-                            <span><b className="block text-slate-400">Progress</b><strong>{student.overallProgress}%</strong></span>
+                            <span><b className="block text-slate-400">Overall</b><strong>{student.overallProgress}%</strong></span>
                             <span><b className="block text-slate-400">Quiz</b><strong>{student.quizScore}%</strong></span>
                             <span><b className="block text-slate-400">Practice</b><strong>{student.practiceScore}%</strong></span>
                           </div>
