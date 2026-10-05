@@ -742,7 +742,7 @@ const initializeDatabase = async () => {
           teacher_feedback TEXT DEFAULT '',
           graded_by UUID REFERENCES users(id) ON DELETE SET NULL,
           graded_at TIMESTAMPTZ,
-          review_status TEXT NOT NULL DEFAULT 'pending',
+          review_status TEXT NOT NULL DEFAULT 'pending_review',
           reopened_by UUID REFERENCES users(id) ON DELETE SET NULL,
           reopened_at TIMESTAMPTZ
         );
@@ -750,7 +750,8 @@ const initializeDatabase = async () => {
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS teacher_feedback TEXT DEFAULT '';
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS graded_by UUID REFERENCES users(id) ON DELETE SET NULL;
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS graded_at TIMESTAMPTZ;
-        ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'pending';
+        ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'pending_review';
+        ALTER TABLE practice_submissions ALTER COLUMN review_status SET DEFAULT 'pending_review';
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_by UUID REFERENCES users(id) ON DELETE SET NULL;
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_at TIMESTAMPTZ;
         ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS remedial_required BOOLEAN DEFAULT FALSE;
