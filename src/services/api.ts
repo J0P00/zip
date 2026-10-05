@@ -254,6 +254,19 @@ export const adminApi = {
   reports: () => apiRequest<{ success: boolean; data: any }>('/api/admin/reports')
 };
 
+export const monitoringApi = {
+  list: () => apiRequest<{ success: boolean; data: any[] }>('/api/monitoring-requests'),
+  create: (studentId: string) => apiRequest<{ success: boolean; data: any }>('/api/monitoring-requests', {
+    method: 'POST',
+    body: JSON.stringify({ studentId })
+  }),
+  update: (id: string, status: 'pending' | 'accepted' | 'rejected') =>
+    apiRequest<{ success: boolean; data: any }>(`/api/monitoring-requests/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    })
+};
+
 export const recommendationApi = {
   list: (studentId?: string, token?: string) => {
     const query = studentId ? `?studentId=${encodeURIComponent(studentId)}` : '';

@@ -413,6 +413,20 @@ WHERE compile_status IN ('failed', 'runtime_error')
 CREATE INDEX IF NOT EXISTS idx_practice_submissions_student ON practice_submissions(student_id, submitted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_practice_submissions_challenge ON practice_submissions(challenge_id);
 
+CREATE TABLE IF NOT EXISTS monitoring_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(teacher_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS idx_monitoring_requests_teacher_status
+  ON monitoring_requests(teacher_id, status);
+CREATE INDEX IF NOT EXISTS idx_monitoring_requests_student_status
+  ON monitoring_requests(student_id, status);
+
 CREATE TABLE IF NOT EXISTS recommendation_history (
   id TEXT PRIMARY KEY,
   student_id TEXT NOT NULL,

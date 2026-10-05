@@ -4086,6 +4086,96 @@ app.delete("/api/practice-challenges/:id", requireAuth, requireRole(["admin", "t
     }
 });
 
+app.get("/api/monitoring-requests", requireAuth, requireRole(["admin", "teacher", "student"]), async (req, res, next) => {
+    try {
+        const result = await pool.query(`
+            SELECT mr.id, mr.status,
+                   teacher.id AS teacher_id, teacher.name AS teacher_name, teacher.email AS teacher_email,
+                   student.id AS student_user_id, student.user_id AS student_public_id,
+                   student.name AS student_name, student.email AS student_email
+            FROM monitoring_requests mr
+            JOIN users teacher ON teacher.id = mr.teacher_id
+            JOIN users student ON student.id = mr.student_id
+            WHERE $1 = 'admin' OR mr.teacher_id = $2 OR mr.student_id = $2
+            ORDER BY mr.created_at DESC
+        `, [req.authUser.role, req.authUser.id]);
+        res.json({
+            success: true,
+            data: result.rows.map(row => ({
+                id: row.id,
+                teacherEmail: row.teacher_email,
+                teacherName: row.teacher_name,
+                studentEmail: row.student_email,
+                studentName: row.student_name,
+                studentId: row.student_public_id || row.student_user_id,
+                status: row.status
+            }))
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/monitoring-requests", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
+    try {
+        const identifier = cleanText(req.body?.studentId || req.body?.studentEmail || "", 255);
+        if (!identifier) return res.status(400).json({ success: false, message: "A student ID or email is required." });
+        const student = await pool.query(`
+            SELECT id, user_id, name, email
+            FROM users
+            WHERE role = 'student'
+              AND (id::text = $1 OR user_id = $1 OR LOWER(email) = LOWER($1))
+            LIMIT 1
+        `, [identifier]);
+        if (!student.rowCount) return res.status(404).json({ success: false, message: "Student not found." });
+        const result = await pool.query(`
+            INSERT INTO monitoring_requests (teacher_id, student_id, status)
+            VALUES ($1, $2, 'pending')
+            ON CONFLICT (teacher_id, student_id) DO UPDATE SET
+              status = CASE WHEN monitoring_requests.status = 'rejected' THEN 'pending' ELSE monitoring_requests.status END,
+              updated_at = NOW()
+            RETURNING id, status
+        `, [req.authUser.id, student.rows[0].id]);
+        res.status(201).json({
+            success: true,
+            data: {
+                id: result.rows[0].id,
+                teacherEmail: req.authUser.email,
+                teacherName: req.authUser.name || req.authUser.email,
+                studentEmail: student.rows[0].email,
+                studentName: student.rows[0].name,
+                studentId: student.rows[0].user_id || student.rows[0].id,
+                status: result.rows[0].status
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.patch("/api/monitoring-requests/:id", requireAuth, requireRole(["teacher", "admin", "student"]), async (req, res, next) => {
+    try {
+        const status = cleanText(req.body?.status || "", 20);
+        if (!["pending", "accepted", "rejected"].includes(status)) {
+            return res.status(400).json({ success: false, message: "Invalid monitoring request status." });
+        }
+        const result = await pool.query(`
+            UPDATE monitoring_requests
+            SET status = $3, updated_at = NOW()
+            WHERE id = $1 AND (
+              $2 = 'admin'
+              OR teacher_id = $4
+              OR (student_id = $4 AND status = 'pending')
+            )
+            RETURNING id, status
+        `, [req.params.id, req.authUser.role, status, req.authUser.id]);
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Monitoring request not found." });
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]), async (_req, res, next) => {
     try {
         const [students, teachers] = await Promise.all([
@@ -4895,10 +4985,14 @@ console.log('[submission-service] runtime: Render Node.js + PostgreSQL + configu
 initializeDatabase()
     .then(async () => {
         try {
-            await seedDemoUsers();
             await seedLessons();
             await seedPracticeChallenges();
-            await seedCompletedDemoStudent();
+            if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_SEED === 'true') {
+                await seedDemoUsers();
+                await seedCompletedDemoStudent();
+            } else {
+                console.log("Production mode: demo users and demo submissions are not seeded.");
+            }
             console.log("Database seeded successfully.");
         } catch (seedErr) {
             console.error("Database seeding failed:", seedErr);

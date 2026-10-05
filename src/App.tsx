@@ -89,7 +89,7 @@ import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
 import AdminVideoManager from './components/AdminVideoManager';
 import AdminTermsManager from './components/AdminTermsManager';
-import { appApi, authApi, getAuthToken, isDemoEmail, notificationApi, practiceApi, progressApi, recommendationApi, setAuthToken, userApi } from './services/api';
+import { appApi, authApi, getAuthToken, isDemoEmail, monitoringApi, notificationApi, practiceApi, progressApi, recommendationApi, setAuthToken, userApi } from './services/api';
 import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
 import { getCanonicalStudentId, recommendationBelongsToStudent } from './services/identity';
 const NEW_STUDENT_PROGRESS = {
@@ -740,7 +740,7 @@ export default function App() {
   }, [currentUser?.id, currentUser?.token]);
 
   useEffect(() => {
-    if (!currentUser || !['teacher', 'admin'].includes(currentUser.role)) return;
+    if (!currentUser || !['teacher', 'admin', 'student'].includes(currentUser.role)) return;
     let cancelled = false;
     practiceApi.listSubmissions()
       .then(response => {
@@ -760,47 +760,14 @@ export default function App() {
   );
 
   // Monitoring Connection System State
-  const [monitoringRequests, setMonitoringRequests] = useState<MonitoringRequest[]>(() => {
-    try {
-      const saved = localStorage.getItem('oophub_monitoring_requests');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    
-    // Seed initial accepted connections for Elena Vance (demo teacher)
-    return [
-      {
-        id: 'req_1',
-        teacherEmail: 'elena@oophub.edu',
-        teacherName: 'Dr. Elena Vance',
-        studentEmail: 'dmitry@oophub.edu',
-        studentName: 'Dmitry Vance (Alex Mercer)',
-        studentId: 'STU-0001',
-        status: 'accepted'
-      },
-      {
-        id: 'req_2',
-        teacherEmail: 'elena@oophub.edu',
-        teacherName: 'Dr. Elena Vance',
-        studentEmail: 'rodriguez@oophub.edu',
-        studentName: 'S. Rodriguez',
-        studentId: 'STU-0002',
-        status: 'accepted'
-      },
-      {
-        id: 'req_3',
-        teacherEmail: 'elena@oophub.edu',
-        teacherName: 'Dr. Elena Vance',
-        studentEmail: 'volkov@oophub.edu',
-        studentName: 'Dmitry Volkov',
-        studentId: 'STU-0003',
-        status: 'accepted'
-      }
-    ];
-  });
+  const [monitoringRequests, setMonitoringRequests] = useState<MonitoringRequest[]>([]);
 
   useEffect(() => {
-    localStorage.setItem('oophub_monitoring_requests', JSON.stringify(monitoringRequests));
-  }, [monitoringRequests]);
+    if (!currentUser || !['teacher', 'admin'].includes(currentUser.role)) return;
+    monitoringApi.list()
+      .then(response => setMonitoringRequests(response.data))
+      .catch(error => console.warn('Unable to load monitoring relationships from backend:', error));
+  }, [currentUser?.id, currentUser?.role, currentUser?.token]);
 
   // Video Management & Progress Handlers
   const addNotification = (title: string, message: string, type: string) => {
@@ -1030,34 +997,29 @@ export default function App() {
         return { success: false, message: `A pending request is already sent to ${found.name}.` };
       }
       // If rejected, allow re-sending by transitioning back to pending
-      setMonitoringRequests(prev => prev.map(r => r.id === existing.id ? { ...r, status: 'pending' } : r));
+      const response = await monitoringApi.update(existing.id, 'pending');
+      setMonitoringRequests(prev => prev.map(r => r.id === existing.id ? response.data : r));
       return { success: true, message: `Re-sent monitoring request to ${found.name}.` };
     }
     
-    const newRequest: MonitoringRequest = {
-      id: `req_${Date.now()}`,
-      teacherEmail: currentUser.email,
-      teacherName: currentUser.name,
-      studentEmail: found.email,
-      studentName: found.name,
-      studentId: found.userId,
-      status: 'pending'
-    };
-    
-    setMonitoringRequests(prev => [...prev, newRequest]);
+    const response = await monitoringApi.create(found.userId || found.email);
+    setMonitoringRequests(prev => [response.data, ...prev]);
     return { success: true, message: `Monitoring request successfully sent to ${found.name}!` };
   };
 
-  const handleRemoveMonitoringConnection = (requestId: string) => {
-    setMonitoringRequests(prev => prev.filter(req => req.id !== requestId));
-  };
-
-  const handleAcceptMonitoringRequest = (requestId: string) => {
-    setMonitoringRequests(prev => prev.map(req => req.id === requestId ? { ...req, status: 'accepted' } : req));
-  };
-
-  const handleRejectMonitoringRequest = (requestId: string) => {
+  const handleRemoveMonitoringConnection = async (requestId: string) => {
+    await monitoringApi.update(requestId, 'rejected');
     setMonitoringRequests(prev => prev.map(req => req.id === requestId ? { ...req, status: 'rejected' } : req));
+  };
+
+  const handleAcceptMonitoringRequest = async (requestId: string) => {
+    const response = await monitoringApi.update(requestId, 'accepted');
+    setMonitoringRequests(prev => prev.map(req => req.id === requestId ? { ...req, ...response.data } : req));
+  };
+
+  const handleRejectMonitoringRequest = async (requestId: string) => {
+    const response = await monitoringApi.update(requestId, 'rejected');
+    setMonitoringRequests(prev => prev.map(req => req.id === requestId ? { ...req, ...response.data } : req));
   };
 
 
