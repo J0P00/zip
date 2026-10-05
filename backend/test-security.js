@@ -247,15 +247,16 @@ public class Main {
     assert.strictEqual(isPracticeUnlocked(true, 100), true, '100% quiz should unlock practice');
   });
 
-  test('Lesson N+1 unlocks only when Lesson N is fully completed (Practice passed)', () => {
+  test('Lesson N+1 unlocks when Lesson N video and assessment are complete', () => {
     function isLessonUnlocked(lessonIndex, previousLessonProgress) {
       if (lessonIndex === 0) return true; // First lesson always unlocked
-      return Boolean(previousLessonProgress && previousLessonProgress.completed);
+      return Boolean(previousLessonProgress && previousLessonProgress.videoCompleted && previousLessonProgress.assessmentPassed);
     }
 
     assert.strictEqual(isLessonUnlocked(0, null), true, 'Lesson 1 is always unlocked');
-    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: true, assessmentPassed: true, completed: false }), false, 'Lesson 2 is locked if Lesson 1 practice is incomplete');
-    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: true, assessmentPassed: true, completed: true }), true, 'Lesson 2 is unlocked when Lesson 1 practice is completed');
+    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: true, assessmentPassed: true, practiceCompleted: false }), true, 'Lesson 2 unlocks when Lesson 1 practice is incomplete');
+    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: true, assessmentPassed: false, practiceCompleted: true }), false, 'Lesson 2 remains locked when Lesson 1 assessment is incomplete');
+    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: false, assessmentPassed: true, practiceCompleted: true }), false, 'Lesson 2 remains locked when Lesson 1 video is incomplete');
   });
 
   console.log('\n====================================================');

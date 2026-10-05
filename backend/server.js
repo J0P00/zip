@@ -1984,7 +1984,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
         practiceCompleted: Boolean(practiceCompleted),
         assessmentUnlocked: videoCompleted,
         practiceUnlocked: Boolean(videoCompleted && assessmentPassed),
-        nextLessonUnlocked: Boolean(videoCompleted && assessmentPassed && practiceCompleted),
+        nextLessonUnlocked: Boolean(videoCompleted && assessmentPassed),
         completed: Boolean(videoCompleted && assessmentPassed && practiceCompleted)
     };
 };
@@ -1999,10 +1999,16 @@ const getLessonAccessState = async (studentId, lessonId) => {
     );
     if (!previousResult.rowCount) return { canAccess: false, reason: "Complete the previous lesson requirements first.", current };
     const previous = await getLessonEvidence(studentId, previousResult.rows[0].id);
-    const previousAccessComplete = Boolean(previous?.completed);
-    return previousAccessComplete
+    const previousLessonUnlocked = Boolean(previous?.videoCompleted && previous?.assessmentPassed);
+    return previousLessonUnlocked
         ? { canAccess: true, current }
-        : { canAccess: false, reason: "Complete the previous lesson video, assessment, and practice first.", current };
+        : {
+            canAccess: false,
+            reason: !previous?.videoCompleted
+                ? "Complete the previous lesson video to at least 95% first."
+                : "Pass the previous lesson assessment before continuing.",
+            current,
+        };
 };
 
 const classifyEventSeverity = (eventType) => {

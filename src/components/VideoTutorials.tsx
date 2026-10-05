@@ -58,10 +58,9 @@ const getPrerequisiteMessage = (lesson: VideoLesson, allLessons: VideoLesson[], 
   const previous = allLessons.find(item => item.sequence === lesson.sequence - 1);
   if (!previous) return 'Complete the previous lesson requirements first.';
   const previousTopic = getTopic(studentResults, previous.id);
-  if (previousTopic?.lessonCompleted) return '';
   if (!previousTopic?.videoCompleted || (previousTopic.videoPercentage || 0) < 95) return `Complete the ${previous.title} video to continue.`;
   if (!previousTopic?.quizPassed) return `Pass the ${previous.title} assessment with at least ${ASSESSMENT_PASSING_SCORE}%.`;
-  return `Complete the ${previous.title} practice before continuing.`;
+  return '';
 };
 
 export default function VideoTutorials({ currentUser, lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress, studentResults = null }: VideoTutorialsProps) {
