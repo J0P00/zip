@@ -58,8 +58,9 @@ const getPrerequisiteMessage = (lesson: VideoLesson, allLessons: VideoLesson[], 
   const previous = allLessons.find(item => item.sequence === lesson.sequence - 1);
   if (!previous) return 'Complete the previous lesson requirements first.';
   const previousTopic = getTopic(studentResults, previous.id);
-  if (!previousTopic?.videoCompleted || (previousTopic.videoPercentage || 0) < 95) return `Complete the ${previous.title} video to continue.`;
-  if (!previousTopic?.quizPassed) return `Pass the ${previous.title} assessment with at least ${ASSESSMENT_PASSING_SCORE}%.`;
+  if (!previousTopic?.lessonCompleted) {
+    return previousTopic?.accessReason || `Complete the ${previous.title} lesson, including its practice, before continuing.`;
+  }
   return '';
 };
 
@@ -74,10 +75,10 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     const challenge = PRACTICE_CHALLENGES.find(item => item.lessonId === lesson.id);
     const submission = challenge ? submissionDb[`${studentKey}:${challenge.id}`] : undefined;
     const topic = getTopic(studentResults, lesson.id);
-    const completed = topic
-      ? topic.lessonCompleted
-      : Boolean(watch?.completed && watch.completionPercentage >= 95 && assessment && quizDb[assessment.id]?.passed && (!challenge || (submission?.compileStatus === 'success' && Number(submission.score || 0) >= challenge.passingScore)));
-    const access = getPrerequisiteMessage(lesson, sourceLessons, studentResults) ? 'locked' : 'active';
+    const completed = Boolean(topic?.lessonCompleted);
+    const access = topic
+      ? (topic.lessonUnlocked ? 'active' : 'locked')
+      : (lesson.sequence === 1 ? 'active' : 'locked');
     return {
       ...lesson,
       status: completed ? 'completed' as const : access as VideoLesson['status'],

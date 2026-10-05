@@ -5,7 +5,7 @@ import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson } fro
 import { getPracticeChallengeForLesson, PRACTICE_CHALLENGES } from '../data/practiceChallenges';
 import RecommendationCard from './RecommendationCard';
 import SecureWatermark from './SecureWatermark';
-import { practiceApi, progressApi } from '../services/api';
+import { lessonApi, practiceApi, progressApi } from '../services/api';
 import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 
 interface PracticeIDEProps {
@@ -43,6 +43,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
   const [watchDb, setWatchDb] = useState<WatchDb>({});
   const [quizDb, setQuizDb] = useState<QuizDb>({});
   const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
+  const [accessDb, setAccessDb] = useState<Record<string, { canAccess: boolean; reason?: string | null; current?: { practiceUnlocked?: boolean; videoCompleted?: boolean; assessmentPassed?: boolean } }>>({});
   const [draftDb, setDraftDb] = useState<DraftDb>(() => getStoredJson(DRAFT_KEY, {}));
   const [activeChallengeId, setActiveChallengeId] = useState(() => PRACTICE_CHALLENGES[0].id);
   const activeChallenge = PRACTICE_CHALLENGES.find(challenge => challenge.id === activeChallengeId) || PRACTICE_CHALLENGES[0];
@@ -118,11 +119,17 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     Promise.all([
       progressApi.getVideoProgress(currentUser.id || '', currentUser.token),
       progressApi.getQuizAttempts(currentUser.id || '', currentUser.token),
-      practiceApi.listMine()
-    ]).then(([videoResponse, quizResponse, submissionResponse]) => {
+      practiceApi.listMine(),
+      ...OOP_COURSE_LESSONS.map(lesson => lessonApi.getAccess(lesson.id, currentUser.token))
+    ]).then(([videoResponse, quizResponse, submissionResponse, ...accessResponses]) => {
       if (!mounted) return;
       setWatchDb(videoResponse.data.reduce((acc: WatchDb, row: any) => ({ ...acc, [row.video_id]: { lessonId: row.video_id, completionPercentage: Number(row.completion_percentage || 0), completed: Boolean(row.completed) } }), {}));
       setQuizDb(quizResponse.data.reduce((acc: QuizDb, row: any) => ({ ...acc, [row.assessment_id]: { assessmentId: row.assessment_id, lessonId: row.lesson_id || '', percentage: Number(row.percentage || 0), passed: Boolean(row.passed) } }), {}));
+      setAccessDb(accessResponses.reduce((acc: Record<string, any>, response: any) => {
+        const lessonId = response.data?.current?.lessonId;
+        if (lessonId) acc[lessonId] = response.data;
+        return acc;
+      }, {}));
       const remote = submissionResponse.data.reduce((acc: SubmissionDb, row: any) => {
         const mapped = mapBackendSubmission(row);
         const key = `${studentKey}:${mapped.challengeId}`;
@@ -140,21 +147,14 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
   }, [activeChallenge.id, currentUser.email, currentUser.id, currentUser.name, currentUser.section, currentUser.token, currentUser.userId]);
 
   const lockReason = useMemo(() => {
-    const currentLessonSequence = activeLesson?.sequence || 1;
-    if (currentLessonSequence > 1) {
-      const previousLesson = OOP_COURSE_LESSONS.find(lesson => lesson.sequence === currentLessonSequence - 1);
-      const previousAssessment = previousLesson && OOP_ASSESSMENTS.find(assessment => assessment.lessonId === previousLesson.id);
-      if (!previousLesson || !watchDb[previousLesson.id]?.completed || watchDb[previousLesson.id].completionPercentage < 95 || !previousAssessment || !quizDb[previousAssessment.id]?.passed) {
-        return 'Practice IDE is locked until the previous lesson video is completed and its assessment is passed.';
-      }
-    }
-    const watchRecord = watchDb[activeChallenge.lessonId];
-    const quizAttempt = quizDb[activeChallenge.assessmentId];
-    if (!watchRecord?.completed || watchRecord.completionPercentage < 95) return 'Practice IDE is locked until the lesson video is completed at 95% or higher.';
-    if (!quizAttempt) return 'Practice IDE is locked until the assessment is completed.';
-    if (!quizAttempt.passed || quizAttempt.percentage < ASSESSMENT_PASSING_SCORE) return `Practice IDE is locked until the quiz score is ${ASSESSMENT_PASSING_SCORE}% or higher.`;
+    const access = accessDb[activeChallenge.lessonId];
+    if (!access) return 'Checking authoritative lesson access...';
+    if (!access.canAccess) return access.reason || 'Practice IDE is locked until the previous lesson is fully completed.';
+    if (!access.current?.videoCompleted) return 'Practice IDE is locked until the lesson video is completed at 95% or higher.';
+    if (!access.current?.assessmentPassed) return `Practice IDE is locked until the quiz score is ${ASSESSMENT_PASSING_SCORE}% or higher.`;
+    if (!access.current?.practiceUnlocked) return 'Practice IDE is locked until the lesson practice becomes available.';
     return '';
-  }, [activeChallenge.assessmentId, activeChallenge.lessonId, quizDb, watchDb, activeLesson]);
+  }, [accessDb, activeChallenge.lessonId]);
 
   const isLocked = Boolean(lockReason) || Boolean(submitted && submitted.submissionStatus !== 'returned');
   const selectChallenge = (challengeId: string) => {
@@ -280,7 +280,8 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
               const lessonChallenge = getPracticeChallengeForLesson(challenge.lessonId);
               const challengeKey = `${studentKey}:${challenge.id}`;
               const status = submissionDb[challengeKey]?.submissionStatus;
-              const done = status === 'submitted' || status === 'graded';
+              const lessonAccess = accessDb[challenge.lessonId];
+              const done = Boolean(lessonAccess?.current?.practiceUnlocked && (status === 'submitted' || status === 'graded'));
               return (
                 <button
                   key={challenge.id}
@@ -291,7 +292,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
                   <span className="block font-mono text-[10px] text-slate-400">Topic {index + 1}</span>
                   <span className="block truncate">{challenge.title}</span>
                   <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[9px] uppercase ${done ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
-                    {status === 'graded' ? 'Graded' : status === 'submitted' ? 'Waiting for review' : status === 'returned' ? 'Returned for revision' : 'Available when unlocked'}
+                    {!lessonAccess?.canAccess ? 'Locked until previous lesson is completed' : status === 'graded' ? 'Graded' : status === 'submitted' ? 'Waiting for review' : status === 'returned' ? 'Returned for revision' : lessonAccess?.current?.practiceUnlocked ? 'Available' : 'Locked until video and assessment are complete'}
                   </span>
                 </button>
               );

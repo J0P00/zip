@@ -54,6 +54,11 @@ export interface StudentTopicResult {
   quizPercentage: number | null;
   quizPassed: boolean | null;
   practiceScore: number | null;
+  practiceCompleted?: boolean;
+  lessonUnlocked?: boolean;
+  assessmentUnlocked?: boolean;
+  practiceUnlocked?: boolean;
+  accessReason?: string | null;
   lessonCompleted: boolean;
 }
 

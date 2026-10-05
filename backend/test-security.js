@@ -148,7 +148,7 @@ public class Main {
   // ----------------------------------------------------
   console.log('\n--- Group 3: Server Assessment Scoring Engine ---');
 
-  test('Accurate scoring when all answers are correct (100% >= 80% pass threshold)', () => {
+  test('Accurate scoring when all answers are correct (100% >= 60% pass threshold)', () => {
     const questions = OOP_PARSED_QUESTIONS['oop_lesson_1'];
     const studentAnswers = {};
     questions.forEach(q => {
@@ -163,13 +163,13 @@ public class Main {
     });
 
     const score = Math.round((correctCount / questions.length) * 100);
-    const passed = score >= 80;
+    const passed = score >= 60;
 
     assert.strictEqual(score, 100);
     assert.strictEqual(passed, true);
   });
 
-  test('Fails assessment when score is below 80% pass threshold', () => {
+  test('Fails assessment when score is below 60% pass threshold', () => {
     const questions = OOP_PARSED_QUESTIONS['oop_lesson_1'];
     const studentAnswers = {}; // No correct answers
 
@@ -181,7 +181,7 @@ public class Main {
     });
 
     const score = Math.round((correctCount / questions.length) * 100);
-    const passed = score >= 80;
+    const passed = score >= 60;
 
     assert.strictEqual(score, 0);
     assert.strictEqual(passed, false);
@@ -236,27 +236,39 @@ public class Main {
     assert.strictEqual(isAssessmentUnlocked(100), true, '100% video should unlock assessment');
   });
 
-  test('Practice IDE unlocks only when Assessment is passed (score >= 80%)', () => {
+  test('Practice IDE unlocks only when Assessment is passed (configured threshold)', () => {
     function isPracticeUnlocked(assessmentPassed, quizScore) {
-      return Boolean(assessmentPassed) || Number(quizScore || 0) >= 80;
+      return Boolean(assessmentPassed) || Number(quizScore || 0) >= 60;
     }
 
-    assert.strictEqual(isPracticeUnlocked(false, 70), false, '70% quiz should lock practice');
-    assert.strictEqual(isPracticeUnlocked(false, 79), false, '79% quiz should lock practice');
-    assert.strictEqual(isPracticeUnlocked(true, 80), true, '80% quiz should unlock practice');
+    assert.strictEqual(isPracticeUnlocked(false, 59), false, '59% quiz should lock practice');
+    assert.strictEqual(isPracticeUnlocked(false, 60), true, '60% quiz should unlock practice');
     assert.strictEqual(isPracticeUnlocked(true, 100), true, '100% quiz should unlock practice');
   });
 
-  test('Lesson N+1 unlocks when Lesson N video and assessment are complete', () => {
+  test('Lesson N+1 requires Lesson N full completion', () => {
     function isLessonUnlocked(lessonIndex, previousLessonProgress) {
-      if (lessonIndex === 0) return true; // First lesson always unlocked
-      return Boolean(previousLessonProgress && previousLessonProgress.videoCompleted && previousLessonProgress.assessmentPassed);
+      if (lessonIndex === 0) return true;
+      return Boolean(previousLessonProgress?.videoCompleted && previousLessonProgress?.assessmentPassed && previousLessonProgress?.practiceCompleted && previousLessonProgress?.completed);
     }
 
-    assert.strictEqual(isLessonUnlocked(0, null), true, 'Lesson 1 is always unlocked');
-    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: true, assessmentPassed: true, practiceCompleted: false }), true, 'Lesson 2 unlocks when Lesson 1 practice is incomplete');
-    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: true, assessmentPassed: false, practiceCompleted: true }), false, 'Lesson 2 remains locked when Lesson 1 assessment is incomplete');
-    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: false, assessmentPassed: true, practiceCompleted: true }), false, 'Lesson 2 remains locked when Lesson 1 video is incomplete');
+    assert.strictEqual(isLessonUnlocked(0, null), true, 'New student can access Lesson 1');
+    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: false, assessmentPassed: false, practiceCompleted: false, completed: false }), false, 'Video incomplete keeps Lesson 2 locked');
+    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: true, assessmentPassed: false, practiceCompleted: false, completed: false }), false, 'Video-only completion keeps Lesson 2 locked');
+    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: true, assessmentPassed: true, practiceCompleted: false, completed: false }), false, 'Assessment pass without practice keeps Lesson 2 locked');
+    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: true, assessmentPassed: true, practiceCompleted: false, completed: false, historicalPracticeSubmission: true }), false, 'Historical practice submission cannot bypass completion');
+    assert.strictEqual(isLessonUnlocked(1, { videoCompleted: true, assessmentPassed: true, practiceCompleted: true, completed: true }), true, 'Full Lesson 1 completion unlocks Lesson 2');
+    assert.strictEqual(isLessonUnlocked(2, { videoCompleted: true, assessmentPassed: true, practiceCompleted: true, completed: true }), true, 'A fully completed preceding lesson unlocks the next lesson');
+  });
+
+test('Demo progress remains student-scoped', () => {
+    const progressByStudent = {
+      'demo-student-id': { completed: true },
+      'normal-student-id': { completed: false }
+    };
+    const getCompletion = studentId => Boolean(progressByStudent[studentId]?.completed);
+    assert.strictEqual(getCompletion('demo-student-id'), true, 'Demo reads its own progress');
+    assert.strictEqual(getCompletion('normal-student-id'), false, 'Normal students do not inherit demo progress');
   });
 
   console.log('\n====================================================');

@@ -103,7 +103,7 @@ export default function StudentDashboard({
   const oopComplete = Boolean(studentResults?.oopComplete);
   const lessonAccessComplete = (lessonId: string) => {
     const topic = studentResults?.oopTopics?.find(item => item.id === lessonId);
-    return Boolean(topic?.videoCompleted && topic?.quizPassed);
+    return Boolean(topic?.lessonCompleted);
   };
   const nextLesson = OOP_COURSE_LESSONS.find(lesson => !lessonAccessComplete(lesson.id)) || OOP_COURSE_LESSONS[OOP_COURSE_LESSONS.length - 1];
   const currentLesson = nextLesson;
@@ -125,7 +125,7 @@ export default function StudentDashboard({
     ? { submittedAt: '' }
     : null;
   const practiceScore = Number(currentTopicEvidence?.practiceScore || 0);
-  const practiceUnlocked = Boolean(currentTopicEvidence?.videoCompleted && currentTopicEvidence?.quizPassed);
+  const practiceUnlocked = Boolean(currentTopicEvidence?.practiceUnlocked);
   const performanceIndex = studentResults?.learningScore ?? 0;
   const learningState = studentResults?.learningState ?? 'BEGINNER';
   const learningStateClass = learningState === 'MASTERED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : learningState === 'DEVELOPING' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-sky-100 text-sky-800 border border-sky-200';
@@ -167,10 +167,10 @@ export default function StudentDashboard({
       let status = 'Ready Now';
       if (attempt && !attempt.quizPassed) {
         status = 'Retry';
-      } else if (previousLesson && !(previousTopic?.videoCompleted && previousTopic?.quizPassed)) {
-        status = !previousTopic?.videoCompleted
-          ? `Complete Lesson ${previousLesson.sequence} video`
-          : `Pass Lesson ${previousLesson.sequence} assessment`;
+      } else if (currentTopic && !currentTopic.lessonUnlocked) {
+        status = currentTopic.accessReason || `Complete the previous lesson before Lesson ${lesson?.sequence ?? ''}`;
+      } else if (currentTopic && !currentTopic.assessmentUnlocked) {
+        status = `Complete Lesson ${lesson?.sequence ?? ''} video`;
       } else if (lesson && !currentTopic?.videoCompleted) {
         status = 'Complete video first';
       }

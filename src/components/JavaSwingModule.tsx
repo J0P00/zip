@@ -91,7 +91,6 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [videoAttempt, setVideoAttempt] = useState(0);
-
   const activeLesson = JAVA_SWING_LESSONS.find(lesson => lesson.id === activeLessonId) || JAVA_SWING_LESSONS[0];
   const activeAssessment = JAVA_SWING_ASSESSMENTS.find(item => item.lessonId === activeLesson.id) || JAVA_SWING_ASSESSMENTS[0];
   const activeExercise = JAVA_SWING_EXERCISES.find(item => item.lessonId === activeLesson.id) || JAVA_SWING_EXERCISES[0];

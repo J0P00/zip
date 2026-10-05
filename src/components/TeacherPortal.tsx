@@ -334,7 +334,7 @@ const mapBackendStudent = (user: AuthenticatedUser, results: StudentResultsData)
       assessment: t.quizPercentage ?? 0,
       ideStatus: t.lessonCompleted ? 'Passed' : t.practiceScore !== null && t.practiceScore >= 70 ? 'Passed' : t.practiceScore !== null ? 'In Review' : t.attempted ? 'In Progress' : 'Not Started',
       completion: t.lessonCompleted ? 100 : Math.round(((t.videoPercentage || 0) + (t.quizPercentage || 0) + (t.practiceScore || 0)) / 3),
-      unlocked: t.sequence <= 1 || t.attempted || t.lessonCompleted,
+      unlocked: Boolean(t.lessonUnlocked),
       timeSpent: t.attempted ? 'Active' : '--'
     })),
     swingTopics: (results.swingTopics || []).map(t => ({
@@ -529,7 +529,7 @@ export default function TeacherPortal({
 
         if (!cancelled) {
           setBackendStudents(monitoringStudents);
-          setSelectedStudentId(currentId => monitoringStudents.some(student => student.id === currentId) ? currentId : monitoringStudents[0]?.id || currentId);
+          setSelectedStudentId(currentId => monitoringStudents.some((student: LiveStudent) => student.id === currentId) ? currentId : monitoringStudents[0]?.id || currentId);
         }
       })
       .catch(error => {

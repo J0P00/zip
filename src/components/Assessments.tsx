@@ -47,6 +47,7 @@ const getAssessmentLockedReason = (lessonId: string, evidenceDb: Record<string, 
 
   const evidence = evidenceDb[lessonId];
   if (!evidenceLoaded || !evidence) return 'Checking lesson video progress...';
+  if (!evidence.lessonUnlocked) return evidence.accessReason || 'Complete the previous lesson, including its practice, before continuing.';
   return evidence.assessmentUnlocked ? '' : 'Watch at least 95% of this lesson video first.';
 };
 
@@ -105,6 +106,8 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
             acc[evidenceKey] = {
               ...evidence,
               // canStart is the backend-authoritative availability decision.
+              lessonUnlocked: Boolean(accessResponse.data.canAccess),
+              accessReason: accessResponse.data.reason || null,
               assessmentUnlocked: Boolean(accessResponse.data.canStart)
             };
           }

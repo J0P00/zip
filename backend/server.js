@@ -1986,7 +1986,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
         practiceCompleted: Boolean(practiceCompleted),
         assessmentUnlocked: videoCompleted,
         practiceUnlocked: Boolean(videoCompleted && assessmentPassed),
-        nextLessonUnlocked: Boolean(videoCompleted && assessmentPassed),
+        nextLessonUnlocked: Boolean(videoCompleted && assessmentPassed && practiceCompleted),
         completed: Boolean(videoCompleted && assessmentPassed && practiceCompleted)
     };
 };
@@ -1994,23 +1994,38 @@ const getLessonEvidence = async (studentId, lessonId) => {
 const getLessonAccessState = async (studentId, lessonId) => {
     const current = await getLessonEvidence(studentId, lessonId);
     if (!current) return { canAccess: false, reason: "Lesson not found." };
-    if (current.sequence <= 1) return { canAccess: true, current };
+
+    const withLessonAccess = (canAccess, reason = null) => ({
+        canAccess,
+        reason,
+        current: {
+            ...current,
+            lessonUnlocked: canAccess,
+            accessReason: reason
+        }
+    });
+
+    if (current.sequence <= 1) return withLessonAccess(true);
     const previousResult = await pool.query(
-        "SELECT id FROM lessons WHERE module = $1 AND sequence = $2 AND status <> 'Archived' LIMIT 1",
+        `SELECT id
+         FROM lessons
+         WHERE module = $1
+           AND sequence = $2
+           AND status <> 'Archived' LIMIT 1`,
         [current.module, current.sequence - 1]
     );
-    if (!previousResult.rowCount) return { canAccess: false, reason: "Complete the previous lesson requirements first.", current };
+    if (!previousResult.rowCount) return withLessonAccess(false, "Complete the previous lesson requirements first.");
+
     const previous = await getLessonEvidence(studentId, previousResult.rows[0].id);
-    const previousLessonUnlocked = Boolean(previous?.videoCompleted && previous?.assessmentPassed);
-    return previousLessonUnlocked
-        ? { canAccess: true, current }
-        : {
-            canAccess: false,
-            reason: !previous?.videoCompleted
-                ? "Complete the previous lesson video to at least 95% first."
-                : "Pass the previous lesson assessment before continuing.",
-            current,
-        };
+    const previousLessonCompleted = Boolean(previous?.completed);
+    if (previousLessonCompleted) return withLessonAccess(true);
+
+    const reason = !previous?.videoCompleted
+        ? "Complete the previous lesson video to at least 95% first."
+        : !previous?.assessmentPassed
+            ? "Pass the previous lesson assessment before continuing."
+            : "Complete the previous lesson practice before continuing.";
+    return withLessonAccess(false, reason);
 };
 
 const classifyEventSeverity = (eventType) => {
@@ -3477,7 +3492,8 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         const submittedPracticeActivities = Number(row.submitted_practice_activities || 0);
         const totalPracticeActivities = Number(row.total_practice_activities || 0);
         const oopTopicRows = await Promise.all(oopTopics.rows.map(async topic => {
-            const evidence = await getLessonEvidence(dbStudentId, topic.id);
+            const accessState = await getLessonAccessState(dbStudentId, topic.id);
+            const evidence = accessState.current;
             return {
                 id: topic.id,
                 title: topic.title,
@@ -3489,6 +3505,10 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 quizPassed: topic.quiz_passed === null ? null : Boolean(topic.quiz_passed),
                 practiceScore: topic.practice_score === null ? null : Number(topic.practice_score),
                 practiceCompleted: Boolean(evidence?.practiceCompleted),
+                lessonUnlocked: Boolean(accessState.canAccess),
+                assessmentUnlocked: Boolean(accessState.canAccess && evidence?.assessmentUnlocked),
+                practiceUnlocked: Boolean(accessState.canAccess && evidence?.practiceUnlocked),
+                accessReason: accessState.reason,
                 lessonProgress: Math.round((
                     (Math.min(100, Math.max(0, Number(topic.video_percentage || 0)) / 95 * 100) / 100) +
                     (evidence?.assessmentPassed ? 1 : 0) +
@@ -3699,7 +3719,7 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
         const safeLessonId = cleanText(lessonId, 120);
         const lessonAccess = await getLessonAccessState(req.authUser.id, safeLessonId);
         if (!lessonAccess.canAccess || !lessonAccess.current.videoCompleted) {
-            return res.status(403).json({ success: false, message: "Complete the current lesson video before starting its assessment." });
+            return res.status(403).json({ success: false, message: lessonAccess.reason || "Complete the current lesson prerequisites before starting its assessment." });
         }
 
         const safeTotal = Math.max(1, Math.floor(clampNumber(total, 1, 100)));
@@ -3731,13 +3751,13 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
             computedPercentage,
             safeCorrectAnswers,
             safeIncorrectAnswers,
-            computedPercentage >= 80,
+            computedPercentage >= ASSESSMENT_PASSING_SCORE,
             safeAttemptNumber,
             JSON.stringify(safeAnswers),
             dateCompleted || null
         ]);
 
-        const isPassedNow = computedPercentage >= 80;
+        const isPassedNow = computedPercentage >= ASSESSMENT_PASSING_SCORE;
 
         // Award completion and pass XP
         await awardXP(req.authUser.id, 30, `Quiz Completion: ${safeAssessmentId}`);
@@ -3931,6 +3951,12 @@ app.post("/api/practice-challenges/:id/run", requireAuth, async (req, res, next)
 
         if (!challenge) {
             return res.status(404).json({ success: false, message: "Practice challenge not found." });
+        }
+
+        const challengeLessonId = challenge.lessonId || challenge.lesson_id;
+        const lessonAccess = await getLessonAccessState(req.authUser.id, challengeLessonId);
+        if (!lessonAccess.canAccess || !lessonAccess.current?.practiceUnlocked) {
+            return res.status(403).json({ success: false, message: lessonAccess.reason || "Complete the lesson video and assessment before running practice." });
         }
 
         const validation = await evaluateJavaSubmission(challenge, String(sourceCode));

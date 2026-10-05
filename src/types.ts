@@ -161,6 +161,8 @@ export interface LessonEvidence {
   practiceUnlocked: boolean;
   nextLessonUnlocked: boolean;
   completed: boolean;
+  lessonUnlocked?: boolean;
+  accessReason?: string | null;
 }
 
 export interface NotificationItem {
