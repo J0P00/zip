@@ -5,6 +5,7 @@ import { OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
 import { assessmentApi, lessonApi, practiceApi, progressApi } from '../services/api';
 import RecommendationCard from './RecommendationCard';
 import SecureWatermark from './SecureWatermark';
+import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 
 interface AssessmentsProps {
   currentUser: AuthenticatedUser;
@@ -39,8 +40,6 @@ interface QuizAttempt {
 type WatchDb = Record<string, WatchRecord>;
 type QuizDb = Record<string, QuizAttempt>;
 type SubmissionDb = Record<string, { score?: number; compileStatus?: string }>;
-
-const PASSING_PERCENTAGE = 80;
 
 const getAssessmentLockedReason = (lessonId: string, evidenceDb: Record<string, LessonEvidence>, evidenceLoaded: boolean) => {
   const lesson = OOP_COURSE_LESSONS.find(item => item.id === lessonId);
@@ -409,7 +408,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
             </div>
             <h2 className="mt-3 text-2xl font-extrabold text-slate-900 dark:text-white">Lesson Assessments</h2>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">
-              Each attempt delivers 15 server-randomized MCQs with authoritative grading, secure countdown timer, and cheating deterrence. Passing score is 80%.
+              Each attempt delivers 15 server-randomized MCQs with authoritative grading, secure countdown timer, and cheating deterrence. Passing score is {ASSESSMENT_PASSING_SCORE}%.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
@@ -629,7 +628,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
           </div>
           <h2 className="mt-4 text-2xl font-extrabold text-slate-900 dark:text-white">{latestAttempt.passed ? 'Assessment Passed' : 'Assessment Not Passed'}</h2>
           <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
-            {latestAttempt.passed ? `Lesson ${activeLesson.sequence + 1} and Practice IDE are unlocked.` : `Score is below the 80% passing threshold. Rewatch ${activeLesson.title}, then retake the assessment.`}
+            {latestAttempt.passed ? `Practice IDE is unlocked for ${activeLesson.title}. Complete it to unlock the next lesson.` : `Score is below the ${ASSESSMENT_PASSING_SCORE}% passing threshold. Rewatch ${activeLesson.title}, then retake the assessment.`}
           </p>
           <div className="mt-6 grid grid-cols-3 gap-3 border-y border-slate-100 py-5 dark:border-slate-800">
             <div><span className="block text-[10px] font-black uppercase text-slate-400">Score</span><strong className="font-mono text-xl dark:text-white">{latestAttempt.score}/{latestAttempt.total}</strong></div>

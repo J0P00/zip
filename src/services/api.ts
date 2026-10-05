@@ -130,7 +130,7 @@ export const rankingApi = {
 export const lessonApi = {
   list: () => apiRequest<{ success: boolean; data: any[] }>('/api/lessons'),
   getAccess: (lessonId: string, token?: string) =>
-    apiRequest<{ success: boolean; data: { canAccess: boolean; reason?: string; current?: import('../types').LessonEvidence } }>(
+    apiRequest<{ success: boolean; data: { canAccess: boolean; canStart: boolean; reason?: string | null; videoProgress: number; passingScore: number; current?: import('../types').LessonEvidence } }>(
       `/api/lesson-access/${encodeURIComponent(lessonId)}`,
       { token }
     ),

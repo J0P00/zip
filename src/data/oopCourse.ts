@@ -1,5 +1,6 @@
 import { VideoLesson } from '../types';
 import { OOP_PARSED_QUESTIONS } from './oopQuestions';
+import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 
 export type LessonDifficulty = 'Easy' | 'Medium' | 'Hard';
 
@@ -475,7 +476,7 @@ export const OOP_ASSESSMENTS: LessonAssessment[] = OOP_LESSON_BLUEPRINTS.map(les
   id: lesson.assessmentId,
   lessonId: lesson.id,
   title: `${lesson.title} Assessment`,
-  passingPercentage: 80,
+  passingPercentage: ASSESSMENT_PASSING_SCORE,
   questions: OOP_PARSED_QUESTIONS[lesson.id] || []
 }));
 

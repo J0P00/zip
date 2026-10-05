@@ -274,7 +274,7 @@ CREATE TABLE IF NOT EXISTS assessments (
   lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   quiz_type TEXT NOT NULL DEFAULT 'Multiple Choice',
-  passing_score NUMERIC NOT NULL DEFAULT 70,
+  passing_score NUMERIC NOT NULL DEFAULT 60,
   attempts INTEGER NOT NULL DEFAULT 1,
   questions JSONB NOT NULL DEFAULT '[]'::jsonb,
   status TEXT NOT NULL DEFAULT 'Draft',
@@ -285,7 +285,7 @@ CREATE TABLE IF NOT EXISTS assessments (
 ALTER TABLE assessments ADD COLUMN IF NOT EXISTS lesson_id TEXT;
 ALTER TABLE assessments ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE assessments ADD COLUMN IF NOT EXISTS quiz_type TEXT DEFAULT 'Multiple Choice';
-ALTER TABLE assessments ADD COLUMN IF NOT EXISTS passing_score NUMERIC DEFAULT 70;
+ALTER TABLE assessments ADD COLUMN IF NOT EXISTS passing_score NUMERIC DEFAULT 60;
 ALTER TABLE assessments ADD COLUMN IF NOT EXISTS attempts INTEGER DEFAULT 1;
 ALTER TABLE assessments ADD COLUMN IF NOT EXISTS questions JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE assessments ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Draft';
@@ -955,4 +955,3 @@ CREATE TABLE IF NOT EXISTS assessment_security_events (
 
 CREATE INDEX IF NOT EXISTS idx_assessment_security_events_session ON assessment_security_events(session_id, created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_assessment_security_events_student ON assessment_security_events(student_user_id, created_at DESC);
-

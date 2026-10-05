@@ -1,0 +1,1 @@
+export const ASSESSMENT_PASSING_SCORE = 60;

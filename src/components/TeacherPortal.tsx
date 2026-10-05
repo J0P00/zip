@@ -36,6 +36,7 @@ import { AdaptiveRecommendation, AssessmentSecurityEvent, AuthenticatedUser, Mon
 import { LeaderboardUser } from '../types';
 import Leaderboard from './Leaderboard.tsx';
 import { adminApi, assessmentApi, progressApi, userApi } from '../services/api';
+import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 import { generateStudentResultsInterpretation, StudentResultsData, StudentResultsInterpretation } from '../services/interpretation';
 import { generateRuleBasedRecommendation } from '../services/recommendationEngine';
 import { getCanonicalStudentId } from '../services/identity';
@@ -1423,7 +1424,7 @@ export default function TeacherPortal({
                         {viewingStudentSessions.map((session, idx) => {
                           const violations = Number(session.security_violations_count || 0);
                           const score = session.score !== null ? Number(session.score) : null;
-                          const passed = session.passed ?? (score !== null ? score >= 80 : false);
+                          const passed = session.passed ?? (score !== null ? score >= ASSESSMENT_PASSING_SCORE : false);
                           const isTerminated = session.status === 'TERMINATED_SECURITY';
                           const isExpired = session.status === 'EXPIRED';
                           const isSubmitted = session.status === 'SUBMITTED';
@@ -1458,7 +1459,7 @@ export default function TeacherPortal({
                                 <div className="flex items-center gap-3">
                                   <div className="text-right">
                                     <div className="text-xs font-black text-slate-700 dark:text-slate-300">
-                                      Score: <span className={`font-mono text-sm ${score !== null && score >= 80 ? 'text-emerald-600' : 'text-slate-900 dark:text-white'}`}>{score !== null ? `${score}%` : '--'}</span>
+                                      Score: <span className={`font-mono text-sm ${score !== null && score >= ASSESSMENT_PASSING_SCORE ? 'text-emerald-600' : 'text-slate-900 dark:text-white'}`}>{score !== null ? `${score}%` : '--'}</span>
                                     </div>
                                     <div className="mt-0.5">
                                       {violations > 0 ? (
@@ -1837,7 +1838,7 @@ export default function TeacherPortal({
                 >
                   {visibleStudents.map(student => <option key={student.id} value={student.id}>{student.name}</option>)}
                 </select>
-                <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase text-emerald-700">80% Quiz Pass Mark</span>
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase text-emerald-700">{ASSESSMENT_PASSING_SCORE}% Quiz Pass Mark</span>
               </div>
             </div>
             

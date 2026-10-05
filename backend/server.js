@@ -43,6 +43,7 @@ const sendNotificationEvent = (userId, notification) => {
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const isProduction = process.env.NODE_ENV === "production";
+const ASSESSMENT_PASSING_SCORE = 60;
 
 if (isProduction && JWT_SECRET === "change-this-secret") {
     throw new Error("JWT_SECRET must be configured in production.");
@@ -537,7 +538,7 @@ const initializeDatabase = async () => {
           lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
           title TEXT NOT NULL,
           quiz_type TEXT NOT NULL DEFAULT 'Multiple Choice',
-          passing_score NUMERIC NOT NULL DEFAULT 80,
+          passing_score NUMERIC NOT NULL DEFAULT 60,
           attempts INTEGER NOT NULL DEFAULT 1,
           questions JSONB NOT NULL DEFAULT '[]'::jsonb,
           status TEXT NOT NULL DEFAULT 'Draft',
@@ -1815,7 +1816,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
     );
     const quizResult = await pool.query(
         `SELECT
-            EXISTS (SELECT 1 FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 AND percentage >= 80) AS passed,
+            EXISTS (SELECT 1 FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 AND percentage >= ${ASSESSMENT_PASSING_SCORE}) AS passed,
             (SELECT percentage FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 ORDER BY attempt_number DESC, date_completed DESC LIMIT 1) AS percentage`,
         [studentId, lessonId]
     );
@@ -2655,7 +2656,7 @@ app.post("/api/assessments", requireAuth, requireRole(["admin", "teacher"]), asy
             lessonId,
             title,
             cleanText(body.quizType || "Multiple Choice", 80),
-            clampNumber(body.passingScore ?? body.passing_score ?? 80, 0, 100),
+            clampNumber(body.passingScore ?? body.passing_score ?? ASSESSMENT_PASSING_SCORE, 0, 100),
             Math.floor(clampNumber(body.attempts ?? 1, 1, 100)),
             JSON.stringify(Array.isArray(body.questions) ? body.questions : []),
             cleanText(body.status || "Draft", 40),
@@ -3023,7 +3024,7 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
         }
 
         const percentage = Math.round((score / total) * 100);
-        const passed = percentage >= 80;
+        const passed = percentage >= ASSESSMENT_PASSING_SCORE;
         const correctAnswers = score;
         const incorrectAnswers = total - score;
 
@@ -3092,6 +3093,7 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
                 total,
                 percentage,
                 passed,
+                passingScore: ASSESSMENT_PASSING_SCORE,
                 correctAnswers,
                 incorrectAnswers,
                 violationCount: session.violation_count,
@@ -3111,7 +3113,11 @@ app.get("/api/assessments/sessions/student/:studentId", requireAuth, async (req,
         const result = await pool.query(`
             SELECT s.*, 
                    COUNT(e.id)::int AS total_security_events,
-                   COUNT(e.id) FILTER (WHERE e.severity = 'HIGH')::int AS high_severity_events
+                   COUNT(e.id) FILTER (WHERE e.severity = 'HIGH')::int AS high_severity_events,
+                   CASE WHEN s.percentage IS NOT NULL
+                        THEN s.percentage >= ${ASSESSMENT_PASSING_SCORE}
+                        ELSE s.passed
+                   END AS passed
             FROM assessment_sessions s
             LEFT JOIN assessment_security_events e ON e.session_id = s.id
             WHERE s.student_user_id = $1
@@ -3184,7 +3190,8 @@ app.get("/api/lesson-access/:lessonId", requireAuth, requireRole(["student"]), a
                 ...access,
                 canStart: Boolean(current?.assessmentUnlocked),
                 reason: current?.assessmentUnlocked ? null : "VIDEO_INCOMPLETE",
-                videoProgress: Number(current?.videoProgress || 0)
+                videoProgress: Number(current?.videoProgress || 0),
+                passingScore: ASSESSMENT_PASSING_SCORE
             }
         });
     } catch (error) {
@@ -3276,7 +3283,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                                                                              FROM quiz_attempts passed_attempt
                                                                                              WHERE passed_attempt.student_user_id = $1
                                                                                                  AND passed_attempt.lesson_id = l.id
-                                                                                                 AND passed_attempt.percentage >= 80
+                                                                                                 AND passed_attempt.percentage >= ${ASSESSMENT_PASSING_SCORE}
                                                                                          ) AS quiz_passed,
                                              ps.score AS practice_score,
                                              lp.completed AS lesson_completed,
@@ -3516,7 +3523,8 @@ app.get("/api/quiz-attempts/:studentId", requireAuth, async (req, res, next) => 
             return res.status(403).json({ success: false, message: "Students can only view their own quiz attempts." });
         }
         const result = await pool.query(`
-            SELECT DISTINCT ON (assessment_id) *
+            SELECT DISTINCT ON (assessment_id) *,
+                   (percentage >= ${ASSESSMENT_PASSING_SCORE}) AS passed
             FROM quiz_attempts
             WHERE student_user_id = $1
             ORDER BY assessment_id, attempt_number DESC, date_completed DESC
@@ -3983,7 +3991,7 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                         FROM quiz_attempts qa
                         WHERE qa.student_user_id = u.id
                           AND qa.lesson_id = l.id
-                          AND qa.percentage >= 80
+                          AND qa.percentage >= ${ASSESSMENT_PASSING_SCORE}
                       ) AS assessment_passed,
                       CASE
                         WHEN pc.id IS NULL THEN TRUE
@@ -4419,7 +4427,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
                        FROM quiz_attempts qa
                        WHERE qa.student_user_id = $1
                          AND qa.lesson_id = pc.lesson_id
-                         AND qa.percentage >= 80
+                         AND qa.percentage >= ${ASSESSMENT_PASSING_SCORE}
                    ) AS quiz_passed
             FROM programming_challenges pc
             WHERE pc.id = $2 AND pc.status <> 'Archived'
@@ -4434,7 +4442,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             return res.status(403).json({ success: false, message: "Pass the current lesson assessment before submitting practice." });
         }
         if (!prerequisite.rows[0].quiz_passed) {
-            return res.status(403).json({ success: false, message: "Pass the required assessment with 80% or higher before submitting practice." });
+            return res.status(403).json({ success: false, message: `Pass the required assessment with ${ASSESSMENT_PASSING_SCORE}% or higher before submitting practice.` });
         }
 
         const existing = await pool.query(

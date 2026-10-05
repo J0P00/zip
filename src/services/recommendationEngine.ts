@@ -1,5 +1,6 @@
 import { AdaptiveRecommendation, RecommendationTrigger, RecommendationType, StudentSubView } from '../types';
 import { OOP_COURSE_LESSONS } from '../data/oopCourse';
+import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 
 export const RECOMMENDATION_HISTORY_KEY = 'oophub_adaptive_recommendation_history';
 
@@ -72,7 +73,7 @@ export const generateRuleBasedRecommendation = (input: RecommendationInput): Ada
     );
   }
 
-  if ((input.quizAttempts || 0) >= 3 && (input.quizScore ?? 100) < 80) {
+  if ((input.quizAttempts || 0) >= 3 && (input.quizScore ?? 100) < ASSESSMENT_PASSING_SCORE) {
     return buildRecommendation(
       input,
       'Remedial',
@@ -86,11 +87,11 @@ export const generateRuleBasedRecommendation = (input: RecommendationInput): Ada
   }
 
   if (input.trigger === 'Quiz Score' && typeof input.quizScore === 'number') {
-    if (input.quizScore < 80) {
+    if (input.quizScore < ASSESSMENT_PASSING_SCORE) {
       return buildRecommendation(
         input,
         'Remedial',
-        `Quiz Score below 80% (${input.quizScore}%)`,
+        `Quiz Score below ${ASSESSMENT_PASSING_SCORE}% (${input.quizScore}%)`,
         'Recommended Next Step',
         'Strengthen the current topic before retaking the quiz.',
         [`Watch the ${input.currentTopic} lesson again`, 'Read the lesson notes', 'Solve an Easy Coding Challenge', 'Retake the quiz after review'],
@@ -103,7 +104,7 @@ export const generateRuleBasedRecommendation = (input: RecommendationInput): Ada
       return buildRecommendation(
         input,
         'Continue',
-        `Quiz Score between 80% and 89% (${input.quizScore}%)`,
+        `Quiz Score between ${ASSESSMENT_PASSING_SCORE}% and 89% (${input.quizScore}%)`,
         'Good Progress',
         'Continue to practice while reviewing the quiz items you missed.',
         ['Continue to the Coding Exercise', 'Review incorrect quiz answers', 'Practice an Intermediate Challenge'],

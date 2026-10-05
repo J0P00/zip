@@ -360,7 +360,7 @@ export default function StudentDashboard({
               <div className="space-y-1">
                 <span className="text-[9px] font-bold font-mono tracking-wider bg-emerald-50 border border-emerald-200 px-2 py-0.5 uppercase rounded text-emerald-700">{hasProgress ? 'Currently Studying' : 'Ready to Start'}</span>
                 <h2 className="text-lg font-bold text-slate-900">{dashboardCurrentModuleLabel}</h2>
-                <p className="text-xs text-slate-500 font-medium">{hasProgress ? `Continue ${dashboardCurrentLesson.title.toLowerCase()} and complete its video and 80% assessment.` : 'Begin with foundational class structure, object creation, and method basics.'}</p>
+                <p className="text-xs text-slate-500 font-medium">{hasProgress ? `Continue ${dashboardCurrentLesson.title.toLowerCase()} and complete its video and 60% assessment.` : 'Begin with foundational class structure, object creation, and method basics.'}</p>
               </div>
               <span className="text-xs font-bold font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">{moduleProgress}% Completed</span>
             </div>

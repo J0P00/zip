@@ -6,6 +6,7 @@ import { getPracticeChallengeForLesson, PRACTICE_CHALLENGES } from '../data/prac
 import RecommendationCard from './RecommendationCard';
 import SecureWatermark from './SecureWatermark';
 import { practiceApi, progressApi } from '../services/api';
+import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 
 interface PracticeIDEProps {
   currentUser: AuthenticatedUser;
@@ -144,7 +145,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     const quizAttempt = quizDb[activeChallenge.assessmentId];
     if (!watchRecord?.completed || watchRecord.completionPercentage < 95) return 'Practice IDE is locked until the lesson video is completed at 95% or higher.';
     if (!quizAttempt) return 'Practice IDE is locked until the assessment is completed.';
-    if (!quizAttempt.passed || quizAttempt.percentage < 80) return 'Practice IDE is locked until the quiz score is 80% or higher.';
+    if (!quizAttempt.passed || quizAttempt.percentage < ASSESSMENT_PASSING_SCORE) return `Practice IDE is locked until the quiz score is ${ASSESSMENT_PASSING_SCORE}% or higher.`;
     return '';
   }, [activeChallenge.assessmentId, activeChallenge.lessonId, quizDb, watchDb, activeLesson]);
 
