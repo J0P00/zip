@@ -3405,7 +3405,7 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
         const safeVideoId = cleanText(videoId, 120);
         const safeLastPosition = clampNumber(lastPosition, 0, 60 * 60 * 6);
         const safeCompletionPercentage = clampNumber(completionPercentage, 0, 100);
-        const safeCompleted = Boolean(completed) && safeCompletionPercentage >= 95;
+        const safeCompleted = safeCompletionPercentage >= 95;
         const safeNotes = cleanText(notes, 5000);
         const access = await getLessonAccessState(req.authUser.id, safeVideoId);
         if (!access.canAccess) {
@@ -3425,9 +3425,10 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
             INSERT INTO student_progress (student_user_id, video_id, last_position, completion_percentage, completed, date_completed, notes)
             VALUES ($1, $2, $3, $4, $5, CASE WHEN $5 THEN NOW() ELSE NULL END, $6)
             ON CONFLICT (student_user_id, video_id) DO UPDATE SET
-              last_position = EXCLUDED.last_position,
+              last_position = GREATEST(student_progress.last_position, EXCLUDED.last_position),
               completion_percentage = GREATEST(student_progress.completion_percentage, EXCLUDED.completion_percentage),
-              completed = student_progress.completed OR EXCLUDED.completed,
+              completed = student_progress.completed OR EXCLUDED.completed
+                OR GREATEST(student_progress.completion_percentage, EXCLUDED.completion_percentage) >= 95,
               date_completed = CASE
                 WHEN student_progress.completed THEN student_progress.date_completed
                 WHEN EXCLUDED.completed THEN NOW()
@@ -3452,10 +3453,11 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
             INSERT INTO video_progress (student_id, lesson_id, "current_time", duration, watch_percentage, completed)
             VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT (student_id, lesson_id) DO UPDATE SET
-              "current_time" = EXCLUDED."current_time",
+              "current_time" = GREATEST(video_progress."current_time", EXCLUDED."current_time"),
               duration = EXCLUDED.duration,
               watch_percentage = GREATEST(video_progress.watch_percentage, EXCLUDED.watch_percentage),
-              completed = video_progress.completed OR EXCLUDED.completed,
+              completed = video_progress.completed OR EXCLUDED.completed
+                OR GREATEST(video_progress.watch_percentage, EXCLUDED.watch_percentage) >= 95,
               updated_at = NOW()
         `, [req.authUser.id, safeVideoId, safeLastPosition, durationSeconds, safeCompletionPercentage, safeCompleted]);
 

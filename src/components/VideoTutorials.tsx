@@ -38,9 +38,6 @@ interface WatchRecord {
 type WatchDb = Record<string, WatchRecord>;
 type QuizDb = Record<string, { passed: boolean; percentage: number; score: number; total: number; attemptNumber: number; dateCompleted?: string }>;
 
-const isInvalidLegacyCompletion = (record: Partial<WatchRecord>) =>
-  record.completed === true && record.completionPercentage === 100 && record.lastPosition === 900;
-
 const formatTime = (seconds: number) => {
   if (!Number.isFinite(seconds)) return '00:00';
   const mins = Math.floor(seconds / 60);
@@ -135,7 +132,6 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
             completed: Boolean(row.completed),
             dateCompleted: row.date_completed || undefined
           };
-          if (isInvalidLegacyCompletion(record)) return acc;
           acc[row.video_id] = {
             ...record
           };
@@ -183,16 +179,19 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
 
   const persistProgress = (position: number, nextDuration = duration) => {
     if (!activeLesson) return;
-    const percentage = nextDuration > 0 ? Math.min(100, Math.round((position / nextDuration) * 100)) : 0;
+    const existing = watchDb[activeLesson.id];
+    const measuredPercentage = nextDuration > 0 ? Math.min(100, Math.round((position / nextDuration) * 100)) : 0;
+    if (existing?.completionPercentage >= 95 && measuredPercentage < existing.completionPercentage) return;
+    const percentage = Math.max(existing?.completionPercentage || 0, measuredPercentage);
     const completed = percentage >= 95;
     const nextDb = {
       ...watchDb,
       [activeLesson.id]: {
         lessonId: activeLesson.id,
-        lastPosition: position,
+        lastPosition: Math.max(existing?.lastPosition || 0, position),
         completionPercentage: percentage,
         completed,
-        dateCompleted: completed ? watchDb[activeLesson.id]?.dateCompleted || new Date().toISOString() : undefined
+        dateCompleted: completed ? existing?.dateCompleted || new Date().toISOString() : undefined
       }
     };
 
@@ -346,7 +345,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                   <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{activeLesson.description}</p>
                 </div>
                 <button
-                  disabled={!watchDb[activeLesson.id]?.completed}
+                  disabled={(watchDb[activeLesson.id]?.completionPercentage || 0) < 95}
                   onClick={() => onNavigateTo('assessments')}
                   className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
                 >
@@ -408,7 +407,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 const isLocked = lesson.status === 'locked';
                 const progress = lesson.progressPercent || 0;
                 const topic = getTopic(studentResults, lesson.id);
-                const videoDone = Boolean(topic?.videoCompleted || watchDb[lesson.id]?.completed);
+                const videoDone = Boolean(topic?.videoCompleted || (watchDb[lesson.id]?.completionPercentage || 0) >= 95);
                 const quizPassed = Boolean(topic?.quizPassed);
                 const statusLabel = isLocked
                   ? 'Locked'
