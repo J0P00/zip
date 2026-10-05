@@ -3,11 +3,17 @@ require("dotenv").config();
 const bcrypt = require("bcrypt");
 const cors = require("cors");
 const express = require("express");
+const fs = require("fs/promises");
+const os = require("os");
+const path = require("path");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
 const jwt = require("jsonwebtoken");
 const pool = require("./db");
 const { OOP_PARSED_QUESTIONS } = require("./questionBank");
 const { PRACTICE_CHALLENGES } = require("./challengeBank");
 const { validateBasicJavaStructure } = require("./basicJavaValidator");
+const execFileAsync = promisify(execFile);
 
 const app = express();
 
@@ -53,6 +59,65 @@ const clampNumber = (value, min, max) => {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return min;
     return Math.min(Math.max(parsed, min), max);
+};
+
+const evaluateJavaSubmission = async (challenge, sourceCode) => {
+    const validation = validateBasicJavaStructure(challenge, sourceCode);
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "oophub-java-"));
+    const sourcePath = path.join(tempDir, "Main.java");
+    try {
+        await fs.writeFile(sourcePath, String(sourceCode), "utf8");
+        let compilerError = "";
+        try {
+            await execFileAsync("javac", ["-encoding", "UTF-8", sourcePath], { timeout: 10000, windowsHide: true });
+        } catch (error) {
+            compilerError = String(error.stderr || error.stdout || error.message || "Java compilation failed.").trim();
+        }
+        if (compilerError) {
+            return {
+                ...validation,
+                compilationCheck: "failed",
+                compileStatus: "failed",
+                score: 0,
+                passed: false,
+                practiceCompleted: false,
+                canRetry: true,
+                editorLocked: false,
+                compilerError,
+                note: compilerError
+            };
+        }
+
+        let programOutput = "";
+        let runtimeError = "";
+        try {
+            const result = await execFileAsync("java", ["-cp", tempDir, "Main"], { timeout: 10000, windowsHide: true });
+            programOutput = String(result.stdout || "").trim();
+        } catch (error) {
+            runtimeError = String(error.stderr || error.stdout || error.message || "Java execution failed.").trim();
+        }
+
+        const expectedOutput = String(challenge?.sampleOutput || "").trim();
+        const outputPassed = !runtimeError && (!expectedOutput || programOutput === expectedOutput);
+        const requirementsPassed = validation.requirements.every(item => item.passed);
+        const passed = outputPassed && requirementsPassed;
+        const score = passed ? 100 : 0;
+        return {
+            ...validation,
+            compilationCheck: "success",
+            compileStatus: runtimeError ? "runtime_error" : "success",
+            score,
+            passed,
+            practiceCompleted: passed,
+            canRetry: !passed,
+            editorLocked: passed,
+            compilerError: runtimeError,
+            programOutput,
+            note: runtimeError || (outputPassed ? validation.note : `Expected output: ${expectedOutput}; received: ${programOutput || "(none)"}.`)
+        };
+    } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+    }
 };
 
 const cleanText = (value, maxLength = 255) => String(value ?? "").trim().slice(0, maxLength);
@@ -622,7 +687,7 @@ const initializeDatabase = async () => {
           error_message TEXT DEFAULT '',
           test_results JSONB NOT NULL DEFAULT '[]'::jsonb,
           submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          is_locked BOOLEAN NOT NULL DEFAULT TRUE,
+          is_locked BOOLEAN NOT NULL DEFAULT FALSE,
           teacher_score NUMERIC,
           teacher_feedback TEXT DEFAULT '',
           graded_by UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -643,6 +708,10 @@ const initializeDatabase = async () => {
         ALTER TABLE practice_submissions ALTER COLUMN score DROP NOT NULL;
         ALTER TABLE practice_submissions DROP CONSTRAINT IF EXISTS practice_submissions_compile_status_check;
         ALTER TABLE practice_submissions ADD CONSTRAINT practice_submissions_compile_status_check CHECK (compile_status IN ('not_run', 'not_executed', 'success', 'failed', 'runtime_error'));
+        UPDATE practice_submissions
+        SET is_locked = FALSE
+        WHERE compile_status IN ('failed', 'runtime_error')
+           OR (COALESCE(score, 0) = 0 AND is_locked = TRUE);
         CREATE TABLE IF NOT EXISTS notifications (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           recipient_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -3791,17 +3860,17 @@ app.post("/api/practice-challenges/:id/run", requireAuth, async (req, res, next)
             return res.status(404).json({ success: false, message: "Practice challenge not found." });
         }
 
-        const validation = validateBasicJavaStructure(challenge, String(sourceCode));
+        const validation = await evaluateJavaSubmission(challenge, String(sourceCode));
         const runResult = {
-            compileStatus: validation.compilationCheck,
-            executionStatus: 'not_executed',
+            compileStatus: validation.compileStatus,
+            executionStatus: validation.compileStatus === 'success' ? 'executed' : 'not_executed',
             validationStatus: validation.oopStructureCheck,
-            score: null,
+            score: validation.score,
             infrastructureError: false,
             runtime: 0,
             memoryUsage: 0,
             programOutput: '',
-            errorMessage: validation.note,
+            errorMessage: validation.compilerError || validation.note,
             testResults: validation.requirements.map((item, index) => ({
                 id: `static_${index + 1}`,
                 isHidden: false,
@@ -3824,7 +3893,11 @@ app.post("/api/practice-challenges/:id/run", requireAuth, async (req, res, next)
                 memoryUsage: runResult.memoryUsage,
                 programOutput: runResult.programOutput,
                 errorMessage: runResult.errorMessage,
-                testResults: runResult.testResults,
+                testResults: runResult.testResults
+                ,
+                canRetry: true,
+                editorLocked: false,
+                practiceCompleted: false,
                 debug: runResult.debug
             }
         });
@@ -4457,14 +4530,14 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
         const challenge = challengeDbRes.rows[0]
             ? toClientPracticeChallenge({ ...challengeDbRes.rows[0], test_cases: [] })
             : PRACTICE_CHALLENGES.find(c => c.id === safeChallengeId);
-        const validation = validateBasicJavaStructure(challenge || prerequisite.rows[0], String(sourceCode));
+        const validation = await evaluateJavaSubmission(challenge || prerequisite.rows[0], String(sourceCode));
 
         const result = await pool.query(`
             INSERT INTO practice_submissions (
               student_id, challenge_id, source_code, program_output, compile_status,
               runtime, memory_usage, score, error_message, test_results, is_locked
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, TRUE)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)
             ON CONFLICT (student_id, challenge_id) DO UPDATE SET
               source_code = EXCLUDED.source_code,
               program_output = EXCLUDED.program_output,
@@ -4475,7 +4548,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
               error_message = EXCLUDED.error_message,
               test_results = EXCLUDED.test_results,
               submitted_at = NOW(),
-              is_locked = TRUE,
+              is_locked = EXCLUDED.is_locked,
               teacher_score = NULL,
               teacher_feedback = '',
               graded_by = NULL,
@@ -4489,11 +4562,11 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             req.authUser.id,
             safeChallengeId,
             String(sourceCode).slice(0, 50000),
-            '',
-            'not_executed',
+            validation.programOutput || '',
+            validation.compileStatus,
             0,
             0,
-            null,
+            validation.score,
             validation.note,
             JSON.stringify(validation.requirements.map((item, index) => ({
                 id: `static_${index + 1}`,
@@ -4502,7 +4575,15 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
                 expectedOutput: item.requirement,
                 actualOutput: item.passed ? item.requirement : '',
                 message: item.message
-            })))
+            })).concat(validation.compilerError ? [{
+                id: 'compiler',
+                isHidden: false,
+                passed: false,
+                expectedOutput: 'Compilation succeeds',
+                actualOutput: '',
+                message: validation.compilerError
+            }] : [])),
+            validation.passed
         ]);
 
         await logActivity(
@@ -4512,7 +4593,8 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             {
                 lessonId: prerequisite.rows[0].lesson_id || null,
                 challengeId: safeChallengeId,
-                compileStatus: validation.compilationCheck
+                compileStatus: validation.compileStatus,
+                practiceCompleted: validation.practiceCompleted
             }
         );
         if (validation.compilationCheck === "success" || validation.compilationCheck === "failed") {
@@ -4527,6 +4609,9 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
                     challengeId: safeChallengeId
                 }
             );
+        }
+        if (validation.practiceCompleted) {
+            await verifyLessonCompletion(req.authUser.id, prerequisite.rows[0].lesson_id);
         }
 
         try {
@@ -4563,7 +4648,17 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             console.warn("Unable to initialize teacher submission notification:", notificationError);
         }
 
-        res.status(201).json({ success: true, data: result.rows[0] });
+        res.status(201).json({
+            success: true,
+            data: {
+                ...result.rows[0],
+                passed: validation.passed,
+                practiceCompleted: validation.practiceCompleted,
+                canRetry: validation.canRetry,
+                editorLocked: validation.editorLocked,
+                compilerError: validation.compilerError || null
+            }
+        });
     } catch (error) {
         next(error);
     }

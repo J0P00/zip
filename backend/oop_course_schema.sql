@@ -383,7 +383,7 @@ CREATE TABLE IF NOT EXISTS practice_submissions (
   error_message TEXT DEFAULT '',
   test_results JSONB NOT NULL DEFAULT '[]'::jsonb,
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  is_locked BOOLEAN NOT NULL DEFAULT TRUE,
+  is_locked BOOLEAN NOT NULL DEFAULT FALSE,
   teacher_score NUMERIC,
   teacher_feedback TEXT DEFAULT '',
   graded_by UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -402,6 +402,10 @@ ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS review_status TEXT NOT
 ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_by UUID REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS reopened_at TIMESTAMPTZ;
 ALTER TABLE practice_submissions ADD COLUMN IF NOT EXISTS remedial_required BOOLEAN DEFAULT FALSE;
+UPDATE practice_submissions
+SET is_locked = FALSE
+WHERE compile_status IN ('failed', 'runtime_error')
+   OR (COALESCE(score, 0) = 0 AND is_locked = TRUE);
 CREATE INDEX IF NOT EXISTS idx_practice_submissions_student ON practice_submissions(student_id, submitted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_practice_submissions_challenge ON practice_submissions(challenge_id);
 

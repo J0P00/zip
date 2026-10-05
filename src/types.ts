@@ -446,6 +446,10 @@ export interface PracticeSubmission {
   runtime: number;
   memoryUsage?: number;
   score: number;
+  passed?: boolean;
+  practiceCompleted?: boolean;
+  canRetry?: boolean;
+  editorLocked?: boolean;
   submittedAt: string;
   isLocked: boolean;
   errorMessage?: string;

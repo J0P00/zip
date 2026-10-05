@@ -96,6 +96,10 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     memoryUsage: row.memory_usage === null || row.memory_usage === undefined ? undefined : Number(row.memory_usage),
     runtime: Number(row.runtime || 0),
     score: Number(row.score || 0),
+    passed: row.passed === undefined ? undefined : Boolean(row.passed),
+    practiceCompleted: row.practice_completed === undefined ? undefined : Boolean(row.practice_completed),
+    canRetry: row.can_retry === undefined ? undefined : Boolean(row.can_retry),
+    editorLocked: row.editor_locked === undefined ? undefined : Boolean(row.editor_locked),
     submittedAt: row.submitted_at,
     isLocked: Boolean(row.is_locked),
     errorMessage: row.error_message || '',
@@ -126,7 +130,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
       if (current) {
         setSourceCode(current.isLocked ? current.sourceCode : draftDb[submissionKey] || current.sourceCode || activeChallenge.starterCode);
         setLastResult(current.isLocked ? { compileStatus: current.compileStatus === 'not_executed' ? 'not_run' : current.compileStatus, score: current.score, runtime: current.runtime, memoryUsage: current.memoryUsage || 0, programOutput: current.programOutput, errorMessage: current.errorMessage || '', testResults: current.testResults || [] } : null);
-        setConsoleLogs([current.isLocked ? 'Already Submitted. Editor is locked for this challenge.' : 'Submission reopened. You can submit another final solution.']);
+        setConsoleLogs([current.isLocked ? 'Practice completed. Editor is locked for this challenge.' : 'Previous attempt failed. Fix the code and submit again.']);
       }
     }).catch(error => console.warn('Unable to load practice progress from backend:', error));
     return () => { mounted = false; };
@@ -167,7 +171,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
       errorMessage: record.errorMessage || '',
       testResults: record.testResults || []
     } : null);
-    setConsoleLogs([record?.isLocked ? 'Already Submitted. Editor is locked for this challenge.' : record ? 'Submission reopened. You can submit another final solution.' : 'Console ready. Type your Java code solution below.']);
+    setConsoleLogs([record?.isLocked ? 'Practice completed. Editor is locked for this challenge.' : record ? 'Previous attempt failed. Fix the code and submit again.' : 'Console ready. Type your Java code solution below.']);
   };
 
   const updateSource = (value: string) => {
@@ -272,7 +276,11 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
         testResults: savedSubmission.testResults || []
       });
       setConsoleLogs([
-        '✓ Final submission evaluated and saved authoritatively by server.',
+        savedSubmission.compileStatus === 'failed'
+          ? 'Compilation Failed. Fix the compiler error and try again.'
+          : savedSubmission.passed === false
+            ? 'Not Passed. Review the feedback and try again.'
+            : '✓ Practice completed and saved authoritatively by server.',
         `Compile status: ${savedSubmission.compileStatus}`,
         `Final score: ${savedSubmission.score}%`,
         `Submitted: ${formatDateTime(savedSubmission.submittedAt || new Date().toISOString())}`
@@ -385,7 +393,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
           )}
           {submitted && (
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-              Already Submitted: {submitted.score}% on {formatDateTime(submitted.submittedAt)}
+              Practice Completed: {submitted.score}% on {formatDateTime(submitted.submittedAt)}
             </div>
           )}
           <div className="mt-4 space-y-3">
@@ -436,7 +444,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
             disabled={Boolean(lockReason) || Boolean(submitted) || isRunning || isSubmitting}
             className={`mt-4 flex w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${passedRun || !lastResult ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-amber-500 text-white hover:bg-amber-600'}`}
           >
-            <Send className="h-4 w-4" /> {submitted ? 'Already Submitted' : isSubmitting ? 'Evaluating on Server...' : 'Submit Final Solution'}
+            <Send className="h-4 w-4" /> {submitted ? 'Practice Completed' : isSubmitting ? 'Evaluating on Server...' : 'Submit Final Solution'}
           </button>
         </section>
 
