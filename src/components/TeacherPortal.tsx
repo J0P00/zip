@@ -963,7 +963,6 @@ export default function TeacherPortal({
   const swingPracticeAverage = avg(visibleStudents.map(student => student.swing.ide));
   const swingProjectAverage = avg(visibleStudents.map(student => student.swing.miniProject));
   const atRiskStudents = visibleStudents.filter(student => student.learningStatus === 'At Risk' || student.learningStatus === 'Needs Improvement');
-  const studentsNeedingAttention = visibleStudents.filter(student => ['At Risk', 'Needs Help'].includes(monitoringStatus(student)));
   const rosterSections = [...new Set(visibleStudents.map(student => student.section).filter(Boolean))].sort();
   const statusPriority: Record<MonitoringStatus, number> = { 'At Risk': 0, 'Needs Help': 1, Improving: 2, 'On Track': 3, Excellent: 4 };
 
@@ -1517,53 +1516,14 @@ export default function TeacherPortal({
                   ['Total Students', visibleStudents.length],
                   ['Average Progress', `${completionRate}%`],
                   ['Average Quiz Score', `${averageQuiz}%`],
-                  ['Practice Completion', `${averagePractice}%`],
-                  ['Needs Attention', `${studentsNeedingAttention.length} students`]
+                  ['Practice Completion', `${averagePractice}%`]
                 ].map(([label, value]) => (
-                  <div key={label as string} className={`rounded-xl border p-4 shadow-sm ${label === 'Needs Attention' ? 'border-amber-300 bg-amber-50/70 dark:bg-amber-950/30' : cardClass}`}>
+                  <div key={label as string} className={`rounded-xl border p-4 shadow-sm ${cardClass}`}>
                     <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">{label as string}</span>
                     <strong className="mt-2 block font-mono text-xl">{value}</strong>
                   </div>
                 ))}
               </div>
-
-              {/* Students Needing Attention */}
-              <section className={`rounded-2xl border p-4 shadow-sm ${cardClass}`} aria-labelledby="attention-heading">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 id="attention-heading" className="text-base font-black">Students Needing Attention</h3>
-                    <p className="mt-1 text-xs text-slate-500">Prioritized from current progress, assessment, and practice activity.</p>
-                  </div>
-                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-black text-amber-700">{studentsNeedingAttention.length} priority students</span>
-                </div>
-                {studentsNeedingAttention.length === 0 ? (
-                  <p className="mt-4 rounded-xl border border-dashed border-emerald-200 bg-emerald-50/30 p-4 text-xs font-semibold text-emerald-700">No students currently meet the attention thresholds.</p>
-                ) : (
-                  <div className="mt-4 grid gap-2 lg:grid-cols-2">
-                    {studentsNeedingAttention.slice(0, 6).map(student => {
-                      const status = monitoringStatus(student);
-                      return (
-                        <div key={student.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 ${mutedPanel}`}>
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-black">{student.name}</p>
-                            <p className="mt-1 text-[10px] text-slate-500">{student.section} | {student.overallProgress}% progress | {student.quizScore}% quiz</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleViewStudentProgress(student.id)}
-                              className="min-h-9 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 text-[10px] font-black text-white transition cursor-pointer"
-                            >
-                              View Progress
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
 
               {/* Student Monitoring Roster Table */}
               <section className={`rounded-2xl border shadow-sm ${cardClass}`} aria-labelledby="roster-heading">
