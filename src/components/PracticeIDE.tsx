@@ -61,6 +61,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
 
   const [lastResult, setLastResult] = useState<{
     compileStatus: 'success' | 'failed' | 'runtime_error' | 'not_run';
+    evaluationStatus?: 'COMPILATION_FAILED' | 'RUNTIME_FAILED' | 'TEST_FAILED' | 'PASSED';
     score: number;
     runtime: number;
     memoryUsage?: number;
@@ -230,7 +231,9 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
       setLastResult(result);
       setConsoleLogs([
         'javac Main.java',
-        result.compileStatus === 'failed' ? '❌ Compilation failed.' : '✓ Compilation succeeded.',
+        result.evaluationStatus === 'COMPILATION_FAILED' ? '❌ Compilation failed.' : '✓ Compilation succeeded.',
+        result.evaluationStatus === 'RUNTIME_FAILED' ? '❌ Program failed at runtime.' : '',
+        result.evaluationStatus === 'TEST_FAILED' ? '❌ Tests failed.' : '',
         result.errorMessage || 'All visible test checks evaluated.',
         `Visible score preview: ${result.score}%`,
         `Execution time: ${result.runtime} ms`,
@@ -289,6 +292,9 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     } catch (error: any) {
       setConsoleLogs([
         '❌ Final submission was not saved.',
+        error.code === 'JAVA_COMPILER_UNAVAILABLE'
+          ? 'The server Java compiler is unavailable. No submission or progress was changed.'
+          : '',
         error.message || 'Unable to sync practice submission with backend.'
       ]);
     } finally {

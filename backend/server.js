@@ -13,6 +13,7 @@ const pool = require("./db");
 const { OOP_PARSED_QUESTIONS } = require("./questionBank");
 const { PRACTICE_CHALLENGES } = require("./challengeBank");
 const { validateBasicJavaStructure } = require("./basicJavaValidator");
+const { assertJavaToolchain, getJavaToolchainDiagnostics } = require("./javaToolchain");
 const execFileAsync = promisify(execFile);
 
 const app = express();
@@ -62,6 +63,7 @@ const clampNumber = (value, min, max) => {
 };
 
 const evaluateJavaSubmission = async (challenge, sourceCode) => {
+    const toolchain = await assertJavaToolchain();
     const validation = validateBasicJavaStructure(challenge, sourceCode);
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "oophub-java-"));
     const sourcePath = path.join(tempDir, "Main.java");
@@ -69,13 +71,18 @@ const evaluateJavaSubmission = async (challenge, sourceCode) => {
         await fs.writeFile(sourcePath, String(sourceCode), "utf8");
         let compilerError = "";
         try {
-            await execFileAsync("javac", ["-encoding", "UTF-8", sourcePath], { timeout: 10000, windowsHide: true });
+            await execFileAsync(toolchain.javacPath, ["-encoding", "UTF-8", sourcePath], { timeout: 10000, windowsHide: true });
         } catch (error) {
+            if (error.code === "ENOENT") {
+                error.code = "JAVA_COMPILER_UNAVAILABLE";
+                error.diagnostics = toolchain;
+                throw error;
+            }
             compilerError = String(error.stderr || error.stdout || error.message || "Java compilation failed.").trim();
         }
         if (compilerError) {
             const requirements = validation.requirements.map(item => (
-                item.requirement === "Constructor detected"
+                item.requirement === "Constructor detected" && /constructor .*cannot be applied|actual and formal argument lists differ/i.test(compilerError)
                     ? { ...item, passed: false, message: compilerError }
                     : item
             ));
@@ -85,6 +92,7 @@ const evaluateJavaSubmission = async (challenge, sourceCode) => {
                 oopStructureCheck: requirements.every(item => item.passed) ? "passed" : "needs_review",
                 compilationCheck: "failed",
                 compileStatus: "failed",
+                evaluationStatus: "COMPILATION_FAILED",
                 score: 0,
                 passed: false,
                 practiceCompleted: false,
@@ -98,9 +106,14 @@ const evaluateJavaSubmission = async (challenge, sourceCode) => {
         let programOutput = "";
         let runtimeError = "";
         try {
-            const result = await execFileAsync("java", ["-cp", tempDir, "Main"], { timeout: 10000, windowsHide: true });
+            const result =             await execFileAsync(toolchain.javaPath, ["-cp", tempDir, "Main"], { timeout: 10000, windowsHide: true });
             programOutput = String(result.stdout || "").trim();
         } catch (error) {
+            if (error.code === "ENOENT") {
+                error.code = "JAVA_COMPILER_UNAVAILABLE";
+                error.diagnostics = toolchain;
+                throw error;
+            }
             runtimeError = String(error.stderr || error.stdout || error.message || "Java execution failed.").trim();
         }
 
@@ -113,6 +126,7 @@ const evaluateJavaSubmission = async (challenge, sourceCode) => {
             ...validation,
             compilationCheck: "success",
             compileStatus: runtimeError ? "runtime_error" : "success",
+            evaluationStatus: runtimeError ? "RUNTIME_FAILED" : (passed ? "PASSED" : "TEST_FAILED"),
             score,
             passed,
             practiceCompleted: passed,
@@ -2101,7 +2115,9 @@ app.get("/", (_req, res) => {
 });
 
 app.get("/health", (_req, res) => {
-    res.json({ status: "ok", backend: "Render", database: "postgresql", timestamp: new Date().toISOString() });
+    getJavaToolchainDiagnostics().then((java) => {
+        res.json({ status: "ok", backend: "Render", database: "postgresql", java, timestamp: new Date().toISOString() });
+    });
 });
 
 app.get("/api/test", async (_req, res) => {
@@ -3899,28 +3915,23 @@ app.post("/api/practice-challenges/:id/run", requireAuth, async (req, res, next)
         const validation = await evaluateJavaSubmission(challenge, String(sourceCode));
         const runResult = {
             compileStatus: validation.compileStatus,
+            evaluationStatus: validation.evaluationStatus,
             executionStatus: validation.compileStatus === 'success' ? 'executed' : 'not_executed',
             validationStatus: validation.oopStructureCheck,
             score: validation.score,
             infrastructureError: false,
             runtime: 0,
             memoryUsage: 0,
-            programOutput: '',
+            programOutput: validation.programOutput || '',
             errorMessage: validation.compilerError || validation.note,
-            testResults: validation.requirements.map((item, index) => ({
-                id: `static_${index + 1}`,
-                isHidden: false,
-                passed: item.passed,
-                expectedOutput: item.requirement,
-                actualOutput: item.passed ? item.requirement : '',
-                message: item.message
-            }))
+            testResults: buildEvaluationResults(validation, challenge)
         };
 
         res.json({
             success: true,
             data: {
                 compileStatus: runResult.compileStatus,
+                evaluationStatus: runResult.evaluationStatus,
                 executionStatus: runResult.executionStatus,
                 validationStatus: runResult.validationStatus,
                 score: runResult.score,
@@ -3938,6 +3949,14 @@ app.post("/api/practice-challenges/:id/run", requireAuth, async (req, res, next)
             }
         });
     } catch (error) {
+        if (error.code === "JAVA_COMPILER_UNAVAILABLE") {
+            return res.status(503).json({
+                success: false,
+                code: "JAVA_COMPILER_UNAVAILABLE",
+                message: "The server Java compiler is unavailable. Your submission was not saved and practice completion was not changed.",
+                diagnostics: error.diagnostics
+            });
+        }
         next(error);
     }
 });
@@ -4682,6 +4701,14 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             }
         });
     } catch (error) {
+        if (error.code === "JAVA_COMPILER_UNAVAILABLE") {
+            return res.status(503).json({
+                success: false,
+                code: "JAVA_COMPILER_UNAVAILABLE",
+                message: "The server Java compiler is unavailable. Your submission was not saved and practice completion was not changed.",
+                diagnostics: error.diagnostics
+            });
+        }
         next(error);
     }
 });
@@ -4893,7 +4920,7 @@ app.use((err, _req, res, _next) => {
 
 const PORT = process.env.PORT || 5000;
 
-console.log('[submission-service] runtime: Render Node.js + PostgreSQL; Java execution disabled');
+console.log('[submission-service] runtime: Render Node.js + PostgreSQL + configured JDK');
 
 initializeDatabase()
     .then(async () => {

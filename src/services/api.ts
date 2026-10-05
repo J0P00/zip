@@ -46,7 +46,13 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
   }
 
   if (!response.ok) {
-    throw new Error(payload?.message || payload?.error || `Request failed with status ${response.status}`);
+    const error = new Error(payload?.message || payload?.error || `Request failed with status ${response.status}`) as Error & {
+      code?: string;
+      status?: number;
+    };
+    error.code = payload?.code;
+    error.status = response.status;
+    throw error;
   }
 
   return payload as T;
