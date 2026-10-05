@@ -55,7 +55,7 @@ interface TeacherPortalProps {
   leaderboardUsers?: LeaderboardUser[];
 }
 
-type TeacherTab = 'monitoring' | 'ranking' | 'invitations' | 'topics' | 'swing' | 'assessments' | 'ide' | 'analytics';
+type TeacherTab = 'monitoring' | 'ranking' | 'invitations' | 'topics' | 'swing' | 'assessments' | 'ide';
 type LearningStage = 'Lesson' | 'Watch Video' | 'Assessment' | 'Practice IDE' | 'Automatic Grading' | 'Adaptive Recommendation' | 'Unlock Next Topic';
 type LearningStatus = 'In Progress' | 'Completed' | 'Mastered' | 'Needs Improvement' | 'At Risk';
 type MonitoringStatus = 'At Risk' | 'Needs Help' | 'Improving' | 'On Track' | 'Excellent';
@@ -968,7 +968,6 @@ export default function TeacherPortal({
   const averagePractice = avg(visibleStudents.map(student => student.practiceScore));
   const averagePerformance = avg(visibleStudents.map(student => student.performanceIndex));
   const completionRate = avg(visibleStudents.map(student => student.overallProgress));
-  const videoCompletionRate = avg(visibleStudents.map(student => student.videoCompletion));
   const swingSubmissions = submissions.filter(submission =>
     submission.topicId === 'swing' || submission.challengeName.toLowerCase().includes('swing')
   );
@@ -1003,12 +1002,6 @@ export default function TeacherPortal({
   const rosterPageCount = Math.max(1, Math.ceil(filteredRoster.length / rosterPageSize));
   const pagedRoster = filteredRoster.slice((rosterPage - 1) * rosterPageSize, rosterPage * rosterPageSize);
   useEffect(() => setRosterPage(1), [rosterSearch, rosterStatus, sectionFilter, studentSort]);
-
-  const mostSuccessfulStudent = [...visibleStudents].sort((a, b) => b.performanceIndex - a.performanceIndex)[0];
-  const mostDifficultTopic = OOP_TOPICS.map(topic => ({
-    topic,
-    avg: avg(visibleStudents.map(student => student.topics.find(item => item.topic === topic)?.completion ?? 0))
-  })).sort((a, b) => a.avg - b.avg)[0];
 
   const cardClass = isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900';
   const mutedPanel = isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-emerald-50/20 border-emerald-100/50';
@@ -1062,8 +1055,7 @@ export default function TeacherPortal({
             ['topics', 'OOP Topics', BookOpen],
             ['swing', 'Java Swing', PlayCircle],
             ['assessments', 'Assessments', FileQuestion],
-            ['ide', 'Practice IDE', Code2],
-            ['analytics', 'Analytics', BarChart3]
+            ['ide', 'Practice IDE', Code2]
           ].map(([id, label, Icon]) => {
             const TabIcon = Icon as typeof Activity;
             return (
@@ -2233,58 +2225,6 @@ export default function TeacherPortal({
                 Select a submission to inspect source code and grading details.
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* ANALYTICS TAB */}
-      {/* ========================================================================= */}
-      {activeTab === 'analytics' && (
-        <div className="grid gap-5 lg:grid-cols-2">
-          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
-            <h3 className="text-base font-black">Learning Analytics</h3>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              {[
-                ['Average Quiz Score', `${averageQuiz}%`],
-                ['Average Practice IDE Score', `${averagePractice}%`],
-                ['Video Completion Rate', `${videoCompletionRate}%`],
-                ['Performance Index', `${averagePerformance}%`],
-                ['Most Difficult Topic', mostDifficultTopic?.topic || '--'],
-                ['Most Successful Student', mostSuccessfulStudent?.name || '--'],
-                ['Students At Risk', atRiskStudents.length],
-                ['Learning Completion Rate', `${completionRate}%`],
-                ['Programming Success Rate', `${avg(visibleStudents.map(student => student.practiceScore >= 70 ? 100 : 0))}%`],
-                ['Most Failed Topic', mostDifficultTopic?.topic || '--']
-              ].map(([label, value]) => (
-                <div key={label} className={`rounded-xl border p-3 ${mutedPanel}`}>
-                  <span className="block text-[9px] font-black uppercase text-slate-400">{label}</span>
-                  <strong className="mt-1 block text-sm">{value}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
-            <h3 className="text-base font-black">Weekly and Monthly Progress</h3>
-            <div className="mt-5 space-y-4">
-              {[
-                ['Week 1', 54],
-                ['Week 2', 62],
-                ['Week 3', 73],
-                ['Week 4', completionRate],
-                ['Month Target', 88]
-              ].map(([label, value]) => (
-                <div key={label as string}>
-                  <div className="mb-1 flex justify-between text-xs font-bold">
-                    <span>{label as string}</span>
-                    <span>{value}%</span>
-                  </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                    <div className="h-full rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       )}

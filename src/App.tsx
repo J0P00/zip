@@ -244,7 +244,7 @@ const SESSION_VIEW_KEY = 'oophub_workspace_view';
 const LEADERBOARD_KEY = 'oophub_leaderboard_users';
 const PERSONAS: Persona[] = ['public', 'student', 'teacher', 'admin'];
 const STUDENT_TABS: StudentSubView[] = ['dashboard', 'ide', 'videos', 'assessments', 'swing', 'leaderboard', 'profile'];
-const TEACHER_TABS: TeacherSubView[] = ['dashboard', 'students', 'submission-review', 'analytics', 'profile'];
+const TEACHER_TABS: TeacherSubView[] = ['dashboard', 'students', 'submission-review', 'profile'];
 const ADMIN_TABS: AdminSubView[] = ['dashboard', 'videos', 'assessments', 'practice', 'monitoring', 'reports', 'settings'];
 
 const isPersona = (value: unknown): value is Persona =>
