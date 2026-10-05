@@ -936,6 +936,7 @@ const seedCompletedDemoStudent = async () => {
               section = EXCLUDED.section,
               program_status = EXCLUDED.program_status
         `, [studentId]);
+        await client.query("DELETE FROM quiz_attempts WHERE student_user_id = $1", [studentId]);
 
         const lessons = await client.query(`
             SELECT id, sequence
@@ -990,7 +991,7 @@ const seedCompletedDemoStudent = async () => {
                   WHERE student_user_id = $1
                     AND assessment_id = $2
                 )
-            `, [studentId, `demo_assessment_${lesson.id}`, lesson.id]);
+            `, [studentId, `oop_assessment_${lesson.sequence}`, lesson.id]);
 
             const challenge = challengeByLesson.get(lesson.id);
             if (challenge) {
@@ -3138,10 +3139,6 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
         if (req.authUser.role === "student" && req.authUser.id !== req.params.studentId) {
             return res.status(403).json({ success: false, message: "Students can only view their own progress." });
         }
-        await pool.query(
-            "DELETE FROM student_progress WHERE student_user_id = $1 AND completed = TRUE AND completion_percentage = 100 AND last_position = 900",
-            [req.params.studentId]
-        );
         const result = await pool.query(
             `SELECT sp.id, sp.student_user_id, sp.video_id, sp.last_position,
                     sp.completion_percentage,
