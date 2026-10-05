@@ -1153,8 +1153,10 @@ export default function App() {
   // 3. When teacher drafts score reviews inside Instructor grading panels
   const handleGradeSubmission = async (submissionId: string, gradeScore: number, feedbackNotes: string, remedialRequired = false) => {
     const response = await practiceApi.gradeSubmission(submissionId, { grade: gradeScore, feedback: feedbackNotes, remedialRequired });
-    const updated = practiceSubmissionRowToPending(response.data);
-    setPendingSubmissions(prev => [updated, ...prev.filter(s => s.id !== submissionId)]);
+    const refreshed = await practiceApi.listSubmissions();
+    const updated = refreshed.data.map(practiceSubmissionRowToPending).find(submission => submission.id === submissionId);
+    if (!updated) throw new Error('Grade was saved, but the updated submission could not be reloaded.');
+    setPendingSubmissions(refreshed.data.map(practiceSubmissionRowToPending));
 
     // If grading the current student's submission, sync immediately with student recent portfolio records
     const targetSub = pendingSubmissions.find(s => s.id === submissionId);

@@ -875,6 +875,7 @@ export default function TeacherPortal({
   });
 
   const selectedSubmission = submissions.find(sub => sub.id === selectedSubId) ?? filteredSubmissions[0];
+  const selectedSubmissionIsGraded = Boolean(selectedSubmission && ['graded', 'reviewed', 'passed'].includes(selectedSubmission.reviewStatus || selectedSubmission.status));
 
   useEffect(() => {
     if (selectedSubmission) {
@@ -925,10 +926,19 @@ export default function TeacherPortal({
 
   const handlePostGrade = async () => {
     if (!selectedSubmission) return;
+    const numericGrade = Number(scoreText);
+    if (!Number.isFinite(numericGrade) || numericGrade < 0 || numericGrade > 100) {
+      setSubmissionMessage({ type: 'error', message: 'Grade must be a number from 0 to 100.' });
+      return;
+    }
+    if (!commentText.trim()) {
+      setSubmissionMessage({ type: 'error', message: 'Please provide feedback before posting the grade.' });
+      return;
+    }
     setSubmissionAction('grade');
     setSubmissionMessage(null);
     try {
-      await onGradeSubmission(selectedSubmission.id, scoreText, commentText, remedialRequired);
+      await onGradeSubmission(selectedSubmission.id, numericGrade, commentText.trim(), remedialRequired);
       setSubmissionMessage({ type: 'success', message: 'Grade & feedback posted successfully.' });
     } catch (err: any) {
       setSubmissionMessage({ type: 'error', message: err?.message || 'Failed to post grade.' });
@@ -2199,14 +2209,20 @@ export default function TeacherPortal({
                     </div>
                   )}
                   <div className="grid grid-cols-[auto_1fr] gap-2">
-                    {onReopenSubmission && (
+                    {onReopenSubmission && selectedSubmissionIsGraded && (
                       <button type="button" onClick={handleReopenSelectedSubmission} disabled={submissionAction !== null} className="min-h-11 rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer">
                         {submissionAction === 'reopen' ? 'Reopening...' : 'Reopen'}
                       </button>
                     )}
-                    <button type="button" onClick={handlePostGrade} disabled={submissionAction !== null} className="min-h-11 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-black text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer">
-                      {submissionAction === 'grade' ? 'Posting...' : 'Post Grade & Feedback'}
-                    </button>
+                    {!selectedSubmissionIsGraded ? (
+                      <button type="button" onClick={handlePostGrade} disabled={submissionAction !== null} className="min-h-11 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-black text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer">
+                        {submissionAction === 'grade' ? 'Saving...' : 'Post Grade & Feedback'}
+                      </button>
+                    ) : (
+                      <div className="flex min-h-11 items-center justify-center rounded-xl border border-emerald-800 bg-emerald-950/40 px-4 py-2 text-xs font-black text-emerald-300">
+                        Grade Posted
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

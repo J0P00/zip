@@ -4768,7 +4768,7 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
                 return res.status(403).json({ success: false, message: "You are not authorized to review this student's submission." });
             }
         }
-        await client.query(`
+        const gradeUpdate = await client.query(`
             UPDATE practice_submissions
             SET teacher_score = $2,
                 teacher_feedback = $3,
@@ -4777,7 +4777,12 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
                 review_status = $6,
                 remedial_required = $5
             WHERE id = $1
+            RETURNING id, student_id, challenge_id, teacher_score, teacher_feedback, graded_by, graded_at, review_status
         `, [req.params.id, grade, feedback, req.authUser.id, remedialRequired, reviewStatus]);
+        if (gradeUpdate.rowCount !== 1) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ success: false, message: "The practice submission could not be graded because it no longer exists." });
+        }
         const updatedResult = await client.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
                u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
@@ -4797,8 +4802,8 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
         
         notification = await createOrUpdateNotification(client, {
             recipientUserId: studentRecipientId,
-            type: remedialRequired ? "remedial_required" : grade >= 80 ? "submission_passed" : "submission_graded",
-            title: "Practice Reviewed",
+            type: remedialRequired ? "remedial_required" : "submission_graded",
+            title: remedialRequired ? "Practice Returned for Revision" : "Practice Graded",
             message: "Your " + practiceTitle + " practice submission has been reviewed by " + teacherName + ".\nGrade: " + grade + "/100\nFeedback: " + feedback + "\nRemedial work required: " + (remedialRequired ? "Yes" : "No"),
             relatedSubmissionId: existing.id,
             relatedPracticeId: existing.challenge_id,
@@ -4811,6 +4816,9 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
             remedialRequired,
             metadata: { studentName: existing.student_name || "", studentEmail: existing.student_email || "" }
         });
+        if (!notification) {
+            throw new Error("Unable to create the student grading notification.");
+        }
 
         await client.query("COMMIT");
 
