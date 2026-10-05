@@ -62,6 +62,7 @@ import {
   INITIAL_ADAPTIVE_RULES 
 } from './data/mockData';
 import { OOP_COURSE_LESSONS, applyOopLessonCitation } from './data/oopCourse';
+import { lessonVideos } from './data/lessonVideos';
 import {
   ensureStudentProgress,
   findStudentProgress,
@@ -507,7 +508,7 @@ export default function App() {
             ...fallback,
             ...lesson,
             id: lesson.id,
-            videoUrl: usesMissingPlaceholder ? (fallback?.videoUrl || backendVideoUrl) : (backendVideoUrl || fallback?.videoUrl || ''),
+            videoUrl: lessonVideos.oop[lesson.id as keyof typeof lessonVideos.oop]?.secureUrl || (usesMissingPlaceholder ? (fallback?.videoUrl || backendVideoUrl) : (backendVideoUrl || fallback?.videoUrl || '')),
             duration: lesson.duration || fallback?.duration || ''
           } as VideoLesson;
         });

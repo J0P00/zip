@@ -2855,15 +2855,17 @@ app.post("/api/assessments/session/start", requireAuth, async (req, res, next) =
             return res.status(403).json({ success: false, message: "Assessment does not belong to this lesson." });
         }
 
-        // Assessment eligibility is based on the authoritative current-lesson
-        // evidence. Sequential access still controls lesson/video progression,
-        // while a lesson whose video is already >=95% may start its assessment.
-        const evidence = await getLessonEvidence(req.authUser.id, safeLessonId);
-        if (!evidence?.assessmentUnlocked) {
+        // Assessment eligibility is based on the authenticated student's
+        // current-lesson evidence and sequential lesson access.
+        const access = await getLessonAccessState(req.authUser.id, safeLessonId);
+        const evidence = access.current;
+        if (!access.canAccess || !evidence?.assessmentUnlocked) {
             return res.status(403).json({
                 success: false,
-                errorCode: "VIDEO_INCOMPLETE",
-                message: "Complete at least 95% of the current lesson video before starting its assessment.",
+                errorCode: evidence?.assessmentUnlocked ? "LESSON_LOCKED" : "VIDEO_INCOMPLETE",
+                message: evidence?.assessmentUnlocked
+                    ? (access.reason || "Complete the previous lesson requirements first.")
+                    : "Complete at least 95% of the current lesson video before starting its assessment.",
                 data: evidence
             });
         }
@@ -3106,6 +3108,17 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
         }
 
         const session = sessionResult.rows[0];
+        const access = await getLessonAccessState(req.authUser.id, session.lesson_id);
+        if (!access.canAccess || !access.current?.assessmentUnlocked) {
+            return res.status(403).json({
+                success: false,
+                errorCode: access.current?.assessmentUnlocked ? "LESSON_LOCKED" : "VIDEO_INCOMPLETE",
+                message: access.current?.assessmentUnlocked
+                    ? (access.reason || "Complete the previous lesson requirements first.")
+                    : "Complete at least 95% of the current lesson video before submitting its assessment.",
+                data: access.current
+            });
+        }
         if (session.status === "completed") {
             return res.status(409).json({ success: false, message: "This assessment session has already been completed." });
         }
@@ -3303,8 +3316,10 @@ app.get("/api/lesson-access/:lessonId", requireAuth, requireRole(["student"]), a
             success: true,
             data: {
                 ...access,
-                canStart: Boolean(current?.assessmentUnlocked),
-                reason: current?.assessmentUnlocked ? null : "VIDEO_INCOMPLETE",
+                canStart: Boolean(access.canAccess && current?.assessmentUnlocked),
+                reason: access.canAccess
+                    ? (current?.assessmentUnlocked ? null : "VIDEO_INCOMPLETE")
+                    : access.reason,
                 videoProgress: Number(current?.videoProgress || 0),
                 passingScore: ASSESSMENT_PASSING_SCORE
             }

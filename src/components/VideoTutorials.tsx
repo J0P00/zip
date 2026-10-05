@@ -99,6 +99,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const [volume, setVolume] = useState(0.9);
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [videoError, setVideoError] = useState(false);
 
   const completedLessons = studentResults?.completedLessons ?? lessons.filter(lesson => lesson.status === 'completed').length;
   const passedAssessments = OOP_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
@@ -150,6 +151,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
 
   useEffect(() => {
     if (!activeLesson) return;
+    setVideoError(false);
     const watch = watchDb[activeLesson.id];
     const nextPosition = watch?.lastPosition || 0;
     setCurrentTime(nextPosition);
@@ -311,13 +313,26 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 src={activeLesson.videoUrl}
                 className="h-full w-full object-contain"
                 playsInline
-                onLoadedMetadata={handleLoadedMetadata}
+                onLoadedMetadata={() => {
+                  setVideoError(false);
+                  handleLoadedMetadata();
+                }}
+                onError={() => {
+                  setIsPlaying(false);
+                  setVideoError(true);
+                }}
                 onTimeUpdate={handleTimeUpdate}
                 onEnded={() => {
                   setIsPlaying(false);
                   if (videoRef.current) persistProgress(videoRef.current.duration, videoRef.current.duration);
                 }}
               />
+              {videoError && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/75 p-6 text-center text-white">
+                  <p className="text-sm font-bold">Video unavailable. Please try again.</p>
+                  <button type="button" onClick={() => { setVideoError(false); videoRef.current?.load(); }} className="rounded-lg bg-white px-4 py-2 text-xs font-black text-slate-900">Retry video</button>
+                </div>
+              )}
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-2.5 sm:p-4">
                 <input
                   type="range"

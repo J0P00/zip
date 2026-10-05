@@ -89,6 +89,8 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
   const [lastResult, setLastResult] = useState<SwingGradeResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+  const [videoAttempt, setVideoAttempt] = useState(0);
 
   const activeLesson = JAVA_SWING_LESSONS.find(lesson => lesson.id === activeLessonId) || JAVA_SWING_LESSONS[0];
   const activeAssessment = JAVA_SWING_ASSESSMENTS.find(item => item.lessonId === activeLesson.id) || JAVA_SWING_ASSESSMENTS[0];
@@ -107,6 +109,11 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
       return () => window.clearTimeout(timer);
     }
   }, [oopUnlocked, onUnlocked]);
+
+  useEffect(() => {
+    setVideoError(false);
+    setVideoAttempt(0);
+  }, [activeLessonId]);
 
   useEffect(() => {
     const key = `${userKeyFor(currentUser)}:${activeExercise.id}`;
@@ -459,7 +466,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
               {(() => {
                 const video = JAVA_SWING_VIDEOS.find(item => item.lessonId === activeLesson.id) || JAVA_SWING_VIDEOS[0];
                 return video.embedUrl.endsWith('.mp4') ? (
-                  <video key={video.id} src={video.embedUrl} controls className="h-full w-full object-contain" />
+                  <video key={video.id + '-' + videoAttempt} src={video.embedUrl} controls className="h-full w-full object-contain" onLoadedData={() => setVideoError(false)} onError={() => setVideoError(true)} />
                 ) : (
                   <iframe src={video.embedUrl} title={video.title} className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
                 );
@@ -472,7 +479,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
                   <h3 className="mt-1 text-lg font-extrabold text-slate-900">{activeLesson.title}</h3>
                   <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{activeLesson.introduction}</p>
                 </div>
-                <button type="button" disabled={Boolean(lessonLockReason) || progressDb[activeLesson.id]?.videoCompleted} onClick={() => markLessonComplete('videoCompleted')} className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto">
+                <button type="button" disabled={Boolean(lessonLockReason) || progressDb[activeLesson.id]?.videoCompleted || videoError} onClick={() => markLessonComplete('videoCompleted')} className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto">
                   {progressDb[activeLesson.id]?.videoCompleted ? 'Video Complete' : 'Mark Video Complete'}
                 </button>
               </div>

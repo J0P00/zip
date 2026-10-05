@@ -1,0 +1,12 @@
+backend/
+server/
+node_modules/
+dist/
+.vercel/
+.codex-pg-*/
+.obsidian/
+*.log
+*.sql
+*.zip
+*.7z
+*.rar

@@ -1,6 +1,7 @@
 import { ChallengeTestResult, ProgrammingChallenge } from '../types';
 import { CourseQuestion } from './oopCourse';
 import { SWING_QUESTION_BANKS } from './javaSwingQuestions';
+import { lessonVideos } from './lessonVideos';
 
 export const SWING_WATCH_KEY = 'oophub_swing_lesson_progress';
 export const SWING_QUIZ_KEY = 'oophub_swing_quiz_attempts';
@@ -315,7 +316,7 @@ export const JAVA_SWING_VIDEOS: SwingVideo[] = [
     title: 'Topic 1 JFrame Video Lesson',
     duration: '15:00',
     description: 'Learn how to create and configure a simple window using JFrame.',
-    embedUrl: '/Java Swing/Video Lesson/Topic 1 JFRAME.mp4'
+    embedUrl: lessonVideos.javaSwing.swing_lesson_1.secureUrl
   },
   {
     id: 'swing_video_2',
@@ -323,7 +324,7 @@ export const JAVA_SWING_VIDEOS: SwingVideo[] = [
     title: 'Topic 2 JLabel, JTextField, & JTextArea Video Lesson',
     duration: '15:00',
     description: 'Learn how to add static labels, single-line text fields, and multi-line text areas.',
-    embedUrl: '/Java Swing/Video Lesson/Topic 2 Jlabel,JTextField,JtextArea.mp4'
+    embedUrl: lessonVideos.javaSwing.swing_lesson_2.secureUrl
   },
   {
     id: 'swing_video_3',
@@ -331,7 +332,7 @@ export const JAVA_SWING_VIDEOS: SwingVideo[] = [
     title: 'Topic 3 JButton & ActionListener Video Lesson',
     duration: '15:00',
     description: 'Learn how to create buttons and handle click events with ActionListeners.',
-    embedUrl: '/Java Swing/Video Lesson/Topic 3 JButton&ActionListener.mp4'
+    embedUrl: lessonVideos.javaSwing.swing_lesson_3.secureUrl
   },
   {
     id: 'swing_video_4',
@@ -339,7 +340,7 @@ export const JAVA_SWING_VIDEOS: SwingVideo[] = [
     title: 'Topic 4 JPanel & Layout Managers Video Lesson',
     duration: '15:00',
     description: 'Learn how to arrange controls using FlowLayout, BorderLayout, and GridLayout.',
-    embedUrl: '/Java Swing/Video Lesson/Topic 4 JPanel&LayoutManagers.mp4'
+    embedUrl: lessonVideos.javaSwing.swing_lesson_4.secureUrl
   },
   {
     id: 'swing_video_5',
@@ -347,7 +348,7 @@ export const JAVA_SWING_VIDEOS: SwingVideo[] = [
     title: 'Topic 5 JOptionPane Video Lesson',
     duration: '15:00',
     description: 'Learn how to display dialog popups, collect input, and handle confirmation boxes.',
-    embedUrl: '/Java Swing/Video Lesson/Topic 5 JOptionPane.mp4'
+    embedUrl: lessonVideos.javaSwing.swing_lesson_5.secureUrl
   }
 ];
 

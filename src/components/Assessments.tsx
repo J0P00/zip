@@ -101,7 +101,12 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
         setEvidenceDb(accessResponses.reduce((acc: Record<string, LessonEvidence>, accessResponse: any) => {
           if (accessResponse.data?.current) {
             const evidence = accessResponse.data.current;
-            acc[evidence.lessonId || (evidence as LessonEvidence & { id?: string }).id || ''] = evidence;
+            const evidenceKey = evidence.lessonId || (evidence as LessonEvidence & { id?: string }).id || '';
+            acc[evidenceKey] = {
+              ...evidence,
+              // canStart is the backend-authoritative availability decision.
+              assessmentUnlocked: Boolean(accessResponse.data.canStart)
+            };
           }
           return acc;
         }, {}));
@@ -290,7 +295,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
   };
 
   const courseStats = useMemo(() => {
-    const completedLessons = OOP_COURSE_LESSONS.filter(lesson => watchDb[lesson.id]?.completed).length;
+    const completedLessons = OOP_COURSE_LESSONS.filter(lesson => evidenceDb[lesson.id]?.completed).length;
     const passedAssessments = OOP_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
     return {
       completedLessons,
