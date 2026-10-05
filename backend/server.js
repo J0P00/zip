@@ -1807,7 +1807,10 @@ const getLessonEvidence = async (studentId, lessonId) => {
     if (!lessonResult.rowCount) return null;
     const lesson = lessonResult.rows[0];
     const videoResult = await pool.query(
-        "SELECT completed, completion_percentage FROM student_progress WHERE student_user_id = $1 AND video_id = $2",
+        `SELECT COALESCE(MAX(completion_percentage), 0) AS completion_percentage,
+                COALESCE(BOOL_OR(completed), FALSE) AS completed
+         FROM student_progress
+         WHERE student_user_id = $1 AND video_id = $2`,
         [studentId, lessonId]
     );
     const quizResult = await pool.query(
@@ -1856,6 +1859,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
     );
     return {
         ...lesson,
+        lessonId: lesson.id,
         videoProgress,
         videoCompleted,
         assessmentScore: quizResult.rows[0]?.percentage === null || quizResult.rows[0]?.percentage === undefined
@@ -2718,19 +2722,34 @@ app.post("/api/assessments/session/start", requireAuth, async (req, res, next) =
         }
 
         const safeAssessmentId = cleanText(assessmentId, 120);
-        const safeLessonId = cleanText(lessonId, 120);
+        const requestedLessonId = cleanText(lessonId, 120);
+        const assessmentDefinition = await pool.query(
+            "SELECT lesson_id FROM assessments WHERE id = $1 LIMIT 1",
+            [safeAssessmentId]
+        );
+        const definedLessonId = assessmentDefinition.rows[0]?.lesson_id
+            ? cleanText(assessmentDefinition.rows[0].lesson_id, 120)
+            : "";
+        const safeLessonId = definedLessonId || requestedLessonId;
+
+        if (!safeLessonId) {
+            return res.status(400).json({ success: false, message: "lessonId is required for assessment access." });
+        }
+        if (definedLessonId && requestedLessonId && definedLessonId !== requestedLessonId) {
+            return res.status(403).json({ success: false, message: "Assessment does not belong to this lesson." });
+        }
 
         // Assessment eligibility is based on the authoritative current-lesson
         // evidence. Sequential access still controls lesson/video progression,
         // while a lesson whose video is already >=95% may start its assessment.
-        if (safeLessonId) {
-            const evidence = await getLessonEvidence(req.authUser.id, safeLessonId);
-            if (!evidence?.assessmentUnlocked) {
-                return res.status(403).json({
-                    success: false,
-                    message: "Complete the current lesson video before starting its assessment."
-                });
-            }
+        const evidence = await getLessonEvidence(req.authUser.id, safeLessonId);
+        if (!evidence?.assessmentUnlocked) {
+            return res.status(403).json({
+                success: false,
+                errorCode: "VIDEO_INCOMPLETE",
+                message: "Complete at least 95% of the current lesson video before starting its assessment.",
+                data: evidence
+            });
         }
 
         // Check if student has an existing active session for this assessment
@@ -3158,7 +3177,16 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
 app.get("/api/lesson-access/:lessonId", requireAuth, requireRole(["student"]), async (req, res, next) => {
     try {
         const access = await getLessonAccessState(req.authUser.id, cleanText(req.params.lessonId, 120));
-        res.json({ success: true, data: access });
+        const current = access.current;
+        res.json({
+            success: true,
+            data: {
+                ...access,
+                canStart: Boolean(current?.assessmentUnlocked),
+                reason: current?.assessmentUnlocked ? null : "VIDEO_INCOMPLETE",
+                videoProgress: Number(current?.videoProgress || 0)
+            }
+        });
     } catch (error) {
         next(error);
     }
@@ -3241,7 +3269,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                         , pool.query(`
                                 SELECT l.id, l.title, l.sequence,
                                              sp.completion_percentage AS video_percentage,
-                                             sp.completed AS video_completed,
+                                             (COALESCE(sp.completed, FALSE) OR COALESCE(sp.completion_percentage, 0) >= 95) AS video_completed,
                                                                                          qa.percentage AS quiz_percentage,
                                                                                          EXISTS (
                                                                                              SELECT 1

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { AlertCircle, Award, Check, CheckCircle, ChevronLeft, ChevronRight, Clock, Lock, RotateCcw, ShieldAlert, X } from 'lucide-react';
-import { AdaptiveRecommendation, AssessmentReviewQuestion, AssessmentSessionData, AssessmentSessionQuestion, AuthenticatedUser, StudentSubView, VideoLesson } from '../types';
+import { AdaptiveRecommendation, AssessmentReviewQuestion, AssessmentSessionData, AssessmentSessionQuestion, AuthenticatedUser, LessonEvidence, StudentSubView, VideoLesson } from '../types';
 import { OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
-import { assessmentApi, practiceApi, progressApi } from '../services/api';
+import { assessmentApi, lessonApi, practiceApi, progressApi } from '../services/api';
 import RecommendationCard from './RecommendationCard';
 import SecureWatermark from './SecureWatermark';
 
@@ -42,19 +42,21 @@ type SubmissionDb = Record<string, { score?: number; compileStatus?: string }>;
 
 const PASSING_PERCENTAGE = 80;
 
-const getAssessmentLockedReason = (lessonId: string, watchDb: WatchDb, quizDb: QuizDb, submissionDb: SubmissionDb, studentKey: string) => {
+const getAssessmentLockedReason = (lessonId: string, evidenceDb: Record<string, LessonEvidence>, evidenceLoaded: boolean) => {
   const lesson = OOP_COURSE_LESSONS.find(item => item.id === lessonId);
   if (!lesson) return 'Lesson unavailable';
 
-  if ((watchDb[lessonId]?.completionPercentage || 0) < 95) return 'Watch at least 95% of this lesson video first.';
-  return '';
+  const evidence = evidenceDb[lessonId];
+  if (!evidenceLoaded || !evidence) return 'Checking lesson video progress...';
+  return evidence.assessmentUnlocked ? '' : 'Watch at least 95% of this lesson video first.';
 };
 
 export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavigateTo, activeRecommendation }: AssessmentsProps) {
   const [watchDb, setWatchDb] = useState<WatchDb>({});
+  const [evidenceDb, setEvidenceDb] = useState<Record<string, LessonEvidence>>({});
+  const [evidenceLoaded, setEvidenceLoaded] = useState(false);
   const [quizDb, setQuizDb] = useState<QuizDb>({});
   const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
-  const studentKey = currentUser.id || currentUser.userId || currentUser.email;
 
   const [activeAssessmentId, setActiveAssessmentId] = useState<string | null>(null);
   const [sessionData, setSessionData] = useState<AssessmentSessionData | null>(null);
@@ -91,10 +93,19 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
     Promise.all([
       progressApi.getVideoProgress(user, token),
       progressApi.getQuizAttempts(user, token),
-      practiceApi.listMine()
+      practiceApi.listMine(),
+      ...OOP_COURSE_LESSONS.map(lesson => lessonApi.getAccess(lesson.id, token))
     ])
-      .then(([videoResponse, response, submissions]) => {
+      .then(([videoResponse, response, submissions, ...accessResponses]) => {
         if (!isMounted) return;
+        setEvidenceLoaded(true);
+        setEvidenceDb(accessResponses.reduce((acc: Record<string, LessonEvidence>, accessResponse: any) => {
+          if (accessResponse.data?.current) {
+            const evidence = accessResponse.data.current;
+            acc[evidence.lessonId || (evidence as LessonEvidence & { id?: string }).id || ''] = evidence;
+          }
+          return acc;
+        }, {}));
         setWatchDb(
           videoResponse.data.reduce((acc: WatchDb, row: any) => ({
             ...acc,
@@ -133,7 +144,10 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
           }), {})
         );
       })
-      .catch(error => console.warn('Unable to load assessment attempts from backend:', error));
+      .catch(error => {
+        if (isMounted) setEvidenceLoaded(true);
+        console.warn('Unable to load assessment access from backend:', error);
+      });
 
     return () => {
       isMounted = false;
@@ -144,7 +158,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
   useEffect(() => {
     let isMounted = true;
     if (OOP_ASSESSMENTS.length > 0 && view === 'dashboard') {
-      const firstAvailable = OOP_ASSESSMENTS.find(a => !getAssessmentLockedReason(a.lessonId, watchDb, quizDb, submissionDb, studentKey));
+      const firstAvailable = OOP_ASSESSMENTS.find(a => !getAssessmentLockedReason(a.lessonId, evidenceDb, evidenceLoaded));
       if (firstAvailable) {
         assessmentApi.getActiveSession(firstAvailable.id).then(res => {
           if (!isMounted || !res.data) return;
@@ -160,7 +174,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
       }
     }
     return () => { isMounted = false; };
-  }, [quizDb, submissionDb, watchDb, studentKey, view]);
+  }, [evidenceDb, evidenceLoaded, quizDb, submissionDb, view]);
 
   // Server-authoritative timer countdown
   useEffect(() => {
@@ -290,7 +304,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
   const startAssessment = async (assessmentId: string) => {
     const assessment = OOP_ASSESSMENTS.find(item => item.id === assessmentId);
     if (!assessment) return;
-    const reason = getAssessmentLockedReason(assessment.lessonId, watchDb, quizDb, submissionDb, studentKey);
+    const reason = getAssessmentLockedReason(assessment.lessonId, evidenceDb, evidenceLoaded);
     if (reason) return;
 
     setSessionError(null);
@@ -424,7 +438,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
       <div className="grid gap-5 lg:grid-cols-4">
         {OOP_ASSESSMENTS.map(assessment => {
           const lesson = OOP_COURSE_LESSONS.find(item => item.id === assessment.lessonId);
-          const reason = getAssessmentLockedReason(assessment.lessonId, watchDb, quizDb, submissionDb, studentKey);
+          const reason = getAssessmentLockedReason(assessment.lessonId, evidenceDb, evidenceLoaded);
           const attempt = quizDb[assessment.id];
           const passed = attempt?.passed;
 

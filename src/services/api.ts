@@ -129,6 +129,11 @@ export const rankingApi = {
 
 export const lessonApi = {
   list: () => apiRequest<{ success: boolean; data: any[] }>('/api/lessons'),
+  getAccess: (lessonId: string, token?: string) =>
+    apiRequest<{ success: boolean; data: { canAccess: boolean; reason?: string; current?: import('../types').LessonEvidence } }>(
+      `/api/lesson-access/${encodeURIComponent(lessonId)}`,
+      { token }
+    ),
   create: (body: Record<string, unknown>) =>
     apiRequest<{ success: boolean; data: any }>('/api/lessons', {
       method: 'POST',

@@ -57,11 +57,10 @@ const getPrerequisiteMessage = (lesson: VideoLesson, allLessons: VideoLesson[], 
   const previous = allLessons.find(item => item.sequence === lesson.sequence - 1);
   if (!previous) return 'Complete the previous lesson requirements first.';
   const previousTopic = getTopic(studentResults, previous.id);
-  if (previousTopic?.videoCompleted && previousTopic?.quizPassed) return '';
-  if (!previousTopic?.videoCompleted) return `Complete the ${previous.title} video to continue.`;
-  return previousTopic?.quizPercentage !== null && previousTopic?.quizPercentage !== undefined
-    ? `Pass the ${previous.title} assessment with at least 80%.`
-    : `Complete the ${previous.title} assessment to continue.`;
+  if (previousTopic?.lessonCompleted) return '';
+  if (!previousTopic?.videoCompleted || (previousTopic.videoPercentage || 0) < 95) return `Complete the ${previous.title} video to continue.`;
+  if (!previousTopic?.quizPassed) return `Pass the ${previous.title} assessment with at least 80%.`;
+  return `Complete the ${previous.title} practice before continuing.`;
 };
 
 export default function VideoTutorials({ currentUser, lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress, studentResults = null }: VideoTutorialsProps) {
@@ -177,7 +176,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     }
   }, [isPlaying]);
 
-  const persistProgress = (position: number, nextDuration = duration) => {
+  const persistProgress = async (position: number, nextDuration = duration) => {
     if (!activeLesson) return;
     const existing = watchDb[activeLesson.id];
     const measuredPercentage = nextDuration > 0 ? Math.min(100, Math.round((position / nextDuration) * 100)) : 0;
@@ -196,12 +195,30 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     };
 
     setWatchDb(nextDb);
-    progressApi.saveVideoProgress({
-      videoId: activeLesson.id,
-      lastPosition: position,
-      completionPercentage: percentage,
-      completed
-    }).catch(error => console.warn('Unable to sync video progress with backend:', error));
+    try {
+      await progressApi.saveVideoProgress({
+        videoId: activeLesson.id,
+        lastPosition: position,
+        completionPercentage: percentage,
+        completed
+      });
+      const refreshed = await progressApi.getVideoProgress(currentUser.id || '', currentUser.token);
+      const refreshedRecord = refreshed.data.find((row: any) => row.video_id === activeLesson.id);
+      if (refreshedRecord) {
+        setWatchDb(previous => ({
+          ...previous,
+          [activeLesson.id]: {
+            lessonId: activeLesson.id,
+            lastPosition: Number(refreshedRecord.last_position || 0),
+            completionPercentage: Number(refreshedRecord.completion_percentage || 0),
+            completed: Boolean(refreshedRecord.completed),
+            dateCompleted: refreshedRecord.date_completed || undefined
+          }
+        }));
+      }
+    } catch (error) {
+      console.warn('Unable to sync video progress with backend:', error);
+    }
     onUpdateVideoProgress(activeLesson.id, percentage);
   };
 

@@ -149,6 +149,20 @@ export interface VideoLesson {
   citation_url?: string;
 }
 
+export interface LessonEvidence {
+  lessonId: string;
+  videoProgress: number;
+  videoCompleted: boolean;
+  assessmentScore: number | null;
+  assessmentPassed: boolean;
+  practiceRequired: boolean;
+  practiceCompleted: boolean;
+  assessmentUnlocked: boolean;
+  practiceUnlocked: boolean;
+  nextLessonUnlocked: boolean;
+  completed: boolean;
+}
+
 export interface NotificationItem {
   id: string;
   title: string;
