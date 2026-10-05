@@ -875,7 +875,9 @@ export default function TeacherPortal({
   });
 
   const selectedSubmission = submissions.find(sub => sub.id === selectedSubId) ?? filteredSubmissions[0];
-  const selectedSubmissionIsGraded = Boolean(selectedSubmission && ['graded', 'reviewed', 'passed'].includes(selectedSubmission.reviewStatus || selectedSubmission.status));
+  // "returned" is the persisted status used when feedback requires remedial work.
+  // It is still a completed teacher review and must not be treated as pending.
+  const selectedSubmissionIsGraded = Boolean(selectedSubmission && ['graded', 'returned', 'reviewed', 'passed'].includes(selectedSubmission.reviewStatus || selectedSubmission.status));
 
   useEffect(() => {
     if (selectedSubmission) {
