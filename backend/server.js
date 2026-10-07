@@ -5383,9 +5383,22 @@ const purgeDeletedDemoStudent = async () => {
         await client.query("DELETE FROM swing_progress WHERE student_id = ANY($1::text[])", [identifiers]);
         await client.query("DELETE FROM practice_submissions WHERE student_id = ANY($1::text[])", [identifiers]);
         await client.query("DELETE FROM recommendation_history WHERE student_id = ANY($1::text[])", [identifiers]);
-        await client.query("DELETE FROM realtime_learning_events WHERE student_id = ANY($1::text[])", [identifiers]);
-        await client.query("DELETE FROM teacher_students WHERE student_id = ANY($1::text[])", [identifiers]);
-        await client.query("DELETE FROM invitations WHERE LOWER(student_email) = LOWER($1) OR accepted_by_student_id = ANY($2::text[])", [email, identifiers]);
+        const optionalCleanupTables = await client.query(`
+            SELECT
+              to_regclass('public.realtime_learning_events') IS NOT NULL AS has_realtime_events,
+              to_regclass('public.teacher_students') IS NOT NULL AS has_teacher_students,
+              to_regclass('public.invitations') IS NOT NULL AS has_invitations
+        `);
+        const optionalTables = optionalCleanupTables.rows[0] || {};
+        if (optionalTables.has_realtime_events) {
+            await client.query("DELETE FROM realtime_learning_events WHERE student_id = ANY($1::text[])", [identifiers]);
+        }
+        if (optionalTables.has_teacher_students) {
+            await client.query("DELETE FROM teacher_students WHERE student_id = ANY($1::text[])", [identifiers]);
+        }
+        if (optionalTables.has_invitations) {
+            await client.query("DELETE FROM invitations WHERE LOWER(student_email) = LOWER($1) OR accepted_by_student_id = ANY($2::text[])", [email, identifiers]);
+        }
         await client.query("DELETE FROM users WHERE id = $1", [id]);
         await client.query("COMMIT");
         console.log(`Deleted demo account and all associated data for ${email}.`);
