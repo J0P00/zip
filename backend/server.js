@@ -1566,20 +1566,6 @@ const seedPracticeChallenges = async () => {
             challenge.sampleOutput
         ]);
 
-        await verifyLessonCompletion(req.authUser.id, prerequisite.rows[0].lesson_id);
-        const lessonAccess = await getLessonAccessState(req.authUser.id, prerequisite.rows[0].lesson_id);
-        const nextLessonResult = await pool.query(
-            `SELECT id FROM lessons
-             WHERE sequence = (
-               SELECT sequence + 1 FROM lessons WHERE id = $1
-             ) AND status <> 'Archived'
-             LIMIT 1`,
-            [prerequisite.rows[0].lesson_id]
-        );
-        const nextLessonAccess = nextLessonResult.rowCount
-            ? await getLessonAccessState(req.authUser.id, nextLessonResult.rows[0].id)
-            : null;
-
         await pool.query("DELETE FROM challenge_test_cases WHERE challenge_id = $1", [id]);
         for (const testCase of challenge.testCases || []) {
             await pool.query(`
