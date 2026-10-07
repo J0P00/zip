@@ -1522,7 +1522,9 @@ const seedPracticeChallenges = async () => {
     const topics = [
         ["practice_1", "classes-objects", "oop_lesson_1", "Create a Student object"],
         ["practice_2", "constructors", "oop_lesson_2", "Initialize a Book"],
+        ["practice_12", "object-methods", "oop_lesson_3", "Build a calculator method"],
         ["practice_3", "encapsulation", "oop_lesson_4", "Protect BankAccount balance"],
+        ["practice_13", "constructor-overloading", "oop_lesson_5", "Overload a Profile constructor"],
         ["practice_4", "inheritance", "oop_lesson_6", "Extend Employee into Manager"],
         ["practice_5", "polymorphism", "oop_lesson_7", "Override notification sending"],
         ["practice_6", "abstraction", "oop_lesson_8", "Implement an abstract shape"],
@@ -1531,6 +1533,7 @@ const seedPracticeChallenges = async () => {
         ["practice_9", "collections", "oop_lesson_10", "Track unique names"],
         ["practice_10", "file-handling", "oop_lesson_11", "Read simple file content"],
         ["practice_11", "mini-oop-project", "oop_lesson_11", "Mini library checkout"]
+        ,["practice_14", "oop-review", "oop_lesson_12", "Assemble an OOP summary"]
     ];
 
     for (const [id, topicId, lessonId, title] of topics) {
@@ -2056,11 +2059,13 @@ const getLessonEvidence = async (studentId, lessonId) => {
         assessmentScore = quizResult.rows[0]?.percentage === null || quizResult.rows[0]?.percentage === undefined
             ? null : Number(quizResult.rows[0].percentage);
 
-        practiceRequired = challengeResult.rowCount > 0;
+        // Every lesson requires a submission. Teacher review fields are
+        // deliberately excluded from progression.
+        practiceRequired = true;
         const practice = challengeResult.rows[0];
-        // Practice completion is authoritative when a submission exists.
-        // Teacher review is a separate workflow and must not block lesson progression.
-        practiceCompleted = !practiceRequired || Boolean(practice);
+        // Practice completion is authoritative only when a student submission
+        // exists. Teacher review is a separate workflow.
+        practiceCompleted = Boolean(practice?.id);
     } else {
         const swingProgressResult = await pool.query(
             `SELECT video_completed, quiz_passed, exercise_completed, overall_percentage 
@@ -4010,15 +4015,15 @@ app.post("/api/swing/submissions", requireAuth, async (req, res, next) => {
             RETURNING *
         `, [req.authUser.id, challengeId, sourceCode, programOutput || errorMessage, compileStatus, score, ""]);
 
-        if (compileStatus === "success" && score >= 70) {
-            await pool.query(`
-                INSERT INTO swing_progress (student_id, lesson_id, exercise_completed)
-                VALUES ($1, $2, TRUE)
-                ON CONFLICT (student_id, lesson_id) DO UPDATE SET
-                  exercise_completed = TRUE,
-                  updated_at = NOW()
-            `, [req.authUser.id, topicId]);
-        }
+        // Submission, not compiler score or teacher review, completes the
+        // practice gate for progression.
+        await pool.query(`
+            INSERT INTO swing_progress (student_id, lesson_id, exercise_completed)
+            VALUES ($1, $2, TRUE)
+            ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+              exercise_completed = TRUE,
+              updated_at = NOW()
+        `, [req.authUser.id, topicId]);
 
         const lessonAccess = await getLessonAccessState(req.authUser.id, topicId);
         const nextLessonResult = await pool.query(
@@ -5100,14 +5105,28 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             console.warn("Unable to initialize teacher submission notification:", notificationError);
         }
 
+        await verifyLessonCompletion(req.authUser.id, prerequisite.rows[0].lesson_id);
+        const updatedLessonAccess = await getLessonAccessState(req.authUser.id, prerequisite.rows[0].lesson_id);
+        const nextLessonResult = await pool.query(
+            `SELECT id FROM lessons
+             WHERE sequence = (
+               SELECT sequence + 1 FROM lessons WHERE id = $1
+             ) AND status <> 'Archived'
+             LIMIT 1`,
+            [prerequisite.rows[0].lesson_id]
+        );
+        const nextLessonAccess = nextLessonResult.rowCount
+            ? await getLessonAccessState(req.authUser.id, nextLessonResult.rows[0].id)
+            : null;
+
         res.status(201).json({
             success: true,
             data: {
                 ...result.rows[0],
                 passed: true,
                 practiceCompleted: true,
-                lessonCompleted: Boolean(lessonAccess.current?.completed),
-                lessonAccess: lessonAccess.current,
+                lessonCompleted: Boolean(updatedLessonAccess.current?.completed),
+                lessonAccess: updatedLessonAccess.current,
                 nextLessonAccess: nextLessonAccess?.current || null,
                 canRetry: false,
                 editorLocked: true,

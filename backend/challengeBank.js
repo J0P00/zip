@@ -587,6 +587,72 @@ const baseChallenges = [
       { id: 'mini_sample_output', input: '', expectedOutput: '0', isHidden: false },
       { id: 'mini_hidden_checkout', input: '', expectedOutput: '0', isHidden: true, matcher: 'checkout' }
     ]
+  },
+  {
+    id: 'practice_12',
+    topicId: 'object-methods',
+    topicTitle: 'Object Methods',
+    lessonId: 'oop_lesson_3',
+    assessmentId: 'oop_assessment_3',
+    title: 'Build a calculator method',
+    description: 'Create a Calculator class with an add method.',
+    starterCode: `public class Main {
+    public static void main(String[] args) {
+        Calculator calculator = new Calculator();
+        System.out.println(calculator.add(2, 3));
+    }
+}
+`,
+    sampleInput: '',
+    sampleOutput: '5',
+    passingScore: 70,
+    rubric: { compilation: 10, oopStructure: 40, behavioral: 30, hidden: 20 },
+    oopRequirements: [],
+    testCases: [{ id: 'methods_sample', input: '', expectedOutput: '5', isHidden: false, matcher: 'add' }]
+  },
+  {
+    id: 'practice_13',
+    topicId: 'constructor-overloading',
+    topicTitle: 'Constructor Overloading',
+    lessonId: 'oop_lesson_5',
+    assessmentId: 'oop_assessment_5',
+    title: 'Overload a Profile constructor',
+    description: 'Create a Profile class with overloaded constructors.',
+    starterCode: `public class Main {
+    public static void main(String[] args) {
+        Profile profile = new Profile("Mia");
+        System.out.println(profile.name);
+    }
+}
+`,
+    sampleInput: '',
+    sampleOutput: 'Mia',
+    passingScore: 70,
+    rubric: { compilation: 10, oopStructure: 40, behavioral: 30, hidden: 20 },
+    oopRequirements: [],
+    testCases: [{ id: 'overload_sample', input: '', expectedOutput: 'Mia', isHidden: false, matcher: 'Profile' }]
+  },
+  {
+    id: 'practice_14',
+    topicId: 'oop-review',
+    topicTitle: 'OOP Review',
+    lessonId: 'oop_lesson_12',
+    assessmentId: 'oop_assessment_12',
+    title: 'Assemble an OOP summary',
+    description: 'Create an OOPSummary class with a completion message.',
+    starterCode: `public class Main {
+    public static void main(String[] args) {
+        OOPSummary summary = new OOPSummary();
+        System.out.println(summary.message());
+    }
+}
+`,
+    sampleInput: '',
+    sampleOutput: 'OOP complete',
+    passingScore: 70,
+    rubric: { compilation: 10, oopStructure: 40, behavioral: 30, hidden: 20 },
+    oopRequirements: [],
+    testCases: [{ id: 'review_sample', input: '', expectedOutput: 'OOP complete', isHidden: false, matcher: 'message' }]
   }
 ];
 

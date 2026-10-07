@@ -121,7 +121,7 @@ export default function StudentDashboard({
   const dashboardPractice = PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === dashboardCurrentLesson.id) || activePractice;
   const dashboardAssessment = OOP_ASSESSMENTS.find(assessment => assessment.lessonId === dashboardCurrentLesson.id) || activeAssessment;
   const currentTopicEvidence = studentResults?.oopTopics?.find(topic => topic.id === dashboardCurrentLesson.id);
-  const practiceSubmission = currentTopicEvidence?.practiceScore !== null && currentTopicEvidence?.practiceScore !== undefined
+  const practiceSubmission = currentTopicEvidence?.practiceCompleted
     ? { submittedAt: '' }
     : null;
   const practiceScore = Number(currentTopicEvidence?.practiceScore || 0);
