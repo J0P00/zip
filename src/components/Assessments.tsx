@@ -652,7 +652,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
             <button onClick={() => startAssessment(activeAssessment.id)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-5 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer">
               <RotateCcw className="h-4 w-4" /> Retake Assessment
             </button>
-            <button onClick={() => { setView('dashboard'); onNavigateTo?.('videos'); }} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white hover:bg-emerald-700 transition cursor-pointer">
+            <button onClick={() => { setView('dashboard'); onNavigateTo?.(latestAttempt.passed ? 'ide' : 'videos'); }} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white hover:bg-emerald-700 transition cursor-pointer">
               Continue Learning
             </button>
           </div>
