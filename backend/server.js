@@ -51,6 +51,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const isProduction = process.env.NODE_ENV === "production";
 const ASSESSMENT_PASSING_SCORE = 60;
+const VIDEO_COMPLETION_THRESHOLD = 95;
 const DEMO_STUDENT_EMAIL = "oop.demo.student@oophub.edu";
 const isDemoStudentEmail = (email) => String(email || "").trim().toLowerCase() === DEMO_STUDENT_EMAIL;
 
@@ -1981,74 +1982,106 @@ const checkAndAwardBadges = async (studentId) => {
 };
 
 const getLessonEvidence = async (studentId, lessonId) => {
-    const lessonResult = await pool.query(
+    let isSwing = false;
+    let lessonResult = await pool.query(
         "SELECT id, sequence, module FROM lessons WHERE id = $1 AND status <> 'Archived'",
         [lessonId]
     );
-    if (!lessonResult.rowCount) return null;
+    if (!lessonResult.rowCount) {
+        lessonResult = await pool.query(
+            "SELECT id, sequence, 'Java Swing' AS module FROM swing_lessons WHERE id = $1",
+            [lessonId]
+        );
+        if (!lessonResult.rowCount) return null;
+        isSwing = true;
+    }
     const lesson = lessonResult.rows[0];
-    const videoResult = await pool.query(
-        `SELECT COALESCE(MAX(completion_percentage), 0) AS completion_percentage,
-                COALESCE(BOOL_OR(completed), FALSE) AS completed
-         FROM student_progress
-         WHERE student_user_id = $1 AND video_id = $2`,
-        [studentId, lessonId]
-    );
-    const quizResult = await pool.query(
-        `SELECT
-            EXISTS (SELECT 1 FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 AND percentage >= ${ASSESSMENT_PASSING_SCORE}) AS passed,
-            (SELECT percentage FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 ORDER BY attempt_number DESC, date_completed DESC LIMIT 1) AS percentage`,
-        [studentId, lessonId]
-    );
-    const challengeResult = await pool.query(`
-        SELECT pc.id, pc.passing_score,
-               latest.score, latest.teacher_score, latest.compile_status,
-               latest.review_status, latest.remedial_required,
-               latest.submitted_at
-        FROM programming_challenges pc
-        LEFT JOIN LATERAL (
-            SELECT ps.score, ps.teacher_score, ps.compile_status,
-                   ps.review_status, ps.remedial_required, ps.submitted_at
-            FROM practice_submissions ps
-            WHERE (ps.student_id = $1::text OR ps.student_id IN (SELECT user_id FROM users WHERE id::text = $1::text))
-              AND ps.challenge_id = pc.id
-            ORDER BY ps.submitted_at DESC
+
+    let videoProgress = 0;
+    let videoCompleted = false;
+    let assessmentScore = null;
+    let assessmentPassed = false;
+    let practiceRequired = false;
+    let practiceCompleted = false;
+
+    if (!isSwing) {
+        const videoResult = await pool.query(
+            `SELECT COALESCE(MAX(completion_percentage), 0) AS completion_percentage
+             FROM student_progress
+             WHERE student_user_id = $1 AND video_id = $2`,
+            [studentId, lessonId]
+        );
+        const quizResult = await pool.query(
+            `SELECT
+                EXISTS (SELECT 1 FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 AND percentage >= ${ASSESSMENT_PASSING_SCORE}) AS passed,
+                (SELECT percentage FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 ORDER BY attempt_number DESC, date_completed DESC LIMIT 1) AS percentage`,
+            [studentId, lessonId]
+        );
+        const challengeResult = await pool.query(`
+            SELECT pc.id, pc.passing_score,
+                   latest.score, latest.teacher_score, latest.compile_status,
+                   latest.review_status, latest.remedial_required
+            FROM programming_challenges pc
+            LEFT JOIN LATERAL (
+                SELECT ps.score, ps.teacher_score, ps.compile_status,
+                       ps.review_status, ps.remedial_required
+                FROM practice_submissions ps
+                WHERE (ps.student_id = $1::text OR ps.student_id IN (SELECT user_id FROM users WHERE id::text = $1::text))
+                  AND ps.challenge_id = pc.id
+                ORDER BY ps.submitted_at DESC
+                LIMIT 1
+            ) latest ON TRUE
+            WHERE pc.lesson_id = $2 AND pc.status <> 'Archived'
+            ORDER BY pc.id
             LIMIT 1
-        ) latest ON TRUE
-        WHERE pc.lesson_id = $2 AND pc.status <> 'Archived'
-        ORDER BY pc.id
-        LIMIT 1
-    `, [studentId, lessonId]);
-    // Completion is threshold-based. Do not trust a stale boolean flag when
-    // the persisted video percentage already satisfies the 95% requirement.
-    const videoProgress = Number(videoResult.rows[0]?.completion_percentage || 0);
-    const videoCompleted = videoProgress >= 95;
-    const assessmentPassed = Boolean(quizResult.rows[0]?.passed);
-    const practiceRequired = challengeResult.rowCount > 0;
-    const practice = challengeResult.rows[0];
-    const effectiveScore = practice?.teacher_score !== null && practice?.teacher_score !== undefined
-        ? Number(practice.teacher_score)
-        : Number(practice?.score || 0);
-    const isRemedial = Boolean(practice?.remedial_required);
-    const passingThreshold = Number(practice?.passing_score || 70);
-    const practiceCompleted = !practiceRequired || (
-        practice &&
-        practice.teacher_score !== null &&
-        !isRemedial &&
-        effectiveScore >= passingThreshold &&
-        practice.review_status === 'graded'
-    );
+        `, [studentId, lessonId]);
+
+        videoProgress = Number(videoResult.rows[0]?.completion_percentage || 0);
+        videoCompleted = videoProgress >= VIDEO_COMPLETION_THRESHOLD;
+        assessmentPassed = Boolean(quizResult.rows[0]?.passed);
+        assessmentScore = quizResult.rows[0]?.percentage === null || quizResult.rows[0]?.percentage === undefined
+            ? null : Number(quizResult.rows[0].percentage);
+
+        practiceRequired = challengeResult.rowCount > 0;
+        const practice = challengeResult.rows[0];
+        const effectiveScore = practice?.teacher_score !== null && practice?.teacher_score !== undefined
+            ? Number(practice.teacher_score)
+            : Number(practice?.score || 0);
+        const isRemedial = Boolean(practice?.remedial_required);
+        const passingThreshold = Number(practice?.passing_score || 70);
+        practiceCompleted = !practiceRequired || (
+            practice &&
+            practice.teacher_score !== null &&
+            !isRemedial &&
+            effectiveScore >= passingThreshold &&
+            practice.review_status === 'graded'
+        );
+    } else {
+        const swingProgressResult = await pool.query(
+            `SELECT video_completed, quiz_passed, exercise_completed, overall_percentage 
+             FROM swing_progress 
+             WHERE student_id = $1 AND lesson_id = $2`,
+            [studentId, lessonId]
+        );
+
+        const row = swingProgressResult.rows[0];
+        videoProgress = row?.video_completed ? 100 : 0;
+        videoCompleted = Boolean(row?.video_completed);
+        assessmentPassed = Boolean(row?.quiz_passed);
+        practiceRequired = true;
+        practiceCompleted = Boolean(row?.exercise_completed);
+    }
+
     return {
         ...lesson,
         lessonId: lesson.id,
+        isSwing,
         videoProgress,
         videoCompleted,
-        assessmentScore: quizResult.rows[0]?.percentage === null || quizResult.rows[0]?.percentage === undefined
-            ? null
-            : Number(quizResult.rows[0].percentage),
+        assessmentScore,
         assessmentPassed,
         practiceRequired,
-        practiceCompleted: Boolean(practiceCompleted),
+        practiceCompleted,
         assessmentUnlocked: videoCompleted,
         practiceUnlocked: Boolean(videoCompleted && assessmentPassed),
         nextLessonUnlocked: Boolean(videoCompleted && assessmentPassed && practiceCompleted),
@@ -2093,23 +2126,38 @@ const getLessonAccessState = async (studentId, lessonId) => {
         }
     });
 
-    if (current.sequence <= 1) return withLessonAccess(true);
-    const previousResult = await pool.query(
-        `SELECT id
-         FROM lessons
-         WHERE module = $1
-           AND sequence = $2
-           AND status <> 'Archived' LIMIT 1`,
-        [current.module, current.sequence - 1]
-    );
-    if (!previousResult.rowCount) return withLessonAccess(false, "Complete the previous lesson requirements first.");
+    let previousLessonId = null;
 
-    const previous = await getLessonEvidence(studentId, previousResult.rows[0].id);
+    if (!current.isSwing) {
+        if (current.sequence <= 1) return withLessonAccess(true);
+        const previousResult = await pool.query(
+            `SELECT id FROM lessons WHERE sequence = $1 AND status <> 'Archived' LIMIT 1`,
+            [current.sequence - 1]
+        );
+        if (previousResult.rowCount) previousLessonId = previousResult.rows[0].id;
+    } else {
+        if (current.sequence <= 1) {
+            const previousResult = await pool.query(
+                `SELECT id FROM lessons WHERE sequence = 12 AND status <> 'Archived' LIMIT 1`
+            );
+            if (previousResult.rowCount) previousLessonId = previousResult.rows[0].id;
+        } else {
+            const previousResult = await pool.query(
+                `SELECT id FROM swing_lessons WHERE sequence = $1 LIMIT 1`,
+                [current.sequence - 1]
+            );
+            if (previousResult.rowCount) previousLessonId = previousResult.rows[0].id;
+        }
+    }
+
+    if (!previousLessonId) return withLessonAccess(false, "Complete the previous lesson requirements first.");
+
+    const previous = await getLessonEvidence(studentId, previousLessonId);
     const previousLessonCompleted = Boolean(previous?.completed);
     if (previousLessonCompleted) return withLessonAccess(true);
 
     const reason = !previous?.videoCompleted
-        ? "Complete the previous lesson video to at least 95% first."
+        ? `Complete the previous lesson video to at least ${VIDEO_COMPLETION_THRESHOLD}% first.`
         : !previous?.assessmentPassed
             ? "Pass the previous lesson assessment before continuing."
             : "Complete the previous lesson practice before continuing.";
@@ -3605,17 +3653,26 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         const completedLessons = oopTopicRows.filter(topic => topic.lessonCompleted).length;
         const effectiveTotalLessons = oopTopicRows.length || totalLessons;
         const oopComplete = oopCompletion.oopComplete;
-        const swingTopicRows = oopCompletion.oopComplete ? swingTopics.rows.map(topic => ({
-            id: topic.id,
-            title: topic.title,
-            sequence: Number(topic.sequence || 0),
-            attempted: Boolean(topic.attempted),
-            overallPercentage: topic.overall_percentage === null ? null : Number(topic.overall_percentage),
-            contentCompleted: Boolean(topic.content_completed),
-            videoCompleted: Boolean(topic.video_completed),
-            quizPassed: Boolean(topic.quiz_passed),
-            exerciseCompleted: Boolean(topic.exercise_completed),
-            submissionScore: topic.submission_score === null ? null : Number(topic.submission_score)
+        const swingTopicRows = oopCompletion.oopComplete ? await Promise.all(swingTopics.rows.map(async topic => {
+            const accessState = await getLessonAccessState(dbStudentId, topic.id);
+            const evidence = accessState.current;
+            return {
+                id: topic.id,
+                title: topic.title,
+                sequence: Number(topic.sequence || 0),
+                attempted: Boolean(topic.attempted),
+                overallPercentage: topic.overall_percentage === null ? null : Number(topic.overall_percentage),
+                contentCompleted: Boolean(topic.content_completed),
+                videoCompleted: Boolean(evidence?.videoCompleted),
+                quizPassed: Boolean(evidence?.assessmentPassed),
+                exerciseCompleted: Boolean(evidence?.practiceCompleted),
+                submissionScore: topic.submission_score === null ? null : Number(topic.submission_score),
+                lessonUnlocked: Boolean(accessState.canAccess),
+                assessmentUnlocked: Boolean(accessState.canAccess && evidence?.assessmentUnlocked),
+                practiceUnlocked: Boolean(accessState.canAccess && evidence?.practiceUnlocked),
+                accessReason: accessState.reason,
+                lessonCompleted: Boolean(evidence?.completed)
+            };
         })) : [];
         // Overall progress measures evidence across all three required stages.
         // Mastery remains separately practice-gated through lessonCompleted.
@@ -3869,6 +3926,96 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
         await checkAndAwardBadges(req.authUser.id);
 
         res.status(201).json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.put("/api/swing/progress", requireAuth, async (req, res, next) => {
+    try {
+        const { lessonId, videoCompleted, contentCompleted, overallPercentage } = req.body || {};
+        if (!lessonId) return res.status(400).json({ success: false, message: "lessonId is required." });
+        if (req.authUser.role !== "student") return res.status(403).json({ success: false, message: "Only students can update progress." });
+
+        const access = await getLessonAccessState(req.authUser.id, lessonId);
+        if (!access.canAccess) {
+            return res.status(403).json({ success: false, message: access.reason });
+        }
+
+        const result = await pool.query(`
+            INSERT INTO swing_progress (student_id, lesson_id, video_completed, content_completed, overall_percentage)
+            VALUES ($1, $2, COALESCE($3, FALSE), COALESCE($4, FALSE), COALESCE($5, 0))
+            ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+              video_completed = swing_progress.video_completed OR EXCLUDED.video_completed,
+              content_completed = swing_progress.content_completed OR EXCLUDED.content_completed,
+              overall_percentage = GREATEST(swing_progress.overall_percentage, EXCLUDED.overall_percentage),
+              updated_at = NOW()
+            RETURNING *
+        `, [req.authUser.id, lessonId, videoCompleted, contentCompleted, overallPercentage]);
+
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/swing/quiz-attempts", requireAuth, async (req, res, next) => {
+    try {
+        const { assessmentId, lessonId, score, total, percentage, correctAnswers, incorrectAnswers, passed, answers, dateCompleted } = req.body || {};
+        if (!assessmentId) return res.status(400).json({ success: false, message: "assessmentId is required." });
+        if (req.authUser.role !== "student") return res.status(403).json({ success: false, message: "Only students can submit quiz attempts." });
+
+        const access = await getLessonAccessState(req.authUser.id, lessonId);
+        if (!access.canAccess || !access.current.videoCompleted) {
+            return res.status(403).json({ success: false, message: access.reason || "Complete video first." });
+        }
+
+        const safePassed = percentage >= ASSESSMENT_PASSING_SCORE;
+
+        const result = await pool.query(`
+            INSERT INTO swing_progress (student_id, lesson_id, quiz_passed)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+              quiz_passed = swing_progress.quiz_passed OR EXCLUDED.quiz_passed,
+              updated_at = NOW()
+            RETURNING *
+        `, [req.authUser.id, lessonId, safePassed]);
+
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/swing/submissions", requireAuth, async (req, res, next) => {
+    try {
+        const { challengeId, topicId, sourceCode, programOutput, compileStatus, score, errorMessage } = req.body || {};
+        if (!challengeId) return res.status(400).json({ success: false, message: "challengeId is required." });
+        if (req.authUser.role !== "student") return res.status(403).json({ success: false, message: "Only students can submit." });
+
+        // topicId here is the lessonId.
+        const access = await getLessonAccessState(req.authUser.id, topicId);
+        if (!access.canAccess || !access.current.assessmentPassed) {
+            return res.status(403).json({ success: false, message: access.reason || "Pass assessment first." });
+        }
+
+        const result = await pool.query(`
+            INSERT INTO swing_submissions (student_id, exercise_id, source_code, program_output, status, score, feedback)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *
+        `, [req.authUser.id, challengeId, sourceCode, programOutput || errorMessage, compileStatus, score, ""]);
+
+        if (compileStatus === "success" && score >= 70) {
+            await pool.query(`
+                INSERT INTO swing_progress (student_id, lesson_id, exercise_completed)
+                VALUES ($1, $2, TRUE)
+                ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+                  exercise_completed = TRUE,
+                  updated_at = NOW()
+            `, [req.authUser.id, topicId]);
+        }
+
+        res.json({ success: true, data: result.rows[0] });
     } catch (error) {
         next(error);
     }

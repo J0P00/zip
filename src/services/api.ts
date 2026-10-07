@@ -235,6 +235,12 @@ export const practiceApi = {
     })
 };
 
+export const swingApi = {
+  updateProgress: (body: any) => apiRequest<{ success: boolean; data: any }>('/api/swing/progress', { method: 'PUT', body: JSON.stringify(body) }),
+  submitQuiz: (body: any) => apiRequest<{ success: boolean; data: any }>('/api/swing/quiz-attempts', { method: 'POST', body: JSON.stringify(body) }),
+  submitCode: (body: any) => apiRequest<{ success: boolean; data: any }>('/api/swing/submissions', { method: 'POST', body: JSON.stringify(body) })
+};
+
 export const notificationApi = {
   list: () => apiRequest<{ success: boolean; data: import('../types').NotificationItem[] }>('/api/notifications'),
   markRead: (id: string) =>

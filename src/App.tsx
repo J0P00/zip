@@ -1670,6 +1670,7 @@ export default function App() {
               <JavaSwingModule
                 currentUser={displayUser}
                 oopUnlocked={Boolean(studentResults?.swingUnlocked)}
+                studentResults={studentResults}
                 onSubmitCompleted={handleStudentSubmitCode}
                 onUnlocked={() => addNotification('Java Swing Unlocked', 'Java Swing Programming is now available after completing OOP.', 'unlock')}
                 theme={theme}

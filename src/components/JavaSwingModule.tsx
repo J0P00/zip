@@ -37,10 +37,12 @@ import {
   SwingQuizDb
 } from '../data/javaSwingCourse';
 import { CourseQuestion } from '../data/oopCourse';
+import { swingApi } from '../services/api';
 
 interface JavaSwingModuleProps {
   currentUser: AuthenticatedUser;
   oopUnlocked: boolean;
+  studentResults?: any;
   onSubmitCompleted: (submission: PracticeSubmission) => void;
   onUnlocked?: () => void;
   theme?: 'light' | 'dark';
@@ -69,16 +71,16 @@ const userKeyFor = (user: AuthenticatedUser) => user.id || user.userId || user.e
 const getLessonCompleted = (lessonId: string, progressDb: SwingProgressDb) =>
   Boolean(progressDb[lessonId]?.contentCompleted && progressDb[lessonId]?.videoCompleted);
 
-export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitCompleted, onUnlocked, theme }: JavaSwingModuleProps) {
+export default function JavaSwingModule({ currentUser, oopUnlocked, studentResults, onSubmitCompleted, onUnlocked, theme }: JavaSwingModuleProps) {
   const isDark = theme === 'dark';
   const [isUnlocked, setIsUnlocked] = useState(oopUnlocked);
   const [activeTab, setActiveTab] = useState<SwingTab>('lessons');
   const [activeLessonId, setActiveLessonId] = useState(JAVA_SWING_LESSONS[0].id);
-  const [progressDb, setProgressDb] = useState<SwingProgressDb>(() => getStoredJson(SWING_WATCH_KEY, {}));
-  const [quizDb, setQuizDb] = useState<SwingQuizDb>(() => getStoredJson(SWING_QUIZ_KEY, {}));
+  const [progressDb, setProgressDb] = useState<SwingProgressDb>({});
+  const [quizDb, setQuizDb] = useState<SwingQuizDb>({});
+  const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
   const [quizHistory, setQuizHistory] = useState<SwingQuizAttempt[]>(() => getStoredJson(QUIZ_HISTORY_KEY, []));
   const [draftDb, setDraftDb] = useState<DraftDb>(() => getStoredJson(SWING_DRAFT_KEY, {}));
-  const [submissionDb, setSubmissionDb] = useState<SubmissionDb>(() => getStoredJson(SWING_SUBMISSION_KEY, {}));
   const [quizQuestions, setQuizQuestions] = useState<CourseQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [quizIndex, setQuizIndex] = useState(0);
@@ -97,6 +99,64 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
   const submissionKey = `${userKeyFor(currentUser)}:${activeExercise.id}`;
   const submitted = submissionDb[submissionKey];
   const [sourceCode, setSourceCode] = useState(() => submitted?.sourceCode || draftDb[submissionKey] || activeExercise.starterCode);
+
+  useEffect(() => {
+    const newProgDb: SwingProgressDb = {};
+    const newQuizDb: SwingQuizDb = {};
+    const newSubDb: SubmissionDb = {};
+    if (studentResults?.swingTopics) {
+      studentResults.swingTopics.forEach((topic: any) => {
+        newProgDb[topic.id] = {
+          lessonId: topic.id,
+          contentCompleted: topic.contentCompleted,
+          videoCompleted: topic.videoCompleted,
+          completedAt: new Date().toISOString()
+        };
+        const assessmentId = JAVA_SWING_ASSESSMENTS.find(a => a.lessonId === topic.id)?.id || `swing_quiz_${topic.sequence}`;
+        newQuizDb[assessmentId] = {
+          assessmentId,
+          lessonId: topic.id,
+          score: 100,
+          total: 100,
+          percentage: topic.quizPassed ? 100 : 0,
+          correctAnswers: 100,
+          incorrectAnswers: 0,
+          passed: topic.quizPassed,
+          attemptNumber: 1,
+          answers: {},
+          dateCompleted: new Date().toISOString()
+        };
+        const exercise = JAVA_SWING_EXERCISES.find(e => e.lessonId === topic.id);
+        if (exercise && topic.exerciseCompleted) {
+          const key = `${userKeyFor(currentUser)}:${exercise.id}`;
+          newSubDb[key] = {
+            id: `sub_${Date.now()}`,
+            studentId: currentUser.id || '',
+            studentName: currentUser.name,
+            studentEmail: currentUser.email,
+            section: currentUser.section || 'Unassigned',
+            challengeId: exercise.id,
+            challengeTitle: exercise.title,
+            topicId: topic.id,
+            topicTitle: topic.title,
+            sourceCode: exercise.starterCode,
+            programOutput: '',
+            compileStatus: 'success',
+            runtime: 10,
+            memoryUsage: 10,
+            score: topic.submissionScore || exercise.passingScore,
+            submittedAt: new Date().toISOString(),
+            isLocked: true,
+            errorMessage: '',
+            testResults: []
+          };
+        }
+      });
+    }
+    setProgressDb(newProgDb);
+    setQuizDb(newQuizDb);
+    setSubmissionDb(newSubDb);
+  }, [studentResults, currentUser]);
 
   useEffect(() => {
     const unlocked = oopUnlocked;
@@ -147,23 +207,15 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
 
   const getSwingLessonLockReason = (lesson: SwingLesson) => {
     if (!isUnlocked) return 'Complete all OOP lessons, assessments, and coding practice to unlock Java Swing.';
-    if (lesson.sequence === 1) return '';
-    const previous = JAVA_SWING_LESSONS.find(item => item.sequence === lesson.sequence - 1);
-    if (!previous) return '';
-    const previousAssessment = JAVA_SWING_ASSESSMENTS.find(item => item.lessonId === previous.id);
-    const previousExercise = JAVA_SWING_EXERCISES.find(item => item.lessonId === previous.id);
-    if (!getLessonCompleted(previous.id, progressDb)) return `Complete Java Swing Lesson ${previous.sequence} content and video first.`;
-    if (previousAssessment && !quizDb[previousAssessment.id]?.passed) return `Pass Java Swing Quiz ${previous.sequence} first.`;
-    if (previousExercise) {
-      const previousSubmission = submissionDb[`${userKeyFor(currentUser)}:${previousExercise.id}`];
-      if (!previousSubmission || previousSubmission.compileStatus !== 'success' || previousSubmission.score < previousExercise.passingScore) return `Complete Java Swing Exercise ${previous.sequence} first.`;
-    }
+    const topic = studentResults?.swingTopics?.find((t: any) => t.id === lesson.id);
+    if (topic && !topic.lessonUnlocked) return topic.accessReason || 'Locked.';
     return '';
   };
 
   const lessonLockReason = getSwingLessonLockReason(activeLesson);
-  const quizLockedReason = lessonLockReason || (!getLessonCompleted(activeLesson.id, progressDb) ? 'Mark lesson content and video complete before starting the quiz.' : '');
-  const practiceLockedReason = quizLockedReason || (!quizDb[activeAssessment.id]?.passed ? 'Pass this lesson quiz with 80% or higher to unlock programming practice.' : '');
+  const topicDetails = studentResults?.swingTopics?.find((t: any) => t.id === activeLesson.id);
+  const quizLockedReason = lessonLockReason || (topicDetails && !topicDetails.assessmentUnlocked ? 'Mark lesson video complete before starting the quiz.' : '');
+  const practiceLockedReason = quizLockedReason || (topicDetails && !topicDetails.practiceUnlocked ? 'Pass this lesson quiz with 60% or higher to unlock programming practice.' : '');
   const passedRun = Boolean(lastResult && lastResult.score >= activeExercise.passingScore && lastResult.compileStatus === 'success');
 
   const selectLesson = (lesson: SwingLesson, nextTab: SwingTab = 'lessons') => {
@@ -178,7 +230,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
     setActiveTab(nextTab);
   };
 
-  const markLessonComplete = (field: 'contentCompleted' | 'videoCompleted') => {
+  const markLessonComplete = async (field: 'contentCompleted' | 'videoCompleted') => {
     if (!isUnlocked) {
       setNotice('Complete all OOP lessons, assessments, and coding practice to unlock Java Swing.');
       return;
@@ -189,9 +241,16 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
       [field]: true,
       completedAt: field === 'videoCompleted' && current.contentCompleted ? new Date().toISOString() : current.completedAt
     };
-    const next = { ...progressDb, [activeLesson.id]: nextRecord };
-    setProgressDb(next);
-    setStoredJson(SWING_WATCH_KEY, next);
+    setProgressDb({ ...progressDb, [activeLesson.id]: nextRecord });
+    
+    try {
+      await swingApi.updateProgress({
+        lessonId: activeLesson.id,
+        [field]: true
+      });
+      onSubmitCompleted({ id: 'dummy_progress' } as any);
+    } catch (err) {}
+
     setNotice(field === 'videoCompleted' ? 'Video completion saved.' : 'Lesson content marked complete.');
     window.setTimeout(() => setNotice(''), 2400);
   };
@@ -214,7 +273,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
     setActiveTab('quiz');
   };
 
-  const submitQuiz = () => {
+  const submitQuiz = async () => {
     let score = 0;
     quizQuestions.forEach(question => {
       if (answers[question.id] === question.correctAnswer) score += 1;
@@ -238,11 +297,27 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
     const nextHistory = [attempt, ...quizHistory].slice(0, 100);
     setQuizDb(nextDb);
     setQuizHistory(nextHistory);
-    setStoredJson(SWING_QUIZ_KEY, nextDb);
     setStoredJson(QUIZ_HISTORY_KEY, nextHistory);
+    
+    try {
+      await swingApi.submitQuiz({
+        assessmentId: activeAssessment.id,
+        lessonId: activeLesson.id,
+        score,
+        total,
+        percentage,
+        correctAnswers: score,
+        incorrectAnswers: total - score,
+        passed: percentage >= SWING_PASSING_PERCENTAGE,
+        answers,
+        dateCompleted: attempt.dateCompleted
+      });
+      onSubmitCompleted({ id: 'dummy_quiz' } as any);
+    } catch (err) {}
+
     setLatestAttempt(attempt);
     setQuizMode('result');
-    setNotice(attempt.passed ? 'Quiz passed. Programming practice is now unlocked.' : 'Quiz saved. You can retake until you reach 80%.');
+    setNotice(attempt.passed ? 'Quiz passed. Programming practice is now unlocked.' : 'Quiz saved. You can retake until you reach 60%.');
     window.setTimeout(() => setNotice(''), 3600);
   };
 
@@ -312,17 +387,33 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, onSubmitComp
       errorMessage: result.errorMessage,
       testResults: result.testResults
     };
-    window.setTimeout(() => {
+    
+    swingApi.submitCode({
+      challengeId: activeExercise.id,
+      challengeTitle: activeExercise.title,
+      topicId: activeLesson.id,
+      topicTitle: `Java Swing Lesson ${activeLesson.sequence}`,
+      sourceCode,
+      programOutput: result.programOutput,
+      compileStatus: result.compileStatus,
+      runtime: result.runtime,
+      memoryUsage: result.memoryUsage,
+      score: result.score,
+      errorMessage: result.errorMessage,
+      testResults: result.testResults
+    }).then(() => {
       const next = { ...submissionDb, [submissionKey]: submission };
       setSubmissionDb(next);
-      setStoredJson(SWING_SUBMISSION_KEY, next);
       setLastResult(result);
       setConsoleLogs(['Final Swing submission saved.', `Score: ${result.score}%`, `Submitted: ${formatDateTime(now)}`]);
       onSubmitCompleted(submission);
       setNotice('Programming exercise submitted for teacher review.');
       setIsSubmitting(false);
       window.setTimeout(() => setNotice(''), 3200);
-    }, 450);
+    }).catch(() => {
+      setNotice('Failed to submit. Try again.');
+      setIsSubmitting(false);
+    });
   };
 
   const renderLocked = () => (
