@@ -1563,6 +1563,20 @@ const seedPracticeChallenges = async () => {
             challenge.sampleOutput
         ]);
 
+        await verifyLessonCompletion(req.authUser.id, prerequisite.rows[0].lesson_id);
+        const lessonAccess = await getLessonAccessState(req.authUser.id, prerequisite.rows[0].lesson_id);
+        const nextLessonResult = await pool.query(
+            `SELECT id FROM lessons
+             WHERE sequence = (
+               SELECT sequence + 1 FROM lessons WHERE id = $1
+             ) AND status <> 'Archived'
+             LIMIT 1`,
+            [prerequisite.rows[0].lesson_id]
+        );
+        const nextLessonAccess = nextLessonResult.rowCount
+            ? await getLessonAccessState(req.authUser.id, nextLessonResult.rows[0].id)
+            : null;
+
         await pool.query("DELETE FROM challenge_test_cases WHERE challenge_id = $1", [id]);
         for (const testCase of challenge.testCases || []) {
             await pool.query(`
@@ -2044,18 +2058,9 @@ const getLessonEvidence = async (studentId, lessonId) => {
 
         practiceRequired = challengeResult.rowCount > 0;
         const practice = challengeResult.rows[0];
-        const effectiveScore = practice?.teacher_score !== null && practice?.teacher_score !== undefined
-            ? Number(practice.teacher_score)
-            : Number(practice?.score || 0);
-        const isRemedial = Boolean(practice?.remedial_required);
-        const passingThreshold = Number(practice?.passing_score || 70);
-        practiceCompleted = !practiceRequired || (
-            practice &&
-            practice.teacher_score !== null &&
-            !isRemedial &&
-            effectiveScore >= passingThreshold &&
-            practice.review_status === 'graded'
-        );
+        // Practice completion is authoritative when a submission exists.
+        // Teacher review is a separate workflow and must not block lesson progression.
+        practiceCompleted = !practiceRequired || Boolean(practice);
     } else {
         const swingProgressResult = await pool.query(
             `SELECT video_completed, quiz_passed, exercise_completed, overall_percentage 
@@ -3516,7 +3521,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         const [course, videos, quizzes, practice, swing, oopTopics, swingTopics] = await Promise.all([
             pool.query(`
                 SELECT COUNT(*)::int AS total_lessons,
-                       COUNT(*) FILTER (WHERE sp.completed AND COALESCE(qa.passed, FALSE) AND COALESCE(ps.teacher_score, ps.score, 0) >= 70 AND (ps.teacher_score IS NOT NULL OR COALESCE(ps.compile_status, '') = 'success'))::int AS completed_lessons
+                       COUNT(*) FILTER (WHERE sp.completed AND COALESCE(qa.passed, FALSE) AND ps.id IS NOT NULL)::int AS completed_lessons
                 FROM lessons l
                 LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND sp.video_id = l.id
                 LEFT JOIN LATERAL (
@@ -3548,7 +3553,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             pool.query(`
                 SELECT COUNT(pc.id)::int AS total_practice_activities,
                        COUNT(ps.id)::int AS submitted_practice_activities,
-                      COUNT(ps.id) FILTER (WHERE COALESCE(ps.teacher_score, ps.score, 0) >= 70 AND (ps.teacher_score IS NOT NULL OR ps.compile_status = 'success'))::int AS completed_practice_activities,
+                      COUNT(ps.id)::int AS completed_practice_activities,
                       COALESCE(ROUND(AVG(ps.teacher_score)), 0)::int AS average_practice_score
                 FROM programming_challenges pc
                 LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND ps.student_id = $1::text
@@ -4015,7 +4020,29 @@ app.post("/api/swing/submissions", requireAuth, async (req, res, next) => {
             `, [req.authUser.id, topicId]);
         }
 
-        res.json({ success: true, data: result.rows[0] });
+        const lessonAccess = await getLessonAccessState(req.authUser.id, topicId);
+        const nextLessonResult = await pool.query(
+            `SELECT id FROM swing_lessons
+             WHERE sequence = (
+               SELECT sequence + 1 FROM swing_lessons WHERE id = $1
+             )
+             LIMIT 1`,
+            [topicId]
+        );
+        const nextLessonAccess = nextLessonResult.rowCount
+            ? await getLessonAccessState(req.authUser.id, nextLessonResult.rows[0].id)
+            : null;
+
+        res.json({
+            success: true,
+            data: {
+                ...result.rows[0],
+                practiceCompleted: Boolean(lessonAccess.current?.practiceCompleted),
+                lessonCompleted: Boolean(lessonAccess.current?.completed),
+                lessonAccess: lessonAccess.current,
+                nextLessonAccess: nextLessonAccess?.current || null
+            }
+        });
     } catch (error) {
         next(error);
     }
@@ -5077,8 +5104,11 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             success: true,
             data: {
                 ...result.rows[0],
-                passed: false,
-                practiceCompleted: false,
+                passed: true,
+                practiceCompleted: true,
+                lessonCompleted: Boolean(lessonAccess.current?.completed),
+                lessonAccess: lessonAccess.current,
+                nextLessonAccess: nextLessonAccess?.current || null,
                 canRetry: false,
                 editorLocked: true,
                 submissionStatus: 'pending_review'

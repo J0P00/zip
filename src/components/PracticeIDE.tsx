@@ -248,6 +248,15 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
         `Submitted: ${formatDateTime(savedSubmission.submittedAt || new Date().toISOString())}`
       ]);
       onSubmitCompleted(savedSubmission);
+      Promise.all(OOP_COURSE_LESSONS.map(lesson => lessonApi.getAccess(lesson.id, currentUser.token)))
+        .then(accessResponses => {
+          setAccessDb(accessResponses.reduce((acc: Record<string, any>, accessResponse: any) => {
+            const lessonId = accessResponse.data?.current?.lessonId;
+            if (lessonId) acc[lessonId] = accessResponse.data;
+            return acc;
+          }, {}));
+        })
+        .catch(error => console.warn('Unable to refresh lesson access after practice submission:', error));
     } catch (error: any) {
       setConsoleLogs([
         '❌ Practice submission was not saved.',
