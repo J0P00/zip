@@ -2342,10 +2342,6 @@ app.post("/api/auth/login", async (req, res, next) => {
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) return res.status(401).json({ success: false, message: "Invalid email or password." });
 
-        if (user.role === "student" && isDemoStudentEmail(user.email)) {
-            await seedCompletedDemoStudent();
-        }
-
         const token = signToken(user);
         res.json({ success: true, message: "Login successful.", token, user: toClientUser(user) });
     } catch (error) {
@@ -5180,6 +5176,45 @@ app.use((err, _req, res, _next) => {
     res.status(err.status || 500).json({ success: false, message });
 });
 
+const purgeDeletedDemoStudent = async () => {
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+        const userResult = await client.query(
+            `SELECT u.id, u.user_id, u.email, s.id AS student_id, s.student_number
+             FROM users u
+             LEFT JOIN students s ON s.user_id = u.id
+             WHERE LOWER(u.email) = LOWER($1)`,
+            [DEMO_STUDENT_EMAIL]
+        );
+
+        if (!userResult.rowCount) {
+            await client.query("COMMIT");
+            return;
+        }
+
+        const { id, user_id: legacyUserId, email, student_id: studentId, student_number: studentNumber } = userResult.rows[0];
+        const identifiers = [String(id), String(legacyUserId || ''), String(studentId || ''), String(studentNumber || ''), String(email).toLowerCase()]
+            .filter(Boolean);
+
+        await client.query("DELETE FROM swing_submissions WHERE student_id = ANY($1::text[])", [identifiers]);
+        await client.query("DELETE FROM swing_progress WHERE student_id = ANY($1::text[])", [identifiers]);
+        await client.query("DELETE FROM practice_submissions WHERE student_id = ANY($1::text[])", [identifiers]);
+        await client.query("DELETE FROM recommendation_history WHERE student_id = ANY($1::text[])", [identifiers]);
+        await client.query("DELETE FROM realtime_learning_events WHERE student_id = ANY($1::text[])", [identifiers]);
+        await client.query("DELETE FROM teacher_students WHERE student_id = ANY($1::text[])", [identifiers]);
+        await client.query("DELETE FROM invitations WHERE LOWER(student_email) = LOWER($1) OR accepted_by_student_id = ANY($2::text[])", [email, identifiers]);
+        await client.query("DELETE FROM users WHERE id = $1", [id]);
+        await client.query("COMMIT");
+        console.log(`Deleted demo account and all associated data for ${email}.`);
+    } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+    } finally {
+        client.release();
+    }
+};
+
 const PORT = process.env.PORT || 5000;
 
 console.log('[submission-service] runtime: Render Node.js + PostgreSQL + configured JDK');
@@ -5191,10 +5226,10 @@ initializeDatabase()
             await seedPracticeChallenges();
             if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_SEED === 'true') {
                 await seedDemoUsers();
-                await seedCompletedDemoStudent();
             } else {
                 console.log("Production mode: demo users and demo submissions are not seeded.");
             }
+            await purgeDeletedDemoStudent();
             console.log("Database seeded successfully.");
         } catch (seedErr) {
             console.error("Database seeding failed:", seedErr);

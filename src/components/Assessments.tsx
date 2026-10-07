@@ -636,7 +636,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
           </div>
           <h2 className="mt-4 text-2xl font-extrabold text-slate-900 dark:text-white">{latestAttempt.passed ? 'Assessment Passed' : 'Assessment Not Passed'}</h2>
           <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
-            {latestAttempt.passed ? `Practice IDE is unlocked for ${activeLesson.title}. Complete it to unlock the next lesson.` : `Score is below the ${ASSESSMENT_PASSING_SCORE}% passing threshold. Rewatch ${activeLesson.title}, then retake the assessment.`}
+            {latestAttempt.passed ? `Practice IDE is unlocked for Lesson ${activeLesson.sequence}: ${activeLesson.title}. Complete it to unlock the next Lesson.` : `Score is below the ${ASSESSMENT_PASSING_SCORE}% passing threshold. Rewatch Lesson ${activeLesson.sequence}: ${activeLesson.title}, then retake the assessment.`}
           </p>
           <div className="mt-6 grid grid-cols-3 gap-3 border-y border-slate-100 py-5 dark:border-slate-800">
             <div><span className="block text-[10px] font-black uppercase text-slate-400">Score</span><strong className="font-mono text-xl dark:text-white">{latestAttempt.score}/{latestAttempt.total}</strong></div>
