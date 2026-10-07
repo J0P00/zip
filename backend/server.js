@@ -5363,7 +5363,7 @@ const purgeDeletedDemoStudent = async () => {
     try {
         await client.query("BEGIN");
         const userResult = await client.query(
-            `SELECT u.id, u.user_id, u.email, s.id AS student_id, s.student_number
+            `SELECT u.id, u.user_id, u.email, s.user_id AS student_id, s.student_number
              FROM users u
              LEFT JOIN students s ON s.user_id = u.id
              WHERE LOWER(u.email) = LOWER($1)`,
