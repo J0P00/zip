@@ -73,6 +73,11 @@ export interface SwingTopicResult {
   quizPassed: boolean;
   exerciseCompleted: boolean;
   submissionScore: number | null;
+  lessonUnlocked?: boolean;
+  assessmentUnlocked?: boolean;
+  practiceUnlocked?: boolean;
+  accessReason?: string | null;
+  lessonCompleted?: boolean;
 }
 
 export interface StudentResultsInterpretation {

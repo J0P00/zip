@@ -136,15 +136,34 @@ export default function StudentDashboard({
   const journeyCompletedCount = journeyTopics.filter(topic => topic.lessonCompleted).length;
   const journeyCurrentTopic = journeyTopics.find(topic => !topic.lessonCompleted) || null;
   const journeyCurrentIndex = journeyCurrentTopic ? journeyTopics.findIndex(topic => topic.id === journeyCurrentTopic.id) : -1;
-  const journeyNextAction = !studentResults || journeyTopics.length === 0
-    ? { label: 'Continue Video', detail: 'Start the first available OOP lesson.', view: 'videos' as StudentSubView }
-    : !journeyCurrentTopic
-    ? { label: 'Completed', detail: 'All OOP lessons are complete.', view: 'swing' as StudentSubView }
-    : journeyCurrentTopic.videoPercentage === null || journeyCurrentTopic.videoPercentage < 95
-      ? { label: 'Continue Video', detail: `Continue watching “${journeyCurrentTopic.title}”.`, view: 'videos' as StudentSubView }
-      : !journeyCurrentTopic.quizPassed
-        ? { label: 'Assessment Required', detail: `Take the assessment for “${journeyCurrentTopic.title}”.`, view: 'assessments' as StudentSubView }
-        : { label: 'Practice Required', detail: `Complete the coding practice for “${journeyCurrentTopic.title}”.`, view: 'ide' as StudentSubView };
+  const journeyNextAction = (() => {
+    if (!studentResults || journeyTopics.length === 0) {
+      return { label: 'Continue Video', detail: 'Start the first available OOP lesson.', view: 'videos' as StudentSubView };
+    }
+    
+    if (journeyCurrentTopic) {
+      if (journeyCurrentTopic.videoPercentage === null || journeyCurrentTopic.videoPercentage < 95) {
+        return { label: 'Continue Video', detail: `Continue watching “${journeyCurrentTopic.title}”.`, view: 'videos' as StudentSubView };
+      } else if (!journeyCurrentTopic.quizPassed) {
+        return { label: 'Assessment Required', detail: `Take the assessment for “${journeyCurrentTopic.title}”.`, view: 'assessments' as StudentSubView };
+      } else {
+        return { label: 'Practice Required', detail: `Complete the coding practice for “${journeyCurrentTopic.title}”.`, view: 'ide' as StudentSubView };
+      }
+    }
+    
+    const swingCurrentTopic = swingTopicState.find(topic => !topic.lessonCompleted);
+    if (swingCurrentTopic) {
+      if (!swingCurrentTopic.videoCompleted) {
+        return { label: 'Continue Swing', detail: `Continue watching “${swingCurrentTopic.title}”.`, view: 'swing' as StudentSubView };
+      } else if (!swingCurrentTopic.quizPassed) {
+        return { label: 'Swing Assessment', detail: `Take the assessment for “${swingCurrentTopic.title}”.`, view: 'swing' as StudentSubView };
+      } else {
+        return { label: 'Swing Practice', detail: `Complete the coding practice for “${swingCurrentTopic.title}”.`, view: 'swing' as StudentSubView };
+      }
+    }
+    
+    return { label: 'Course Completed', detail: 'All OOP and Swing lessons are completely finished.', view: 'dashboard' as StudentSubView };
+  })();
   const swingProgress = {
     unlocked: Boolean(studentResults?.swingUnlocked),
     completedLessons: swingTopicState.filter(topic => topic.contentCompleted && topic.videoCompleted && topic.quizPassed && topic.exerciseCompleted).length,
