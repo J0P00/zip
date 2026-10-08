@@ -199,7 +199,7 @@ export const assessmentApi = {
 export const practiceApi = {
   listChallenges: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-challenges'),
   listSubmissions: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-submissions'),
-  listMine: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-submissions/me'),
+  listMine: (token?: string) => apiRequest<{ success: boolean; data: any[] }>('/api/practice-submissions/me', { token }),
   runCode: (challengeId: string, sourceCode: string) =>
     apiRequest<{ success: boolean; data: any }>(`/api/practice-challenges/${encodeURIComponent(challengeId)}/run`, {
       method: 'POST',
@@ -294,7 +294,4 @@ export const appApi = {
   health: () => apiRequest<{ status?: string; message?: string }>('/health')
 };
 
-export const isDemoEmail = (email: string, role?: Persona) => {
-  void role;
-  return email.trim().toLowerCase() === 'oop.demo.student@oophub.edu';
-};
+

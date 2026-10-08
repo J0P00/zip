@@ -122,7 +122,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     const user = currentUser.id;
     if (!token || !user) return;
 
-    Promise.all([progressApi.getVideoProgress(user, token), progressApi.getQuizAttempts(user, token), practiceApi.listMine()])
+    Promise.all([progressApi.getVideoProgress(user, token), progressApi.getQuizAttempts(user, token), practiceApi.listMine(token)])
       .then(([videoResponse, quizResponse, submissions]) => {
         if (!isMounted) return;
         const remoteDb = videoResponse.data.reduce((acc: WatchDb, row: any) => {

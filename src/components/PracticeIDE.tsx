@@ -119,7 +119,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     Promise.all([
       progressApi.getVideoProgress(currentUser.id || '', currentUser.token),
       progressApi.getQuizAttempts(currentUser.id || '', currentUser.token),
-      practiceApi.listMine(),
+      practiceApi.listMine(currentUser.token),
       ...OOP_COURSE_LESSONS.map(lesson => lessonApi.getAccess(lesson.id, currentUser.token))
     ]).then(([videoResponse, quizResponse, submissionResponse, ...accessResponses]) => {
       if (!mounted) return;

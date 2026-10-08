@@ -45,6 +45,8 @@ interface StudentDashboardProps {
   activeRecommendation?: AdaptiveRecommendation | null;
   recommendationHistory?: AdaptiveRecommendation[];
   studentResults?: StudentResultsData | null;
+  studentResultsError?: string | null;
+  studentResultsLoading?: boolean;
 }
 
 export default function StudentDashboard({
@@ -63,7 +65,9 @@ export default function StudentDashboard({
   onMarkNotificationRead,
   activeRecommendation,
   recommendationHistory = [],
-  studentResults = null
+  studentResults = null,
+  studentResultsError = null,
+  studentResultsLoading = false
 }: StudentDashboardProps) {
   const firstName = userName.trim().split(/\s+/)[0] || 'Student';
   const effectiveCompletedLessons = studentResults?.completedLessons ?? completedLessonsCount;
@@ -210,6 +214,15 @@ export default function StudentDashboard({
 
   return (
     <div className={`space-y-6 ${isDark ? 'text-slate-100' : 'text-slate-800'}`} id="student-dashboard-root">
+      {(studentResultsLoading || studentResultsError) && (
+        <div className={`rounded-xl border p-4 text-sm font-semibold ${
+          studentResultsError
+            ? 'border-rose-200 bg-rose-50 text-rose-800'
+            : 'border-sky-200 bg-sky-50 text-sky-800'
+        }`}>
+          {studentResultsError || 'Loading authoritative progress from the backend...'}
+        </div>
+      )}
       
       {/* Monitoring Requests Notification Panel */}
       {pendingRequests.length > 0 && (

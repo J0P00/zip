@@ -93,7 +93,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
     Promise.all([
       progressApi.getVideoProgress(user, token),
       progressApi.getQuizAttempts(user, token),
-      practiceApi.listMine(),
+      practiceApi.listMine(token),
       ...OOP_COURSE_LESSONS.map(lesson => lessonApi.getAccess(lesson.id, token))
     ])
       .then(([videoResponse, response, submissions, ...accessResponses]) => {

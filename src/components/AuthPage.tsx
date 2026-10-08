@@ -32,8 +32,7 @@ import {
   recordTermsAcceptance,
   requiresTermsAcceptance
 } from '../data/termsStore';
-import { authApi, getAuthToken, isDemoEmail, progressApi, setAuthToken } from '../services/api';
-import { seedDemoStudentProgress } from '../data/demoSeed';
+import { authApi, getAuthToken, progressApi, setAuthToken } from '../services/api';
 import TermsAgreementModal from './TermsAgreementModal';
 
 interface AuthPageProps {
@@ -87,8 +86,6 @@ type StoredUser = {
   termsAcceptedAt?: string;
   termsVersion?: string;
 };
-
-const demoAccounts: StoredUser[] = [];
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isValidEmail = (value: string) => emailPattern.test(value.trim());
@@ -161,7 +158,7 @@ const findExistingUserByEmail = (email: string): StoredUser | undefined => {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) return undefined;
 
-  return [...demoAccounts, ...readStoredUsers()].find(
+  return [...readStoredUsers()].find(
     account => account.email.trim().toLowerCase() === normalizedEmail
   );
 };
@@ -458,9 +455,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       localStorage.removeItem('oophub_remembered_email');
     }
 
-    if (accountSource === 'demo') {
-      seedDemoStudentProgress();
-    }
+    
 
     showNotice('success', `Welcome back, ${user.name}! Redirecting to workspace...`);
 
@@ -588,10 +583,8 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
 
     try {
       const response = await authApi.login(normalizedEmail, loginPassword);
-      const accountSource: AccountSource = isDemoEmail(response.user.email, response.user.role) ? 'demo' : 'custom';
-      if (accountSource === 'demo') {
-        seedDemoStudentProgress();
-      }
+      const accountSource: AccountSource = 'custom';
+      
       await completeLogin(
         {
           ...response.user,
@@ -609,16 +602,14 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       }
 
       // Check local demo accounts & stored users fallback
-      const allAccounts = [...demoAccounts, ...readStoredUsers()];
+      const allAccounts = [...readStoredUsers()];
       const matched = allAccounts.find(
         acc => acc.email.toLowerCase() === normalizedEmail && acc.password === loginPassword
       );
 
       if (matched) {
-        const accountSource: AccountSource = isDemoEmail(matched.email, matched.role) ? 'demo' : 'custom';
-        if (accountSource === 'demo') {
-          seedDemoStudentProgress();
-        }
+        const accountSource: AccountSource = 'custom';
+        
         await completeLogin(
           {
             ...matched,
@@ -1965,3 +1956,9 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
     </>
   );
 }
+
+
+
+
+
+

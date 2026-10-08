@@ -52,8 +52,8 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const isProduction = process.env.NODE_ENV === "production";
 const ASSESSMENT_PASSING_SCORE = 60;
 const VIDEO_COMPLETION_THRESHOLD = 95;
-const DEMO_STUDENT_EMAIL = "oop.demo.student@oophub.edu";
-const isDemoStudentEmail = (email) => String(email || "").trim().toLowerCase() === DEMO_STUDENT_EMAIL;
+let practiceSubmissionKeyColumn = "id";
+
 
 if (isProduction && JWT_SECRET === "change-this-secret") {
     throw new Error("JWT_SECRET must be configured in production.");
@@ -197,7 +197,7 @@ const toClientUser = (row) => ({
     name: row.name,
     email: row.email,
     role: row.role,
-    accountSource: row.account_source || (isDemoStudentEmail(row.email) ? "demo" : "custom"),
+    accountSource: row.account_source || "custom",
     registrationDate: row.created_at,
     contactNumber: row.contact_number || "",
     address: row.address || "",
@@ -984,286 +984,20 @@ const initializeDatabase = async () => {
         CREATE INDEX IF NOT EXISTS idx_swing_submissions_student ON swing_submissions(student_id, submitted_at DESC);
         CREATE INDEX IF NOT EXISTS idx_swing_progress_student ON swing_progress(student_id, lesson_id);
     `);
-};
-
-const seedDemoUsers = async () => {
-    const demoUsers = [
-        ["Dmitry Vance (Alex Mercer)", "dmitry@oophub.edu", "password123", "student"],
-        ["Dr. Elena Vance", "elena@oophub.edu", "password123", "teacher"],
-        ["Jerico Vance (Admin)", "jericokunn@gmail.com", "password123", "admin"]
-    ];
-
-    for (const [name, email, password, role] of demoUsers) {
-        const existing = await pool.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email]);
-        if (existing.rowCount) continue;
-
-        const passwordHash = await bcrypt.hash(password, 12);
-        const userResult = await pool.query(`
-            INSERT INTO users (user_id, name, email, password_hash, role, terms_agreement_accepted, terms_accepted_at, terms_version)
-            VALUES ($1, $2, LOWER($3), $4, $5, TRUE, NOW(), '2026.06.26')
-            RETURNING id
-        `, [buildUserId(email, role), name, email, passwordHash, role]);
-        const id = userResult.rows[0].id;
-
-        if (role === "student") {
-            await pool.query(`
-                INSERT INTO students (user_id, student_number, course, year_level, section, program_status)
-                VALUES ($1, '2026-0001', 'BS Computer Science', '3rd Year', 'CS-3A', 'Regular')
-            `, [id]);
-        } else if (role === "teacher") {
-            await pool.query(`
-                INSERT INTO teachers (user_id, employee_id, department, specialization, assigned_courses)
-                VALUES ($1, 'EMP-0001', 'College of Computer Studies', 'Object-Oriented Programming', 'OOP 101, Advanced Java, Software Architecture')
-            `, [id]);
-        } else if (role === "admin") {
-            await pool.query(`
-                INSERT INTO admins (user_id, admin_id, system_role, access_level)
-                VALUES ($1, 'ADM-0001', 'Super Admin', 'Level 5 - Full Access')
-            `, [id]);
-        }
-    }
-};
-
-const seedCompletedDemoStudent = async () => {
-    const email = DEMO_STUDENT_EMAIL;
-    const password = "DemoStudent!2026";
-    const client = await pool.connect();
-    try {
-        await client.query("BEGIN");
-        let userResult = await client.query("SELECT id, role FROM users WHERE LOWER(email) = LOWER($1)", [email]);
-        let studentId;
-
-        if (userResult.rowCount) {
-            if (userResult.rows[0].role !== 'student') {
-                throw new Error(`Demo student email is already used by a ${userResult.rows[0].role} account.`);
-            }
-            studentId = userResult.rows[0].id;
-        } else {
-            const passwordHash = await bcrypt.hash(password, 12);
-            const inserted = await client.query(`
-                INSERT INTO users (
-                  user_id, name, email, password_hash, role,
-                  account_status, terms_agreement_accepted, terms_accepted_at, terms_version
-                )
-                VALUES ($1, $2, LOWER($3), $4, 'student', 'Active', TRUE, NOW(), '2026.06.26')
-                RETURNING id
-            `, ["STU-DEMO-OOP-2026-9F4C", "OOP Demo Student", email, passwordHash]);
-            studentId = inserted.rows[0].id;
-        }
-
-        await client.query(`
-            INSERT INTO students (user_id, student_number, course, year_level, section, program_status)
-            VALUES ($1, 'DEMO-OOP-2026-9F4C', 'BS Computer Science', '3rd Year', 'OOP-DEMO', 'Regular')
-            ON CONFLICT (user_id) DO UPDATE SET
-              course = EXCLUDED.course,
-              year_level = EXCLUDED.year_level,
-              section = EXCLUDED.section,
-              program_status = EXCLUDED.program_status
-        `, [studentId]);
-        await client.query("DELETE FROM quiz_attempts WHERE student_user_id = $1", [studentId]);
-
-        const lessons = await client.query(`
-            SELECT id, sequence
-            FROM lessons
-            WHERE status <> 'Archived'
-            ORDER BY sequence, id
-        `);
-        const challenges = await client.query(`
-            SELECT DISTINCT ON (lesson_id) id, lesson_id, passing_score
-            FROM programming_challenges
-            WHERE status <> 'Archived'
-            ORDER BY lesson_id, id
-        `);
-        const challengeByLesson = new Map(challenges.rows.map(challenge => [challenge.lesson_id, challenge]));
-
-        for (const lesson of lessons.rows) {
-            await client.query(`
-                INSERT INTO student_progress (
-                  student_user_id, video_id, last_position, completion_percentage,
-                  completed, date_completed, notes
-                )
-                VALUES ($1, $2, 900, 100, TRUE, NOW(), 'Backend demo completion')
-                ON CONFLICT (student_user_id, video_id) DO UPDATE SET
-                  last_position = 900,
-                  completion_percentage = 100,
-                  completed = TRUE,
-                  date_completed = COALESCE(student_progress.date_completed, NOW()),
-                  updated_at = NOW()
-            `, [studentId, lesson.id]);
-
-            await client.query(`
-                INSERT INTO video_progress (
-                  student_id, lesson_id, "current_time", duration, watch_percentage, completed
-                )
-                VALUES ($1, $2, 900, 900, 100, TRUE)
-                ON CONFLICT (student_id, lesson_id) DO UPDATE SET
-                  "current_time" = 900,
-                  watch_percentage = 100,
-                  completed = TRUE,
-                  updated_at = NOW()
-            `, [studentId, lesson.id]);
-
-            await client.query(`
-                INSERT INTO quiz_attempts (
-                  student_user_id, assessment_id, lesson_id, score, total, percentage,
-                  correct_answers, incorrect_answers, passed, attempt_number, answers
-                )
-                SELECT $1, $2, $3, 100, 100, 100, 100, 0, TRUE, 1, '{}'::jsonb
-                WHERE NOT EXISTS (
-                  SELECT 1
-                  FROM quiz_attempts
-                  WHERE student_user_id = $1
-                    AND assessment_id = $2
-                )
-            `, [studentId, `oop_assessment_${lesson.sequence}`, lesson.id]);
-
-            const challenge = challengeByLesson.get(lesson.id);
-            if (challenge) {
-                await client.query(`
-                    INSERT INTO practice_submissions (
-                      student_id, challenge_id, source_code, program_output, compile_status,
-                      score, test_results, is_locked, teacher_score, teacher_feedback,
-                      graded_at, review_status
-                    )
-                    SELECT $1, $2, 'public class DemoSolution {}', 'All tests passed',
-                      'success', 100, '[]'::jsonb, TRUE, 100,
-                      'Demo submission completed successfully.', NOW(), 'graded'
-                    WHERE NOT EXISTS (
-                      SELECT 1 FROM practice_submissions WHERE student_id = $1 AND challenge_id = $2
-                    )
-                `, [studentId, challenge.id]);
-
-                await client.query(`
-                UPDATE practice_submissions
-                SET compile_status = 'success',
-                    score = 100,
-                    teacher_score = 100,
-                    teacher_feedback = 'Demo submission completed successfully.',
-                    graded_at = COALESCE(graded_at, NOW()),
-                    review_status = 'graded',
-                    remedial_required = FALSE,
-                    is_locked = TRUE
-                WHERE student_id = $1 AND challenge_id = $2
-                `, [studentId, challenge.id]);
-
-                await client.query(`
-                INSERT INTO practice_results (
-                      student_id, challenge_id, started, completed, score,
-                      source_code, submission_count, completed_at
-                    )
-                    VALUES ($1, $2, TRUE, TRUE, 100, 'public class DemoSolution {}', 1, NOW())
-                    ON CONFLICT (student_id, challenge_id) DO UPDATE SET
-                      started = TRUE,
-                      completed = TRUE,
-                      score = 100,
-                      completed_at = COALESCE(practice_results.completed_at, NOW()),
-                      updated_at = NOW()
-                `, [studentId, challenge.id]);
-            }
-
-            await client.query(`
-                INSERT INTO lesson_progress (
-                  student_id, lesson_id, video_completed, quiz_passed,
-                  practice_completed, completed, completed_at
-                )
-                VALUES ($1, $2, TRUE, TRUE, $3, TRUE, NOW())
-                ON CONFLICT (student_id, lesson_id) DO UPDATE SET
-                  video_completed = TRUE,
-                  quiz_passed = TRUE,
-                  practice_completed = EXCLUDED.practice_completed,
-                  completed = TRUE,
-                  completed_at = COALESCE(lesson_progress.completed_at, NOW()),
-                  updated_at = NOW()
-            `, [studentId, lesson.id, Boolean(challenge)]);
-        }
-
-        const swingLessons = await client.query(`
-            SELECT id
-            FROM swing_lessons
-            ORDER BY sequence, id
-        `);
-        const swingExercises = await client.query(`
-            SELECT id, lesson_id, starter_code
-            FROM swing_programming_exercises
-            ORDER BY lesson_id, id
-        `);
-
-        for (const lesson of swingLessons.rows) {
-            await client.query(`
-                INSERT INTO swing_progress (
-                    student_id, lesson_id, content_completed, video_completed,
-                    quiz_passed, exercise_completed, overall_percentage
-                )
-                VALUES ($1, $2, TRUE, TRUE, TRUE, TRUE, 100)
-                ON CONFLICT (student_id, lesson_id) DO UPDATE SET
-                    content_completed = TRUE,
-                    video_completed = TRUE,
-                    quiz_passed = TRUE,
-                    exercise_completed = TRUE,
-                    overall_percentage = 100,
-                    updated_at = NOW()
-            `, [studentId, lesson.id]);
-        }
-
-        for (const exercise of swingExercises.rows) {
-            await client.query(`
-                INSERT INTO swing_submissions (
-                    student_id, exercise_id, source_code, program_output,
-                    status, score, feedback, submitted_at, graded_at
-                )
-                SELECT $1, $2, $3, 'All Swing tests passed',
-                       'graded', 100, 'Demo Swing exercise completed successfully.', NOW(), NOW()
-                WHERE NOT EXISTS (
-                    SELECT 1
-                    FROM swing_submissions
-                    WHERE student_id = $1 AND exercise_id = $2
-                )
-            `, [studentId, exercise.id, exercise.starter_code || ''] );
-            await client.query(`
-                UPDATE swing_submissions
-                SET status = 'graded',
-                    score = 100,
-                    feedback = 'Demo Swing exercise completed successfully.',
-                    graded_at = COALESCE(graded_at, NOW())
-                WHERE student_id = $1 AND exercise_id = $2
-            `, [studentId, exercise.id]);
-        }
-
-        const teacher = await client.query(`
-            SELECT id
-            FROM users
-            WHERE role = 'teacher'
-              AND (LOWER(email) = 'elena@oophub.edu' OR name = 'Dr. Elena Vance')
-            ORDER BY CASE WHEN LOWER(email) = 'elena@oophub.edu' THEN 0 ELSE 1 END
-            LIMIT 1
-        `);
-        if (teacher.rowCount) {
-            await client.query(`
-                INSERT INTO monitoring_requests (teacher_id, student_id, status)
-                VALUES ($1, $2, 'accepted')
-                ON CONFLICT (teacher_id, student_id) DO UPDATE SET
-                  status = 'accepted',
-                  updated_at = NOW()
-            `, [teacher.rows[0].id, studentId]);
-        }
-
-        await client.query(`
-            INSERT INTO activity_logs (student_id, activity_type, activity_detail, metadata)
-            SELECT $1, 'lesson_completed', 'Completed all OOP demo lessons', $2::jsonb
-            WHERE NOT EXISTS (
-              SELECT 1
-              FROM activity_logs
-              WHERE student_id = $1
-                AND activity_type = 'lesson_completed'
-                AND activity_detail = 'Completed all OOP demo lessons'
-            )
-        `, [studentId, JSON.stringify({ lessonCount: lessons.rowCount })]);
-        await client.query("COMMIT");
-    } catch (error) {
-        await client.query("ROLLBACK");
-        throw error;
-    } finally {
-        client.release();
+    const practiceSubmissionColumns = await pool.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'practice_submissions'
+          AND column_name IN ('id', 'submission_id')
+    `);
+    const availableSubmissionKeys = new Set(practiceSubmissionColumns.rows.map(row => row.column_name));
+    if (availableSubmissionKeys.has('id')) {
+        practiceSubmissionKeyColumn = 'id';
+    } else if (availableSubmissionKeys.has('submission_id')) {
+        practiceSubmissionKeyColumn = 'submission_id';
+    } else {
+        throw new Error('practice_submissions has no supported submission identifier column (expected id or submission_id).');
     }
 };
 
@@ -3512,7 +3246,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         const [course, videos, quizzes, practice, swing, oopTopics, swingTopics] = await Promise.all([
             pool.query(`
                 SELECT COUNT(*)::int AS total_lessons,
-                       COUNT(*) FILTER (WHERE sp.completed AND COALESCE(qa.passed, FALSE) AND ps.id IS NOT NULL)::int AS completed_lessons
+                       COUNT(*) FILTER (WHERE sp.completed AND COALESCE(qa.passed, FALSE) AND ps.challenge_id IS NOT NULL)::int AS completed_lessons
                 FROM lessons l
                 LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND sp.video_id = l.id
                 LEFT JOIN LATERAL (
@@ -3520,7 +3254,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                   ORDER BY attempt_number DESC, date_completed DESC LIMIT 1
                 ) qa ON TRUE
                 LEFT JOIN LATERAL (
-                  SELECT ps.score, ps.teacher_score, ps.compile_status FROM practice_submissions ps
+                  SELECT ps.challenge_id, ps.score, ps.teacher_score, ps.compile_status FROM practice_submissions ps
                   JOIN programming_challenges pc ON pc.id = ps.challenge_id
                                     WHERE ps.student_id = $1::text AND pc.lesson_id = l.id
                   ORDER BY ps.submitted_at DESC LIMIT 1
@@ -3543,8 +3277,8 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             `, [dbStudentId]),
             pool.query(`
                 SELECT COUNT(pc.id)::int AS total_practice_activities,
-                       COUNT(ps.id)::int AS submitted_practice_activities,
-                      COUNT(ps.id)::int AS completed_practice_activities,
+                       COUNT(ps.challenge_id)::int AS submitted_practice_activities,
+                      COUNT(ps.challenge_id)::int AS completed_practice_activities,
                       COALESCE(ROUND(AVG(ps.teacher_score)), 0)::int AS average_practice_score
                 FROM programming_challenges pc
                 LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND ps.student_id = $1::text
@@ -3573,7 +3307,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                                                                          ) AS quiz_passed,
                                              ps.score AS practice_score,
                                              lp.completed AS lesson_completed,
-                                             (sp.id IS NOT NULL OR qa.id IS NOT NULL OR ps.id IS NOT NULL OR lp.id IS NOT NULL) AS attempted
+                                             (sp.id IS NOT NULL OR qa.id IS NOT NULL OR ps.challenge_id IS NOT NULL OR lp.id IS NOT NULL) AS attempted
                                 FROM lessons l
                                 LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND sp.video_id = l.id
                                 LEFT JOIN lesson_progress lp ON lp.student_id = $1 AND lp.lesson_id = l.id
@@ -3585,7 +3319,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                     LIMIT 1
                                 ) qa ON TRUE
                                 LEFT JOIN LATERAL (
-                                    SELECT ps.id, ps.score
+                                    SELECT ps.challenge_id, ps.score
                                     FROM practice_submissions ps
                                     JOIN programming_challenges pc ON pc.id = ps.challenge_id
                                     WHERE ps.student_id = $1::text AND pc.lesson_id = l.id
@@ -4835,7 +4569,7 @@ app.get("/api/admin/reports", requireAuth, requireRole(["admin"]), async (_req, 
                 ORDER BY assessment_id
             `),
             pool.query(`
-                SELECT pc.title, COUNT(ps.id)::int AS submissions,
+                SELECT pc.title, COUNT(ps.challenge_id)::int AS submissions,
                        COALESCE(ROUND(AVG(ps.score)), 0) AS average_score
                 FROM programming_challenges pc
                 LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id
@@ -4878,13 +4612,14 @@ const selectPracticeSubmissionById = async (id) => {
         LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
         LEFT JOIN students s ON s.user_id = u.id
         LEFT JOIN users grader ON grader.id = ps.graded_by
-        WHERE ps.id = $1
+        WHERE ps.${practiceSubmissionKeyColumn} = $1
     `, [id]);
     return result.rows[0] ? normalizeSubmissionTestResults(result.rows[0]) : null;
 };
 
 const normalizeSubmissionTestResults = (row) => ({
     ...row,
+    id: row.id || row.submission_id,
     test_results: Array.isArray(row.test_results)
         ? row.test_results
         : Array.isArray(row.test_results?.requirements)
@@ -4976,6 +4711,11 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin
 
 app.get("/api/practice-submissions/me", requireAuth, requireRole(["student"]), async (req, res, next) => {
     try {
+        const authenticatedStudentIds = [
+            req.authUser.id,
+            req.authUser.userId,
+            req.authUser.email
+        ].filter(Boolean);
         const result = await pool.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
                    ps.teacher_score, ps.teacher_feedback, ps.graded_at, ps.review_status, ps.remedial_required,
@@ -4983,9 +4723,9 @@ app.get("/api/practice-submissions/me", requireAuth, requireRole(["student"]), a
             FROM practice_submissions ps
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
             LEFT JOIN users grader ON grader.id = ps.graded_by
-            WHERE ps.student_id IN ($1::text, $2, $3)
+            WHERE ps.student_id = ANY($1::text[])
             ORDER BY ps.submitted_at DESC
-        `, [req.authUser.id, req.authUser.userId || "", req.authUser.email || ""]);
+        `, [authenticatedStudentIds]);
         res.json({ success: true, data: result.rows.map(normalizeSubmissionTestResults) });
     } catch (error) {
         next(error);
@@ -5144,7 +4884,7 @@ app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["tea
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
             LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
             LEFT JOIN users teacher ON teacher.id = $2
-            WHERE ps.id = $1
+            WHERE ps.${practiceSubmissionKeyColumn} = $1
         `, [req.params.id, req.authUser.id]);
         const existing = existingResult.rows[0];
         if (!existing) {
@@ -5182,7 +4922,7 @@ app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["tea
             LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
             LEFT JOIN students s ON s.user_id = u.id
             LEFT JOIN users reopener ON reopener.id = ps.reopened_by
-            WHERE ps.id = $1
+            WHERE ps.${practiceSubmissionKeyColumn} = $1
         `, [req.params.id]);
         updated = updatedResult.rows[0];
         const teacherName = existing.teacher_name || req.authUser.email || "your teacher";
@@ -5242,7 +4982,7 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
             JOIN programming_challenges pc ON pc.id = ps.challenge_id
             LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
             LEFT JOIN users teacher ON teacher.id = $2
-            WHERE ps.id = $1
+            WHERE ps.${practiceSubmissionKeyColumn} = $1
         `, [req.params.id, req.authUser.id]);
         const existing = existingResult.rows[0];
         if (!existing) {
@@ -5287,7 +5027,7 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
             LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
             LEFT JOIN students s ON s.user_id = u.id
             LEFT JOIN users grader ON grader.id = ps.graded_by
-            WHERE ps.id = $1
+            WHERE ps.${practiceSubmissionKeyColumn} = $1
         `, [req.params.id]);
         updated = updatedResult.rows[0];
         const teacherName = existing.teacher_name || req.authUser.email || "your teacher";
@@ -5358,58 +5098,6 @@ app.use((err, _req, res, _next) => {
     res.status(err.status || 500).json({ success: false, message });
 });
 
-const purgeDeletedDemoStudent = async () => {
-    const client = await pool.connect();
-    try {
-        await client.query("BEGIN");
-        const userResult = await client.query(
-            `SELECT u.id, u.user_id, u.email, s.user_id AS student_id, s.student_number
-             FROM users u
-             LEFT JOIN students s ON s.user_id = u.id
-             WHERE LOWER(u.email) = LOWER($1)`,
-            [DEMO_STUDENT_EMAIL]
-        );
-
-        if (!userResult.rowCount) {
-            await client.query("COMMIT");
-            return;
-        }
-
-        const { id, user_id: legacyUserId, email, student_id: studentId, student_number: studentNumber } = userResult.rows[0];
-        const identifiers = [String(id), String(legacyUserId || ''), String(studentId || ''), String(studentNumber || ''), String(email).toLowerCase()]
-            .filter(Boolean);
-
-        await client.query("DELETE FROM swing_submissions WHERE student_id = ANY($1::text[])", [identifiers]);
-        await client.query("DELETE FROM swing_progress WHERE student_id = ANY($1::text[])", [identifiers]);
-        await client.query("DELETE FROM practice_submissions WHERE student_id = ANY($1::text[])", [identifiers]);
-        await client.query("DELETE FROM recommendation_history WHERE student_id = ANY($1::text[])", [identifiers]);
-        const optionalCleanupTables = await client.query(`
-            SELECT
-              to_regclass('public.realtime_learning_events') IS NOT NULL AS has_realtime_events,
-              to_regclass('public.teacher_students') IS NOT NULL AS has_teacher_students,
-              to_regclass('public.invitations') IS NOT NULL AS has_invitations
-        `);
-        const optionalTables = optionalCleanupTables.rows[0] || {};
-        if (optionalTables.has_realtime_events) {
-            await client.query("DELETE FROM realtime_learning_events WHERE student_id = ANY($1::text[])", [identifiers]);
-        }
-        if (optionalTables.has_teacher_students) {
-            await client.query("DELETE FROM teacher_students WHERE student_id = ANY($1::text[])", [identifiers]);
-        }
-        if (optionalTables.has_invitations) {
-            await client.query("DELETE FROM invitations WHERE LOWER(student_email) = LOWER($1) OR accepted_by_student_id = ANY($2::text[])", [email, identifiers]);
-        }
-        await client.query("DELETE FROM users WHERE id = $1", [id]);
-        await client.query("COMMIT");
-        console.log(`Deleted demo account and all associated data for ${email}.`);
-    } catch (error) {
-        await client.query("ROLLBACK");
-        throw error;
-    } finally {
-        client.release();
-    }
-};
-
 const PORT = process.env.PORT || 5000;
 
 console.log('[submission-service] runtime: Render Node.js + PostgreSQL + configured JDK');
@@ -5419,12 +5107,7 @@ initializeDatabase()
         try {
             await seedLessons();
             await seedPracticeChallenges();
-            if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEMO_SEED === 'true') {
-                await seedDemoUsers();
-            } else {
-                console.log("Production mode: demo users and demo submissions are not seeded.");
-            }
-            await purgeDeletedDemoStudent();
+            
             console.log("Database seeded successfully.");
         } catch (seedErr) {
             console.error("Database seeding failed:", seedErr);
@@ -5439,3 +5122,7 @@ initializeDatabase()
         console.error(err);
         process.exit(1);
     });
+
+
+
+

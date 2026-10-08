@@ -90,7 +90,7 @@ import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
 import AdminVideoManager from './components/AdminVideoManager';
 import AdminTermsManager from './components/AdminTermsManager';
-import { appApi, authApi, getAuthToken, isDemoEmail, monitoringApi, notificationApi, practiceApi, progressApi, recommendationApi, setAuthToken, userApi } from './services/api';
+import { appApi, authApi, getAuthToken, monitoringApi, notificationApi, practiceApi, progressApi, recommendationApi, setAuthToken, userApi } from './services/api';
 import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
 import { getCanonicalStudentId, recommendationBelongsToStudent } from './services/identity';
 const NEW_STUDENT_PROGRESS = {
@@ -594,7 +594,7 @@ export default function App() {
         const restoredUser: AuthenticatedUser = {
           ...response.user,
           role: response.user.role as Persona,
-          accountSource: response.user.accountSource ?? (isDemoEmail(response.user.email, response.user.role) ? 'demo' : 'custom'),
+          accountSource: response.user.accountSource ?? ('custom'),
           token
         };
 
@@ -651,9 +651,13 @@ export default function App() {
   const [points, setPoints] = useState<number>(0);
   const [completedLessonsCount, setCompletedLessonsCount] = useState<number>(0);
   const [studentResults, setStudentResults] = useState<StudentResultsData | null>(null);
+  const [studentResultsError, setStudentResultsError] = useState<string | null>(null);
+  const [studentResultsLoading, setStudentResultsLoading] = useState(false);
 
   const refreshStudentResults = async (user: AuthenticatedUser | null = currentUser) => {
     if (!user || user.role !== 'student') return;
+    setStudentResultsLoading(true);
+    setStudentResultsError(null);
     try {
       const response = await progressApi.getStudentResults(getCanonicalStudentId(user), user.token);
       setStudentResults(response.data);
@@ -661,6 +665,9 @@ export default function App() {
       setPoints(response.data.overallProgress);
     } catch (error) {
       console.warn('Unable to refresh current student progress:', error);
+      setStudentResultsError('Unable to load authoritative progress from the backend.');
+    } finally {
+      setStudentResultsLoading(false);
     }
   };
 
@@ -1027,6 +1034,8 @@ export default function App() {
   useEffect(() => {
     if (currentUser?.role !== 'student') {
       setStudentResults(null);
+      setStudentResultsError(null);
+      setStudentResultsLoading(true);
       return;
     }
     const studentId = getCanonicalStudentId(currentUser);
@@ -1040,12 +1049,19 @@ export default function App() {
       .then(response => {
         if (cancelled) return;
         setStudentResults(response.data);
+        setStudentResultsError(null);
         setCompletedLessonsCount(response.data.completedLessons);
         setPoints(response.data.overallProgress);
         setRecentStudentGrade(null);
       })
       .catch(error => {
-        if (!cancelled) console.warn('Unable to load current student dashboard progress:', error);
+        if (!cancelled) {
+          console.warn('Unable to load current student dashboard progress:', error);
+          setStudentResultsError('Unable to load authoritative progress from the backend.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setStudentResultsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -1210,7 +1226,7 @@ export default function App() {
     name: persona === 'student' ? 'Student User' : persona === 'teacher' ? 'Teacher User' : 'Admin User',
     email: persona === 'student' ? 'student@oophub.edu' : persona === 'teacher' ? 'teacher@oophub.edu' : 'admin@oophub.edu',
     role: persona === 'public' ? 'student' : persona,
-    accountSource: 'demo',
+    accountSource: 'custom',
     userId: persona === 'student' ? 'STU-0000' : persona === 'teacher' ? 'TEA-0000' : 'ADM-0000',
     registrationDate: '2026-06-01T00:00:00.000Z',
     accountStatus: 'Active',
@@ -1631,6 +1647,8 @@ export default function App() {
                 activeRecommendation={activeRecommendation}
                 recommendationHistory={recommendationHistory.filter(item => recommendationBelongsToStudent(item, displayUser))}
                 studentResults={studentResults}
+                studentResultsError={studentResultsError}
+                studentResultsLoading={studentResultsLoading}
               />
             )}
 
@@ -1849,3 +1867,6 @@ export default function App() {
     </div>
   );
 }
+
+
+
