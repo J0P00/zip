@@ -411,7 +411,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
                 Secure Assessment Mode
               </span>
               <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                <Clock className="h-3 w-3" /> 20 min timer
+                <Clock className="h-3 w-3" /> 10 min timer
               </span>
             </div>
             <h2 className="mt-3 text-2xl font-extrabold text-slate-900 dark:text-white">Lesson Assessments</h2>
