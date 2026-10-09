@@ -15,6 +15,7 @@ const { PRACTICE_CHALLENGES } = require("./challengeBank");
 const { validateBasicJavaStructure } = require("./basicJavaValidator");
 const { getJavaToolchainDiagnostics } = require("./javaToolchain");
 const { normalizeAssessmentPercentage, isPassingAssessment } = require("./assessmentValidation");
+const { assessmentMatchesLesson } = require("./assessmentEligibility");
 const execFileAsync = promisify(execFile);
 
 const app = express();
@@ -24,7 +25,7 @@ const allowedOrigins = (process.env.CORS_ORIGIN || process.env.CORS_ORIGINS || "
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-app.use(cors({
+const corsMiddleware = cors({
     origin(origin, callback) {
         if (!origin) return callback(null, true);
         if (!allowedOrigins.length || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
@@ -35,8 +36,9 @@ app.use(cors({
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"]
-}));
-app.options(/.*/, cors());
+});
+app.use(corsMiddleware);
+app.options(/.*/, corsMiddleware);
 app.use(express.json({ limit: "10mb" }));
 
 const notificationStreams = new Map();
@@ -486,11 +488,16 @@ const requireAuth = async (req, res, next) => {
 
     try {
         const payload = jwt.verify(token, JWT_SECRET);
-        const result = await pool.query("SELECT id FROM users WHERE id = $1", [payload.id]);
+        const result = await pool.query(
+            "SELECT id, user_id, email, role FROM users WHERE id = $1",
+            [payload.id]
+        );
         if (result.rowCount === 0) {
             return res.status(401).json({ success: false, message: "User session is no longer valid." });
         }
-        req.authUser = payload;
+        // Authorization and identity are refreshed from PostgreSQL so a stale
+        // token cannot retain a changed role or cross-user identifier.
+        req.authUser = { ...payload, ...result.rows[0] };
         return next();
     } catch {
         return res.status(401).json({ success: false, message: "Invalid or expired authentication token." });
@@ -1762,7 +1769,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
                     SELECT 1
                     FROM quiz_attempts qa
                     WHERE qa.student_user_id = $1
-                      AND qa.lesson_id = $2
+                      AND COALESCE(qa.lesson_id, '') IN ($2, '')
                       AND (
                         qa.assessment_id = 'oop_assessment_' || (SELECT sequence FROM lessons WHERE id = $2)
                         OR EXISTS (SELECT 1 FROM assessments a WHERE a.id = qa.assessment_id AND a.lesson_id = $2)
@@ -4768,31 +4775,49 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
         const safeChallengeId = cleanText(challengeId, 120);
 
         const prerequisite = await pool.query(`
-            SELECT pc.id, pc.lesson_id, pc.title AS challenge_title, pc.passing_score,
-                   EXISTS (
-                       SELECT 1
-                       FROM quiz_attempts qa
-                       WHERE qa.student_user_id = $1
-                         AND qa.lesson_id = pc.lesson_id
-                         AND (
-                           qa.assessment_id = 'oop_assessment_' || (SELECT sequence FROM lessons WHERE id = pc.lesson_id)
-                           OR EXISTS (SELECT 1 FROM assessments a WHERE a.id = qa.assessment_id AND a.lesson_id = pc.lesson_id)
-                         )
-                         AND ${normalizedAssessmentPercentageSql("qa")} >= ${ASSESSMENT_PASSING_SCORE}
-                   ) AS quiz_passed
+            SELECT pc.id, pc.lesson_id, pc.title AS challenge_title, pc.passing_score
             FROM programming_challenges pc
-            WHERE pc.id = $2 AND pc.status <> 'Archived'
-        `, [req.authUser.id, safeChallengeId]);
+            WHERE pc.id = $1 AND pc.status <> 'Archived'
+        `, [safeChallengeId]);
 
         if (!prerequisite.rowCount) {
             return res.status(404).json({ success: false, message: "Practice challenge not found." });
         }
 
         const lessonAccess = await getLessonAccessState(req.authUser.id, prerequisite.rows[0].lesson_id);
-        if (!lessonAccess.canAccess || !lessonAccess.current.videoCompleted || !lessonAccess.current.assessmentPassed) {
+        if (!lessonAccess.canAccess || !lessonAccess.current.videoCompleted) {
             return res.status(403).json({ success: false, message: "Pass the current lesson assessment before submitting practice." });
         }
-        if (!prerequisite.rows[0].quiz_passed) {
+        const lessonId = prerequisite.rows[0].lesson_id;
+        const assessmentResult = await pool.query(`
+            SELECT qa.assessment_id, qa.lesson_id, qa.score, qa.total, qa.percentage, qa.correct_answers
+            FROM quiz_attempts qa
+            WHERE qa.student_user_id = $1
+              AND (
+                qa.lesson_id = $2
+                OR qa.assessment_id = 'oop_assessment_' || (SELECT sequence FROM lessons WHERE id = $2)
+                OR EXISTS (
+                    SELECT 1 FROM assessments a
+                    WHERE a.id = qa.assessment_id AND a.lesson_id = $2
+                )
+              )
+            ORDER BY qa.attempt_number DESC, qa.date_completed DESC
+        `, [req.authUser.id, lessonId]);
+        const databaseAssessmentIds = (await pool.query(
+            "SELECT id FROM assessments WHERE lesson_id = $1",
+            [lessonId]
+        )).rows.map(row => row.id);
+        const canonicalAssessmentId = `oop_assessment_${String(lessonId).match(/(\d+)$/)?.[1] || ""}`;
+        const quizPassed = assessmentResult.rows.some(attempt => (
+            assessmentMatchesLesson({
+                assessmentId: attempt.assessment_id,
+                attemptLessonId: attempt.lesson_id,
+                lessonId,
+                canonicalAssessmentId,
+                databaseAssessmentIds
+            }) && normalizeAssessmentPercentage(attempt) >= ASSESSMENT_PASSING_SCORE
+        ));
+        if (!quizPassed) {
             return res.status(403).json({ success: false, message: `Pass the required assessment with ${ASSESSMENT_PASSING_SCORE}% or higher before submitting practice.` });
         }
 
@@ -5134,6 +5159,7 @@ initializeDatabase()
             console.log("Database seeded successfully.");
         } catch (seedErr) {
             console.error("Database seeding failed:", seedErr);
+            throw seedErr;
         }
 
         app.listen(PORT, () => {
