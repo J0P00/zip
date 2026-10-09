@@ -22,11 +22,10 @@ import {
   LockKeyhole,
   Circle
 } from 'lucide-react';
-import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
+import { AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
 import { getCurrentPracticeChallenge, PRACTICE_CHALLENGES } from '../oopPracticeCatalog';
 import type { StudentResultsData } from '../services/interpretation';
-import RecommendationCard from './RecommendationCard';
 
 interface StudentDashboardProps {
   userName: string;
@@ -41,8 +40,6 @@ interface StudentDashboardProps {
   theme?: 'light' | 'dark';
   notifications?: NotificationItem[];
   onMarkNotificationRead?: (id: string) => void;
-  activeRecommendation?: AdaptiveRecommendation | null;
-  recommendationHistory?: AdaptiveRecommendation[];
   studentResults?: StudentResultsData | null;
   studentResultsError?: string | null;
   studentResultsLoading?: boolean;
@@ -61,8 +58,6 @@ export default function StudentDashboard({
   theme,
   notifications = [],
   onMarkNotificationRead,
-  activeRecommendation,
-  recommendationHistory = [],
   studentResults = null,
   studentResultsError = null,
   studentResultsLoading = false
@@ -210,6 +205,54 @@ export default function StudentDashboard({
     .sort((a, b) => a.sequence - b.sequence)
     .slice(0, 3);
 
+  const topicMetrics = OOP_COURSE_LESSONS.map(lesson => {
+    const topic = studentResults?.oopTopics?.find(item => item.id === lesson.id);
+    return { lesson, topic };
+  });
+  const passedAssessmentCount = topicMetrics.filter(({ topic }) => topic?.quizPassed === true).length;
+  const submittedPracticeCount = studentResults?.submittedPracticeActivities ?? topicMetrics.filter(({ topic }) => topic?.practiceScore !== null && topic?.practiceScore !== undefined).length;
+  const completedPracticeCount = studentResults?.completedPracticeActivities ?? topicMetrics.filter(({ topic }) => topic?.practiceCompleted === true).length;
+  const latestAssessmentScore = currentTopicEvidence?.quizPercentage ?? null;
+  const assessmentProgress = Math.round((passedAssessmentCount / Math.max(1, lessonCount)) * 100);
+  const practiceProgress = Math.round((completedPracticeCount / Math.max(1, lessonCount)) * 100);
+  const videoProgress = studentResults?.videoPercentage ?? 0;
+
+  const areasForImprovement = studentResults
+    ? topicMetrics.flatMap(({ lesson, topic }) => {
+        if (!topic || topic.lessonUnlocked === false || topic.lessonCompleted) return [];
+        if (!topic.videoCompleted || (topic.videoPercentage ?? 0) < 95) {
+          return [{ lesson, label: 'Video incomplete', detail: `${topic.videoPercentage ?? 0}% watched; at least 95% is required.`, view: 'videos' as StudentSubView }];
+        }
+        if (topic.quizPassed !== true) {
+          const score = topic.quizPercentage === null ? 'Not attempted' : `${topic.quizPercentage}%`;
+          return [{ lesson, label: 'Assessment needs attention', detail: `Latest score: ${score}. A passing score is 60%.`, view: 'assessments' as StudentSubView }];
+        }
+        if (topic.practiceCompleted !== true) {
+          const practiceDetail = topic.practiceScore === null || topic.practiceScore === undefined
+            ? 'Practice has not been submitted.'
+            : `Practice is submitted at ${topic.practiceScore}%, but is not marked complete.`;
+          return [{ lesson, label: 'Practice needs attention', detail: practiceDetail, view: 'ide' as StudentSubView }];
+        }
+        return [];
+      }).slice(0, 4)
+    : [];
+
+  const recommendedNextSteps = (() => {
+    if (!studentResults) return [];
+    const topicEntry = topicMetrics.find(({ topic }) => topic && !topic.lessonCompleted);
+    if (!topicEntry || !topicEntry.topic || topicEntry.topic.lessonUnlocked === false) return [];
+    const { lesson, topic } = topicEntry;
+    if (!topic.videoCompleted || (topic.videoPercentage ?? 0) < 95) {
+      return [{ lesson, title: 'Finish the lesson video', reason: `${topic.title} is at ${topic.videoPercentage ?? 0}%; reach 95% to unlock the assessment.`, view: 'videos' as StudentSubView, action: 'Continue video' }];
+    }
+    if (topic.quizPassed !== true && topic.assessmentUnlocked !== false) {
+      return [{ lesson, title: topic.quizPercentage === null ? 'Take the lesson assessment' : 'Retake the lesson assessment', reason: topic.quizPercentage === null ? 'This assessment has not been attempted.' : `The latest score is ${topic.quizPercentage}%; 60% is required to pass.`, view: 'assessments' as StudentSubView, action: topic.quizPercentage === null ? 'Start assessment' : 'Retake assessment' }];
+    }
+    if (topic.quizPassed === true && topic.practiceCompleted !== true && topic.practiceUnlocked !== false) {
+      return [{ lesson, title: 'Complete the coding practice', reason: topic.practiceScore === null || topic.practiceScore === undefined ? 'The eligible practice problem has not been submitted.' : 'The practice submission is not yet marked complete.', view: 'ide' as StudentSubView, action: 'Open Practice IDE' }];
+    }
+    return [];
+  })();
   return (
     <div className={`space-y-6 ${isDark ? 'text-slate-100' : 'text-slate-800'}`} id="student-dashboard-root">
       {(studentResultsLoading || studentResultsError) && (
@@ -268,7 +311,7 @@ export default function StudentDashboard({
       <div className="grid lg:grid-cols-12 gap-6">
         
         {/* Welcome Back card utilizing dynamic glass details and emerald gradients */}
-        <div className="lg:col-span-8 bg-white/70 backdrop-blur-md border border-slate-200/80 p-6 rounded-2xl relative overflow-hidden flex flex-col justify-between min-h-[210px]" id="student-welcome-card">
+        <div className="lg:col-span-8 bg-white/70 backdrop-blur-md border border-slate-200/80 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between" id="student-welcome-card">
           {/* Decorative subtle top mesh glow */}
           <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-20 bg-[radial-gradient(circle_at_bottom_right,ellipse,rgba(16,185,129,0.3)_0%,rgba(255,255,255,0)_70%)] pointer-events-none"></div>
           
@@ -311,6 +354,85 @@ export default function StudentDashboard({
           </div>
         </div>
 
+        {/* Authoritative student progress and improvement guidance */}
+        <section className="lg:col-span-8 bg-white/90 border border-slate-200 p-5 rounded-2xl shadow-sm" id="student-progress-section" aria-labelledby="student-progress-title">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Student Progress</span>
+              <h2 id="student-progress-title" className="mt-1 text-lg font-extrabold text-slate-900">Your learning at a glance</h2>
+              <p className="mt-1 text-xs font-semibold text-slate-500">Progress is calculated from your authenticated account records.</p>
+            </div>
+            <span className={`rounded-xl px-3 py-1.5 text-xs font-black ${learningStateClass}`}>{learningState} · {performanceIndex}%</span>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              ['Lessons', `${effectiveCompletedLessons}/${lessonCount}`, 'completed', 'text-emerald-700'],
+              ['Assessments', studentResults?.quizAttempts ? `${studentResults.averageQuizScore}%` : '--', `${passedAssessmentCount} passed · latest ${latestAssessmentScore === null ? '--' : `${latestAssessmentScore}%`}`, 'text-sky-700'],              ['Coding practice', `${completedPracticeCount}/${lessonCount}`, `${submittedPracticeCount} submitted`, 'text-violet-700'],
+              ['Learning score', `${performanceIndex}%`, learningState, 'text-amber-700']
+            ].map(([label, value, detail, color]) => (
+              <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <span className="block text-[9px] font-black uppercase tracking-wide text-slate-400">{label}</span>
+                <span className={`mt-1 block text-lg font-black ${color}`}>{value}</span>
+                <span className="block text-[10px] font-bold text-slate-500">{detail}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3" aria-label="Learning activity progress">
+            {[
+              ['Video lessons', videoProgress, '95% required per lesson'],
+              ['Assessments passed', assessmentProgress, '60% required to pass'],
+              ['Coding practice completed', practiceProgress, 'Submission is not completion']
+            ].map(([label, value, detail]) => (
+              <div key={label}>
+                <div className="flex justify-between gap-2 text-[10px] font-black text-slate-600"><span>{label}</span><span>{value}%</span></div>
+                <div className="mt-1 h-2 rounded-full bg-slate-100" role="progressbar" aria-label={String(label)} aria-valuenow={Number(value)} aria-valuemin={0} aria-valuemax={100}>
+                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500" style={{ width: `${value}%` }} />
+                </div>
+                <span className="mt-1 block text-[9px] font-semibold text-slate-400">{detail}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-2">
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900">Areas to Improve</h3>
+              <div className="mt-2 space-y-2">
+                {areasForImprovement.length ? areasForImprovement.map(item => (
+                  <div key={item.lesson.id} className="rounded-xl border border-amber-100 bg-amber-50/50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-wide text-amber-700">Lesson {item.lesson.sequence}</span>
+                        <h4 className="mt-0.5 text-xs font-extrabold text-slate-900">{item.lesson.title}</h4>
+                        <p className="mt-1 text-[10px] font-semibold text-slate-600"><strong>{item.label}:</strong> {item.detail}</p>
+                      </div>
+                      <button type="button" onClick={() => onNavigateTo(item.view)} className="shrink-0 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-[10px] font-black text-amber-800 hover:border-amber-400">Open</button>
+                    </div>
+                  </div>
+                )) : (
+                  <p className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-[10px] font-bold text-emerald-800">No active improvement items. Keep going.</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900">Recommended Next Steps</h3>
+              <div className="mt-2 space-y-2">
+                {recommendedNextSteps.length ? recommendedNextSteps.map(item => (
+                  <div key={item.lesson.id} className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+                    <span className="text-[9px] font-black uppercase tracking-wide text-emerald-700">Lesson {item.lesson.sequence}</span>
+                    <h4 className="mt-0.5 text-xs font-extrabold text-slate-900">{item.title}</h4>
+                    <p className="mt-1 text-[10px] font-semibold text-slate-600">{item.reason}</p>
+                    <button type="button" onClick={() => onNavigateTo(item.view)} className="mt-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-emerald-700">{item.action}</button>
+                  </div>
+                )) : (
+                  <p className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-[10px] font-bold text-slate-600">Complete the current required activity to unlock the next step.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
         {/* Backend-backed learning journey */}
         <div className="lg:col-span-4 bg-white/70 backdrop-blur-md border border-slate-200 p-5 rounded-2xl shadow-sm" id="student-activity-card">
           <div className="flex justify-between items-start gap-3">
@@ -463,50 +585,6 @@ export default function StudentDashboard({
             >
               <GraduationCap className="h-3.5 w-3.5" /> Open Swing Lesson
             </button>
-          </div>
-
-          <RecommendationCard recommendation={activeRecommendation || null} onNavigateTo={onNavigateTo} />
-
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm" id="student-recommendation-history">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight">Recommended For You</h3>
-                <p className="text-xs text-slate-500 font-medium">Rule-based recommendations update after every video, quiz, and coding activity.</p>
-              </div>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase text-slate-500">
-                {recommendationHistory.length} Records
-              </span>
-            </div>
-            <div className="space-y-3">
-              {recommendationHistory.slice(0, 4).map(item => (
-                <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
-                        item.type === 'Remedial' ? 'bg-rose-100 text-rose-700' : item.type === 'Continue' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                      }`}>
-                        {item.type}
-                      </span>
-                      <h4 className="mt-2 text-xs font-black text-slate-900">{item.type === 'Remedial' ? 'Review' : item.type}: {item.currentTopic}</h4>
-                      <p className="mt-1 text-[11px] font-semibold text-slate-500">Reason: {item.reason}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => onNavigateTo(item.targetView)}
-                      className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700"
-                    >
-                      {item.primaryActionLabel}
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {recommendationHistory.length === 0 && (
-                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
-                  <h4 className="text-xs font-extrabold text-slate-900">No recommendation history yet</h4>
-                  <p className="mt-1 text-[11px] font-semibold text-slate-500">Complete a lesson video, quiz, or coding activity to generate your first adaptive recommendation.</p>
-                </div>
-              )}
-            </div>
           </div>
 
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm" id="practice-ide-progress-card">

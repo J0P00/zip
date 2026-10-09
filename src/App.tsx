@@ -1594,8 +1594,6 @@ export default function App() {
                 theme={theme}
                 notifications={notifications}
                 onMarkNotificationRead={handleMarkNotificationRead}
-                activeRecommendation={activeRecommendation}
-                recommendationHistory={recommendationHistory.filter(item => recommendationBelongsToStudent(item, displayUser))}
                 studentResults={studentResults}
                 studentResultsError={studentResultsError}
                 studentResultsLoading={studentResultsLoading}
