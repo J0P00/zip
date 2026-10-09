@@ -1462,7 +1462,7 @@ export default function TeacherPortal({
                                   <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 font-medium">
                                     <span>Started: {new Date(session.started_at).toLocaleString()}</span>
                                     {session.submitted_at && <span>Submitted: {new Date(session.submitted_at).toLocaleString()}</span>}
-                                    <span>Time Limit: {session.time_limit_minutes || 20} min</span>
+                                    <span>Time Limit: {session.time_limit_minutes || 10} min</span>
                                   </div>
                                 </div>
 
