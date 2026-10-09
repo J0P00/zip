@@ -1267,7 +1267,7 @@ const classifyLearningState = ({ learningScore = 0, quizScore = 0, practiceScore
     return { learningState, interpretation, strengths, weaknesses };
 };
 
-const seedPracticeChallenges = async () => {
+const seedPracticeChallenges = async (db = pool) => {
     const topics = [
         ["practice_1", "classes-objects", "oop_lesson_1", "Create a Student object"],
         ["practice_2", "constructors", "oop_lesson_2", "Initialize a Book"],
@@ -1285,10 +1285,31 @@ const seedPracticeChallenges = async () => {
         ,["practice_14", "oop-review", "oop_lesson_12", "Assemble an OOP summary"]
     ];
 
-    for (const [id, topicId, lessonId, title] of topics) {
+    const seedChallengeIds = new Set();
+    const seedTestCaseIds = new Map();
+    for (const [id] of topics) {
+        if (seedChallengeIds.has(id)) {
+            throw new Error(`Duplicate practice challenge seed id: ${id}`);
+        }
+        seedChallengeIds.add(id);
         const challenge = PRACTICE_CHALLENGES.find(item => item.id === id);
         if (!challenge) continue;
-        await pool.query(`
+        for (const testCase of challenge.testCases || []) {
+            const previousChallengeId = seedTestCaseIds.get(testCase.id);
+            if (previousChallengeId) {
+                throw new Error(`Duplicate challenge test-case seed id: ${testCase.id} (${previousChallengeId}, ${id})`);
+            }
+            seedTestCaseIds.set(testCase.id, id);
+        }
+    }
+
+    const client = await db.connect();
+    try {
+        await client.query("BEGIN");
+        for (const [id, topicId, lessonId, title] of topics) {
+            const challenge = PRACTICE_CHALLENGES.find(item => item.id === id);
+            if (!challenge) continue;
+            await client.query(`
             INSERT INTO programming_challenges (
               id, topic_id, lesson_id, title, description, learning_objectives,
               requirements, starter_code, sample_input, sample_output, passing_score
@@ -1303,7 +1324,7 @@ const seedPracticeChallenges = async () => {
               requirements = EXCLUDED.requirements,
               starter_code = EXCLUDED.starter_code,
               sample_output = EXCLUDED.sample_output
-        `, [
+            `, [
             id,
             topicId,
             lessonId,
@@ -1313,13 +1334,17 @@ const seedPracticeChallenges = async () => {
             JSON.stringify(challenge.requirements),
             challenge.starterCode,
             challenge.sampleOutput
-        ]);
+            ]);
 
-        await pool.query("DELETE FROM challenge_test_cases WHERE challenge_id = $1", [id]);
-        for (const testCase of challenge.testCases || []) {
-            await pool.query(`
+            // Seed IDs are stable. Preserve an existing row because it may have
+            // been customized in production; DO NOTHING also makes repeated or
+            // concurrent startup safe without deleting rows or touching student
+            // submissions.
+            for (const testCase of challenge.testCases || []) {
+                await client.query(`
                 INSERT INTO challenge_test_cases (id, challenge_id, input, expected_output, is_hidden, matcher)
                 VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (id) DO NOTHING
             `, [
                 testCase.id,
                 id,
@@ -1327,14 +1352,16 @@ const seedPracticeChallenges = async () => {
                 testCase.expectedOutput || "",
                 Boolean(testCase.isHidden),
                 testCase.matcher || ""
-            ]);
+                ]);
+            }
         }
 
-        /*
-         * Keep the legacy placeholder upsert removed: it made the database
-         * challenge disagree with the trusted evaluator catalogue, e.g. Topic 1
-         * expected "Expected output depends..." instead of the real sample.
-         */
+        await client.query("COMMIT");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+    } finally {
+        client.release();
     }
 };
 
@@ -5150,6 +5177,7 @@ const PORT = process.env.PORT || 5000;
 
 console.log('[submission-service] runtime: Render Node.js + PostgreSQL + configured JDK');
 
+if (require.main === module) {
 initializeDatabase()
     .then(async () => {
         try {
@@ -5171,6 +5199,9 @@ initializeDatabase()
         console.error(err);
         process.exit(1);
     });
+}
+
+module.exports = { app, initializeDatabase, seedPracticeChallenges };
 
 
 
