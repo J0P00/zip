@@ -8,7 +8,7 @@ import {
   Play, 
   Code2, 
   CheckCircle2, 
-  MessageSquare, 
+
   Sparkles, 
   TrendingUp, 
   Clock,
@@ -33,7 +33,6 @@ interface StudentDashboardProps {
   streak: number;
   points: number;
   completedLessonsCount: number;
-  recentGrade: { grade: number; feedback: string; challenge: string } | null;
   onNavigateTo: (view: StudentSubView) => void;
   currentUser: AuthenticatedUser;
   monitoringRequests: MonitoringRequest[];
@@ -54,7 +53,6 @@ export default function StudentDashboard({
   streak,
   points,
   completedLessonsCount,
-  recentGrade,
   onNavigateTo,
   currentUser,
   monitoringRequests,
@@ -71,7 +69,7 @@ export default function StudentDashboard({
 }: StudentDashboardProps) {
   const firstName = userName.trim().split(/\s+/)[0] || 'Student';
   const effectiveCompletedLessons = studentResults?.completedLessons ?? completedLessonsCount;
-  const hasProgress = Boolean(studentResults?.hasActivity) || streak > 0 || points > 0 || effectiveCompletedLessons > 0 || Boolean(recentGrade);
+  const hasProgress = Boolean(studentResults?.hasActivity) || streak > 0 || points > 0 || effectiveCompletedLessons > 0;
   const lessonCount = OOP_COURSE_LESSONS.length;
   const moduleProgress = studentResults
     ? studentResults.overallProgress
@@ -607,34 +605,6 @@ export default function StudentDashboard({
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Academic feedbacks and peer grading feed */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm" id="student-academic-feedbacks">
-            <h3 className="text-sm font-extrabold text-slate-905 mb-4 flex items-center gap-2 uppercase tracking-wide">
-              <MessageSquare className="w-4 h-4 text-emerald-600" /> Instructor Evaluation Feed
-            </h3>
-
-            {recentGrade ? (
-              <div className="space-y-3">
-                <div className="p-4 rounded-xl bg-emerald-50/30 border border-emerald-100 space-y-2.5">
-                  <div className="flex justify-between items-center">
-                    <span className="font-extrabold text-xs text-slate-800 truncate max-w-[150px]">{recentGrade.challenge}</span>
-                    <span className="text-xs font-extrabold text-emerald-800 bg-emerald-100/60 border border-emerald-200 px-2.5 py-0.5 rounded font-mono shrink-0">{recentGrade.grade}% SCORE</span>
-                  </div>
-                  <p className="text-[11px] text-slate-600 leading-relaxed italic">
-                    "{recentGrade.feedback}"
-                  </p>
-                  <span className="text-[10px] text-slate-400 block text-right font-mono font-bold">Grader: Dr. Elena Vance</span>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4 font-sans">
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-105 text-slate-500 text-xs text-center py-8">
-                  <p className="italic">No feedbacks returned yet. Complete and submit vehicle overrides in the practice IDE sandbox, and instructors will grade your code shortly.</p>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Practice Pro-Tip block */}

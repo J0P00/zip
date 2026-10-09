@@ -762,11 +762,6 @@ export default function App() {
     };
   }, [currentUser?.role, currentUser?.token]);
 
-  // Live reviews returned from Dr. Elena Vance
-  const [recentStudentGrade, setRecentStudentGrade] = useState<{ grade: number; feedback: string; challenge: string } | null>(
-    null
-  );
-
   // Monitoring Connection System State
   const [monitoringRequests, setMonitoringRequests] = useState<MonitoringRequest[]>([]);
 
@@ -1052,7 +1047,6 @@ export default function App() {
         setStudentResultsError(null);
         setCompletedLessonsCount(response.data.completedLessons);
         setPoints(response.data.overallProgress);
-        setRecentStudentGrade(null);
       })
       .catch(error => {
         if (!cancelled) {
@@ -1115,13 +1109,6 @@ export default function App() {
     });
     publishRecommendation(recommendation);
 
-    // Post mock success grading notification immediately to Student Dashboard reviews
-    setRecentStudentGrade({
-      grade: attempt.percentage,
-      feedback: recommendation.summary,
-      challenge: lesson ? `${lesson.title} Assessment` : 'OOP Assessment'
-    });
-
     addNotification(
       `Coding Exercises Unlocked! 🔓`,
       recommendation.summary,
@@ -1137,14 +1124,9 @@ export default function App() {
     if (!updated) throw new Error('Grade was saved, but the updated submission could not be reloaded.');
     setPendingSubmissions(refreshed.data.map(practiceSubmissionRowToPending));
 
-    // If grading the current student's submission, sync immediately with student recent portfolio records
+    // If grading the current student's submission, sync the incentive immediately.
     const targetSub = pendingSubmissions.find(s => s.id === submissionId);
     if (targetSub && targetSub.studentName.includes('(You)')) {
-      setRecentStudentGrade({
-        grade: gradeScore,
-        feedback: feedbackNotes,
-        challenge: targetSub.challengeName
-      });
       setPoints(prev => prev + 100); // Incentive
     }
     return updated;
@@ -1409,7 +1391,6 @@ export default function App() {
               setStreak(0);
               setPoints(0);
               setCompletedLessonsCount(0);
-              setRecentStudentGrade(null);
             } else if (user.role === 'teacher') {
               setTeacherTab('dashboard');
             } else if (user.role === 'admin') {
@@ -1579,52 +1560,22 @@ export default function App() {
 
           {/* Core Content canvas */}
           <main className="flex-1 p-4 pb-24 sm:p-6 md:pb-6 overflow-y-auto" id="portal-content-canvas">
-            
-            {/* Header / Sub Header description */}
-            <div className={`pb-5 mb-4 border-b flex justify-between items-center flex-wrap gap-4 ${isDark ? 'border-slate-800' : 'border-slate-200'}`} id="view-content-header">
-              <div>
-                <h1 className={`text-xl sm:text-2xl font-bold tracking-tight capitalize leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  {persona === 'student' && studentTab === 'dashboard' && 'Student Workspace Dashboard'}
-                  {persona === 'student' && studentTab === 'ide' && 'Dynamic Java Compiler Sandbox'}
-                  {persona === 'student' && studentTab === 'videos' && 'Syllabus Playlist & Lesson Lectures'}
-                  {persona === 'student' && studentTab === 'assessments' && 'Interactive MCQ Scenario Simulator'}
-                  {persona === 'student' && studentTab === 'swing' && 'Java Swing Programming Lesson'}
-                  {persona === 'student' && studentTab === 'leaderboard' && 'Active CS & IT Cohort Rankings'}
-                  {persona === 'teacher' && teacherTab === 'dashboard' && 'Instructor Cohort Evaluation Dashboard'}
-                  {persona === 'admin' && adminViewMeta[adminTab].title}
-                  {((persona === 'student' && studentTab === 'profile') ||
-                    (persona === 'teacher' && teacherTab === 'profile')) && 'User Profile & Credentials'}
-                </h1>
-                <p className={`text-xs font-medium mt-1 leading-normal ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {persona === 'student' && studentTab === 'dashboard' && 'Track progress scores, active streaks, and watch specialized adaptive loop recommendations.'}
-                  {persona === 'student' && studentTab === 'ide' && 'Extend base Java classes, call super constructors, and run simulated tests instantly.'}
-                  {persona === 'student' && studentTab === 'videos' && 'View loop animations of dispatch lookups and write synchronized local study notes.'}
-                  {persona === 'student' && studentTab === 'assessments' && 'Diagnose Company Fleet dispatch hierarchies to earn high achievement points.'}
-                  {persona === 'student' && studentTab === 'swing' && 'Unlock desktop GUI development after completing the OOP lesson path and assessments.'}
-                  {persona === 'student' && studentTab === 'leaderboard' && 'Compare Computer Science and Information Technology student performance using live learning metrics.'}
-                  {persona === 'teacher' && teacherTab === 'dashboard' && 'Review sandbox compiler drafts, enter academic feedbacks, and submit final grades.'}
-                  {persona === 'admin' && adminViewMeta[adminTab].description}
-                  {((persona === 'student' && studentTab === 'profile') ||
-                    (persona === 'teacher' && teacherTab === 'profile')) && 'Manage your personal details, academic enrolment cards, teacher qualifications, or administrative system access.'}
-                </p>
-              </div>
-
-              {/* Status Pill indicators */}
-              <div className="flex gap-2 items-center text-xs shrink-0 font-medium select-none">
+            {/* Contextual status indicators */}
+            {(persona === 'teacher' || persona === 'admin') && (
+              <div className="flex justify-end mb-4">
                 {persona === 'teacher' && (
-                  <span className="flex items-center gap-1.5 bg-rose-50 text-rose-700 px-3 py-1.5 rounded-xl border border-rose-200 font-bold">
+                  <span className="flex items-center gap-1.5 bg-rose-50 text-rose-700 px-3 py-1.5 rounded-xl border border-rose-200 font-bold text-xs">
                     <span className="w-2 h-2 bg-rose-500 rounded-full animate-ping"></span>
                     Review Inbox ({needsGradingCount} Pending)
                   </span>
                 )}
-
                 {persona === 'admin' && (
                   <span className="flex items-center gap-1.5 bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl border border-slate-200 font-mono text-[10.5px]">
                     ● Engine Mode: ADAPTIVE_SYNC
                   </span>
                 )}
               </div>
-            </div>
+            )}
 
             {/* Sub View Router rendering */}
             
@@ -1635,7 +1586,6 @@ export default function App() {
                 streak={streak}
                 points={points}
                 completedLessonsCount={completedLessonsCount}
-                recentGrade={recentStudentGrade}
                 onNavigateTo={handleDirectNavigation}
                 currentUser={displayUser}
                 monitoringRequests={monitoringRequests}
