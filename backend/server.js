@@ -14,6 +14,7 @@ const { OOP_PARSED_QUESTIONS } = require("./questionBank");
 const { PRACTICE_CHALLENGES } = require("./challengeBank");
 const { validateBasicJavaStructure } = require("./basicJavaValidator");
 const { getJavaToolchainDiagnostics } = require("./javaToolchain");
+const { normalizeAssessmentPercentage, isPassingAssessment } = require("./assessmentValidation");
 const execFileAsync = promisify(execFile);
 
 const app = express();
@@ -53,6 +54,13 @@ const isProduction = process.env.NODE_ENV === "production";
 const ASSESSMENT_PASSING_SCORE = 60;
 const VIDEO_COMPLETION_THRESHOLD = 95;
 let practiceSubmissionKeyColumn = "id";
+
+const normalizedAssessmentPercentageSql = (alias = "qa") => `CASE
+    WHEN ${alias}.percentage IS NULL THEN 0
+    WHEN ${alias}.percentage BETWEEN 0 AND 1 AND ${alias}.total > 0
+      THEN (${alias}.score::numeric / ${alias}.total::numeric) * 100
+    ELSE ${alias}.percentage
+  END`;
 
 
 if (isProduction && JWT_SECRET === "change-this-secret") {
@@ -1256,17 +1264,17 @@ const seedPracticeChallenges = async () => {
     const topics = [
         ["practice_1", "classes-objects", "oop_lesson_1", "Create a Student object"],
         ["practice_2", "constructors", "oop_lesson_2", "Initialize a Book"],
-        ["practice_12", "object-methods", "oop_lesson_3", "Build a calculator method"],
-        ["practice_3", "encapsulation", "oop_lesson_4", "Protect BankAccount balance"],
-        ["practice_13", "constructor-overloading", "oop_lesson_5", "Overload a Profile constructor"],
-        ["practice_4", "inheritance", "oop_lesson_6", "Extend Employee into Manager"],
-        ["practice_5", "polymorphism", "oop_lesson_7", "Override notification sending"],
-        ["practice_6", "abstraction", "oop_lesson_8", "Implement an abstract shape"],
-        ["practice_7", "interfaces", "oop_lesson_9", "Implement Payable"],
-        ["practice_8", "exception-handling", "oop_lesson_10", "Validate division safely"],
-        ["practice_9", "collections", "oop_lesson_10", "Track unique names"],
-        ["practice_10", "file-handling", "oop_lesson_11", "Read simple file content"],
-        ["practice_11", "mini-oop-project", "oop_lesson_11", "Mini library checkout"]
+        ["practice_3", "object-methods", "oop_lesson_3", "Build a calculator method"],
+        ["practice_4", "encapsulation", "oop_lesson_4", "Protect BankAccount balance"],
+        ["practice_5", "constructor-overloading", "oop_lesson_5", "Overload a Profile constructor"],
+        ["practice_6", "inheritance", "oop_lesson_6", "Extend Employee into Manager"],
+        ["practice_7", "polymorphism", "oop_lesson_7", "Override notification sending"],
+        ["practice_8", "abstraction", "oop_lesson_8", "Implement an abstract shape"],
+        ["practice_9", "interfaces", "oop_lesson_9", "Implement Payable"],
+        ["practice_10", "exception-handling", "oop_lesson_10", "Validate division safely"],
+        ["practice_11", "collections", "oop_lesson_10", "Track unique names"],
+        ["practice_12", "file-handling", "oop_lesson_11", "Read simple file content"],
+        ["practice_13", "mini-oop-project", "oop_lesson_11", "Mini library checkout"]
         ,["practice_14", "oop-review", "oop_lesson_12", "Assemble an OOP summary"]
     ];
 
@@ -1750,8 +1758,18 @@ const getLessonEvidence = async (studentId, lessonId) => {
         );
         const quizResult = await pool.query(
             `SELECT
-                EXISTS (SELECT 1 FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 AND percentage >= ${ASSESSMENT_PASSING_SCORE}) AS passed,
-                (SELECT percentage FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = $2 ORDER BY attempt_number DESC, date_completed DESC LIMIT 1) AS percentage`,
+                EXISTS (
+                    SELECT 1
+                    FROM quiz_attempts qa
+                    WHERE qa.student_user_id = $1
+                      AND qa.lesson_id = $2
+                      AND (
+                        qa.assessment_id = 'oop_assessment_' || (SELECT sequence FROM lessons WHERE id = $2)
+                        OR EXISTS (SELECT 1 FROM assessments a WHERE a.id = qa.assessment_id AND a.lesson_id = $2)
+                      )
+                      AND ${normalizedAssessmentPercentageSql("qa")} >= ${ASSESSMENT_PASSING_SCORE}
+                ) AS passed,
+                (SELECT ${normalizedAssessmentPercentageSql("latest")} FROM quiz_attempts latest WHERE latest.student_user_id = $1 AND latest.lesson_id = $2 ORDER BY latest.attempt_number DESC, latest.date_completed DESC LIMIT 1) AS percentage`,
             [studentId, lessonId]
         );
         const challengeResult = await pool.query(`
@@ -3303,7 +3321,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                                                                              FROM quiz_attempts passed_attempt
                                                                                              WHERE passed_attempt.student_user_id = $1
                                                                                                  AND passed_attempt.lesson_id = l.id
-                                                                                                 AND passed_attempt.percentage >= ${ASSESSMENT_PASSING_SCORE}
+                                                                                                 AND ${normalizedAssessmentPercentageSql("passed_attempt")} >= ${ASSESSMENT_PASSING_SCORE}
                                                                                          ) AS quiz_passed,
                                              ps.score AS practice_score,
                                              lp.completed AS lesson_completed,
@@ -3557,11 +3575,12 @@ app.get("/api/quiz-attempts/:studentId", requireAuth, async (req, res, next) => 
             return res.status(403).json({ success: false, message: "Students can only view their own quiz attempts." });
         }
         const result = await pool.query(`
-            SELECT DISTINCT ON (assessment_id) *,
-                   (percentage >= ${ASSESSMENT_PASSING_SCORE}) AS passed
-            FROM quiz_attempts
-            WHERE student_user_id = $1
-            ORDER BY assessment_id, attempt_number DESC, date_completed DESC
+            SELECT DISTINCT ON (qa.assessment_id) qa.*,
+                   ${normalizedAssessmentPercentageSql("qa")} AS percentage,
+                   (${normalizedAssessmentPercentageSql("qa")} >= ${ASSESSMENT_PASSING_SCORE}) AS passed
+            FROM quiz_attempts qa
+            WHERE qa.student_user_id = $1
+            ORDER BY qa.assessment_id, qa.attempt_number DESC, qa.date_completed DESC
         `, [req.params.studentId]);
         res.json({ success: true, data: result.rows });
     } catch (error) {
@@ -3596,7 +3615,7 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
 
         const safeTotal = Math.max(1, Math.floor(clampNumber(total, 1, 100)));
         const safeScore = Math.floor(clampNumber(score, 0, safeTotal));
-        const computedPercentage = Math.round((safeScore / safeTotal) * 100);
+        const computedPercentage = Math.round(normalizeAssessmentPercentage({ score: safeScore, total: safeTotal }));
         const safeCorrectAnswers = Math.floor(clampNumber(correctAnswers, 0, safeTotal));
         const safeIncorrectAnswers = Math.floor(clampNumber(incorrectAnswers, 0, safeTotal));
         const safeAssessmentId = cleanText(assessmentId, 120);
@@ -3623,13 +3642,13 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
             computedPercentage,
             safeCorrectAnswers,
             safeIncorrectAnswers,
-            computedPercentage >= ASSESSMENT_PASSING_SCORE,
+            isPassingAssessment({ score: safeScore, total: safeTotal }),
             safeAttemptNumber,
             JSON.stringify(safeAnswers),
             dateCompleted || null
         ]);
 
-        const isPassedNow = computedPercentage >= ASSESSMENT_PASSING_SCORE;
+        const isPassedNow = isPassingAssessment({ score: safeScore, total: safeTotal });
 
         // Award completion and pass XP
         await awardXP(req.authUser.id, 30, `Quiz Completion: ${safeAssessmentId}`);
@@ -4240,7 +4259,7 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
                         FROM quiz_attempts qa
                         WHERE qa.student_user_id = u.id
                           AND qa.lesson_id = l.id
-                          AND qa.percentage >= ${ASSESSMENT_PASSING_SCORE}
+                          AND ${normalizedAssessmentPercentageSql("qa")} >= ${ASSESSMENT_PASSING_SCORE}
                       ) AS assessment_passed,
                       CASE
                         WHEN pc.id IS NULL THEN TRUE
@@ -4755,7 +4774,11 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
                        FROM quiz_attempts qa
                        WHERE qa.student_user_id = $1
                          AND qa.lesson_id = pc.lesson_id
-                         AND qa.percentage >= ${ASSESSMENT_PASSING_SCORE}
+                         AND (
+                           qa.assessment_id = 'oop_assessment_' || (SELECT sequence FROM lessons WHERE id = pc.lesson_id)
+                           OR EXISTS (SELECT 1 FROM assessments a WHERE a.id = qa.assessment_id AND a.lesson_id = pc.lesson_id)
+                         )
+                         AND ${normalizedAssessmentPercentageSql("qa")} >= ${ASSESSMENT_PASSING_SCORE}
                    ) AS quiz_passed
             FROM programming_challenges pc
             WHERE pc.id = $2 AND pc.status <> 'Archived'

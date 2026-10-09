@@ -615,7 +615,7 @@ CREATE TABLE IF NOT EXISTS oop_video_progress (
 CREATE TABLE IF NOT EXISTS oop_assessments (
   id TEXT PRIMARY KEY,
   lesson_id TEXT NOT NULL REFERENCES oop_lessons(id) ON DELETE CASCADE,
-  passing_percentage NUMERIC NOT NULL DEFAULT 70,
+  passing_percentage NUMERIC NOT NULL DEFAULT 60,
   questions_count INTEGER NOT NULL DEFAULT 25,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -836,17 +836,17 @@ SET title = EXCLUDED.title,
 
 INSERT INTO oop_assessments (id, lesson_id, passing_percentage, questions_count)
 VALUES
-  ('oop_assessment_1', 'oop_lesson_1', 70, 25),
-  ('oop_assessment_2', 'oop_lesson_2', 70, 25),
-  ('oop_assessment_3', 'oop_lesson_3', 70, 25),
-  ('oop_assessment_4', 'oop_lesson_4', 70, 25),
-  ('oop_assessment_5', 'oop_lesson_5', 70, 25),
-  ('oop_assessment_6', 'oop_lesson_6', 70, 25),
-  ('oop_assessment_7', 'oop_lesson_7', 70, 25),
-  ('oop_assessment_8', 'oop_lesson_8', 70, 25),
-  ('oop_assessment_9', 'oop_lesson_9', 70, 25),
-  ('oop_assessment_10', 'oop_lesson_10', 70, 25),
-  ('oop_assessment_11', 'oop_lesson_11', 70, 25)
+  ('oop_assessment_1', 'oop_lesson_1', 60, 25),
+  ('oop_assessment_2', 'oop_lesson_2', 60, 25),
+  ('oop_assessment_3', 'oop_lesson_3', 60, 25),
+  ('oop_assessment_4', 'oop_lesson_4', 60, 25),
+  ('oop_assessment_5', 'oop_lesson_5', 60, 25),
+  ('oop_assessment_6', 'oop_lesson_6', 60, 25),
+  ('oop_assessment_7', 'oop_lesson_7', 60, 25),
+  ('oop_assessment_8', 'oop_lesson_8', 60, 25),
+  ('oop_assessment_9', 'oop_lesson_9', 60, 25),
+  ('oop_assessment_10', 'oop_lesson_10', 60, 25),
+  ('oop_assessment_11', 'oop_lesson_11', 60, 25)
 ON CONFLICT (id) DO UPDATE
 SET passing_percentage = EXCLUDED.passing_percentage,
     questions_count = EXCLUDED.questions_count;

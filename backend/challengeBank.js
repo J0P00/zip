@@ -136,7 +136,7 @@ const baseChallenges = [
     ]
   },
   {
-    id: 'practice_3',
+    id: 'practice_4',
     topicId: 'encapsulation',
     topicTitle: 'Encapsulation',
     lessonId: 'oop_lesson_4',
@@ -197,7 +197,7 @@ const baseChallenges = [
     ]
   },
   {
-    id: 'practice_4',
+    id: 'practice_6',
     topicId: 'inheritance',
     topicTitle: 'Inheritance',
     lessonId: 'oop_lesson_6',
@@ -247,7 +247,7 @@ const baseChallenges = [
     ]
   },
   {
-    id: 'practice_5',
+    id: 'practice_7',
     topicId: 'polymorphism',
     topicTitle: 'Polymorphism',
     lessonId: 'oop_lesson_7',
@@ -300,7 +300,7 @@ const baseChallenges = [
     ]
   },
   {
-    id: 'practice_6',
+    id: 'practice_8',
     topicId: 'abstraction',
     topicTitle: 'Abstraction',
     lessonId: 'oop_lesson_8',
@@ -353,7 +353,7 @@ const baseChallenges = [
     ]
   },
   {
-    id: 'practice_7',
+    id: 'practice_9',
     topicId: 'interfaces',
     topicTitle: 'Interfaces',
     lessonId: 'oop_lesson_9',
@@ -403,7 +403,7 @@ const baseChallenges = [
     ]
   },
   {
-    id: 'practice_8',
+    id: 'practice_10',
     topicId: 'exception-handling',
     topicTitle: 'Exception Handling',
     lessonId: 'oop_lesson_10',
@@ -449,7 +449,7 @@ const baseChallenges = [
     ]
   },
   {
-    id: 'practice_9',
+    id: 'practice_11',
     topicId: 'collections',
     topicTitle: 'Collections',
     lessonId: 'oop_lesson_10',
@@ -495,7 +495,7 @@ const baseChallenges = [
     ]
   },
   {
-    id: 'practice_10',
+    id: 'practice_12',
     topicId: 'file-handling',
     topicTitle: 'File Handling',
     lessonId: 'oop_lesson_11',
@@ -537,7 +537,7 @@ const baseChallenges = [
     ]
   },
   {
-    id: 'practice_11',
+    id: 'practice_13',
     topicId: 'mini-oop-project',
     topicTitle: 'Mini OOP Project',
     lessonId: 'oop_lesson_11',
@@ -589,7 +589,7 @@ const baseChallenges = [
     ]
   },
   {
-    id: 'practice_12',
+    id: 'practice_3',
     topicId: 'object-methods',
     topicTitle: 'Object Methods',
     lessonId: 'oop_lesson_3',
@@ -611,7 +611,7 @@ const baseChallenges = [
     testCases: [{ id: 'methods_sample', input: '', expectedOutput: '5', isHidden: false, matcher: 'add' }]
   },
   {
-    id: 'practice_13',
+    id: 'practice_5',
     topicId: 'constructor-overloading',
     topicTitle: 'Constructor Overloading',
     lessonId: 'oop_lesson_5',
