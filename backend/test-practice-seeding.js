@@ -1,6 +1,6 @@
 const assert = require('assert');
 const { seedPracticeChallenges } = require('./server');
-const { PRACTICE_CHALLENGES } = require('./challengeBank');
+const { ACTIVE_OOP_PRACTICE_CHALLENGES } = require('./oopPracticeCatalog');
 
 class FakeSeedClient {
     constructor() {
@@ -16,6 +16,7 @@ class FakeSeedClient {
             return { rowCount: 0, rows: [] };
         }
         if (normalized === 'COMMIT' || normalized === 'ROLLBACK') return { rowCount: 0, rows: [] };
+        if (normalized.startsWith('UPDATE programming_challenges SET status')) return { rowCount: 0, rows: [] };
         if (normalized.startsWith('INSERT INTO programming_challenges')) {
             this.challenges.set(params[0], { id: params[0], lesson_id: params[2] });
             return { rowCount: 1, rows: [] };
@@ -50,7 +51,7 @@ const db = { connect: async () => client };
     await seedPracticeChallenges(db);
     await seedPracticeChallenges(db);
 
-    const expectedTestCaseCount = PRACTICE_CHALLENGES.reduce(
+    const expectedTestCaseCount = ACTIVE_OOP_PRACTICE_CHALLENGES.reduce(
         (count, challenge) => count + (challenge.testCases || []).length,
         0
     );

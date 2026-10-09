@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { AuthenticatedUser, StudentSubView, VideoLesson } from '../types';
 import { OOP_ASSESSMENTS } from '../data/oopCourse';
-import { PRACTICE_CHALLENGES } from '../data/practiceChallenges';
+import { PRACTICE_CHALLENGES } from '../oopPracticeCatalog';
 import { practiceApi, progressApi } from '../services/api';
 import type { StudentResultsData, StudentTopicResult } from '../services/interpretation';
 import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';

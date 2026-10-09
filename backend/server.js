@@ -11,7 +11,7 @@ const { promisify } = require("util");
 const jwt = require("jsonwebtoken");
 const pool = require("./db");
 const { OOP_PARSED_QUESTIONS } = require("./questionBank");
-const { PRACTICE_CHALLENGES } = require("./challengeBank");
+const { ACTIVE_OOP_PRACTICE_CHALLENGES, ACTIVE_OOP_PRACTICE_IDS } = require("./oopPracticeCatalog");
 const { validateBasicJavaStructure } = require("./basicJavaValidator");
 const { getJavaToolchainDiagnostics } = require("./javaToolchain");
 const { normalizeAssessmentPercentage, isPassingAssessment } = require("./assessmentValidation");
@@ -19,6 +19,7 @@ const { assessmentMatchesLesson } = require("./assessmentEligibility");
 const execFileAsync = promisify(execFile);
 
 const app = express();
+const PRACTICE_CHALLENGES = ACTIVE_OOP_PRACTICE_CHALLENGES;
 
 const allowedOrigins = (process.env.CORS_ORIGIN || process.env.CORS_ORIGINS || "")
     .split(",")
@@ -447,7 +448,7 @@ const toClientPracticeChallenge = (row) => {
         sampleOutput: row.sample_output || "",
         passingScore: Number(row.passing_score || 70),
         status: row.status || "Draft",
-        testCases: (row.test_cases || []).map(normalizeChallengeTestCase),
+        testCases: (canonical?.testCases || row.test_cases || []).map(normalizeChallengeTestCase),
         createdAt: row.created_at,
         updatedAt: row.updated_at
     };
@@ -1278,11 +1279,9 @@ const seedPracticeChallenges = async (db = pool) => {
         ["practice_7", "polymorphism", "oop_lesson_7", "Override notification sending"],
         ["practice_8", "abstraction", "oop_lesson_8", "Implement an abstract shape"],
         ["practice_9", "interfaces", "oop_lesson_9", "Implement Payable"],
-        ["practice_10", "exception-handling", "oop_lesson_10", "Validate division safely"],
-        ["practice_11", "collections", "oop_lesson_10", "Track unique names"],
-        ["practice_12", "file-handling", "oop_lesson_11", "Read simple file content"],
-        ["practice_13", "mini-oop-project", "oop_lesson_11", "Mini library checkout"]
-        ,["practice_14", "oop-review", "oop_lesson_12", "Assemble an OOP summary"]
+        ["practice_10", "arrays-objects-10", "oop_lesson_10", "Process an array of objects"],
+        ["practice_11", "arrays-objects-11", "oop_lesson_11", "Find an object in an array"],
+        ["practice_12", "enum", "oop_lesson_12", "Use an enum for course status"]
     ];
 
     const seedChallengeIds = new Set();
@@ -1355,6 +1354,14 @@ const seedPracticeChallenges = async (db = pool) => {
                 ]);
             }
         }
+
+        // Keep obsolete challenge rows and their historical submissions, but
+        // remove them from the active OOP catalogue.
+        await client.query(`
+            UPDATE programming_challenges
+            SET status = 'Archived', updated_at = NOW()
+            WHERE id = ANY($1::text[])
+        `, [["practice_13", "practice_14"]]);
 
         await client.query("COMMIT");
     } catch (error) {
@@ -3940,9 +3947,10 @@ app.get("/api/practice-challenges", requireAuth, async (req, res, next) => {
             SELECT c.*, COALESCE(json_agg(t.*) FILTER (WHERE t.id IS NOT NULL), '[]') AS test_cases
             FROM programming_challenges c
             LEFT JOIN challenge_test_cases t ON t.challenge_id = c.id
+            WHERE c.id = ANY($1::text[])
             GROUP BY c.id
             ORDER BY c.id
-        `);
+        `, [ACTIVE_OOP_PRACTICE_IDS]);
         const challenges = result.rows.map(toClientPracticeChallenge);
 
         // For student role, NEVER expose hidden test cases or matchers to frontend

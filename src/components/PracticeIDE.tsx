@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, Code2, Lock, RotateCcw, Send, Shield, Terminal } from 'lucide-react';
 import { AdaptiveRecommendation, AuthenticatedUser, PracticeSubmission } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson } from '../data/oopCourse';
-import { getPracticeChallengeForLesson, PRACTICE_CHALLENGES } from '../data/practiceChallenges';
+import { getPracticeChallengeForLesson, PRACTICE_CHALLENGES } from '../oopPracticeCatalog';
 import RecommendationCard from './RecommendationCard';
 import SecureWatermark from './SecureWatermark';
 import { lessonApi, practiceApi, progressApi } from '../services/api';
@@ -44,6 +44,9 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
   const [quizDb, setQuizDb] = useState<QuizDb>({});
   const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
   const [accessDb, setAccessDb] = useState<Record<string, { canAccess: boolean; reason?: string | null; current?: { practiceUnlocked?: boolean; videoCompleted?: boolean; assessmentPassed?: boolean } }>>({});
+  const [accessLoadState, setAccessLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const [accessAttempt, setAccessAttempt] = useState(0);
   const [draftDb, setDraftDb] = useState<DraftDb>(() => getStoredJson(DRAFT_KEY, {}));
   const [activeChallengeId, setActiveChallengeId] = useState(() => PRACTICE_CHALLENGES[0].id);
   const activeChallenge = PRACTICE_CHALLENGES.find(challenge => challenge.id === activeChallengeId) || PRACTICE_CHALLENGES[0];
@@ -116,20 +119,28 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
 
   useEffect(() => {
     let mounted = true;
+    setAccessLoadState('loading');
+    setAccessError(null);
+    const accessRequests = OOP_COURSE_LESSONS.map(lesson => lessonApi.getAccess(lesson.id, currentUser.token));
     Promise.all([
       progressApi.getVideoProgress(currentUser.id || '', currentUser.token),
       progressApi.getQuizAttempts(currentUser.id || '', currentUser.token),
       practiceApi.listMine(currentUser.token),
-      ...OOP_COURSE_LESSONS.map(lesson => lessonApi.getAccess(lesson.id, currentUser.token))
-    ]).then(([videoResponse, quizResponse, submissionResponse, ...accessResponses]) => {
+      Promise.allSettled(accessRequests)
+    ]).then(([videoResponse, quizResponse, submissionResponse, accessResults]) => {
       if (!mounted) return;
       setWatchDb(videoResponse.data.reduce((acc: WatchDb, row: any) => ({ ...acc, [row.video_id]: { lessonId: row.video_id, completionPercentage: Number(row.completion_percentage || 0), completed: Boolean(row.completed) } }), {}));
       setQuizDb(quizResponse.data.reduce((acc: QuizDb, row: any) => ({ ...acc, [row.assessment_id]: { assessmentId: row.assessment_id, lessonId: row.lesson_id || '', percentage: Number(row.percentage || 0), passed: Boolean(row.passed) } }), {}));
-      setAccessDb(accessResponses.reduce((acc: Record<string, any>, response: any) => {
-        const lessonId = response.data?.current?.lessonId;
-        if (lessonId) acc[lessonId] = response.data;
+      const failedAccess = accessResults.some(result => result.status === 'rejected');
+      setAccessDb(accessResults.reduce((acc: Record<string, any>, result: any, index: number) => {
+        if (result.status === 'fulfilled') {
+          const lessonId = result.value.data?.current?.lessonId || OOP_COURSE_LESSONS[index].id;
+          acc[lessonId] = result.value.data;
+        }
         return acc;
       }, {}));
+      setAccessLoadState(failedAccess ? 'error' : 'ready');
+      if (failedAccess) setAccessError('Authoritative lesson access could not be loaded.');
       const remote = submissionResponse.data.reduce((acc: SubmissionDb, row: any) => {
         const mapped = mapBackendSubmission(row);
         const key = `${studentKey}:${mapped.challengeId}`;
@@ -142,19 +153,25 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
         setLastResult(null);
         setConsoleLogs([current.submissionStatus === 'returned' ? 'Returned for revision. Edit your code and submit again.' : `Practice ${current.submissionStatus || 'submitted'} to your teacher.`]);
       }
-    }).catch(error => console.warn('Unable to load practice progress from backend:', error));
+    }).catch(error => {
+      if (!mounted) return;
+      setAccessLoadState('error');
+      setAccessError(error?.message || 'Unable to load authoritative lesson access.');
+    });
     return () => { mounted = false; };
-  }, [activeChallenge.id, currentUser.email, currentUser.id, currentUser.name, currentUser.section, currentUser.token, currentUser.userId]);
+  }, [accessAttempt, activeChallenge.id, currentUser.email, currentUser.id, currentUser.name, currentUser.section, currentUser.token, currentUser.userId]);
 
   const lockReason = useMemo(() => {
     const access = accessDb[activeChallenge.lessonId];
-    if (!access) return 'Checking authoritative lesson access...';
+    if (accessLoadState === 'loading') return 'Checking authoritative lesson access...';
+    if (accessLoadState === 'error') return accessError || 'Unable to verify lesson access. Retry below.';
+    if (!access) return 'Unable to verify lesson access. Retry below.';
     if (!access.canAccess) return access.reason || 'Practice IDE is locked until the previous lesson is fully completed.';
     if (!access.current?.videoCompleted) return 'Practice IDE is locked until the lesson video is completed at 95% or higher.';
     if (!access.current?.assessmentPassed) return `Practice IDE is locked until the quiz score is ${ASSESSMENT_PASSING_SCORE}% or higher.`;
     if (!access.current?.practiceUnlocked) return 'Practice IDE is locked until the lesson practice becomes available.';
     return '';
-  }, [accessDb, activeChallenge.lessonId]);
+  }, [accessDb, accessError, accessLoadState, activeChallenge.lessonId]);
 
   const isLocked = Boolean(lockReason) || Boolean(submitted && submitted.submissionStatus !== 'returned');
   const selectChallenge = (challengeId: string) => {
@@ -359,6 +376,11 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-300">
               <AlertCircle className="mb-1 h-4 w-4" />
               {lockReason}
+              {accessLoadState === 'error' && (
+                <button type="button" onClick={() => setAccessAttempt(value => value + 1)} className="mt-2 inline-flex items-center gap-1 rounded border border-amber-300 px-2 py-1 text-[10px] font-black hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-900/50">
+                  <RotateCcw className="h-3 w-3" /> Retry access check
+                </button>
+              )}
             </div>
           )}
           {submitted && (

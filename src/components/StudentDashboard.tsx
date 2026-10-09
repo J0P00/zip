@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { AdaptiveRecommendation, AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
-import { getCurrentPracticeChallenge, PRACTICE_CHALLENGES } from '../data/practiceChallenges';
+import { getCurrentPracticeChallenge, PRACTICE_CHALLENGES } from '../oopPracticeCatalog';
 import type { StudentResultsData } from '../services/interpretation';
 import RecommendationCard from './RecommendationCard';
 
