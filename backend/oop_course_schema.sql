@@ -948,7 +948,7 @@ CREATE TABLE IF NOT EXISTS assessment_sessions (
   expires_at TIMESTAMPTZ NOT NULL,
   completed_at TIMESTAMPTZ,
   violation_count INTEGER NOT NULL DEFAULT 0,
-  time_limit_seconds INTEGER NOT NULL DEFAULT 1200,
+  time_limit_seconds INTEGER NOT NULL DEFAULT 600,
   question_order JSONB NOT NULL DEFAULT '[]'::jsonb,
   score INTEGER,
   total INTEGER,

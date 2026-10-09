@@ -1196,7 +1196,7 @@ const seedLessons = async () => {
           expires_at TIMESTAMPTZ NOT NULL,
           completed_at TIMESTAMPTZ,
           violation_count INTEGER NOT NULL DEFAULT 0,
-          time_limit_seconds INTEGER NOT NULL DEFAULT 1200,
+          time_limit_seconds INTEGER NOT NULL DEFAULT 600,
           question_order JSONB NOT NULL DEFAULT '[]'::jsonb,
           score INTEGER,
           total INTEGER,
@@ -2824,7 +2824,7 @@ app.post("/api/assessments/session/start", requireAuth, async (req, res, next) =
         const attemptNumber = Number(attemptResult.rows[0]?.next_attempt || 1);
 
         const sessionToken = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-        const timeLimitSeconds = 1200; // 20 minutes
+        const timeLimitSeconds = 600; // 10 minutes
         const expiresAt = new Date(Date.now() + timeLimitSeconds * 1000);
 
         // Fetch question bank and randomize questions and option order
