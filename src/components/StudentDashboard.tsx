@@ -1,7 +1,6 @@
 import React from 'react';
 import { 
   Flame, 
-  Award, 
   Calendar, 
   BookOpen, 
   ChevronRight, 
@@ -69,27 +68,6 @@ export default function StudentDashboard({
   const moduleProgress = studentResults
     ? studentResults.overallProgress
     : Math.min(100, Math.round((effectiveCompletedLessons / lessonCount) * 100));
-  const badges = [
-    { title: 'Quick Learner', desc: 'Finished classes lesson 1 in under 10 minutes', icon: '⚡', color: 'bg-amber-50 text-amber-700 border border-amber-100' },
-    { title: 'Bug Hunter', desc: 'Resolved v-table hierarchy constructor errors', icon: '🐞', color: 'bg-rose-50 text-rose-700 border border-rose-100' },
-    { title: 'OOP Initiate', desc: 'Completed basic class models diagnostic', icon: '🧩', color: 'bg-sky-50 text-sky-700 border border-sky-100' },
-    { title: 'Rising Star', desc: 'Maintained 12-day streak multiplier', icon: '🔥', color: 'bg-emerald-50 text-emerald-800 border border-emerald-100' },
-  ];
-  const visibleBadges = hasProgress
-    ? [
-        { title: 'First Steps', desc: 'Started the OOP learning path', icon: '01', color: 'bg-sky-50 text-sky-700 border border-sky-100' },
-        ...(completedLessonsCount > 0
-          ? [{ title: 'Lab Starter', desc: 'Completed an initial compiled submission', icon: '</>', color: 'bg-emerald-50 text-emerald-800 border border-emerald-100' }]
-          : []),
-        ...(points >= 1000
-          ? [{ title: 'Rising Star', desc: 'Reached 1000 XP in the course workspace', icon: 'XP', color: 'bg-amber-50 text-amber-700 border border-amber-100' }]
-          : []),
-        ...(streak >= 7
-          ? [{ title: 'Consistent Learner', desc: `Maintained a ${streak}-day streak`, icon: '7+', color: 'bg-rose-50 text-rose-700 border border-rose-100' }]
-          : [])
-      ]
-    : [];
-
   const isDark = theme === 'dark';
   const pendingRequests = monitoringRequests.filter(
     req => req.studentEmail.toLowerCase() === currentUser.email.toLowerCase() && req.status === 'pending'
@@ -137,7 +115,7 @@ export default function StudentDashboard({
     if (!studentResults || journeyTopics.length === 0) {
       return { label: 'Continue Video', detail: 'Start the first available OOP lesson.', view: 'videos' as StudentSubView };
     }
-    
+
     if (journeyCurrentTopic) {
       if (journeyCurrentTopic.videoPercentage === null || journeyCurrentTopic.videoPercentage < 95) {
         return { label: 'Continue Video', detail: `Continue watching “${journeyCurrentTopic.title}”.`, view: 'videos' as StudentSubView };
@@ -147,7 +125,7 @@ export default function StudentDashboard({
         return { label: 'Practice Required', detail: `Complete the coding practice for “${journeyCurrentTopic.title}”.`, view: 'ide' as StudentSubView };
       }
     }
-    
+
     const swingCurrentTopic = swingTopicState.find(topic => !topic.lessonCompleted);
     if (swingCurrentTopic) {
       if (!swingCurrentTopic.videoCompleted) {
@@ -158,7 +136,7 @@ export default function StudentDashboard({
         return { label: 'Swing Practice', detail: `Complete the coding practice for “${swingCurrentTopic.title}”.`, view: 'swing' as StudentSubView };
       }
     }
-    
+
     return { label: 'Course Completed', detail: 'All OOP and Swing lessons are completely finished.', view: 'dashboard' as StudentSubView };
   })();
   const swingProgress = {
@@ -264,7 +242,7 @@ export default function StudentDashboard({
           {studentResultsError || 'Loading authoritative progress from the backend...'}
         </div>
       )}
-      
+
       {/* Monitoring Requests Notification Panel */}
       {pendingRequests.length > 0 && (
         <div className={`p-4 border rounded-xl space-y-3 transition-colors duration-250 ${
@@ -306,15 +284,15 @@ export default function StudentDashboard({
           </div>
         </div>
       )}
-      
+
       {/* Primary Bento Cards Header block */}
       <div className="grid lg:grid-cols-12 gap-6">
-        
+
         {/* Welcome Back card utilizing dynamic glass details and emerald gradients */}
         <div className="lg:col-span-12 min-w-0 bg-white/70 backdrop-blur-md border border-slate-200/80 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between" id="student-welcome-card">
           {/* Decorative subtle top mesh glow */}
           <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-20 bg-[radial-gradient(circle_at_bottom_right,ellipse,rgba(16,185,129,0.3)_0%,rgba(255,255,255,0)_70%)] pointer-events-none"></div>
-          
+
           <div className="space-y-2 relative z-10">
             <div className="flex items-center gap-2">
               <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold rounded">Student Workspace</span>
@@ -323,17 +301,6 @@ export default function StudentDashboard({
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-2">Welcome back, {firstName}! 👋</h1>
-            <p className="text-slate-600 text-xs sm:text-sm max-w-xl leading-relaxed">
-              {hasProgress ? (
-                <>
-                  Your learning streak is active at <strong className="text-slate-900 font-extrabold font-mono">{streak} continuous {streak === 1 ? 'day' : 'days'}</strong>. Compile and run today's subclass structures inside our test suite to protect your multiplier status.
-                </>
-              ) : (
-                <>
-                  Your workspace is ready. Start your first lesson or open the sandbox IDE to earn XP and begin your learning streak.
-                </>
-              )}
-            </p>
             {studentResults && (
               <div className="mt-3 max-w-xl rounded-xl border border-slate-200 bg-white/70 p-3 text-xs font-semibold leading-5 text-slate-600">
                 <span className="font-black text-slate-800">Learning Score: {studentResults.learningScore}%.</span> {studentResults.learningStateInterpretation}
@@ -529,10 +496,10 @@ export default function StudentDashboard({
 
       {/* Main Bento Grid layout split into features lists */}
       <div className="space-y-6">
-        
+
         {/* Playlists, Lessons & Guidance block */}
         <div className="min-w-0 space-y-6">
-          
+
           {/* Curriculum Target Milestone Card with emerald themes */}
           <div className="bg-white/70 backdrop-blur-md p-6 rounded-2xl border border-slate-200/80 relative overflow-hidden" id="bento-curriculum-milestone">
             <div className="flex justify-between items-start mb-4 flex-wrap gap-4">
@@ -646,48 +613,13 @@ export default function StudentDashboard({
             </button>
           </div>
 
-          {/* Gamified Achievements Showcase Card */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm" id="bento-achievements">
-            <div className="flex justify-between items-center mb-6 flex-wrap gap-2">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-905 uppercase tracking-tight">Unlocked Badges & Achievements</h3>
-                <p className="text-xs text-slate-500 font-medium">Badges collected through compiled submissions</p>
-              </div>
-              <button 
-                onClick={() => onNavigateTo('leaderboard')}
-                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:underline cursor-pointer flex items-center gap-0.5 bg-emerald-50 border border-emerald-200/60 px-3 py-1 rounded-xl"
-              >
-                View cohort standings <ChevronRight className="w-3.5 h-3.5 text-emerald-600" />
-              </button>
-            </div>
 
-            <div className="grid sm:grid-cols-2 gap-4">
-              {visibleBadges.length > 0 ? (
-                visibleBadges.map((b, i) => (
-                  <div key={i} className="flex gap-4 p-4 bg-slate-50/70 rounded-xl border border-slate-100 items-center hover:bg-white hover:border-emerald-200 transition-all shadow-inner">
-                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl font-bold ${b.color} shadow-sm shrink-0`}>
-                      {b.icon}
-                    </div>
-                    <div>
-                      <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm">{b.title}</h4>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{b.desc}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="sm:col-span-2 p-6 bg-slate-50/70 rounded-xl border border-dashed border-slate-200 text-center">
-                  <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm">No badges unlocked yet</h4>
-                  <p className="text-[11px] text-slate-500 mt-1 leading-snug">Complete your first lesson, quiz, or sandbox submission to start earning achievements.</p>
-                </div>
-              )}
-            </div>
-          </div>
 
         </div>
 
         {/* Additional dashboard guidance */}
         <div className="min-w-0 space-y-6">
-          
+
 
           <div className="bg-emerald-50/40 border border-emerald-100 p-5 rounded-2xl relative overflow-hidden" id="student-tip-log">
             <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-full blur-xl pointer-events-none"></div>
