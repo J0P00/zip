@@ -311,7 +311,7 @@ export default function StudentDashboard({
       <div className="grid lg:grid-cols-12 gap-6">
         
         {/* Welcome Back card utilizing dynamic glass details and emerald gradients */}
-        <div className="lg:col-span-8 bg-white/70 backdrop-blur-md border border-slate-200/80 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between" id="student-welcome-card">
+        <div className="lg:col-span-12 min-w-0 bg-white/70 backdrop-blur-md border border-slate-200/80 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between" id="student-welcome-card">
           {/* Decorative subtle top mesh glow */}
           <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-20 bg-[radial-gradient(circle_at_bottom_right,ellipse,rgba(16,185,129,0.3)_0%,rgba(255,255,255,0)_70%)] pointer-events-none"></div>
           
@@ -355,7 +355,7 @@ export default function StudentDashboard({
         </div>
 
         {/* Authoritative student progress and improvement guidance */}
-        <section className="lg:col-span-8 bg-white/90 border border-slate-200 p-5 rounded-2xl shadow-sm" id="student-progress-section" aria-labelledby="student-progress-title">
+        <section className="lg:col-span-8 min-w-0 bg-white/90 border border-slate-200 p-5 rounded-2xl shadow-sm" id="student-progress-section" aria-labelledby="student-progress-title">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Student Progress</span>
@@ -365,13 +365,13 @@ export default function StudentDashboard({
             <span className={`rounded-xl px-3 py-1.5 text-xs font-black ${learningStateClass}`}>{learningState} · {performanceIndex}%</span>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
               ['Lessons', `${effectiveCompletedLessons}/${lessonCount}`, 'completed', 'text-emerald-700'],
               ['Assessments', studentResults?.quizAttempts ? `${studentResults.averageQuizScore}%` : '--', `${passedAssessmentCount} passed · latest ${latestAssessmentScore === null ? '--' : `${latestAssessmentScore}%`}`, 'text-sky-700'],              ['Coding practice', `${completedPracticeCount}/${lessonCount}`, `${submittedPracticeCount} submitted`, 'text-violet-700'],
               ['Learning score', `${performanceIndex}%`, learningState, 'text-amber-700']
             ].map(([label, value, detail, color]) => (
-              <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+              <div key={label} className="h-full min-w-0 rounded-xl border border-slate-100 bg-slate-50 p-3">
                 <span className="block text-[9px] font-black uppercase tracking-wide text-slate-400">{label}</span>
                 <span className={`mt-1 block text-lg font-black ${color}`}>{value}</span>
                 <span className="block text-[10px] font-bold text-slate-500">{detail}</span>
@@ -379,7 +379,7 @@ export default function StudentDashboard({
             ))}
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-3" aria-label="Learning activity progress">
+          <div className="mt-4 grid items-start gap-3 sm:grid-cols-3" aria-label="Learning activity progress">
             {[
               ['Video lessons', videoProgress, '95% required per lesson'],
               ['Assessments passed', assessmentProgress, '60% required to pass'],
@@ -434,7 +434,7 @@ export default function StudentDashboard({
           </div>
         </section>
         {/* Backend-backed learning journey */}
-        <div className="lg:col-span-4 bg-white/70 backdrop-blur-md border border-slate-200 p-5 rounded-2xl shadow-sm" id="student-activity-card">
+        <div className="lg:col-span-4 min-w-0 bg-white/70 backdrop-blur-md border border-slate-200 p-5 rounded-2xl shadow-sm" id="student-activity-card">
           <div className="flex justify-between items-start gap-3">
             <div>
               <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 uppercase tracking-tight">Learning Journey</h3>
@@ -500,19 +500,19 @@ export default function StudentDashboard({
 
 
           {/* Upcoming Academic deadlines */}
-          <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm" id="student-deadlines">
+          <div className="lg:col-span-8 min-w-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm" id="student-deadlines">
             <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 mb-4 flex items-center gap-2 uppercase tracking-wide">
               <Calendar className="w-4 h-4 text-emerald-600" /> Pending Assessments
             </h3>
 
             <div className="space-y-3">
               {pendingAssessments.length > 0 ? pendingAssessments.map(item => (
-                <div key={item.id} className={`p-3 bg-slate-50 rounded-xl border border-slate-100 border-l-4 ${item.color} flex justify-between items-center hover:bg-white hover:shadow-sm transition-all`}>
+                <div key={item.id} className={`p-3 bg-slate-50 rounded-xl border border-slate-100 border-l-4 ${item.color} flex flex-col items-stretch gap-2 hover:bg-white hover:shadow-sm transition-all sm:flex-row sm:items-center`}>
                   <div>
                     <h4 className="font-extrabold text-slate-900 text-xs">{item.title}</h4>
                     <span className="text-[10px] text-slate-400 font-bold font-mono">{item.type}</span>
                   </div>
-                  <span className="text-[10px] font-semibold text-slate-650 bg-slate-100 border border-slate-150 px-2 py-0.5 rounded text-right font-mono block whitespace-nowrap">{item.status}</span>
+                  <span className="text-[10px] font-semibold text-slate-650 bg-slate-100 border border-slate-150 px-2 py-0.5 rounded text-left font-mono block whitespace-normal break-words sm:max-w-[55%] sm:text-right">{item.status}</span>
                 </div>
               )) : (
                 <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 p-4 text-center">
@@ -528,10 +528,10 @@ export default function StudentDashboard({
       </div>
 
       {/* Main Bento Grid layout split into features lists */}
-      <div className="grid md:grid-cols-12 gap-6">
+      <div className="space-y-6">
         
         {/* Playlists, Lessons & Guidance block */}
-        <div className="md:col-span-8 space-y-6">
+        <div className="min-w-0 space-y-6">
           
           {/* Curriculum Target Milestone Card with emerald themes */}
           <div className="bg-white/70 backdrop-blur-md p-6 rounded-2xl border border-slate-200/80 relative overflow-hidden" id="bento-curriculum-milestone">
@@ -632,7 +632,7 @@ export default function StudentDashboard({
                     ['Submitted', practiceSubmission?.submittedAt ? new Date(practiceSubmission.submittedAt).toLocaleDateString() : '--'],
                 ['PI', `${performanceIndex}% ${performanceClass}`]
               ].map(([label, value]) => (
-                <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <div key={label} className="h-full min-w-0 rounded-xl border border-slate-100 bg-slate-50 p-3">
                   <span className="block text-[9px] font-black uppercase text-slate-400">{label}</span>
                   <span className="mt-1 block text-xs font-extrabold text-slate-800">{value}</span>
                 </div>
@@ -685,8 +685,8 @@ export default function StudentDashboard({
 
         </div>
 
-        {/* Sidebar sub widgets (Deadlines, Recent Academic reviews) */}
-        <div className="md:col-span-4 space-y-6">
+        {/* Additional dashboard guidance */}
+        <div className="min-w-0 space-y-6">
           
 
           <div className="bg-emerald-50/40 border border-emerald-100 p-5 rounded-2xl relative overflow-hidden" id="student-tip-log">
