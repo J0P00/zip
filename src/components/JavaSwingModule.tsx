@@ -857,7 +857,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase text-emerald-700">
-              New Learning Module
+              New Learning Lesson
             </span>
             <h1 className="mt-3 text-2xl font-extrabold text-slate-900">Java Swing Programming</h1>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-500">

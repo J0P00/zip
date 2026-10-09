@@ -121,7 +121,7 @@ export default function StudentDashboard({
     : currentLesson;
   const dashboardCurrentModuleLabel = oopComplete
     ? 'OOP completed - Java Swing available'
-    : `Module ${dashboardCurrentLesson.sequence}: ${dashboardCurrentLesson.title}`;
+    : `Lesson ${dashboardCurrentLesson.sequence}: ${dashboardCurrentLesson.title}`;
   const dashboardPractice = PRACTICE_CHALLENGES.find(challenge => challenge.lessonId === dashboardCurrentLesson.id) || activePractice;
   const dashboardAssessment = OOP_ASSESSMENTS.find(assessment => assessment.lessonId === dashboardCurrentLesson.id) || activeAssessment;
   const currentTopicEvidence = studentResults?.oopTopics?.find(topic => topic.id === dashboardCurrentLesson.id);
@@ -344,7 +344,7 @@ export default function StudentDashboard({
                     {index < journeyTopics.length - 1 && <div className="mt-1 h-full min-h-3 w-px bg-slate-200" />}
                   </div>
                   <div className="min-w-0 pb-1">
-                    <div className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Module {topic.sequence}</div>
+                    <div className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Lesson {topic.sequence}</div>
                     <div className="truncate text-[11px] font-extrabold text-slate-800">{topic.title}</div>
                     <div className={`text-[10px] font-semibold ${completed ? 'text-emerald-700' : current ? 'text-slate-600' : 'text-slate-400'}`}>
                       {completed
@@ -463,7 +463,7 @@ export default function StudentDashboard({
               onClick={() => onNavigateTo('swing')}
               className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700"
             >
-              <GraduationCap className="h-3.5 w-3.5" /> Open Swing Module
+              <GraduationCap className="h-3.5 w-3.5" /> Open Swing Lesson
             </button>
           </div>
 

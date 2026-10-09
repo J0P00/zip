@@ -727,7 +727,7 @@ export default function AdminVideoManager({
               <tr className="border-b border-slate-100 bg-slate-50/50 text-slate-500 font-semibold uppercase text-[10px]">
                 <th className="py-3 px-4 w-12 text-center">Seq</th>
                 <th className="py-3 px-4">Thumbnail & Title</th>
-                <th className="py-3 px-4">Course & Module</th>
+                <th className="py-3 px-4">Course & Lesson</th>
                 <th className="py-3 px-4">Difficulty & Topic</th>
                 <th className="py-3 px-4">Prerequisite Unlock</th>
                 <th className="py-3 px-4 text-center">Views / Completed</th>
@@ -803,13 +803,13 @@ export default function AdminVideoManager({
                       </div>
                     </td>
 
-                    {/* Course & Module */}
+                    {/* Course & Lesson */}
                     <td className="py-3 px-4">
                       <span className="text-slate-900 font-bold block">
                         {courseOptions.find(c => c.id === video.courseId)?.name || video.courseId}
                       </span>
                       <span className="text-[10px] text-slate-400 block mt-0.5 truncate max-w-[150px]">
-                        {video.module || 'General Module'}
+                        {video.module || 'General Lesson'}
                       </span>
                     </td>
 
@@ -1208,7 +1208,7 @@ export default function AdminVideoManager({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Module Group</label>
+                  <label className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider block font-sans">Lesson Group</label>
                   <input 
                     type="text" 
                     value={formModule}

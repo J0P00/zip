@@ -283,7 +283,7 @@ export default function Navbar({
             <div className="space-y-3">
               {[
                 { label: 'Compact dashboard mode', desc: 'Use tighter rows for analytics-heavy review sessions.' },
-                { label: 'Show mastery alerts first', desc: 'Prioritize weak OOP concepts in dashboard modules.' },
+                { label: 'Show mastery alerts first', desc: 'Prioritize weak OOP concepts in dashboard lessons.' },
                 { label: 'Weekly admin digest', desc: 'Send platform health, course progress, and audit summaries.' }
               ].map((item) => (
                 <div key={item.label} className="flex justify-between items-center p-3 border border-slate-100 dark:border-slate-800 rounded-xl">

@@ -221,7 +221,7 @@ export default function AdminDashboard({
             subtitle="A simple workspace for learning content, assessment, programming practice, monitoring, and reports."
           />
           <div className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600">
-            {modules.filter(module => module.status === 'Published').length} published learning modules
+            {modules.filter(module => module.status === 'Published').length} published learning lessons
           </div>
         </div>
       </PageCard>
@@ -273,7 +273,7 @@ export default function AdminDashboard({
           <PrimaryButton icon={<Plus className="h-4 w-4" />}>Create Lecture</PrimaryButton>
         </div>
         <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          <Field label="Module"><input className={inputClass} placeholder="Module 1" /></Field>
+          <Field label="Lesson"><input className={inputClass} placeholder="Lesson 1" /></Field>
           <Field label="Lesson Title"><input className={inputClass} placeholder="Classes and Objects" /></Field>
           <Field label="Lesson Order"><input className={inputClass} placeholder="1" /></Field>
           <Field label="Status"><select className={inputClass}><option>Active</option><option>Draft</option><option>Archived</option></select></Field>
@@ -286,14 +286,14 @@ export default function AdminDashboard({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="border-b border-slate-100 text-[11px] uppercase tracking-wide text-slate-400">
-              <tr><th className="py-3">Order</th><th>Lesson Title</th><th>Module</th><th>Existing Video</th><th>Status</th><th>Actions</th></tr>
+              <tr><th className="py-3">Order</th><th>Lesson Title</th><th>Lesson</th><th>Existing Video</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {activeVideos.slice(0, 6).map(video => (
                 <tr key={video.id} className="align-middle">
                   <td className="py-4 font-bold text-slate-500">{video.sequence}</td>
                   <td className="font-extrabold text-slate-900">{video.title}</td>
-                  <td className="font-medium text-slate-600">{video.module || 'OOP Module'}</td>
+                  <td className="font-medium text-slate-600">{video.module || 'OOP Lesson'}</td>
                   <td className="font-medium text-slate-600">{video.videoUrl ? 'Assigned' : 'No video assigned'}</td>
                   <td><span className={`rounded-md ${oliveSoft} px-2 py-1 text-[11px] font-bold ${olive}`}>{video.status}</span></td>
                   <td><Actions /></td>
@@ -394,7 +394,7 @@ export default function AdminDashboard({
   const renderMonitoring = () => (
     <PageCard>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <SectionTitle icon={<UsersRound className="h-5 w-5" />} title="User Monitoring" subtitle="Monitor student learning progress without school-management modules." />
+        <SectionTitle icon={<UsersRound className="h-5 w-5" />} title="User Monitoring" subtitle="Monitor student learning progress without school-management features." />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <label className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />

@@ -471,7 +471,7 @@ export default function App() {
         difficulty: lesson.difficulty || 'Beginner'
       })));
       const moduleCounts = lessonsWithCitations.reduce<Record<string, number>>((acc, lesson) => {
-        const moduleName = lesson.module || 'Unassigned Module';
+        const moduleName = lesson.module || 'Unassigned Lesson';
         acc[moduleName] = (acc[moduleName] || 0) + 1;
         return acc;
       }, {});
@@ -1275,12 +1275,12 @@ export default function App() {
     : displayUser.role === 'admin'
       ? [
           { label: 'Total Users Managed', value: String(leaderboardUsers.length + 2), helper: 'Student, teacher, and administrator accounts' },
-          { label: 'Total Courses', value: String(curriculumModules.length), helper: 'Curriculum modules available in the system' },
+          { label: 'Total Courses', value: String(curriculumModules.length), helper: 'Lessons available in the system' },
           { label: 'System Status', value: 'Online', helper: 'Pedagogical core services are currently active' }
         ]
       : [
           { label: 'Completed Courses', value: completedLessonsCount >= OOP_LESSON_COUNT ? '1' : '0', helper: 'Courses completed from the active learning path' },
-          { label: 'Learning Progress', value: `${learningProgress}%`, helper: 'Progress through the current OOP module sequence' },
+          { label: 'Learning Progress', value: `${learningProgress}%`, helper: 'Progress through the current OOP lesson sequence' },
         ];
 
   const handleUpdateProfile = (updates: Partial<AuthenticatedUser>) => {
@@ -1337,7 +1337,7 @@ export default function App() {
     },
     courses: {
       title: 'Courses',
-      description: 'Manage active course modules, publication status, and connected OOP lessons.'
+      description: 'Manage active lessons, publication status, and connected OOP lessons.'
     },
     library: {
       title: 'Content Library',
@@ -1345,7 +1345,7 @@ export default function App() {
     },
     videos: {
       title: 'Video Tutorial Management',
-      description: 'Upload, edit, arrange, preview, and assign OOP lesson videos to modules.'
+      description: 'Upload, edit, arrange, preview, and assign OOP lesson videos to lessons.'
     },
     assessments: {
       title: 'Quiz Management',
@@ -1588,7 +1588,7 @@ export default function App() {
                   {persona === 'student' && studentTab === 'ide' && 'Dynamic Java Compiler Sandbox'}
                   {persona === 'student' && studentTab === 'videos' && 'Syllabus Playlist & Lesson Lectures'}
                   {persona === 'student' && studentTab === 'assessments' && 'Interactive MCQ Scenario Simulator'}
-                  {persona === 'student' && studentTab === 'swing' && 'Java Swing Programming Module'}
+                  {persona === 'student' && studentTab === 'swing' && 'Java Swing Programming Lesson'}
                   {persona === 'student' && studentTab === 'leaderboard' && 'Active CS & IT Cohort Rankings'}
                   {persona === 'teacher' && teacherTab === 'dashboard' && 'Instructor Cohort Evaluation Dashboard'}
                   {persona === 'admin' && adminViewMeta[adminTab].title}

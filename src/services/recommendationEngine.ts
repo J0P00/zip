@@ -158,8 +158,8 @@ export const generateRuleBasedRecommendation = (input: RecommendationInput): Ada
       `Coding Score at least 85% (${input.codingScore}%)`,
       'Advanced Challenge Unlocked',
       'Your coding performance shows mastery for this activity.',
-      ['Unlock the Advanced Challenge', 'Continue to the next module', 'Apply the concept in a harder scenario'],
-      'Continue to Next Module',
+      ['Unlock the Advanced Challenge', 'Continue to the next lesson', 'Apply the concept in a harder scenario'],
+      'Continue to Next Lesson',
       'videos'
     );
   }

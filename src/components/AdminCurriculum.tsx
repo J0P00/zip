@@ -117,7 +117,7 @@ li_csv_3,Abstract Virtual Tables,Polymorphism & Dynamic Binding,Quiz,Advanced`);
             onClick={() => setActiveTab('modules')}
             className={`px-4 py-2 font-bold text-xs rounded-xl transition ${activeTab === 'modules' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-650 hover:bg-slate-100 bg-transparent'}`}
           >
-            📂 Curriculum Structure ({modules.length})
+            📂 Lesson Structure ({modules.length})
           </button>
           <button
             onClick={() => setActiveTab('lessons')}
@@ -148,7 +148,7 @@ li_csv_3,Abstract Virtual Tables,Polymorphism & Dynamic Binding,Quiz,Advanced`);
           <div className="flex justify-between items-start border-b border-slate-850 pb-3 flex-wrap gap-3">
             <div>
               <h3 className="text-sm font-bold text-slate-200 flex items-center gap-1.5"><UploadCloud className="w-5 h-5 text-indigo-400" /> Bulk CSV Curriculum Importer</h3>
-              <p className="text-xs text-slate-400">Insert spreadsheet rows formatting columns: ID, Title, Module, Type, Difficulty</p>
+              <p className="text-xs text-slate-400">Insert spreadsheet rows formatting columns: ID, Title, Lesson, Type, Difficulty</p>
             </div>
             <button
               onClick={loadPresetCSV}
@@ -160,7 +160,7 @@ li_csv_3,Abstract Virtual Tables,Polymorphism & Dynamic Binding,Quiz,Advanced`);
 
           <textarea
             className="w-full h-24 bg-slate-950 text-emerald-400 font-mono text-[11px] leading-relaxed outline-none p-4 rounded-xl border border-slate-850 focus:border-indigo-500"
-            placeholder={`id_code,Title name,Module parent catalog,Activity type,Difficulty context...`}
+            placeholder={`id_code,Title name,Lesson parent catalog,Activity type,Difficulty context...`}
             value={csvText}
             onChange={(e) => setCsvText(e.target.value)}
           />
@@ -221,7 +221,7 @@ li_csv_3,Abstract Virtual Tables,Polymorphism & Dynamic Binding,Quiz,Advanced`);
 
               {/* Connected Lesson statistics checklist */}
               <div className="space-y-2 pt-3 border-t border-slate-100">
-                <span className="text-[9.5px] font-mono uppercase font-bold text-slate-400 tracking-wider">Lessons connected in this syllabus module</span>
+                <span className="text-[9.5px] font-mono uppercase font-bold text-slate-400 tracking-wider">Lessons connected in this syllabus</span>
                 <div className="space-y-1.5 font-sans">
                   {lessons.filter(l => l.module === mod.title).slice(0, 3).map((item, idx) => (
                     <div key={idx} className="flex justify-between items-center text-xs p-1.5 bg-slate-50/50 rounded-lg">
@@ -271,7 +271,7 @@ li_csv_3,Abstract Virtual Tables,Polymorphism & Dynamic Binding,Quiz,Advanced`);
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-mono text-slate-400 font-bold uppercase block tracking-wider">Module parent catalog</label>
+                <label className="text-[10px] font-mono text-slate-400 font-bold uppercase block tracking-wider">Lesson parent catalog</label>
                 <select
                   value={newModule}
                   onChange={(e) => setNewModule(e.target.value)}
@@ -327,7 +327,7 @@ li_csv_3,Abstract Virtual Tables,Polymorphism & Dynamic Binding,Quiz,Advanced`);
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px]">
                     <th className="py-2.5 px-3">Title name</th>
-                    <th className="py-2.5 px-3">Module Category</th>
+                    <th className="py-2.5 px-3">Lesson Category</th>
                     <th className="py-2.5 px-3">Activity Type</th>
                     <th className="py-2.5 px-3">Difficulty</th>
                     <th className="py-2.5 px-3 text-right">Actions</th>

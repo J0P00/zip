@@ -1028,7 +1028,7 @@ export default function TeacherPortal({
       <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-600">Teacher Account Module</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-600">Teacher Account Lesson</p>
             <h2 className="mt-1 text-xl font-black tracking-tight">Real-Time OOP Learning Command Center</h2>
             <p className="mt-1 max-w-3xl text-xs font-medium leading-relaxed text-slate-500">
               Monitor student progress, track adaptive learning events, review Practice IDE evidence, and follow each learner from lesson to unlock.
@@ -1245,7 +1245,7 @@ export default function TeacherPortal({
                   <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     {[
                       ['Overall Progress', activeViewingStudent.overallProgress],
-                      ['Module Progress', activeViewingStudent.moduleProgress],
+                      ['Lesson Progress', activeViewingStudent.moduleProgress],
                       ['Topic Progress', activeViewingStudent.topicProgress],
                       ['Video Completion', activeViewingStudent.videoCompletion],
                       ['Quiz Score', activeViewingStudent.quizScore],
