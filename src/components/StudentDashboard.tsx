@@ -151,32 +151,44 @@ export default function StudentDashboard({
   const pendingAssessments = OOP_ASSESSMENTS
     .map(assessment => {
       const lesson = OOP_COURSE_LESSONS.find(item => item.id === assessment.lessonId);
-      const topic = studentResults?.oopTopics?.find(item => item.id === lesson?.id);
-      const attempt = topic?.quizPercentage === null ? undefined : topic;
-      const previousLesson = lesson?.sequence && lesson.sequence > 1
-        ? OOP_COURSE_LESSONS.find(item => item.sequence === lesson.sequence - 1)
-        : undefined;
-      const previousTopic = studentResults?.oopTopics?.find(item => item.id === previousLesson?.id);
       const currentTopic = studentResults?.oopTopics?.find(item => item.id === lesson?.id);
-      let status = 'Ready Now';
-      if (attempt && !attempt.quizPassed) {
+      const latestScore = currentTopic?.quizPercentage ?? null;
+      const passed = currentTopic?.quizPassed === true;
+      let status = 'Ready';
+      let statusKind: 'ready' | 'retry' | 'locked' | 'loading' = 'ready';
+
+      if (!studentResults) {
+        status = 'Loading';
+        statusKind = 'loading';
+      } else if (passed) {
+        status = 'Passed';
+      } else if (currentTopic?.quizPassed === false && latestScore !== null) {
         status = 'Retry';
-      } else if (currentTopic && !currentTopic.lessonUnlocked) {
-        status = currentTopic.accessReason || `Complete the previous lesson before Lesson ${lesson?.sequence ?? ''}`;
-      } else if (currentTopic && !currentTopic.assessmentUnlocked) {
-        status = `Complete Lesson ${lesson?.sequence ?? ''} video`;
+        statusKind = 'retry';
+      } else if (currentTopic && currentTopic.lessonUnlocked === false) {
+        status = currentTopic.accessReason || 'Complete the previous lesson first';
+        statusKind = 'locked';
+      } else if (currentTopic && currentTopic.assessmentUnlocked === false) {
+        status = 'Complete the video first';
+        statusKind = 'locked';
       } else if (lesson && !currentTopic?.videoCompleted) {
-        status = 'Complete video first';
+        status = 'Complete the video first';
+        statusKind = 'locked';
+      } else if (!currentTopic && lesson && lesson.sequence > 1) {
+        status = 'Locked until previous lesson is complete';
+        statusKind = 'locked';
       }
 
       return {
         id: assessment.id,
         title: assessment.title,
-        type: '15 MCQ | ' + (lesson?.topic || lesson?.title || 'Assessment'),
+        lessonTitle: lesson?.title || 'OOP Lesson',
         sequence: lesson?.sequence || 999,
+        latestScore,
         status,
-        color: status === 'Ready Now' ? 'border-l-emerald-600' : status === 'Retry' ? 'border-l-amber-500' : 'border-l-slate-400',
-        isPassed: Boolean(attempt?.quizPassed)
+        statusKind,
+        isPassed: passed,
+        actionAvailable: statusKind === 'ready' || statusKind === 'retry'
       };
     })
     .filter(item => !item.isPassed)
@@ -290,10 +302,20 @@ export default function StudentDashboard({
 
         {/* Welcome Back card utilizing dynamic glass details and emerald gradients */}
         <div className="lg:col-span-12 min-w-0 bg-white/70 backdrop-blur-md border border-slate-200/80 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between" id="student-welcome-card">
+          <div className="absolute right-5 top-5 hidden items-center gap-4 sm:flex" aria-label={`Course progress ${journeyProgress}%`}>
+            <div className="relative h-20 w-20 rounded-full" style={{ background: `conic-gradient(#10b981 ${journeyProgress}%, #d1fae5 0)` }}>
+              <div className="absolute inset-2 flex items-center justify-center rounded-full bg-white text-lg font-black text-slate-800">{journeyProgress}%</div>
+            </div>
+            <div className="min-w-[150px]">
+              <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">Course progress</span>
+              <span className="mt-1 block text-xs font-bold text-slate-800">{effectiveCompletedLessons} of {lessonCount} lessons completed</span>
+              <div className="mt-2 h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${journeyProgress}%` }} /></div>
+            </div>
+          </div>
           {/* Decorative subtle top mesh glow */}
           <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-20 bg-[radial-gradient(circle_at_bottom_right,ellipse,rgba(16,185,129,0.3)_0%,rgba(255,255,255,0)_70%)] pointer-events-none"></div>
 
-          <div className="space-y-2 relative z-10">
+          <div className="space-y-2 relative z-10 sm:pr-56">
             <div className="flex items-center gap-2">
               <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold rounded">Student Workspace</span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 ${learningStateClass}`}>
@@ -301,6 +323,7 @@ export default function StudentDashboard({
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-2">Welcome back, {firstName}! 👋</h1>
+            <p className="text-sm font-semibold text-slate-600">Your next step is clear. Keep building your OOP skills.</p>
             {studentResults && (
               <div className="mt-3 max-w-xl rounded-xl border border-slate-200 bg-white/70 p-3 text-xs font-semibold leading-5 text-slate-600">
                 <span className="font-black text-slate-800">Learning Score: {studentResults.learningScore}%.</span> {studentResults.learningStateInterpretation}
@@ -322,7 +345,7 @@ export default function StudentDashboard({
         </div>
 
         {/* Authoritative student progress and improvement guidance */}
-        <section className="lg:col-span-8 min-w-0 bg-white/90 border border-slate-200 p-5 rounded-2xl shadow-sm" id="student-progress-section" aria-labelledby="student-progress-title">
+        <section className="lg:col-span-12 min-w-0 bg-white/90 border border-slate-200 p-5 rounded-2xl shadow-sm" id="student-progress-section" aria-labelledby="student-progress-title">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Student Progress</span>
@@ -401,7 +424,7 @@ export default function StudentDashboard({
           </div>
         </section>
         {/* Backend-backed learning journey */}
-        <div className="lg:col-span-4 min-w-0 bg-white/70 backdrop-blur-md border border-slate-200 p-5 rounded-2xl shadow-sm" id="student-activity-card">
+        <div className="lg:col-span-6 min-w-0 bg-white/70 backdrop-blur-md border border-slate-200 p-5 rounded-2xl shadow-sm" id="student-activity-card">
           <div className="flex justify-between items-start gap-3">
             <div>
               <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 uppercase tracking-tight">Learning Journey</h3>
@@ -422,6 +445,11 @@ export default function StudentDashboard({
               const completed = topic.lessonCompleted;
               const current = !completed && index === journeyCurrentIndex;
               const locked = !completed && !current;
+              const journeyStatus = completed
+                ? 'Video complete · Assessment passed · Practice complete'
+                : current
+                  ? `Video ${topic.videoPercentage ?? 0}% · ${topic.quizPassed ? 'Assessment passed' : 'Assessment needed'} · ${topic.practiceCompleted ? 'Practice complete' : topic.practiceScore !== null && topic.practiceScore !== undefined ? `Practice ${topic.practiceScore}%` : 'Practice needed'}`
+                  : `Locked until ${journeyCurrentTopic?.title || 'the previous lesson'}`;
               return (
                 <div key={topic.id} className={`relative flex gap-2.5 ${locked ? 'opacity-60' : ''}`}>
                   <div className="flex flex-col items-center">
@@ -434,11 +462,7 @@ export default function StudentDashboard({
                     <div className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Lesson {topic.sequence}</div>
                     <div className="truncate text-[11px] font-extrabold text-slate-800">{topic.title}</div>
                     <div className={`text-[10px] font-semibold ${completed ? 'text-emerald-700' : current ? 'text-slate-600' : 'text-slate-400'}`}>
-                      {completed
-                        ? 'Completed'
-                        : current
-                          ? `Video ${topic.videoPercentage ?? 0}% · ${topic.quizPassed ? 'Assessment passed' : 'Assessment pending'} · ${topic.quizPassed ? 'Practice required' : 'Practice locked'}`
-                          : `Locked until ${journeyCurrentTopic?.title || 'the previous lesson'} is completed`}
+                      {journeyStatus}
                     </div>
                   </div>
                 </div>
@@ -466,31 +490,37 @@ export default function StudentDashboard({
         </div>
 
 
-          {/* Upcoming Academic deadlines */}
-          <div className="lg:col-span-8 min-w-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm" id="student-deadlines">
-            <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 mb-4 flex items-center gap-2 uppercase tracking-wide">
-              <Calendar className="w-4 h-4 text-emerald-600" /> Pending Assessments
+        {/* Upcoming assessments */}
+        <section className="lg:col-span-6 min-w-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm" id="student-deadlines" aria-labelledby="upcoming-assessments-title">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 id="upcoming-assessments-title" className="text-xs sm:text-sm font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wide">
+              <Calendar className="w-4 h-4 text-emerald-600" /> Upcoming Assessments
             </h3>
-
-            <div className="space-y-3">
-              {pendingAssessments.length > 0 ? pendingAssessments.map(item => (
-                <div key={item.id} className={`p-3 bg-slate-50 rounded-xl border border-slate-100 border-l-4 ${item.color} flex flex-col items-stretch gap-2 hover:bg-white hover:shadow-sm transition-all sm:flex-row sm:items-center`}>
-                  <div>
-                    <h4 className="font-extrabold text-slate-900 text-xs">{item.title}</h4>
-                    <span className="text-[10px] text-slate-400 font-bold font-mono">{item.type}</span>
-                  </div>
-                  <span className="text-[10px] font-semibold text-slate-650 bg-slate-100 border border-slate-150 px-2 py-0.5 rounded text-left font-mono block whitespace-normal break-words sm:max-w-[55%] sm:text-right">{item.status}</span>
-                </div>
-              )) : (
-                <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 p-4 text-center">
-                  <h4 className="text-xs font-extrabold text-emerald-800">All assessments cleared</h4>
-                  <p className="mt-1 text-[11px] font-semibold text-emerald-700">No pending assessment attempts right now.</p>
-                </div>
-              )}
-            </div>
+            <button type="button" onClick={() => onNavigateTo('assessments')} className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black text-slate-700 hover:border-emerald-400 hover:text-emerald-700">View all assessments →</button>
           </div>
 
-          {/* Practice Pro-Tip block */}
+          <div className="space-y-2.5">
+            {pendingAssessments.length > 0 ? pendingAssessments.map(item => (
+              <div key={item.id} className="flex min-w-0 flex-col gap-2 rounded-xl border border-slate-100 border-l-4 border-l-slate-300 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <h4 className="break-words text-xs font-extrabold text-slate-900">{item.title}</h4>
+                  <span className="mt-0.5 block break-words text-[10px] font-bold text-slate-400">15 MCQ · Lesson {item.sequence} · {item.lessonTitle}</span>
+                  <span className="mt-1 block text-[10px] font-semibold text-slate-500">Latest score: {item.latestScore === null ? 'Not attempted' : `${item.latestScore}%`}</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end">
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${item.statusKind === 'ready' ? 'bg-emerald-100 text-emerald-800' : item.statusKind === 'retry' ? 'bg-amber-100 text-amber-800' : item.statusKind === 'loading' ? 'bg-sky-100 text-sky-800' : 'bg-slate-200 text-slate-600'}`}>{item.statusKind === 'ready' ? 'Ready' : item.statusKind === 'retry' ? 'Retry' : item.statusKind === 'loading' ? 'Loading' : 'Locked'}</span>
+                  {item.actionAvailable && <button type="button" onClick={() => onNavigateTo('assessments')} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[10px] font-black text-white hover:bg-emerald-700">Start now</button>}
+                  {!item.actionAvailable && <span className="max-w-[190px] text-right text-[10px] font-semibold text-slate-500">{item.status}</span>}
+                </div>
+              </div>
+            )) : (
+              <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 p-4 text-center">
+                <h4 className="text-xs font-extrabold text-emerald-800">All assessments cleared</h4>
+                <p className="mt-1 text-[11px] font-semibold text-emerald-700">No pending assessment attempts right now.</p>
+              </div>
+            )}
+          </div>
+        </section>
 
       </div>
 
