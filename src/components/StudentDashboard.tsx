@@ -498,6 +498,33 @@ export default function StudentDashboard({
           </div>
         </div>
 
+
+          {/* Upcoming Academic deadlines */}
+          <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm" id="student-deadlines">
+            <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 mb-4 flex items-center gap-2 uppercase tracking-wide">
+              <Calendar className="w-4 h-4 text-emerald-600" /> Pending Assessments
+            </h3>
+
+            <div className="space-y-3">
+              {pendingAssessments.length > 0 ? pendingAssessments.map(item => (
+                <div key={item.id} className={`p-3 bg-slate-50 rounded-xl border border-slate-100 border-l-4 ${item.color} flex justify-between items-center hover:bg-white hover:shadow-sm transition-all`}>
+                  <div>
+                    <h4 className="font-extrabold text-slate-900 text-xs">{item.title}</h4>
+                    <span className="text-[10px] text-slate-400 font-bold font-mono">{item.type}</span>
+                  </div>
+                  <span className="text-[10px] font-semibold text-slate-650 bg-slate-100 border border-slate-150 px-2 py-0.5 rounded text-right font-mono block whitespace-nowrap">{item.status}</span>
+                </div>
+              )) : (
+                <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 p-4 text-center">
+                  <h4 className="text-xs font-extrabold text-emerald-800">All assessments cleared</h4>
+                  <p className="mt-1 text-[11px] font-semibold text-emerald-700">No pending assessment attempts right now.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Practice Pro-Tip block */}
+
       </div>
 
       {/* Main Bento Grid layout split into features lists */}
@@ -661,31 +688,7 @@ export default function StudentDashboard({
         {/* Sidebar sub widgets (Deadlines, Recent Academic reviews) */}
         <div className="md:col-span-4 space-y-6">
           
-          {/* Upcoming Academic deadlines */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm" id="student-deadlines">
-            <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 mb-4 flex items-center gap-2 uppercase tracking-wide">
-              <Calendar className="w-4 h-4 text-emerald-600" /> Pending Assessments
-            </h3>
-            
-            <div className="space-y-3">
-              {pendingAssessments.length > 0 ? pendingAssessments.map(item => (
-                <div key={item.id} className={`p-3 bg-slate-50 rounded-xl border border-slate-100 border-l-4 ${item.color} flex justify-between items-center hover:bg-white hover:shadow-sm transition-all`}>
-                  <div>
-                    <h4 className="font-extrabold text-slate-900 text-xs">{item.title}</h4>
-                    <span className="text-[10px] text-slate-400 font-bold font-mono">{item.type}</span>
-                  </div>
-                  <span className="text-[10px] font-semibold text-slate-650 bg-slate-100 border border-slate-150 px-2 py-0.5 rounded text-right font-mono block whitespace-nowrap">{item.status}</span>
-                </div>
-              )) : (
-                <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 p-4 text-center">
-                  <h4 className="text-xs font-extrabold text-emerald-800">All assessments cleared</h4>
-                  <p className="mt-1 text-[11px] font-semibold text-emerald-700">No pending assessment attempts right now.</p>
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* Practice Pro-Tip block */}
           <div className="bg-emerald-50/40 border border-emerald-100 p-5 rounded-2xl relative overflow-hidden" id="student-tip-log">
             <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-full blur-xl pointer-events-none"></div>
             <h4 className="text-[10px] font-bold text-emerald-800 uppercase tracking-widest font-mono flex items-center gap-1">
