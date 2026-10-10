@@ -766,7 +766,12 @@ export default function App() {
   const [monitoringRequests, setMonitoringRequests] = useState<MonitoringRequest[]>([]);
 
   useEffect(() => {
-    if (!currentUser || !['teacher', 'admin'].includes(currentUser.role)) return;
+    // Students must load their own pending teacher invitations as well as
+    // teachers/admins loading the requests they manage.
+    if (!currentUser || !['teacher', 'admin', 'student'].includes(currentUser.role)) {
+      setMonitoringRequests([]);
+      return;
+    }
     monitoringApi.list()
       .then(response => setMonitoringRequests(response.data))
       .catch(error => console.warn('Unable to load monitoring relationships from backend:', error));

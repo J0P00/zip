@@ -70,7 +70,7 @@ export default function StudentDashboard({
     : Math.min(100, Math.round((effectiveCompletedLessons / lessonCount) * 100));
   const isDark = theme === 'dark';
   const pendingRequests = monitoringRequests.filter(
-    req => req.studentEmail.toLowerCase() === currentUser.email.toLowerCase() && req.status === 'pending'
+    req => req.studentEmail?.toLowerCase() === currentUser.email?.toLowerCase() && req.status === 'pending'
   );
   const activePractice = getCurrentPracticeChallenge();
   const activeLesson = OOP_COURSE_LESSONS.find(lesson => lesson.id === activePractice.lessonId) || OOP_COURSE_LESSONS[0];
