@@ -100,6 +100,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [videoError, setVideoError] = useState(false);
+  const lastProgressPersistRef = useRef(0);
 
   const completedLessons = studentResults?.completedLessons ?? lessons.filter(lesson => lesson.status === 'completed').length;
   const passedAssessments = OOP_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
@@ -161,7 +162,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
       setIsPlaying(false);
       previousLessonIdRef.current = activeLesson.id;
     }
-  }, [activeLesson, watchDb]);
+  }, [activeLesson?.id]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -228,7 +229,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
     if (!video || !activeLesson) return;
-    setDuration(video.duration || 0);
+    setDuration(Number.isFinite(video.duration) ? video.duration : 0);
     const resumeAt = watchDb[activeLesson.id]?.lastPosition || 0;
     if (resumeAt > 0 && resumeAt < video.duration) {
       video.currentTime = resumeAt;
@@ -241,7 +242,11 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     if (!video) return;
     setCurrentTime(video.currentTime);
     setMaxWatchedTime(value => Math.max(value, video.currentTime));
-    persistProgress(video.currentTime, video.duration);
+    const now = Date.now();
+    if (now - lastProgressPersistRef.current >= 2000) {
+      lastProgressPersistRef.current = now;
+      persistProgress(video.currentTime, video.duration);
+    }
   };
 
   const handleSeek = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -249,11 +254,10 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     const allowedTime = Math.min(requestedTime, maxWatchedTime + 5, duration || requestedTime);
     if (videoRef.current) videoRef.current.currentTime = allowedTime;
     setCurrentTime(allowedTime);
-    persistProgress(allowedTime);
   };
 
   const handleFullscreen = () => {
-    shellRef.current?.requestFullscreen?.();
+    void shellRef.current?.requestFullscreen?.().catch(() => undefined);
   };
 
   const selectLesson = (lesson: VideoLesson) => {
@@ -313,6 +317,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 src={activeLesson.videoUrl}
                 className="h-full w-full object-contain"
                 playsInline
+                preload="metadata"
                 onLoadedMetadata={() => {
                   setVideoError(false);
                   handleLoadedMetadata();
