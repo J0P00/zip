@@ -101,6 +101,10 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const [playbackRate, setPlaybackRate] = useState(1);
   const [videoError, setVideoError] = useState(false);
   const lastProgressPersistRef = useRef(0);
+  const watchDbRef = useRef<WatchDb>({});
+  const pendingProgressRef = useRef<Record<string, { lessonId: string; position: number; duration: number; percentage: number; completed: boolean }>>({});
+  const progressSaveInFlightRef = useRef(false);
+  const progressSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const completedLessons = studentResults?.completedLessons ?? lessons.filter(lesson => lesson.status === 'completed').length;
   const passedAssessments = OOP_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
@@ -180,52 +184,83 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     }
   }, [isPlaying]);
 
-  const persistProgress = async (position: number, nextDuration = duration) => {
-    if (!activeLesson) return;
-    const existing = watchDb[activeLesson.id];
-    const measuredPercentage = nextDuration > 0 ? Math.min(100, Math.round((position / nextDuration) * 100)) : 0;
-    if (existing?.completionPercentage >= 95 && measuredPercentage < existing.completionPercentage) return;
-    const percentage = Math.max(existing?.completionPercentage || 0, measuredPercentage);
-    const completed = percentage >= 95;
-    const nextDb = {
-      ...watchDb,
-      [activeLesson.id]: {
-        lessonId: activeLesson.id,
-        lastPosition: Math.max(existing?.lastPosition || 0, position),
-        completionPercentage: percentage,
-        completed,
-        dateCompleted: completed ? existing?.dateCompleted || new Date().toISOString() : undefined
-      }
-    };
+  useEffect(() => {
+    watchDbRef.current = watchDb;
+  }, [watchDb]);
 
-    setWatchDb(nextDb);
+  const flushPendingProgress = async () => {
+    if (progressSaveInFlightRef.current) return;
+    const next = Object.values(pendingProgressRef.current)[0];
+    if (!next) return;
+
+    delete pendingProgressRef.current[next.lessonId];
+    progressSaveInFlightRef.current = true;
     try {
       await progressApi.saveVideoProgress({
-        videoId: activeLesson.id,
-        lastPosition: position,
-        completionPercentage: percentage,
-        completed
+        videoId: next.lessonId,
+        lastPosition: next.position,
+        completionPercentage: next.percentage,
+        completed: next.completed
       });
-      const refreshed = await progressApi.getVideoProgress(currentUser.id || '', currentUser.token);
-      const refreshedRecord = refreshed.data.find((row: any) => row.video_id === activeLesson.id);
-      if (refreshedRecord) {
-        setWatchDb(previous => ({
-          ...previous,
-          [activeLesson.id]: {
-            lessonId: activeLesson.id,
-            lastPosition: Number(refreshedRecord.last_position || 0),
-            completionPercentage: Number(refreshedRecord.completion_percentage || 0),
-            completed: Boolean(refreshedRecord.completed),
-            dateCompleted: refreshedRecord.date_completed || undefined
-          }
-        }));
-      }
     } catch (error) {
       console.warn('Unable to sync video progress with backend:', error);
+    } finally {
+      progressSaveInFlightRef.current = false;
+      if (Object.keys(pendingProgressRef.current).length > 0) {
+        void flushPendingProgress();
+      }
     }
-    onUpdateVideoProgress(activeLesson.id, percentage);
   };
 
+  const persistProgress = (position: number, nextDuration = duration, flush = false) => {
+    if (!activeLesson) return;
+    const lessonId = activeLesson.id;
+    const existing = watchDbRef.current[lessonId];
+    const measuredPercentage = nextDuration > 0 ? Math.min(100, Math.round((position / nextDuration) * 100)) : 0;
+    if (existing?.completionPercentage >= 95 && measuredPercentage < existing.completionPercentage) return;
+
+    const percentage = Math.max(existing?.completionPercentage || 0, measuredPercentage);
+    const completed = percentage >= 95;
+    const record = {
+      lessonId,
+      lastPosition: Math.max(existing?.lastPosition || 0, position),
+      completionPercentage: percentage,
+      completed,
+      dateCompleted: completed ? existing?.dateCompleted || new Date().toISOString() : undefined
+    };
+
+    const nextDb = { ...watchDbRef.current, [lessonId]: record };
+    watchDbRef.current = nextDb;
+    setWatchDb(nextDb);
+    onUpdateVideoProgress(lessonId, percentage);
+
+    const queued = pendingProgressRef.current[lessonId];
+    pendingProgressRef.current[lessonId] = {
+      lessonId,
+      position: Math.max(queued?.position || 0, position),
+      duration: nextDuration,
+      percentage: Math.max(queued?.percentage || 0, percentage),
+      completed: Boolean(queued?.completed || completed)
+    };
+
+    if (flush) {
+      if (progressSaveTimerRef.current) {
+        clearTimeout(progressSaveTimerRef.current);
+        progressSaveTimerRef.current = null;
+      }
+      void flushPendingProgress();
+    } else if (!progressSaveTimerRef.current) {
+      progressSaveTimerRef.current = setTimeout(() => {
+        progressSaveTimerRef.current = null;
+        void flushPendingProgress();
+      }, 2000);
+    }
+  };
+
+  useEffect(() => () => {
+    if (progressSaveTimerRef.current) clearTimeout(progressSaveTimerRef.current);
+    void flushPendingProgress();
+  }, [currentUser.id]);
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
     if (!video || !activeLesson) return;
@@ -262,6 +297,9 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
 
   const selectLesson = (lesson: VideoLesson) => {
     if (lesson.status === 'locked') return;
+    if (activeLesson && activeLesson.id !== lesson.id && videoRef.current) {
+      persistProgress(videoRef.current.currentTime, videoRef.current.duration, true);
+    }
     setActiveLessonId(lesson.id);
   };
 
@@ -322,6 +360,12 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                   setVideoError(false);
                   handleLoadedMetadata();
                 }}
+                onPause={() => {
+                  setIsPlaying(false);
+                  if (videoRef.current && !videoRef.current.ended) {
+                    persistProgress(videoRef.current.currentTime, videoRef.current.duration, true);
+                  }
+                }}
                 onError={() => {
                   setIsPlaying(false);
                   setVideoError(true);
@@ -329,7 +373,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 onTimeUpdate={handleTimeUpdate}
                 onEnded={() => {
                   setIsPlaying(false);
-                  if (videoRef.current) persistProgress(videoRef.current.duration, videoRef.current.duration);
+                  if (videoRef.current) persistProgress(videoRef.current.duration, videoRef.current.duration, true);
                 }}
               />
               {videoError && (
