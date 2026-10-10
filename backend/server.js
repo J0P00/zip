@@ -4253,13 +4253,13 @@ app.patch("/api/monitoring-requests/:id", requireAuth, requireRole(["teacher", "
         }
         const result = await pool.query(`
             UPDATE monitoring_requests
-            SET status = $3, updated_at = NOW()
+            SET status = $2, updated_at = NOW()
             WHERE id = $1 AND (
-              teacher_id = $4
-              OR (student_id = $4 AND status = 'pending')
+              teacher_id = $3
+              OR (student_id = $3 AND status = 'pending')
             )
             RETURNING id, status
-        `, [req.params.id, req.authUser.role, status, req.authUser.id]);
+        `, [req.params.id, status, req.authUser.id]);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Monitoring request not found." });
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {

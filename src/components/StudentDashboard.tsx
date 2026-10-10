@@ -35,8 +35,8 @@ interface StudentDashboardProps {
   currentUser: AuthenticatedUser;
   monitoringRequests: MonitoringRequest[];
   monitoringRequestsError?: string | null;
-  onAcceptRequest: (requestId: string) => void;
-  onRejectRequest: (requestId: string) => void;
+  onAcceptRequest: (requestId: string) => Promise<void> | void;
+  onRejectRequest: (requestId: string) => Promise<void> | void;
   theme?: 'light' | 'dark';
   notifications?: NotificationItem[];
   onMarkNotificationRead?: (id: string) => void;
@@ -71,6 +71,8 @@ export default function StudentDashboard({
     ? studentResults.overallProgress
     : Math.min(100, Math.round((effectiveCompletedLessons / lessonCount) * 100));
   const isDark = theme === 'dark';
+  const [requestActionId, setRequestActionId] = React.useState<string | null>(null);
+  const [requestActionError, setRequestActionError] = React.useState<string | null>(null);
   const pendingRequests = monitoringRequests.filter(
     req => req.studentEmail?.toLowerCase() === currentUser.email?.toLowerCase() && req.status === 'pending'
   );
@@ -263,6 +265,12 @@ export default function StudentDashboard({
         </div>
       )}
 
+      {requestActionError && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800" role="alert">
+          {requestActionError}
+        </div>
+      )}
+
       {/* Monitoring Requests Notification Panel */}
       {pendingRequests.length > 0 && (
         <div className={`p-4 border rounded-xl space-y-3 transition-colors duration-250 ${
@@ -283,18 +291,42 @@ export default function StudentDashboard({
                 </div>
                 <div className="flex gap-2 shrink-0">
                   <button
-                    onClick={() => onRejectRequest(req.id)}
+                    type="button"
+                    disabled={requestActionId === req.id}
+                    onClick={async () => {
+                      setRequestActionId(req.id);
+                      setRequestActionError(null);
+                      try {
+                        await onRejectRequest(req.id);
+                      } catch (error) {
+                        setRequestActionError(error instanceof Error ? error.message : 'Unable to reject this invitation.');
+                      } finally {
+                        setRequestActionId(null);
+                      }
+                    }}
                     className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
                       isDark 
                         ? 'border-slate-800 hover:bg-slate-900 text-rose-450' 
                         : 'border-slate-250 hover:bg-slate-50 text-rose-600'
-                    }`}
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
                   >
                     Reject
                   </button>
                   <button
-                    onClick={() => onAcceptRequest(req.id)}
-                    className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                    type="button"
+                    disabled={requestActionId === req.id}
+                    onClick={async () => {
+                      setRequestActionId(req.id);
+                      setRequestActionError(null);
+                      try {
+                        await onAcceptRequest(req.id);
+                      } catch (error) {
+                        setRequestActionError(error instanceof Error ? error.message : 'Unable to accept this invitation.');
+                      } finally {
+                        setRequestActionId(null);
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Accept
                   </button>
