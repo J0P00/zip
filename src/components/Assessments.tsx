@@ -7,6 +7,8 @@ import RecommendationCard from './RecommendationCard';
 import SecureWatermark from './SecureWatermark';
 import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 
+const MAX_ASSESSMENT_ATTEMPTS = 3;
+
 interface AssessmentsProps {
   currentUser: AuthenticatedUser;
   onCorrectAnswerAdded: (xp: number, attempt: QuizAttempt) => void;
@@ -33,6 +35,7 @@ interface QuizAttempt {
   incorrectAnswers: number;
   passed: boolean;
   attemptNumber: number;
+  attemptCount?: number;
   answers: Record<string, string>;
   dateCompleted: string;
 }
@@ -134,7 +137,8 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
             correctAnswers: row.correct_answers,
             incorrectAnswers: row.incorrect_answers,
             passed: Boolean(row.passed),
-            attemptNumber: row.attempt_number,
+            attemptNumber: Number(row.attempt_number || 0),
+            attemptCount: Number(row.attempt_count || row.attempt_number || 0),
             answers: row.answers || {},
             dateCompleted: row.date_completed
           };
@@ -313,6 +317,11 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
     if (!assessment) return;
     const reason = getAssessmentLockedReason(assessment.lessonId, evidenceDb, evidenceLoaded);
     if (reason) return;
+    const attemptsUsed = quizDb[assessmentId]?.attemptCount ?? quizDb[assessmentId]?.attemptNumber ?? 0;
+    if (attemptsUsed >= MAX_ASSESSMENT_ATTEMPTS) {
+      setSessionError("You have used all " + MAX_ASSESSMENT_ATTEMPTS + " attempts for this assessment.");
+      return;
+    }
 
     setSessionError(null);
     try {
@@ -371,6 +380,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
         incorrectAnswers: result.data.incorrectAnswers,
         passed: result.data.passed,
         attemptNumber: result.data.attempt?.attempt_number || sessionData.attemptNumber,
+        attemptCount: Number(result.data.attemptCount || result.data.attempt?.attempt_number || sessionData.attemptNumber),
         answers,
         dateCompleted: new Date().toISOString()
       };
@@ -448,6 +458,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
           const reason = getAssessmentLockedReason(assessment.lessonId, evidenceDb, evidenceLoaded);
           const attempt = quizDb[assessment.id];
           const passed = attempt?.passed;
+          const attemptsUsed = attempt?.attemptCount ?? attempt?.attemptNumber ?? 0;
 
           return (
             <article key={assessment.id} className={`rounded-2xl border bg-white/80 p-5 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900 ${reason ? 'border-slate-200 opacity-75 dark:border-slate-800' : 'border-emerald-200 dark:border-emerald-800/60'}`}>
@@ -463,17 +474,17 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
                   </p>
                   {attempt && (
                     <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'}`}>
-                      Latest: {attempt.score}/{attempt.total} ({attempt.percentage}%) - Attempt {attempt.attemptNumber}
+                      Latest: {attempt.score}/{attempt.total} ({attempt.percentage}%) - Attempt {attempt.attemptNumber} of {MAX_ASSESSMENT_ATTEMPTS} - {Math.max(0, MAX_ASSESSMENT_ATTEMPTS - attemptsUsed)} remaining
                     </p>
                   )}
                   {reason && <p className="mt-3 text-[11px] font-bold leading-5 text-slate-400">{reason}</p>}
                 </div>
                 <button
-                  disabled={Boolean(reason)}
+                  disabled={Boolean(reason) || attemptsUsed >= MAX_ASSESSMENT_ATTEMPTS}
                   onClick={() => startAssessment(assessment.id)}
                   className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-800"
                 >
-                  {attempt?.passed ? 'Retake Assessment' : 'Start Secure Assessment'}
+                  {attemptsUsed >= MAX_ASSESSMENT_ATTEMPTS ? 'Attempts Exhausted' : attempt?.passed ? 'Retake Assessment' : 'Start Secure Assessment'}
                 </button>
               </div>
             </article>
@@ -638,10 +649,11 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
           <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
             {latestAttempt.passed ? `Practice IDE is unlocked for Lesson ${activeLesson.sequence}: ${activeLesson.title}. Complete it to unlock the next Lesson.` : `Score is below the ${ASSESSMENT_PASSING_SCORE}% passing threshold. Rewatch Lesson ${activeLesson.sequence}: ${activeLesson.title}, then retake the assessment.`}
           </p>
-          <div className="mt-6 grid grid-cols-3 gap-3 border-y border-slate-100 py-5 dark:border-slate-800">
+          <div className="mt-6 grid grid-cols-4 gap-3 border-y border-slate-100 py-5 dark:border-slate-800">
             <div><span className="block text-[10px] font-black uppercase text-slate-400">Score</span><strong className="font-mono text-xl dark:text-white">{latestAttempt.score}/{latestAttempt.total}</strong></div>
             <div><span className="block text-[10px] font-black uppercase text-slate-400">Percentage</span><strong className="font-mono text-xl dark:text-white">{latestAttempt.percentage}%</strong></div>
             <div><span className="block text-[10px] font-black uppercase text-slate-400">Attempt</span><strong className="font-mono text-xl dark:text-white">{latestAttempt.attemptNumber}</strong></div>
+            <div><span className="block text-[10px] font-black uppercase text-slate-400">Remaining</span><strong className="font-mono text-xl dark:text-white">{Math.max(0, MAX_ASSESSMENT_ATTEMPTS - (latestAttempt.attemptCount ?? latestAttempt.attemptNumber))}</strong></div>
           </div>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             {reviewQuestions.length > 0 && (
@@ -649,9 +661,9 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
                 Review Answers
               </button>
             )}
-            <button onClick={() => startAssessment(activeAssessment.id)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-5 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer">
+            {(latestAttempt.attemptCount ?? latestAttempt.attemptNumber) < MAX_ASSESSMENT_ATTEMPTS && <button onClick={() => startAssessment(activeAssessment.id)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-5 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer">
               <RotateCcw className="h-4 w-4" /> Retake Assessment
-            </button>
+            </button>}
             <button onClick={() => { setView('dashboard'); onNavigateTo?.(latestAttempt.passed ? 'ide' : 'videos'); }} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white hover:bg-emerald-700 transition cursor-pointer">
               Continue Learning
             </button>

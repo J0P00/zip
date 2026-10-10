@@ -551,6 +551,8 @@ export interface AssessmentSessionData {
 export interface AssessmentSubmitResult {
   sessionId: string;
   attempt: any;
+  attemptCount?: number;
+  maxAttempts?: number;
   score: number;
   total: number;
   percentage: number;

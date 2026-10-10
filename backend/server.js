@@ -56,7 +56,34 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const isProduction = process.env.NODE_ENV === "production";
 const ASSESSMENT_PASSING_SCORE = 60;
 const VIDEO_COMPLETION_THRESHOLD = 95;
+const MAX_ASSESSMENT_ATTEMPTS = 3;
 let practiceSubmissionKeyColumn = "id";
+
+const insertCappedAssessmentAttempt = async ({ studentId, assessmentId, storage, fallbackAttemptNumber = 1, insertQuery, buildParams, beforeInsert }) => {
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [String(studentId) + ":" + String(assessmentId)]);
+        const attemptTable = storage === "swing" ? "swing_quiz_attempts" : "quiz_attempts";
+        const studentColumn = storage === "swing" ? "student_id" : "student_user_id";
+        const countResult = await client.query("SELECT COUNT(*)::int AS attempt_count, COALESCE(MAX(attempt_number), 0)::int AS max_attempt FROM " + attemptTable + " WHERE " + studentColumn + " = $1 AND assessment_id = $2", [studentId, assessmentId]);
+        const attemptCount = Number(countResult.rows[0]?.attempt_count || 0);
+        if (attemptCount >= MAX_ASSESSMENT_ATTEMPTS) {
+            await client.query("ROLLBACK");
+            return { limited: true, attemptCount };
+        }
+        const attemptNumber = Math.max(Number(fallbackAttemptNumber || 1), Number(countResult.rows[0]?.max_attempt || 0) + 1);
+        if (beforeInsert) await beforeInsert(client);
+        const inserted = await client.query(insertQuery, buildParams(attemptNumber));
+        await client.query("COMMIT");
+        return { limited: false, attemptCount: attemptCount + 1, attemptNumber, row: inserted.rows[0] };
+    } catch (error) {
+        try { await client.query("ROLLBACK"); } catch {}
+        throw error;
+    } finally {
+        client.release();
+    }
+};
 
 const normalizedAssessmentPercentageSql = (alias = "qa") => `CASE
     WHEN ${alias}.percentage IS NULL THEN 0
@@ -2831,6 +2858,12 @@ app.post("/api/assessments/session/start", requireAuth, async (req, res, next) =
             });
         }
 
+        const attemptCountResult = await pool.query("SELECT COUNT(*)::int AS attempt_count FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = $2", [req.authUser.id, safeAssessmentId]);
+        const attemptCount = Number(attemptCountResult.rows[0]?.attempt_count || 0);
+        if (attemptCount >= MAX_ASSESSMENT_ATTEMPTS) {
+            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", attemptCount, maxAttempts: MAX_ASSESSMENT_ATTEMPTS, message: "You have used all " + MAX_ASSESSMENT_ATTEMPTS + " attempts for this assessment." });
+        }
+
         // Check if student has an existing active session for this assessment
         const existingActive = await pool.query(`
             SELECT * FROM assessment_sessions
@@ -2935,6 +2968,7 @@ app.post("/api/assessments/session/start", requireAuth, async (req, res, next) =
                 sessionId: session.id,
                 sessionToken: session.session_token,
                 assessmentId: session.assessment_id,
+            storage: "oop",
                 lessonId: session.lesson_id,
                 startedAt: session.started_at,
                 expiresAt: session.expires_at,
@@ -2982,12 +3016,13 @@ app.get("/api/assessments/session/active/:assessmentId", requireAuth, async (req
                 sessionId: session.id,
                 sessionToken: session.session_token,
                 assessmentId: session.assessment_id,
+            storage: "oop",
                 lessonId: session.lesson_id,
                 startedAt: session.started_at,
                 expiresAt: session.expires_at,
                 remainingSeconds,
                 violationCount: session.violation_count,
-                attemptNumber: session.attempt_number,
+            attemptNumber: cappedInsert.attemptNumber,
                 questions: session.question_order,
                 savedAnswers: session.answers || {}
             }
@@ -3117,35 +3152,27 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
         const correctAnswers = score;
         const incorrectAnswers = total - score;
 
-        // Update session to completed
-        await pool.query(`
-            UPDATE assessment_sessions
-            SET status = 'completed', completed_at = NOW(), score = $1, total = $2,
-                percentage = $3, passed = $4, answers = $5::jsonb, updated_at = NOW()
-            WHERE id = $6
-        `, [score, total, percentage, passed, JSON.stringify(answers), session.id]);
+        const attemptCountResult = await pool.query("SELECT COUNT(*)::int AS attempt_count FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = $2", [req.authUser.id, session.assessment_id]);
+        const attemptCount = Number(attemptCountResult.rows[0]?.attempt_count || 0);
+        if (attemptCount >= MAX_ASSESSMENT_ATTEMPTS) {
+            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", attemptCount, maxAttempts: MAX_ASSESSMENT_ATTEMPTS, message: "You have used all " + MAX_ASSESSMENT_ATTEMPTS + " attempts for this assessment." });
+        }
+
 
         // Insert into quiz_attempts for authoritative history
-        const attemptInsert = await pool.query(`
-            INSERT INTO quiz_attempts (
-              student_user_id, assessment_id, lesson_id, score, total, percentage,
-              correct_answers, incorrect_answers, passed, attempt_number, answers, date_completed
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, NOW())
-            RETURNING *
-        `, [
-            req.authUser.id,
-            session.assessment_id,
-            session.lesson_id,
-            score,
-            total,
-            percentage,
-            correctAnswers,
-            incorrectAnswers,
-            passed,
-            session.attempt_number,
-            JSON.stringify(answers)
-        ]);
+        const cappedInsert = await insertCappedAssessmentAttempt({
+            studentId: req.authUser.id,
+            assessmentId: session.assessment_id,
+            storage: "oop",
+            fallbackAttemptNumber: session.attempt_number,
+            beforeInsert: client => client.query("UPDATE assessment_sessions SET status = 'completed', completed_at = NOW(), score = $1, total = $2, percentage = $3, passed = $4, answers = $5::jsonb, updated_at = NOW() WHERE id = $6", [score, total, percentage, passed, JSON.stringify(answers), session.id]),
+            insertQuery: "INSERT INTO quiz_attempts (student_user_id, assessment_id, lesson_id, score, total, percentage, correct_answers, incorrect_answers, passed, attempt_number, answers, date_completed) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, NOW()) RETURNING *",
+            buildParams: attemptNumber => [req.authUser.id, session.assessment_id, session.lesson_id, score, total, percentage, correctAnswers, incorrectAnswers, passed, attemptNumber, JSON.stringify(answers)]
+        });
+        if (cappedInsert.limited) {
+            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", attemptCount: cappedInsert.attemptCount, maxAttempts: MAX_ASSESSMENT_ATTEMPTS, message: "You have used all " + MAX_ASSESSMENT_ATTEMPTS + " attempts for this assessment." });
+        }
+        const attemptInsert = { rows: [cappedInsert.row] };
 
         // Award XP
         await awardXP(req.authUser.id, 30, `Quiz Completion: ${session.assessment_id}`);
@@ -3157,6 +3184,7 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
         await logActivity(req.authUser.id, "quiz_attempt", `Completed secure quiz for ${session.lesson_id || session.assessment_id} with score ${score}/${total} (${percentage}%)`, {
             sessionId: session.id,
             assessmentId: session.assessment_id,
+            storage: "oop",
             lessonId: session.lesson_id,
             score,
             total,
@@ -3186,10 +3214,15 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
                 correctAnswers,
                 incorrectAnswers,
                 violationCount: session.violation_count,
-                review
+                review,
+                attemptCount: cappedInsert.attemptCount,
+                maxAttempts: MAX_ASSESSMENT_ATTEMPTS,
             }
         });
     } catch (error) {
+        if (error?.code === "23505" && (error?.constraint === "uq_quiz_attempt_student_assessment_number" || error?.constraint === "uq_swing_quiz_attempt_student_assessment_number")) {
+            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", maxAttempts: MAX_ASSESSMENT_ATTEMPTS, message: "This assessment attempt was already recorded by another request." });
+        }
         next(error);
     }
 });
@@ -3414,12 +3447,13 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                              qa.total AS quiz_total,
                                              qa.percentage AS quiz_percentage,
                                              qa.passed AS quiz_attempt_passed,
+                                              qa.attempt_count AS quiz_attempt_count,
                                              ss.submission_score,
                                              (sg.id IS NOT NULL OR ss.submission_score IS NOT NULL) AS attempted
                                 FROM swing_lessons sl
                                 LEFT JOIN swing_progress sg ON sg.student_id = $1::text AND sg.lesson_id = sl.id
                                 LEFT JOIN LATERAL (
-                                    SELECT score, total, percentage, passed
+                                     SELECT score, total, percentage, passed, (SELECT COUNT(*)::int FROM swing_quiz_attempts counted WHERE counted.student_id = $1::text AND counted.assessment_id = 'swing_assessment_' || sl.sequence) AS attempt_count
                                     FROM swing_quiz_attempts
                                     WHERE student_id = $1::text AND lesson_id = sl.id
                                     ORDER BY attempt_number DESC, date_completed DESC
@@ -3484,6 +3518,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 quizScore: topic.quiz_score === null ? null : Number(topic.quiz_score),
                 quizTotal: topic.quiz_total === null ? null : Number(topic.quiz_total),
                 quizPercentage: topic.quiz_percentage === null ? null : Number(topic.quiz_percentage),
+                 quizAttemptCount: Number(topic.quiz_attempt_count || 0),
                 quizPassed: Boolean(evidence?.assessmentPassed),
                 exerciseCompleted: Boolean(evidence?.practiceCompleted),
                 submissionScore: topic.submission_score === null ? null : Number(topic.submission_score),
@@ -3649,7 +3684,8 @@ app.get("/api/quiz-attempts/:studentId", requireAuth, async (req, res, next) => 
         const result = await pool.query(`
             SELECT DISTINCT ON (qa.assessment_id) qa.*,
                    ${normalizedAssessmentPercentageSql("qa")} AS percentage,
-                   (${normalizedAssessmentPercentageSql("qa")} >= ${ASSESSMENT_PASSING_SCORE}) AS passed
+                   (${normalizedAssessmentPercentageSql("qa")} >= ${ASSESSMENT_PASSING_SCORE}) AS passed,
+                    COUNT(*) OVER (PARTITION BY qa.assessment_id)::int AS attempt_count
             FROM quiz_attempts qa
             WHERE qa.student_user_id = $1
             ORDER BY qa.assessment_id, qa.attempt_number DESC, qa.date_completed DESC
@@ -3696,29 +3732,26 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
             [req.authUser.id, safeAssessmentId]
         );
         const safeAttemptNumber = Number(attemptResult.rows[0]?.next_attempt || 1);
+        const attemptCountResult = await pool.query("SELECT COUNT(*)::int AS attempt_count FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = $2", [req.authUser.id, safeAssessmentId]);
+        const attemptCount = Number(attemptCountResult.rows[0]?.attempt_count || 0);
+        if (attemptCount >= MAX_ASSESSMENT_ATTEMPTS) {
+            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", attemptCount, maxAttempts: MAX_ASSESSMENT_ATTEMPTS, message: "You have used all " + MAX_ASSESSMENT_ATTEMPTS + " attempts for this assessment." });
+        }
+
         const safeAnswers = answers && typeof answers === "object" && !Array.isArray(answers) ? answers : {};
 
-        const result = await pool.query(`
-            INSERT INTO quiz_attempts (
-              student_user_id, assessment_id, lesson_id, score, total, percentage,
-              correct_answers, incorrect_answers, passed, attempt_number, answers, date_completed
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, COALESCE($12::timestamptz, NOW()))
-            RETURNING *
-        `, [
-            req.authUser.id,
-            safeAssessmentId,
-            safeLessonId,
-            safeScore,
-            safeTotal,
-            computedPercentage,
-            safeCorrectAnswers,
-            safeIncorrectAnswers,
-            isPassingAssessment({ score: safeScore, total: safeTotal }),
-            safeAttemptNumber,
-            JSON.stringify(safeAnswers),
-            dateCompleted || null
-        ]);
+        const cappedInsert = await insertCappedAssessmentAttempt({
+            studentId: req.authUser.id,
+            assessmentId: safeAssessmentId,
+            storage: "oop",
+            fallbackAttemptNumber: safeAttemptNumber,
+            insertQuery: "INSERT INTO quiz_attempts (student_user_id, assessment_id, lesson_id, score, total, percentage, correct_answers, incorrect_answers, passed, attempt_number, answers, date_completed) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, COALESCE($12::timestamptz, NOW())) RETURNING *",
+            buildParams: attemptNumber => [req.authUser.id, safeAssessmentId, safeLessonId, safeScore, safeTotal, computedPercentage, safeCorrectAnswers, safeIncorrectAnswers, isPassingAssessment({ score: safeScore, total: safeTotal }), attemptNumber, JSON.stringify(safeAnswers), dateCompleted || null]
+        });
+        if (cappedInsert.limited) {
+            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", attemptCount: cappedInsert.attemptCount, maxAttempts: MAX_ASSESSMENT_ATTEMPTS, message: "You have used all " + MAX_ASSESSMENT_ATTEMPTS + " attempts for this assessment." });
+        }
+        const result = { rows: [cappedInsert.row] };
 
         const isPassedNow = isPassingAssessment({ score: safeScore, total: safeTotal });
 
@@ -3748,6 +3781,9 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
 
         res.status(201).json({ success: true, data: result.rows[0] });
     } catch (error) {
+        if (error?.code === "23505" && (error?.constraint === "uq_quiz_attempt_student_assessment_number" || error?.constraint === "uq_swing_quiz_attempt_student_assessment_number")) {
+            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", maxAttempts: MAX_ASSESSMENT_ATTEMPTS, message: "This assessment attempt was already recorded by another request." });
+        }
         next(error);
     }
 });
@@ -3776,48 +3812,33 @@ app.put("/api/swing/progress", requireAuth, async (req, res, next) => {
 });
 app.post("/api/swing/quiz-attempts", requireAuth, async (req, res, next) => {
     try {
-        const { assessmentId, lessonId, score, total, percentage, correctAnswers, incorrectAnswers, passed, answers, dateCompleted } = req.body || {};
+        const { assessmentId, lessonId, score, total, correctAnswers, incorrectAnswers, answers } = req.body || {};
         if (!assessmentId) return res.status(400).json({ success: false, message: "assessmentId is required." });
         if (req.authUser.role !== "student") return res.status(403).json({ success: false, message: "Only students can submit quiz attempts." });
-        const swingLessonResult = await pool.query('SELECT sequence FROM swing_lessons WHERE id = $1', [lessonId]);
-        if (!swingLessonResult.rowCount || assessmentId !== 'swing_assessment_' + swingLessonResult.rows[0].sequence) {
+        const swingLessonResult = await pool.query("SELECT sequence FROM swing_lessons WHERE id = $1", [lessonId]);
+        if (!swingLessonResult.rowCount || assessmentId !== "swing_assessment_" + swingLessonResult.rows[0].sequence) {
             return res.status(400).json({ success: false, message: "The assessment does not belong to this Java Swing lesson." });
         }
-
         const access = await getLessonAccessState(req.authUser.id, lessonId);
         if (!access.canAccess || !access.current.videoCompleted) {
             return res.status(403).json({ success: false, message: access.reason || "Complete video first." });
         }
-
         const safeTotal = Math.max(1, Math.floor(Number(total) || 0));
         const safeScore = Math.max(0, Math.min(safeTotal, Math.floor(Number(score) || 0)));
         const computedPercentage = Math.round((safeScore / safeTotal) * 100);
         const safePassed = computedPercentage >= ASSESSMENT_PASSING_SCORE;
-        const attemptNumberResult = await pool.query(
-            'SELECT COALESCE(MAX(attempt_number), 0) + 1 AS next_attempt FROM swing_quiz_attempts WHERE student_id = $1 AND assessment_id = $2',
-            [req.authUser.id, assessmentId]
-        );
-        const attemptNumber = Number(attemptNumberResult.rows[0]?.next_attempt || 1);
-        await pool.query(
-            'INSERT INTO swing_quiz_attempts (student_id, assessment_id, lesson_id, score, total, percentage, correct_answers, incorrect_answers, passed, attempt_number, answers) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)',
-            [
-                req.authUser.id, assessmentId, lessonId, safeScore, safeTotal, computedPercentage,
-                Math.max(0, Math.min(safeTotal, Math.floor(Number(correctAnswers) || safeScore))),
-                Math.max(0, Math.min(safeTotal, Math.floor(Number(incorrectAnswers) || (safeTotal - safeScore)))),
-                safePassed, attemptNumber, JSON.stringify(answers && typeof answers === 'object' ? answers : {})
-            ]
-        );
-
-        const result = await pool.query(`
-            INSERT INTO swing_progress (student_id, lesson_id, quiz_passed)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (student_id, lesson_id) DO UPDATE SET
-              quiz_passed = swing_progress.quiz_passed OR EXCLUDED.quiz_passed,
-              updated_at = NOW()
-            RETURNING *
-        `, [req.authUser.id, lessonId, safePassed]);
-
-        res.json({ success: true, data: result.rows[0] });
+        const cappedInsert = await insertCappedAssessmentAttempt({
+            studentId: req.authUser.id,
+            assessmentId,
+            storage: "swing",
+            insertQuery: "INSERT INTO swing_quiz_attempts (student_id, assessment_id, lesson_id, score, total, percentage, correct_answers, incorrect_answers, passed, attempt_number, answers) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb) RETURNING *",
+            buildParams: attemptNumber => [req.authUser.id, assessmentId, lessonId, safeScore, safeTotal, computedPercentage, Math.max(0, Math.min(safeTotal, Math.floor(Number(correctAnswers) || safeScore))), Math.max(0, Math.min(safeTotal, Math.floor(Number(incorrectAnswers) || (safeTotal - safeScore)))), safePassed, attemptNumber, JSON.stringify(answers && typeof answers === "object" ? answers : {})]
+        });
+        if (cappedInsert.limited) {
+            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", attemptCount: cappedInsert.attemptCount, maxAttempts: MAX_ASSESSMENT_ATTEMPTS, message: "You have used all " + MAX_ASSESSMENT_ATTEMPTS + " attempts for this assessment." });
+        }
+        const result = await pool.query("INSERT INTO swing_progress (student_id, lesson_id, quiz_passed) VALUES ($1, $2, $3) ON CONFLICT (student_id, lesson_id) DO UPDATE SET quiz_passed = swing_progress.quiz_passed OR EXCLUDED.quiz_passed, updated_at = NOW() RETURNING *", [req.authUser.id, lessonId, safePassed]);
+        res.json({ success: true, data: { ...result.rows[0], attemptCount: cappedInsert.attemptCount, attemptNumber: cappedInsert.attemptNumber, maxAttempts: MAX_ASSESSMENT_ATTEMPTS } });
     } catch (error) {
         next(error);
     }

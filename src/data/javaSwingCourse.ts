@@ -43,6 +43,7 @@ export interface SwingQuizAttempt {
   incorrectAnswers: number;
   passed: boolean;
   attemptNumber: number;
+  attemptCount?: number;
   answers: Record<string, string>;
   dateCompleted: string;
 }

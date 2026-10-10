@@ -128,10 +128,12 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
           correctAnswers: Number(topic.quizScore || 0),
           incorrectAnswers: Math.max(0, Number(topic.quizTotal || 0) - Number(topic.quizScore || 0)),
           passed: topic.quizPassed,
-          attemptNumber: 1,
+           attemptNumber: Number(topic.quizAttemptCount || 0),
+           attemptCount: Number(topic.quizAttemptCount || 0),
           answers: {},
           dateCompleted: new Date().toISOString()
         };
+        if (Number(topic.quizAttemptCount || 0) <= 0) delete newQuizDb[assessmentId];
         const exercise = JAVA_SWING_EXERCISES.find(e => e.lessonId === topic.id);
         if (exercise && topic.exerciseCompleted) {
           const key = `${userKeyFor(currentUser)}:${exercise.id}`;
@@ -329,6 +331,12 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
   };
 
   const startQuiz = () => {
+    const attemptsUsed = quizDb[activeAssessment.id]?.attemptCount ?? quizDb[activeAssessment.id]?.attemptNumber ?? 0;
+    if (attemptsUsed >= 3) {
+      setNotice("You have used all 3 attempts for this quiz.");
+      window.setTimeout(() => setNotice(""), 3200);
+      return;
+    }
     if (quizLockedReason) {
       setNotice(quizLockedReason);
       window.setTimeout(() => setNotice(''), 3200);
@@ -347,6 +355,11 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
   };
 
   const submitQuiz = async () => {
+    const attemptsUsed = quizDb[activeAssessment.id]?.attemptCount ?? quizDb[activeAssessment.id]?.attemptNumber ?? 0;
+    if (attemptsUsed >= 3) {
+      setNotice("You have used all 3 attempts for this quiz.");
+      return;
+    }
     let score = 0;
     quizQuestions.forEach(question => {
       if (answers[question.id] === question.correctAnswer) score += 1;
@@ -363,17 +376,13 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
       incorrectAnswers: total - score,
       passed: percentage >= SWING_PASSING_PERCENTAGE,
       attemptNumber: (quizDb[activeAssessment.id]?.attemptNumber || 0) + 1,
+      attemptCount: (quizDb[activeAssessment.id]?.attemptCount || quizDb[activeAssessment.id]?.attemptNumber || 0) + 1,
       answers,
       dateCompleted: new Date().toISOString()
     };
-    const nextDb = { ...quizDb, [activeAssessment.id]: attempt };
-    const nextHistory = [attempt, ...quizHistory].slice(0, 100);
-    setQuizDb(nextDb);
-    setQuizHistory(nextHistory);
-    setStoredJson(QUIZ_HISTORY_KEY, nextHistory);
     
     try {
-      await swingApi.submitQuiz({
+      const response = await swingApi.submitQuiz({
         assessmentId: activeAssessment.id,
         lessonId: activeLesson.id,
         score,
@@ -385,13 +394,26 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
         answers,
         dateCompleted: attempt.dateCompleted
       });
+      const persistedAttempt: SwingQuizAttempt = {
+        ...attempt,
+        attemptNumber: Number(response.data?.attemptNumber || attempt.attemptNumber),
+        attemptCount: Number(response.data?.attemptCount || attempt.attemptCount || attempt.attemptNumber)
+      };
+      const nextDb = { ...quizDb, [activeAssessment.id]: persistedAttempt };
+      const nextHistory = [persistedAttempt, ...quizHistory].slice(0, 100);
+      setQuizDb(nextDb);
+      setQuizHistory(nextHistory);
+      setStoredJson(QUIZ_HISTORY_KEY, nextHistory);
       onSubmitCompleted({ id: 'dummy_quiz' } as any);
-    } catch (err) {}
+      setLatestAttempt(persistedAttempt);
+      setQuizMode("result");
+      setNotice(persistedAttempt.passed ? "Quiz passed. Programming practice is now unlocked." : "Quiz saved. You can retake until you reach 60%.");
+      window.setTimeout(() => setNotice(""), 3600);
+    } catch (err: any) {
+      setNotice(err?.message || "Unable to save this quiz attempt.");
+      return;
 
-    setLatestAttempt(attempt);
-    setQuizMode('result');
-    setNotice(attempt.passed ? 'Quiz passed. Programming practice is now unlocked.' : 'Quiz saved. You can retake until you reach 60%.');
-    window.setTimeout(() => setNotice(''), 3600);
+    }
   };
 
   const updateSource = (value: string) => {
@@ -773,7 +795,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
             <p className="mt-2 text-sm font-semibold text-slate-500">Score: {latestAttempt.score}/{latestAttempt.total} ({latestAttempt.percentage}%). Passing score is {SWING_PASSING_PERCENTAGE}%.</p>
             <div className="mt-5 flex justify-center gap-3">
               <button type="button" onClick={() => setQuizMode('review')} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700">Review Answers</button>
-              <button type="button" onClick={startQuiz} className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700"><RotateCcw className="h-4 w-4" /> Retake</button>
+               {(latestAttempt.attemptCount ?? latestAttempt.attemptNumber) < 3 && <button type="button" onClick={startQuiz} className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700"><RotateCcw className="h-4 w-4" /> Retake</button>}
               {latestAttempt.passed ? <button type="button" onClick={() => setActiveTab('practice')} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white">Open Practice</button> : <button type="button" onClick={() => setActiveTab('videos')} className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-black text-white">Return to Tutorial</button>}
             </div>
           </div>
@@ -806,9 +828,9 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
             <article key={assessment.id} className={`rounded-2xl border bg-white p-5 shadow-sm ${selected ? 'border-emerald-300' : 'border-slate-200'}`}>
               <span className="font-mono text-[10px] font-black uppercase text-slate-400">Lesson {lesson?.sequence}</span>
               <h3 className="mt-2 text-sm font-extrabold text-slate-900">{assessment.title}</h3>
-              <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">15 randomized MCQs from the full question bank. Unlimited retakes. Passing score: {SWING_PASSING_PERCENTAGE}%.</p>
-              {attempt && <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>Latest: {attempt.percentage}% - Attempt {attempt.attemptNumber}</p>}
-              <button type="button" onClick={() => { if (lesson) setActiveLessonId(lesson.id); window.setTimeout(startQuiz, 0); }} className="mt-4 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white">Start Quiz</button>
+              <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">15 randomized MCQs from the full question bank. Maximum 3 attempts. Passing score: {SWING_PASSING_PERCENTAGE}%.</p>
+              {attempt && <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>Latest: {attempt.percentage}% - Attempt {attempt.attemptNumber} of 3 - {Math.max(0, 3 - (attempt.attemptCount ?? attempt.attemptNumber))} remaining</p>}
+              <button type="button" disabled={(attempt?.attemptCount ?? attempt?.attemptNumber ?? 0) >= 3} onClick={() => { if (lesson) setActiveLessonId(lesson.id); window.setTimeout(startQuiz, 0); }} className="mt-4 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white">Start Quiz</button>
             </article>
           );
         })}
