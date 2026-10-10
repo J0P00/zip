@@ -496,6 +496,9 @@ const requireAuth = async (req, res, next) => {
         if (result.rowCount === 0) {
             return res.status(401).json({ success: false, message: "User session is no longer valid." });
         }
+        if (result.rows[0].role === "admin") {
+            return res.status(403).json({ success: false, message: "Administrator accounts are no longer available." });
+        }
         // Authorization and identity are refreshed from PostgreSQL so a stale
         // token cannot retain a changed role or cross-user identifier.
         req.authUser = { ...payload, ...result.rows[0] };
@@ -2113,8 +2116,8 @@ app.post("/api/auth/register", async (req, res, next) => {
                 message: "Password must be strong: at least 8 characters long and contain uppercase, lowercase, a number, and a special character."
             });
         }
-        if (!["student", "teacher", "admin"].includes(role)) {
-            return res.status(400).json({ success: false, message: "Role must be student, teacher, or admin." });
+        if (!["student", "teacher"].includes(role)) {
+            return res.status(400).json({ success: false, message: "Role must be student or teacher." });
         }
 
         const existing = await findUserByEmail(email);
@@ -2175,6 +2178,9 @@ app.post("/api/auth/login", async (req, res, next) => {
         }
         const user = await findUserByEmail(email);
         if (!user) return res.status(401).json({ success: false, message: "Invalid email or password." });
+        if (user.role === "admin") {
+            return res.status(403).json({ success: false, message: "Administrator accounts are no longer available." });
+        }
 
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) return res.status(401).json({ success: false, message: "Invalid email or password." });
@@ -2195,6 +2201,9 @@ app.post("/api/auth/forgot-password", async (req, res, next) => {
         const user = await findUserByEmail(email);
         if (!user) {
             return res.status(404).json({ success: false, message: "No account found with this email address.", exists: false });
+        }
+        if (user.role === "admin") {
+            return res.status(403).json({ success: false, message: "Administrator accounts are no longer available.", exists: false });
         }
         return res.json({ success: true, message: "Account verified. You can now reset your password.", exists: true });
     } catch (error) {

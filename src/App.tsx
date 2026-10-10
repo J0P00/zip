@@ -242,7 +242,8 @@ const mergeCurrentProgressIntoLeaderboard = (
 const SESSION_USER_KEY = 'oophub_current_user';
 const SESSION_VIEW_KEY = 'oophub_workspace_view';
 const LEADERBOARD_KEY = 'oophub_leaderboard_users';
-const PERSONAS: Persona[] = ['public', 'student', 'teacher', 'admin'];
+// Admin is intentionally not an available application persona.
+const PERSONAS: Persona[] = ['public', 'student', 'teacher'];
 const STUDENT_TABS: StudentSubView[] = ['dashboard', 'ide', 'videos', 'assessments', 'swing', 'leaderboard', 'profile'];
 const TEACHER_TABS: TeacherSubView[] = ['dashboard', 'students', 'submission-review', 'profile'];
 const ADMIN_TABS: AdminSubView[] = ['dashboard', 'videos', 'assessments', 'practice', 'monitoring', 'reports', 'settings'];
@@ -590,6 +591,10 @@ export default function App() {
     authApi.me(token)
       .then(response => {
         if (isCancelled) return;
+
+        if (response.user.role === 'admin') {
+          throw new Error('Administrator accounts are no longer available.');
+        }
 
         const restoredUser: AuthenticatedUser = {
           ...response.user,
