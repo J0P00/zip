@@ -72,11 +72,6 @@ type StoredUser = {
   specialization?: string;
   assignedCourses?: string;
 
-  // Admin specific
-  adminId?: string;
-  systemRole?: string;
-  accessLevel?: string;
-
   // Status & Avatar
   onlineStatus?: 'online' | 'busy' | 'away' | 'offline';
   avatar?: string;
@@ -486,11 +481,6 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
         department: user.department ?? '',
         specialization: user.specialization ?? '',
         assignedCourses: user.assignedCourses ?? '',
-
-        // Admin details
-        adminId: user.adminId ?? '',
-        systemRole: user.systemRole ?? '',
-        accessLevel: user.accessLevel ?? '',
 
         // Status & Avatar
         onlineStatus: user.onlineStatus ?? 'online',

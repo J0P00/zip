@@ -228,9 +228,6 @@ const toClientUser = (row) => ({
     department: row.department || "",
     specialization: row.specialization || "",
     assignedCourses: row.assigned_courses || "",
-    adminId: row.admin_id || "",
-    systemRole: row.system_role || "",
-    accessLevel: row.access_level || ""
 });
 
 const toClientRecommendation = (row) => ({
@@ -457,12 +454,10 @@ const toClientPracticeChallenge = (row) => {
 const findUserByEmail = async (email) => {
     const result = await pool.query(`
         SELECT u.*, s.student_number, s.course, s.year_level, s.section, s.program_status,
-               t.employee_id, t.department, t.specialization, t.assigned_courses,
-               a.admin_id, a.system_role, a.access_level
+               t.employee_id, t.department, t.specialization, t.assigned_courses
         FROM users u
         LEFT JOIN students s ON s.user_id = u.id
         LEFT JOIN teachers t ON t.user_id = u.id
-        LEFT JOIN admins a ON a.user_id = u.id
         WHERE LOWER(u.email) = LOWER($1)
     `, [email]);
     return result.rows[0] || null;
@@ -471,12 +466,10 @@ const findUserByEmail = async (email) => {
 const findUserById = async (id) => {
     const result = await pool.query(`
         SELECT u.*, s.student_number, s.course, s.year_level, s.section, s.program_status,
-               t.employee_id, t.department, t.specialization, t.assigned_courses,
-               a.admin_id, a.system_role, a.access_level
+               t.employee_id, t.department, t.specialization, t.assigned_courses
         FROM users u
         LEFT JOIN students s ON s.user_id = u.id
         LEFT JOIN teachers t ON t.user_id = u.id
-        LEFT JOIN admins a ON a.user_id = u.id
         WHERE u.id = $1
     `, [id]);
     return result.rows[0] || null;
@@ -520,7 +513,7 @@ const initializeDatabase = async () => {
     await pool.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
     await pool.query(`
         DO $$ BEGIN
-          CREATE TYPE user_role AS ENUM ('student', 'teacher', 'admin');
+          CREATE TYPE user_role AS ENUM ('student', 'teacher');
         EXCEPTION WHEN duplicate_object THEN NULL;
         END $$
     `);
@@ -633,14 +626,6 @@ const initializeDatabase = async () => {
           department TEXT,
           specialization TEXT,
           assigned_courses TEXT,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-        CREATE TABLE IF NOT EXISTS admins (
-          user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-          admin_id TEXT UNIQUE,
-          system_role TEXT,
-          access_level TEXT,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
@@ -2364,16 +2349,14 @@ app.get("/api/auth/me", requireAuth, async (req, res, next) => {
     }
 });
 
-app.get("/api/users", requireAuth, requireRole(["admin", "teacher", "student"]), async (req, res, next) => {
+app.get("/api/users", requireAuth, requireRole(["teacher", "student"]), async (req, res, next) => {
     try {
         const result = await pool.query(`
             SELECT u.*, s.student_number, s.course, s.year_level, s.section, s.program_status,
-                   t.employee_id, t.department, t.specialization, t.assigned_courses,
-                   a.admin_id, a.system_role, a.access_level
+                   t.employee_id, t.department, t.specialization, t.assigned_courses
             FROM users u
             LEFT JOIN students s ON s.user_id = u.id
             LEFT JOIN teachers t ON t.user_id = u.id
-            LEFT JOIN admins a ON a.user_id = u.id
             ORDER BY u.created_at DESC
         `);
         
@@ -2404,7 +2387,7 @@ app.get("/api/users", requireAuth, requireRole(["admin", "teacher", "student"]),
     }
 });
 
-app.get("/api/rankings", requireAuth, requireRole(["admin", "teacher", "student"]), async (_req, res, next) => {
+app.get("/api/rankings", requireAuth, requireRole(["teacher", "student"]), async (_req, res, next) => {
     try {
         const result = await pool.query(`
             WITH lesson_totals AS (
@@ -2543,7 +2526,7 @@ app.get("/api/rankings", requireAuth, requireRole(["admin", "teacher", "student"
 
 app.put("/api/users/:id", requireAuth, async (req, res, next) => {
     try {
-        if (req.authUser.role !== "admin" && req.authUser.id !== req.params.id) {
+        if (req.authUser.id !== req.params.id) {
             return res.status(403).json({ success: false, message: "You can only update your own profile." });
         }
         const updates = req.body || {};
@@ -2565,6 +2548,7 @@ app.put("/api/users/:id", requireAuth, async (req, res, next) => {
     }
 });
 
+/* Removed admin-only overview endpoint.
 app.get("/api/admin/overview", requireAuth, requireRole(["admin"]), async (_req, res, next) => {
     try {
         const [students, teachers, lectures, assessments, activities, recent] = await Promise.all([
@@ -2609,6 +2593,7 @@ app.get("/api/admin/overview", requireAuth, requireRole(["admin"]), async (_req,
         next(error);
     }
 });
+*/
 
 app.get("/api/lessons", async (_req, res, next) => {
     try {
@@ -2619,7 +2604,7 @@ app.get("/api/lessons", async (_req, res, next) => {
     }
 });
 
-app.post("/api/lessons", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const body = req.body || {};
         const id = cleanText(body.id || `lesson_${Date.now()}`, 120);
@@ -2651,7 +2636,7 @@ app.post("/api/lessons", requireAuth, requireRole(["admin", "teacher"]), async (
     }
 });
 
-app.put("/api/lessons/:id", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const body = req.body || {};
         const objectives = Array.isArray(body.learningObjectives)
@@ -2693,7 +2678,7 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["admin", "teacher"]), asyn
     }
 });
 
-app.delete("/api/lessons/:id", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+app.delete("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const result = await pool.query("DELETE FROM lessons WHERE id = $1 RETURNING id", [req.params.id]);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Lecture not found." });
@@ -2712,7 +2697,7 @@ app.get("/api/assessments", requireAuth, async (_req, res, next) => {
     }
 });
 
-app.post("/api/assessments", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+app.post("/api/assessments", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const body = req.body || {};
         const id = cleanText(body.id || `quiz_${Date.now()}`, 120);
@@ -2740,7 +2725,7 @@ app.post("/api/assessments", requireAuth, requireRole(["admin", "teacher"]), asy
     }
 });
 
-app.put("/api/assessments/:id", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+app.put("/api/assessments/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const body = req.body || {};
         const result = await pool.query(`
@@ -2772,7 +2757,7 @@ app.put("/api/assessments/:id", requireAuth, requireRole(["admin", "teacher"]), 
     }
 });
 
-app.delete("/api/assessments/:id", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+app.delete("/api/assessments/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const result = await pool.query("DELETE FROM assessments WHERE id = $1 RETURNING id", [req.params.id]);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Quiz not found." });
@@ -3215,7 +3200,7 @@ app.get("/api/assessments/sessions/student/:studentId", requireAuth, async (req,
     }
 });
 
-app.get("/api/assessments/sessions/:sessionId/events", requireAuth, requireRole(["teacher", "admin", "student"]), async (req, res, next) => {
+app.get("/api/assessments/sessions/:sessionId/events", requireAuth, requireRole(["teacher", "student"]), async (req, res, next) => {
     try {
         const sessionRes = await pool.query("SELECT * FROM assessment_sessions WHERE id = $1", [req.params.sessionId]);
         if (!sessionRes.rowCount) {
@@ -3286,7 +3271,7 @@ app.get("/api/lesson-access/:lessonId", requireAuth, requireRole(["student"]), a
     }
 });
 
-app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", "admin", "student"]), async (req, res, next) => {
+app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", "student"]), async (req, res, next) => {
     try {
         const studentId = req.params.studentId;
         const identity = await pool.query(`
@@ -4062,7 +4047,7 @@ app.post("/api/practice-challenges/:id/run", requireAuth, async (req, res, next)
     }
 });
 
-app.post("/api/practice-challenges", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+app.post("/api/practice-challenges", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     const client = await pool.connect();
     try {
         const body = req.body || {};
@@ -4118,7 +4103,7 @@ app.post("/api/practice-challenges", requireAuth, requireRole(["admin", "teacher
     }
 });
 
-app.put("/api/practice-challenges/:id", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+app.put("/api/practice-challenges/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     const client = await pool.connect();
     try {
         const body = req.body || {};
@@ -4183,7 +4168,7 @@ app.put("/api/practice-challenges/:id", requireAuth, requireRole(["admin", "teac
     }
 });
 
-app.delete("/api/practice-challenges/:id", requireAuth, requireRole(["admin", "teacher"]), async (req, res, next) => {
+app.delete("/api/practice-challenges/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const result = await pool.query("DELETE FROM programming_challenges WHERE id = $1 RETURNING id", [req.params.id]);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Practice activity not found." });
@@ -4193,7 +4178,7 @@ app.delete("/api/practice-challenges/:id", requireAuth, requireRole(["admin", "t
     }
 });
 
-app.get("/api/monitoring-requests", requireAuth, requireRole(["admin", "teacher", "student"]), async (req, res, next) => {
+app.get("/api/monitoring-requests", requireAuth, requireRole(["teacher", "student"]), async (req, res, next) => {
     try {
         const result = await pool.query(`
             SELECT mr.id, mr.status,
@@ -4203,7 +4188,7 @@ app.get("/api/monitoring-requests", requireAuth, requireRole(["admin", "teacher"
             FROM monitoring_requests mr
             JOIN users teacher ON teacher.id = mr.teacher_id
             JOIN users student ON student.id = mr.student_id
-            WHERE $1 = 'admin' OR mr.teacher_id = $2 OR mr.student_id = $2
+            WHERE mr.teacher_id = $2 OR mr.student_id = $2
             ORDER BY mr.created_at DESC
         `, [req.authUser.role, req.authUser.id]);
         res.json({
@@ -4223,7 +4208,7 @@ app.get("/api/monitoring-requests", requireAuth, requireRole(["admin", "teacher"
     }
 });
 
-app.post("/api/monitoring-requests", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
+app.post("/api/monitoring-requests", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const identifier = cleanText(req.body?.studentId || req.body?.studentEmail || "", 255);
         if (!identifier) return res.status(400).json({ success: false, message: "A student ID or email is required." });
@@ -4260,7 +4245,7 @@ app.post("/api/monitoring-requests", requireAuth, requireRole(["teacher", "admin
     }
 });
 
-app.patch("/api/monitoring-requests/:id", requireAuth, requireRole(["teacher", "admin", "student"]), async (req, res, next) => {
+app.patch("/api/monitoring-requests/:id", requireAuth, requireRole(["teacher", "student"]), async (req, res, next) => {
     try {
         const status = cleanText(req.body?.status || "", 20);
         if (!["pending", "accepted", "rejected"].includes(status)) {
@@ -4270,8 +4255,7 @@ app.patch("/api/monitoring-requests/:id", requireAuth, requireRole(["teacher", "
             UPDATE monitoring_requests
             SET status = $3, updated_at = NOW()
             WHERE id = $1 AND (
-              $2 = 'admin'
-              OR teacher_id = $4
+              teacher_id = $4
               OR (student_id = $4 AND status = 'pending')
             )
             RETURNING id, status
@@ -4283,7 +4267,7 @@ app.patch("/api/monitoring-requests/:id", requireAuth, requireRole(["teacher", "
     }
 });
 
-app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]), async (_req, res, next) => {
+app.get("/api/teacher/monitoring", requireAuth, requireRole(["teacher"]), async (_req, res, next) => {
     try {
         const [students, teachers] = await Promise.all([
             pool.query(`
@@ -4617,6 +4601,7 @@ app.get("/api/admin/monitoring", requireAuth, requireRole(["admin", "teacher"]),
     }
 });
 
+/* Removed admin-only reports endpoint.
 app.get("/api/admin/reports", requireAuth, requireRole(["admin"]), async (_req, res, next) => {
     try {
         const [studentProgress, quizReport, practiceReport, completionReport] = await Promise.all([
@@ -4668,6 +4653,7 @@ app.get("/api/admin/reports", requireAuth, requireRole(["admin"]), async (_req, 
         next(error);
     }
 });
+*/
 
 
 const selectPracticeSubmissionById = async (id) => {
@@ -4729,19 +4715,19 @@ const normalizeTeacherSubmission = (row) => ({
     gradedAt: row.graded_at || null
 });
 
-app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
+app.get("/api/practice-submissions", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const [studentCountResult, totalCountResult, result] = await Promise.all([
             pool.query(`
                 SELECT COUNT(DISTINCT u.id)::int AS count
                 FROM users u
                 WHERE u.role = 'student'
-                  AND ($1 = 'admin' OR EXISTS (
+                  AND EXISTS (
                     SELECT 1 FROM monitoring_requests mr
                     WHERE mr.teacher_id = $2
                       AND mr.status = 'accepted'
-                      AND mr.student_id = u.id
-                  ))
+                  AND mr.student_id = u.id
+                  )
             `, [req.authUser.role, req.authUser.id]),
             pool.query(`SELECT COUNT(*)::int AS count FROM practice_submissions`),
             pool.query(`
@@ -4756,12 +4742,12 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "admin
             LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
             LEFT JOIN students s ON s.user_id = u.id
             LEFT JOIN users grader ON grader.id = ps.graded_by
-            WHERE ($1 = 'admin' OR EXISTS (
+            WHERE EXISTS (
                 SELECT 1 FROM monitoring_requests mr
                 WHERE mr.teacher_id = $2
                   AND mr.status = 'accepted'
                   AND (mr.student_id = u.id OR mr.student_id::text = ps.student_id)
-            ))
+            )
             ORDER BY ps.submitted_at DESC
             `, [req.authUser.role, req.authUser.id])
         ]);
@@ -4964,7 +4950,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
     }
 });
 
-app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
+app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     const client = await pool.connect();
     let notification = null;
     let updated = null;
@@ -4983,18 +4969,16 @@ app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["tea
             await client.query("ROLLBACK");
             return res.status(404).json({ success: false, message: "Submission not found." });
         }
-        if (req.authUser.role !== 'admin') {
-            const authorization = await client.query(`
-                SELECT 1 FROM monitoring_requests
-                WHERE teacher_id = $1
-                  AND status = 'accepted'
-                  AND (student_id = $2 OR student_id::text = $3)
-                LIMIT 1
-            `, [req.authUser.id, existing.student_user_id || existing.student_id, existing.student_id]);
-            if (!authorization.rowCount) {
-                await client.query("ROLLBACK");
-                return res.status(403).json({ success: false, message: "You are not authorized to reopen this student's submission." });
-            }
+        const authorization = await client.query(`
+            SELECT 1 FROM monitoring_requests
+            WHERE teacher_id = $1
+              AND status = 'accepted'
+              AND (student_id = $2 OR student_id::text = $3)
+            LIMIT 1
+        `, [req.authUser.id, existing.student_user_id || existing.student_id, existing.student_id]);
+        if (!authorization.rowCount) {
+            await client.query("ROLLBACK");
+            return res.status(403).json({ success: false, message: "You are not authorized to reopen this student's submission." });
         }
         await client.query(`
             UPDATE practice_submissions
@@ -5048,7 +5032,7 @@ app.patch("/api/practice-submissions/:id/reopen", requireAuth, requireRole(["tea
     }
 });
 
-app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teacher", "admin"]), async (req, res, next) => {
+app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     const client = await pool.connect();
     let notification = null;
     let updated = null;
@@ -5081,18 +5065,16 @@ app.patch("/api/practice-submissions/:id/grade", requireAuth, requireRole(["teac
             await client.query("ROLLBACK");
             return res.status(404).json({ success: false, message: "Submission not found." });
         }
-        if (req.authUser.role !== 'admin') {
-            const authorization = await client.query(`
-                SELECT 1 FROM monitoring_requests
-                WHERE teacher_id = $1
-                  AND status = 'accepted'
-                  AND (student_id = $2 OR student_id::text = $3)
-                LIMIT 1
-            `, [req.authUser.id, existing.student_user_id || existing.student_id, existing.student_id]);
-            if (!authorization.rowCount) {
-                await client.query("ROLLBACK");
-                return res.status(403).json({ success: false, message: "You are not authorized to review this student's submission." });
-            }
+        const authorization = await client.query(`
+            SELECT 1 FROM monitoring_requests
+            WHERE teacher_id = $1
+              AND status = 'accepted'
+              AND (student_id = $2 OR student_id::text = $3)
+            LIMIT 1
+        `, [req.authUser.id, existing.student_user_id || existing.student_id, existing.student_id]);
+        if (!authorization.rowCount) {
+            await client.query("ROLLBACK");
+            return res.status(403).json({ success: false, message: "You are not authorized to review this student's submission." });
         }
         const gradeUpdate = await client.query(`
             UPDATE practice_submissions

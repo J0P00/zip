@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 interface LandingPageProps {
   onStartLearning: () => void;
-  onSelectPersona: (persona: 'student' | 'teacher' | 'admin') => void;
+  onSelectPersona: (persona: 'student' | 'teacher') => void;
   onAuthTrigger?: (mode: 'login' | 'register') => void;
   theme?: 'light' | 'dark';
   setTheme?: React.Dispatch<React.SetStateAction<'light' | 'dark'>>;

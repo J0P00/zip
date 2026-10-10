@@ -65,10 +65,7 @@ export default function ProfilePage({ user, metrics, onUpdateProfile }: ProfileP
     employeeId: user.employeeId ?? '',
     department: user.department ?? '',
     specialization: user.specialization ?? '',
-    assignedCourses: user.assignedCourses ?? '',
-    adminId: user.adminId ?? '',
-    systemRole: user.systemRole ?? '',
-    accessLevel: user.accessLevel ?? ''
+    assignedCourses: user.assignedCourses ?? ''
   });
 
   useEffect(() => {
@@ -86,10 +83,7 @@ export default function ProfilePage({ user, metrics, onUpdateProfile }: ProfileP
       employeeId: user.employeeId ?? '',
       department: user.department ?? '',
       specialization: user.specialization ?? '',
-      assignedCourses: user.assignedCourses ?? '',
-      adminId: user.adminId ?? '',
-      systemRole: user.systemRole ?? '',
-      accessLevel: user.accessLevel ?? ''
+      assignedCourses: user.assignedCourses ?? ''
     });
     if (user.avatar) {
       setAvatarUrl(user.avatar);
@@ -112,8 +106,6 @@ export default function ProfilePage({ user, metrics, onUpdateProfile }: ProfileP
       roleFields = [form.studentNumber, form.course, form.yearLevel, form.section];
     } else if (user.role === 'teacher') {
       roleFields = [form.employeeId, form.department, form.specialization, form.assignedCourses];
-    } else if (user.role === 'admin') {
-      roleFields = [form.adminId, form.systemRole, form.accessLevel];
     }
     
     const filledRole = roleFields.filter(Boolean).length;
@@ -139,9 +131,6 @@ export default function ProfilePage({ user, metrics, onUpdateProfile }: ProfileP
       department: form.department.trim(),
       specialization: form.specialization.trim(),
       assignedCourses: form.assignedCourses.trim(),
-      adminId: form.adminId.trim(),
-      systemRole: form.systemRole.trim(),
-      accessLevel: form.accessLevel.trim(),
       avatar: avatarUrl
     });
     setIsEditing(false);
@@ -333,19 +322,6 @@ export default function ProfilePage({ user, metrics, onUpdateProfile }: ProfileP
                   </span>
                   <span className="px-3 py-1 bg-slate-100 border border-slate-200 text-slate-700 rounded-lg">
                     Spec: {form.specialization || 'Object-Oriented Programming'}
-                  </span>
-                </>
-              )}
-              {user.role === 'admin' && (
-                <>
-                  <span className="px-3 py-1 bg-purple-50 border border-purple-200 text-purple-700 rounded-lg">
-                    Admin ID: {form.adminId || 'ADM-0001'}
-                  </span>
-                  <span className="px-3 py-1 bg-slate-100 border border-slate-200 text-slate-700 rounded-lg">
-                    System Role: {form.systemRole || 'System Architect'}
-                  </span>
-                  <span className="px-3 py-1 bg-slate-100 border border-slate-200 text-slate-700 rounded-lg">
-                    Clearance: {form.accessLevel || 'Level 5'}
                   </span>
                 </>
               )}
@@ -553,7 +529,7 @@ export default function ProfilePage({ user, metrics, onUpdateProfile }: ProfileP
               <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs text-left space-y-6">
                 <div>
                   <h3 className="text-sm font-extrabold text-slate-900">
-                    {user.role === 'student' ? 'Academic Enrolment Information' : user.role === 'teacher' ? 'Teaching Assignments' : 'System Administration Authorization'}
+                    {user.role === 'student' ? 'Academic Enrolment Information' : 'Teaching Assignments'}
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">Verified registrar information profile card</p>
                 </div>
@@ -604,23 +580,6 @@ export default function ProfilePage({ user, metrics, onUpdateProfile }: ProfileP
                     <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-1 col-span-2">
                       <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Assigned Syllabus Classes</span>
                       <span className="font-semibold text-slate-600 text-xs leading-normal block pt-0.5">{form.assignedCourses || 'OOP 101, Advanced Java, Software Architecture'}</span>
-                    </div>
-                  </div>
-                )}
-
-                {user.role === 'admin' && (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
-                      <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Admin ID Number</span>
-                      <span className="font-extrabold text-slate-800 text-sm">{form.adminId || 'ADM-0001'}</span>
-                    </div>
-                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
-                      <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Clearance Access Level</span>
-                      <span className="font-extrabold text-slate-800 text-sm">{form.accessLevel || 'Level 5 - Full Access'}</span>
-                    </div>
-                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-1 col-span-2">
-                      <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Administrative System Role</span>
-                      <span className="font-extrabold text-slate-800 text-sm">{form.systemRole || 'Super Administrator'}</span>
                     </div>
                   </div>
                 )}

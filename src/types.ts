@@ -1,4 +1,4 @@
-export type Persona = 'public' | 'student' | 'teacher' | 'admin';
+export type Persona = 'public' | 'student' | 'teacher';
 export type AccountSource = 'demo' | 'custom';
 export type PolicyStatus = 'Draft' | 'Published' | 'Archived';
 
@@ -29,11 +29,6 @@ export interface AuthenticatedUser {
   specialization?: string;
   assignedCourses?: string;
 
-  // Admin-specific profile fields
-  adminId?: string;
-  systemRole?: string;
-  accessLevel?: string;
-
   // Global user preference & status fields
   onlineStatus?: 'online' | 'busy' | 'away' | 'offline';
   avatar?: string;
@@ -46,21 +41,6 @@ export interface AuthenticatedUser {
 
 export type StudentSubView = 'dashboard' | 'ide' | 'videos' | 'assessments' | 'swing' | 'leaderboard' | 'profile';
 export type TeacherSubView = 'dashboard' | 'students' | 'submission-review' | 'analytics' | 'profile';
-export type AdminSubView =
-  | 'dashboard'
-  | 'users'
-  | 'courses'
-  | 'library'
-  | 'assessments'
-  | 'practice'
-  | 'monitoring'
-  | 'analytics'
-  | 'reports'
-  | 'settings'
-  | 'terms'
-  | 'profile'
-  | 'videos';
-
 export interface TermsPolicyVersion {
   id: string;
   version: string;

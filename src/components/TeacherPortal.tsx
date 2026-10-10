@@ -35,7 +35,7 @@ import {
 import { AdaptiveRecommendation, AssessmentSecurityEvent, AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
 import { LeaderboardUser } from '../types';
 import Leaderboard from './Leaderboard.tsx';
-import { adminApi, assessmentApi, progressApi, userApi } from '../services/api';
+import { teacherApi, assessmentApi, progressApi, userApi } from '../services/api';
 import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 import { generateStudentResultsInterpretation, StudentResultsData, StudentResultsInterpretation } from '../services/interpretation';
 import { generateRuleBasedRecommendation } from '../services/recommendationEngine';
@@ -469,7 +469,7 @@ export default function TeacherPortal({
   // Fetch all student users on mount
   useEffect(() => {
     let cancelled = false;
-    Promise.all([userApi.listUsers(currentUser.token), adminApi.monitoring(currentUser.token)])
+    Promise.all([userApi.listUsers(currentUser.token), teacherApi.monitoring(currentUser.token)])
       .then(([usersResponse, monitoringResponse]) => {
         if (!monitoringResponse?.data || !Array.isArray(monitoringResponse.data.students)) {
           throw new Error('Teacher monitoring returned an invalid student roster.');

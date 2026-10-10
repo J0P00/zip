@@ -84,8 +84,6 @@ export default function Navbar({
       roleFields = [u.studentNumber, u.course, u.yearLevel, u.section];
     } else if (u.role === 'teacher') {
       roleFields = [u.employeeId, u.department, u.specialization, u.assignedCourses];
-    } else if (u.role === 'admin') {
-      roleFields = [u.adminId, u.systemRole, u.accessLevel];
     }
     
     const filledRole = roleFields.filter(Boolean).length;
@@ -140,7 +138,6 @@ export default function Navbar({
 
   const roleLabel = (role: Persona) => {
     if (role === 'teacher') return 'Instructor';
-    if (role === 'admin') return 'System Administrator';
     return 'Student Member';
   };
 
@@ -220,26 +217,8 @@ export default function Navbar({
                   </div>
                 </div>
               </>
-            ) : (
-              <>
-                <p className="text-slate-500 dark:text-slate-400">Administrator authorization clearance properties:</p>
-                <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-                  <div>
-                    <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Admin ID</span>
-                    <span className="font-extrabold text-slate-850 dark:text-slate-200">{user.adminId || 'ADM-0001'}</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Access Clearance</span>
-                    <span className="font-extrabold text-slate-850 dark:text-slate-200">{user.accessLevel || 'Level 5 - Full Access'}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">System Domain Authority</span>
-                    <span className="font-extrabold text-slate-850 dark:text-slate-200">{user.systemRole || 'Super Administrator'}</span>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+              ) : null}
+            </div>
         );
         break;
       case 'account':
@@ -279,12 +258,12 @@ export default function Navbar({
         icon = <SlidersHorizontal className="w-6 h-6 text-emerald-600" />;
         content = (
           <div className="space-y-4 text-sm text-left">
-            <p className="text-slate-500 dark:text-slate-450">Tune dashboard density, alerts, and administrative workspace behavior.</p>
+            <p className="text-slate-500 dark:text-slate-450">Tune dashboard density and learning alerts.</p>
             <div className="space-y-3">
               {[
                 { label: 'Compact dashboard mode', desc: 'Use tighter rows for analytics-heavy review sessions.' },
                 { label: 'Show mastery alerts first', desc: 'Prioritize weak OOP concepts in dashboard lessons.' },
-                { label: 'Weekly admin digest', desc: 'Send platform health, course progress, and audit summaries.' }
+                { label: 'Weekly learning digest', desc: 'Send course progress and learning summaries.' }
               ].map((item) => (
                 <div key={item.label} className="flex justify-between items-center p-3 border border-slate-100 dark:border-slate-800 rounded-xl">
                   <div>
@@ -306,10 +285,10 @@ export default function Navbar({
         icon = <ClipboardList className="w-6 h-6 text-emerald-600" />;
         content = (
           <div className="space-y-4 text-sm text-left">
-            <p className="text-slate-500 dark:text-slate-450">Recent administrative events and system audit entries.</p>
+            <p className="text-slate-500 dark:text-slate-450">Recent workspace events and activity entries.</p>
             <div className="space-y-3">
               {[
-                { event: 'Admin dashboard opened', actor: user.name, time: 'Just now' },
+                { event: 'Workspace opened', actor: user.name, time: 'Just now' },
                 { event: 'Recommendation rules synchronized', actor: 'System Monitor', time: '12 min ago' },
                 { event: 'Course content index refreshed', actor: 'Content Library', time: '38 min ago' },
                 { event: 'Suspicious login attempt flagged', actor: 'Security Layer', time: '1 hr ago' }
@@ -358,7 +337,7 @@ export default function Navbar({
         icon = <Lock className="w-6 h-6 text-emerald-600" />;
         content = (
           <div className="space-y-4 text-sm text-left">
-            <p className="text-slate-500 dark:text-slate-450">Observe active network sessions and administrative security overrides.</p>
+            <p className="text-slate-500 dark:text-slate-450">Review active network sessions and security status.</p>
             <div className="space-y-2 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-xl border border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 space-y-3">
               <div className="flex justify-between">
                 <span className="font-bold">Current Browser Session:</span>
@@ -644,7 +623,7 @@ export default function Navbar({
                     {user.name}
                   </span>
                   <span className="text-[9px] font-extrabold uppercase tracking-widest text-emerald-600 leading-none mt-0.5">
-                    {user.role === 'student' ? 'Student' : user.role === 'teacher' ? 'Teacher' : 'Admin'}
+                    {user.role === 'student' ? 'Student' : 'Teacher'}
                   </span>
                 </div>
 

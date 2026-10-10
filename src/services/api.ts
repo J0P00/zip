@@ -254,10 +254,8 @@ export const notificationApi = {
   streamUrl: () => API_BASE_URL + '/api/notifications/stream?token=' + encodeURIComponent(getAuthToken())
 };
 
-export const adminApi = {
-  overview: () => apiRequest<{ success: boolean; data: any }>('/api/admin/overview'),
-  monitoring: (token?: string) => apiRequest<{ success: boolean; data: any }>('/api/admin/monitoring', { token }),
-  reports: () => apiRequest<{ success: boolean; data: any }>('/api/admin/reports')
+export const teacherApi = {
+  monitoring: (token?: string) => apiRequest<{ success: boolean; data: any }>('/api/teacher/monitoring', { token })
 };
 
 export const monitoringApi = {

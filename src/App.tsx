@@ -37,14 +37,10 @@ import {
   AuthenticatedUser,
   StudentSubView, 
   TeacherSubView, 
-  AdminSubView, 
   VideoLesson, 
   AssessmentQuestion, 
   LeaderboardUser, 
   PendingSubmission, 
-  CurriculumModule, 
-  LessonItem, 
-  AdaptiveRule,
   MonitoringRequest,
   NotificationItem,
   PracticeSubmission,
@@ -57,9 +53,6 @@ import {
   INITIAL_JAVA_FILES, 
   INITIAL_QUESTIONS, 
   INITIAL_SUBMISSIONS, 
-  INITIAL_CURRICULUM_MODULES, 
-  INITIAL_LESSON_ITEMS, 
-  INITIAL_ADAPTIVE_RULES 
 } from './data/mockData';
 import { OOP_COURSE_LESSONS, applyOopLessonCitation } from './data/oopCourse';
 import { lessonVideos } from './data/lessonVideos';
@@ -82,14 +75,9 @@ import Assessments from './components/Assessments';
 import JavaSwingModule from './components/JavaSwingModule';
 import Leaderboard from './components/Leaderboard';
 import TeacherPortal from './components/TeacherPortal';
-import AdminCurriculum from './components/AdminCurriculum';
-import AdminEngine from './components/AdminEngine';
-import AdminDashboard from './components/AdminDashboard';
 import AuthPage from './components/AuthPage';
 import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
-import AdminVideoManager from './components/AdminVideoManager';
-import AdminTermsManager from './components/AdminTermsManager';
 import { appApi, authApi, getAuthToken, monitoringApi, notificationApi, practiceApi, progressApi, recommendationApi, setAuthToken, userApi } from './services/api';
 import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
 import { getCanonicalStudentId, recommendationBelongsToStudent } from './services/identity';
@@ -246,7 +234,6 @@ const LEADERBOARD_KEY = 'oophub_leaderboard_users';
 const PERSONAS: Persona[] = ['public', 'student', 'teacher'];
 const STUDENT_TABS: StudentSubView[] = ['dashboard', 'ide', 'videos', 'assessments', 'swing', 'leaderboard', 'profile'];
 const TEACHER_TABS: TeacherSubView[] = ['dashboard', 'students', 'submission-review', 'profile'];
-const ADMIN_TABS: AdminSubView[] = ['dashboard', 'videos', 'assessments', 'practice', 'monitoring', 'reports', 'settings'];
 
 const isPersona = (value: unknown): value is Persona =>
   typeof value === 'string' && PERSONAS.includes(value as Persona);
@@ -295,7 +282,6 @@ const sanitizeWorkspaceView = (value: unknown): WorkspaceViewState => {
     persona: isPersona(view.persona) ? view.persona : undefined,
     studentTab: STUDENT_TABS.includes(view.studentTab as StudentSubView) ? view.studentTab : undefined,
     teacherTab: TEACHER_TABS.includes(view.teacherTab as TeacherSubView) ? view.teacherTab : undefined,
-    adminTab: ADMIN_TABS.includes(view.adminTab as AdminSubView) ? view.adminTab : undefined
   };
 };
 
@@ -303,7 +289,6 @@ type WorkspaceViewState = {
   persona?: Persona;
   studentTab?: StudentSubView;
   teacherTab?: TeacherSubView;
-  adminTab?: AdminSubView;
 };
 
 const readSessionUser = (): AuthenticatedUser | null => {
@@ -432,7 +417,6 @@ export default function App() {
   const [persona, setPersona] = useState<Persona>(savedUser?.role ?? 'public');
   const [studentTab, setStudentTab] = useState<StudentSubView>(savedView.studentTab ?? 'dashboard');
   const [teacherTab, setTeacherTab] = useState<TeacherSubView>(savedView.teacherTab ?? 'dashboard');
-  const [adminTab, setAdminTab] = useState<AdminSubView>(savedView.adminTab ?? 'dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -552,7 +536,7 @@ export default function App() {
         console.warn('Unable to load registered users from backend:', error);
       });
 
-    if (persona === 'teacher' || persona === 'admin') {
+    if (persona === 'teacher') {
       practiceApi.listChallenges()
         .catch(error => console.warn('Unable to load practice activities from backend:', error));
     }
@@ -567,12 +551,11 @@ export default function App() {
         persona,
         studentTab,
         teacherTab,
-        adminTab
       }));
     } catch {
       // Navigation still works for this render when persistence is unavailable.
     }
-  }, [adminTab, persona, studentTab, teacherTab]);
+  }, [persona, studentTab, teacherTab]);
   useEffect(() => {
     if (currentUser) {
       persistSessionUser(currentUser);
@@ -685,9 +668,6 @@ export default function App() {
     rankLeaderboard(readStoredJson<LeaderboardUser[]>(LEADERBOARD_KEY, []))
   );
   const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>([]);
-  const [curriculumModules, setCurriculumModules] = useState<CurriculumModule[]>([]);
-  const [lessonItems, setLessonItems] = useState<LessonItem[]>([]);
-  const [adaptiveRules, setAdaptiveRules] = useState<AdaptiveRule[]>([]);
   const [recommendationHistory, setRecommendationHistory] = useState<AdaptiveRecommendation[]>([]);
   const [activeRecommendation, setActiveRecommendation] = useState<AdaptiveRecommendation | null>(null);
 
@@ -753,7 +733,7 @@ export default function App() {
   }, [currentUser?.id, currentUser?.token]);
 
   useEffect(() => {
-    if (!currentUser || !['teacher', 'admin', 'student'].includes(currentUser.role)) return;
+    if (!currentUser || !['teacher', 'student'].includes(currentUser.role)) return;
     let cancelled = false;
     practiceApi.listSubmissions()
       .then(response => {
@@ -772,8 +752,8 @@ export default function App() {
 
   useEffect(() => {
     // Students must load their own pending teacher invitations as well as
-    // teachers/admins loading the requests they manage.
-    if (!currentUser || !['teacher', 'admin', 'student'].includes(currentUser.role)) {
+    // Teachers and students load the requests relevant to their account.
+    if (!currentUser || !['teacher', 'student'].includes(currentUser.role)) {
       setMonitoringRequests([]);
       return;
     }
@@ -837,7 +817,7 @@ export default function App() {
     });
     addNotification(
       `Video updated: ${updatedVideo.title} 🔄`,
-      `The video contents and details for "${updatedVideo.title}" have been updated by administrators.`,
+      `The video contents and details for "${updatedVideo.title}" have been updated by your instructor.`,
       'update'
     );
   };
@@ -1149,59 +1129,6 @@ export default function App() {
     return updated;
   };
 
-  // 4. Admin curriculum controls
-  const handleAddLessonItem = (newItem: LessonItem) => {
-    setLessonItems(prev => [...prev, newItem]);
-    
-    // Increment connected lessons counts in matching parent module metadata
-    setCurriculumModules(prev => prev.map(m => {
-      if (m.title === newItem.module) {
-        return { ...m, lessonsCount: m.lessonsCount + 1 };
-      }
-      return m;
-    }));
-  };
-
-  const handleDeleteLessonItem = (lessonId: string) => {
-    const targetItem = lessonItems.find(l => l.id === lessonId);
-    if (!targetItem) return;
-
-    setLessonItems(prev => prev.filter(l => l.id !== lessonId));
-    setCurriculumModules(prev => prev.map(m => {
-      if (m.title === targetItem.module) {
-        return { ...m, lessonsCount: Math.max(m.lessonsCount - 1, 0) };
-      }
-      return m;
-    }));
-  };
-
-  const handleUpdateModuleStatus = (moduleId: string, newStatus: 'Published' | 'Draft' | 'Archived') => {
-    setCurriculumModules(prev => prev.map(m => {
-      if (m.id === moduleId) {
-        return { ...m, status: newStatus };
-      }
-      return m;
-    }));
-  };
-
-  // 5. Admin Recommendation Engine Controls
-  const handleAddAdaptiveRule = (newRule: AdaptiveRule) => {
-    setAdaptiveRules(prev => [...prev, newRule]);
-  };
-
-  const handleDeleteAdaptiveRule = (ruleId: string) => {
-    setAdaptiveRules(prev => prev.filter(r => r.id !== ruleId));
-  };
-
-  const handleToggleAdaptiveRule = (ruleId: string) => {
-    setAdaptiveRules(prev => prev.map(r => {
-      if (r.id === ruleId) {
-        return { ...r, isActive: !r.isActive };
-      }
-      return r;
-    }));
-  };
-
   // Switcher trigger paths
   const handleEnterStudentView = () => {
     setPersona('student');
@@ -1215,11 +1142,11 @@ export default function App() {
   // Retrieve count of pending reviews for floating badge alerts
   const needsGradingCount = pendingSubmissions.filter(s => ['pending', 'pending_review', 'submitted'].includes(s.status) || ['pending', 'pending_review', 'submitted'].includes(s.reviewStatus || '')).length;
   const displayUser: AuthenticatedUser = currentUser ?? {
-    name: persona === 'student' ? 'Student User' : persona === 'teacher' ? 'Teacher User' : 'Admin User',
-    email: persona === 'student' ? 'student@oophub.edu' : persona === 'teacher' ? 'teacher@oophub.edu' : 'admin@oophub.edu',
-    role: persona === 'public' ? 'student' : persona,
+    name: persona === 'teacher' ? 'Teacher User' : 'Student User',
+    email: persona === 'teacher' ? 'teacher@oophub.edu' : 'student@oophub.edu',
+    role: persona === 'teacher' ? 'teacher' : 'student',
     accountSource: 'custom',
-    userId: persona === 'student' ? 'STU-0000' : persona === 'teacher' ? 'TEA-0000' : 'ADM-0000',
+    userId: persona === 'teacher' ? 'TEA-0000' : 'STU-0000',
     registrationDate: '2026-06-01T00:00:00.000Z',
     accountStatus: 'Active',
     studentNumber: '2026-0000',
@@ -1231,9 +1158,6 @@ export default function App() {
     department: 'College of Computer Studies',
     specialization: 'Object-Oriented Programming',
     assignedCourses: 'OOP 101, Advanced Java',
-    adminId: 'ADM-0000',
-    systemRole: 'Administrator',
-    accessLevel: 'Level 4',
     onlineStatus: 'online',
     avatar: ''
   };
@@ -1260,17 +1184,11 @@ export default function App() {
   const learningProgress = Math.min(100, Math.round((completedLessonsCount / OOP_LESSON_COUNT) * 100));
   const profileMetrics = displayUser.role === 'teacher'
     ? [
-        { label: 'Courses Created', value: String(lessonItems.length), helper: 'Lessons and catalog items prepared for students' },
+        { label: 'Courses Available', value: String(OOP_COURSE_LESSONS.length), helper: 'Lessons available in the active learning path' },
         { label: 'Total Students', value: String(teacherVisibleLeaderboardUsers.length), helper: 'Students currently visible in the active cohort' },
         { label: 'Assessments Managed', value: String(INITIAL_QUESTIONS.length + pendingSubmissions.length), helper: 'Question banks and submissions under review' }
       ]
-    : displayUser.role === 'admin'
-      ? [
-          { label: 'Total Users Managed', value: String(leaderboardUsers.length + 2), helper: 'Student, teacher, and administrator accounts' },
-          { label: 'Total Courses', value: String(curriculumModules.length), helper: 'Lessons available in the system' },
-          { label: 'System Status', value: 'Online', helper: 'Pedagogical core services are currently active' }
-        ]
-      : [
+    : [
           { label: 'Completed Courses', value: completedLessonsCount >= OOP_LESSON_COUNT ? '1' : '0', helper: 'Courses completed from the active learning path' },
           { label: 'Learning Progress', value: `${learningProgress}%`, helper: 'Progress through the current OOP lesson sequence' },
         ];
@@ -1308,70 +1226,6 @@ export default function App() {
   };
 
   const isDark = theme === 'dark';
-  const adminNavItems: Array<{ id: AdminSubView; label: string; icon: React.ReactNode }> = [
-    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'videos', label: 'Video Tutorials', icon: <Film className="w-4 h-4" /> },
-    { id: 'assessments', label: 'Quiz Management', icon: <ClipboardCheck className="w-4 h-4" /> },
-    { id: 'practice', label: 'Practice Activities', icon: <Code2 className="w-4 h-4" /> },
-    { id: 'monitoring', label: 'Monitoring', icon: <Users className="w-4 h-4" /> },
-    { id: 'reports', label: 'Reports', icon: <FileBarChart className="w-4 h-4" /> },
-    { id: 'settings', label: 'Settings', icon: <SlidersHorizontal className="w-4 h-4" /> }
-  ];
-
-  const adminViewMeta: Record<AdminSubView, { title: string; description: string }> = {
-    dashboard: {
-      title: 'Admin Dashboard',
-      description: 'Simple learning-content overview for the OOP Pedagogical Hub.'
-    },
-    users: {
-      title: 'User Management',
-      description: 'Search, filter, and review student, teacher, and administrator account activity.'
-    },
-    courses: {
-      title: 'Courses',
-      description: 'Manage active lessons, publication status, and connected OOP lessons.'
-    },
-    library: {
-      title: 'Content Library',
-      description: 'Organize videos, labs, quizzes, and reusable OOP learning materials.'
-    },
-    videos: {
-      title: 'Video Tutorial Management',
-      description: 'Upload, edit, arrange, preview, and assign OOP lesson videos to lessons.'
-    },
-    assessments: {
-      title: 'Quiz Management',
-      description: 'Create and manage lesson quizzes, passing scores, attempts, and answer keys.'
-    },
-    practice: {
-      title: 'Programming Practice Activities',
-      description: 'Create and manage IDE coding exercises, starter code, expected output, and test cases.'
-    },
-    monitoring: {
-      title: 'User Monitoring',
-      description: 'Monitor student lesson progress, quiz averages, programming scores, and completion status.'
-    },
-    analytics: {
-      title: 'Analytics',
-      description: 'Analyze learner engagement, course performance, and concept mastery trends.'
-    },
-    reports: {
-      title: 'Reports',
-      description: 'Generate student progress, quiz performance, programming performance, and lesson completion reports.'
-    },
-    terms: {
-      title: 'Terms & Policies',
-      description: 'Publish platform agreements, manage privacy policy content, and review consent audit records.'
-    },
-    settings: {
-      title: 'Settings',
-      description: 'Manage admin profile, password, and simple system information.'
-    },
-    profile: {
-      title: 'User Profile & Credentials',
-      description: 'Manage your personal details and administrative system access.'
-    }
-  };
 
   const sidebarWidthClass = isSidebarCollapsed ? 'md:w-20' : 'md:w-64';
 
@@ -1403,8 +1257,6 @@ export default function App() {
               setCompletedLessonsCount(0);
             } else if (user.role === 'teacher') {
               setTeacherTab('dashboard');
-            } else if (user.role === 'admin') {
-              setAdminTab('dashboard');
             }
           }}
         />
@@ -1427,7 +1279,6 @@ export default function App() {
             onNavigate={(view) => {
               if (persona === 'student') setStudentTab(view as StudentSubView);
               else if (persona === 'teacher') setTeacherTab(view as TeacherSubView);
-              else if (persona === 'admin') setAdminTab(view as AdminSubView);
             }}
             onUpdateProfile={handleUpdateProfile}
             onLogoutTrigger={() => setShowLogoutConfirm(true)}
@@ -1444,14 +1295,14 @@ export default function App() {
             <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/40">
               <div className={`flex items-center gap-2.5 ${isSidebarCollapsed ? 'md:justify-center md:w-full' : ''}`}>
                 <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-md shrink-0">
-                  {persona === 'student' ? 'S' : persona === 'teacher' ? 'T' : 'A'}
+                    {persona === 'student' ? 'S' : 'T'}
                 </div>
                 <div className={isSidebarCollapsed ? 'md:hidden' : ''}>
                   <h2 className="text-xs font-bold uppercase tracking-widest text-white leading-tight font-mono">
-                    {persona === 'student' ? 'Student Workspace' : persona === 'teacher' ? 'Instructor Portal' : 'Admin Console'}
+                    {persona === 'student' ? 'Student Workspace' : 'Instructor Portal'}
                   </h2>
                   <span className="text-[10px] text-slate-400 block mt-0.5 font-medium">
-                    {currentUser ? currentUser.name : (persona === 'student' ? 'Alex Mercer' : persona === 'teacher' ? 'Dr. Elena Vance' : 'Chief Curriculum Architect')}
+                    {currentUser ? currentUser.name : (persona === 'student' ? 'Alex Mercer' : 'Dr. Elena Vance')}
                   </span>
                 </div>
               </div>
@@ -1519,24 +1370,6 @@ export default function App() {
                 </button>
               ))}
 
-              {/* ADMIN TAB LINKS */}
-              {persona === 'admin' && adminNavItems.map((tab) => (
-                <button
-                  key={tab.id}
-                  id={`side-admin-btn-${tab.id}`}
-                  onClick={() => {
-                    setAdminTab(tab.id as AdminSubView);
-                    setIsMobileMenuOpen(false);
-                  }}
-                  title={isSidebarCollapsed ? tab.label : undefined}
-                  className={`relative w-full py-2.5 px-3.5 rounded-xl font-bold text-xs text-left cursor-pointer transition-all flex items-center gap-2.5 ${isSidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${adminTab === tab.id ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400 hover:text-emerald-100'}`}
-                >
-                  {adminTab === tab.id && !isSidebarCollapsed && <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-white/80" />}
-                  {tab.icon}
-                  <span className={isSidebarCollapsed ? 'md:hidden' : ''}>{tab.label}</span>
-                </button>
-              ))}
-
               {/* public exit shortcut */}
               <div className="pt-6 border-t border-slate-800/80 mt-6 space-y-2 block">
                 <button
@@ -1571,7 +1404,7 @@ export default function App() {
           {/* Core Content canvas */}
           <main className="flex-1 p-4 pb-24 sm:p-6 md:pb-6 overflow-y-auto" id="portal-content-canvas">
             {/* Contextual status indicators */}
-            {(persona === 'teacher' || persona === 'admin') && (
+            {persona === 'teacher' && (
               <div className="flex justify-end mb-4">
                 {persona === 'teacher' && (
                   <span className="flex items-center gap-1.5 bg-rose-50 text-rose-700 px-3 py-1.5 rounded-xl border border-rose-200 font-bold text-xs">
@@ -1579,7 +1412,7 @@ export default function App() {
                     Review Inbox ({needsGradingCount} Pending)
                   </span>
                 )}
-                {persona === 'admin' && (
+                {false && (
                   <span className="flex items-center gap-1.5 bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl border border-slate-200 font-mono text-[10.5px]">
                     ● Engine Mode: ADAPTIVE_SYNC
                   </span>
@@ -1676,43 +1509,9 @@ export default function App() {
               />
             )}
 
-            {/* ADMIN CONSOLES */}
-            {persona === 'admin' && ['dashboard', 'videos', 'assessments', 'practice', 'monitoring', 'reports', 'settings'].includes(adminTab) && (
-              <AdminDashboard
-                modules={curriculumModules}
-                lessons={lessonItems}
-                rules={adaptiveRules}
-                submissions={pendingSubmissions}
-                leaderboardUsers={leaderboardUsers}
-                videoLessons={videoLessons}
-                activeView={adminTab}
-              />
-            )}
-
-            {persona === 'admin' && ['courses', 'library'].includes(adminTab) && (
-              <AdminCurriculum 
-                modules={curriculumModules}
-                lessons={lessonItems}
-                onAddLesson={handleAddLessonItem}
-                onDeleteLesson={handleDeleteLessonItem}
-                onUpdateModule={handleUpdateModuleStatus}
-                videoLessons={videoLessons}
-                onAddVideo={handleUploadVideo}
-                onEditVideo={handleEditVideo}
-                onArchiveVideo={handleArchiveVideo}
-                onDeleteVideo={handleDeleteVideo}
-                onUpdateVideoSequence={handleUpdateVideoSequence}
-              />
-            )}
-
-            {persona === 'admin' && adminTab === 'terms' && (
-              <AdminTermsManager />
-            )}
-
             {/* UNIVERSAL USER PROFILE PAGE */}
             {((persona === 'student' && studentTab === 'profile') ||
-              (persona === 'teacher' && teacherTab === 'profile') ||
-              (persona === 'admin' && adminTab === 'profile')) && (
+              (persona === 'teacher' && teacherTab === 'profile')) && (
               <ProfilePage 
                 user={displayUser}
                 metrics={profileMetrics}
@@ -1754,32 +1553,6 @@ export default function App() {
               <span className="max-w-full truncate">{item.label}</span>
             </button>
           ))}
-        </nav>
-      )}
-
-      {persona === 'admin' && !authMode && (
-        <nav className={`fixed inset-x-3 bottom-3 z-[95] grid grid-cols-5 rounded-lg border p-1 shadow-2xl backdrop-blur md:hidden transition-colors ${
-          isDark 
-            ? 'bg-slate-900/95 border-slate-800 shadow-black/40 text-slate-355' 
-            : 'bg-white/95 border-slate-200 shadow-slate-200/50 text-slate-500'
-        }`}>
-          {adminNavItems
-            .filter(item => ['dashboard', 'videos', 'assessments', 'monitoring', 'reports'].includes(item.id))
-            .map(item => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setAdminTab(item.id)}
-                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-md text-[10px] font-extrabold transition cursor-pointer ${
-                  adminTab === item.id
-                    ? 'bg-emerald-50/50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-450'
-                    : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'
-                }`}
-              >
-                {item.icon}
-                <span className="max-w-full truncate">{item.label.split(' ')[0]}</span>
-              </button>
-            ))}
         </nav>
       )}
 

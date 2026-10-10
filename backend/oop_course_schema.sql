@@ -5,7 +5,7 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 DO $$ BEGIN
-  CREATE TYPE user_role AS ENUM ('student', 'teacher', 'admin');
+  CREATE TYPE user_role AS ENUM ('student', 'teacher');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -201,31 +201,6 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'teachers_user_id_users_id_fkey') THEN
     ALTER TABLE teachers
       ADD CONSTRAINT teachers_user_id_users_id_fkey
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
-  END IF;
-END $$;
-
-CREATE TABLE IF NOT EXISTS admins (
-  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  admin_id TEXT UNIQUE,
-  system_role TEXT,
-  access_level TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-ALTER TABLE admins ADD COLUMN IF NOT EXISTS user_id UUID;
-ALTER TABLE admins ADD COLUMN IF NOT EXISTS admin_id TEXT;
-ALTER TABLE admins ADD COLUMN IF NOT EXISTS system_role TEXT;
-ALTER TABLE admins ADD COLUMN IF NOT EXISTS access_level TEXT;
-ALTER TABLE admins ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
-ALTER TABLE admins ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
-CREATE UNIQUE INDEX IF NOT EXISTS idx_admins_user_id_unique ON admins(user_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_admins_admin_id_unique ON admins(admin_id);
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'admins_user_id_users_id_fkey') THEN
-    ALTER TABLE admins
-      ADD CONSTRAINT admins_user_id_users_id_fkey
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
   END IF;
 END $$;
