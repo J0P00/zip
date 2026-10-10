@@ -7,7 +7,7 @@ export const SWING_WATCH_KEY = 'oophub_swing_lesson_progress';
 export const SWING_QUIZ_KEY = 'oophub_swing_quiz_attempts';
 export const SWING_DRAFT_KEY = 'oophub_swing_practice_drafts';
 export const SWING_SUBMISSION_KEY = 'oophub_swing_submissions';
-export const SWING_PASSING_PERCENTAGE = 80;
+export const SWING_PASSING_PERCENTAGE = 60;
 
 export interface SwingLesson {
   id: string;
@@ -51,6 +51,8 @@ export interface SwingLessonProgress {
   lessonId: string;
   contentCompleted: boolean;
   videoCompleted: boolean;
+  videoPercentage?: number;
+  videoLastPosition?: number;
   completedAt?: string;
 }
 

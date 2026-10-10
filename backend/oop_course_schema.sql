@@ -852,7 +852,7 @@ CREATE TABLE IF NOT EXISTS swing_quizzes (
   id TEXT PRIMARY KEY,
   lesson_id TEXT NOT NULL REFERENCES swing_lessons(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
-  passing_percentage INTEGER NOT NULL DEFAULT 80,
+  passing_percentage INTEGER NOT NULL DEFAULT 60,
   question_count INTEGER NOT NULL DEFAULT 10,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -901,6 +901,8 @@ CREATE TABLE IF NOT EXISTS swing_progress (
   quiz_passed BOOLEAN NOT NULL DEFAULT FALSE,
   exercise_completed BOOLEAN NOT NULL DEFAULT FALSE,
   overall_percentage NUMERIC NOT NULL DEFAULT 0,
+  video_last_position NUMERIC NOT NULL DEFAULT 0,
+  video_percentage NUMERIC NOT NULL DEFAULT 0,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(student_id, lesson_id)
 );
@@ -909,6 +911,23 @@ CREATE INDEX IF NOT EXISTS idx_swing_videos_lesson ON swing_videos(lesson_id);
 CREATE INDEX IF NOT EXISTS idx_swing_questions_quiz ON swing_questions(quiz_id);
 CREATE INDEX IF NOT EXISTS idx_swing_submissions_student ON swing_submissions(student_id, submitted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_swing_progress_student ON swing_progress(student_id, lesson_id);
+CREATE TABLE IF NOT EXISTS swing_quiz_attempts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id TEXT NOT NULL,
+  assessment_id TEXT NOT NULL,
+  lesson_id TEXT NOT NULL REFERENCES swing_lessons(id) ON DELETE CASCADE,
+  score INTEGER NOT NULL DEFAULT 0,
+  total INTEGER NOT NULL DEFAULT 1,
+  percentage NUMERIC NOT NULL DEFAULT 0,
+  correct_answers INTEGER NOT NULL DEFAULT 0,
+  incorrect_answers INTEGER NOT NULL DEFAULT 0,
+  passed BOOLEAN NOT NULL DEFAULT FALSE,
+  attempt_number INTEGER NOT NULL DEFAULT 1,
+  answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+  date_completed TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_swing_quiz_attempts_student ON swing_quiz_attempts(student_id, lesson_id, attempt_number DESC);
 
 -- Secure Assessment & Cheat Deterrence Sessions and Events
 CREATE TABLE IF NOT EXISTS assessment_sessions (

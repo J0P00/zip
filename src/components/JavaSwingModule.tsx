@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   Award,
@@ -93,6 +93,10 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [videoAttempt, setVideoAttempt] = useState(0);
+  const swingVideoRef = useRef<HTMLVideoElement | null>(null);
+  const swingVideoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const swingVideoSaveInFlightRef = useRef(false);
+  const pendingSwingVideoRef = useRef<{ lessonId: string; position: number; percentage: number; completed: boolean } | null>(null);
   const activeLesson = JAVA_SWING_LESSONS.find(lesson => lesson.id === activeLessonId) || JAVA_SWING_LESSONS[0];
   const activeAssessment = JAVA_SWING_ASSESSMENTS.find(item => item.lessonId === activeLesson.id) || JAVA_SWING_ASSESSMENTS[0];
   const activeExercise = JAVA_SWING_EXERCISES.find(item => item.lessonId === activeLesson.id) || JAVA_SWING_EXERCISES[0];
@@ -110,17 +114,19 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
           lessonId: topic.id,
           contentCompleted: topic.contentCompleted,
           videoCompleted: topic.videoCompleted,
+          videoPercentage: Number(topic.videoPercentage || 0),
+          videoLastPosition: Number(topic.videoLastPosition || 0),
           completedAt: new Date().toISOString()
         };
         const assessmentId = JAVA_SWING_ASSESSMENTS.find(a => a.lessonId === topic.id)?.id || `swing_quiz_${topic.sequence}`;
         newQuizDb[assessmentId] = {
           assessmentId,
           lessonId: topic.id,
-          score: 100,
-          total: 100,
-          percentage: topic.quizPassed ? 100 : 0,
-          correctAnswers: 100,
-          incorrectAnswers: 0,
+          score: Number(topic.quizScore || 0),
+          total: Number(topic.quizTotal || 0),
+          percentage: Number(topic.quizPercentage || 0),
+          correctAnswers: Number(topic.quizScore || 0),
+          incorrectAnswers: Math.max(0, Number(topic.quizTotal || 0) - Number(topic.quizScore || 0)),
           passed: topic.quizPassed,
           attemptNumber: 1,
           answers: {},
@@ -214,8 +220,12 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
 
   const lessonLockReason = getSwingLessonLockReason(activeLesson);
   const topicDetails = studentResults?.swingTopics?.find((t: any) => t.id === activeLesson.id);
-  const quizLockedReason = lessonLockReason || (topicDetails && !topicDetails.assessmentUnlocked ? 'Mark lesson video complete before starting the quiz.' : '');
-  const practiceLockedReason = quizLockedReason || (topicDetails && !topicDetails.practiceUnlocked ? 'Pass this lesson quiz with 60% or higher to unlock programming practice.' : '');
+  const localProgress = progressDb[activeLesson.id];
+  const videoPercentage = Math.max(Number(localProgress?.videoPercentage || 0), Number(topicDetails?.videoPercentage || 0));
+  const videoCompleted = Boolean(localProgress?.videoCompleted || topicDetails?.videoCompleted) && videoPercentage >= 95;
+  const assessmentPassed = Boolean(quizDb[activeAssessment.id]?.passed || topicDetails?.quizPassed);
+  const quizLockedReason = lessonLockReason || (!videoCompleted ? 'Watch at least 95% of this Java Swing video before starting the assessment.' : '');
+  const practiceLockedReason = quizLockedReason || (!assessmentPassed ? 'Pass this lesson quiz with 60% or higher to unlock programming practice.' : '');
   const passedRun = Boolean(lastResult && lastResult.score >= activeExercise.passingScore && lastResult.compileStatus === 'success');
 
   const selectLesson = (lesson: SwingLesson, nextTab: SwingTab = 'lessons') => {
@@ -230,11 +240,70 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
     setActiveTab(nextTab);
   };
 
+  const flushSwingVideoProgress = async () => {
+    if (swingVideoSaveInFlightRef.current || !pendingSwingVideoRef.current) return;
+    const pending = pendingSwingVideoRef.current;
+    pendingSwingVideoRef.current = null;
+    swingVideoSaveInFlightRef.current = true;
+    try {
+      await swingApi.updateProgress({
+        lessonId: pending.lessonId,
+        videoPercentage: pending.percentage,
+        lastPosition: pending.position,
+        videoCompleted: pending.completed
+      });
+      if (pending.completed) onSubmitCompleted({ id: 'swing_video_progress' } as any);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to save video progress.');
+    } finally {
+      swingVideoSaveInFlightRef.current = false;
+      if (pendingSwingVideoRef.current) void flushSwingVideoProgress();
+    }
+  };
+
+  const persistSwingVideoProgress = (force = false) => {
+    const video = swingVideoRef.current;
+    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
+    const position = Math.min(video.duration, Math.max(0, video.currentTime));
+    const percentage = Math.min(100, Math.round((position / video.duration) * 100));
+
+    const current = progressDb[activeLesson.id] || { lessonId: activeLesson.id, contentCompleted: false, videoCompleted: false };
+    const next: SwingLessonProgress = {
+      ...current,
+      lessonId: activeLesson.id,
+      videoLastPosition: Math.max(current.videoLastPosition || 0, position),
+      videoPercentage: Math.max(current.videoPercentage || 0, percentage),
+      videoCompleted: Boolean(current.videoCompleted || percentage >= 95)
+    };
+    setProgressDb(previous => ({ ...previous, [activeLesson.id]: next }));
+    pendingSwingVideoRef.current = {
+      lessonId: activeLesson.id,
+      position: next.videoLastPosition || position,
+      percentage: next.videoPercentage || percentage,
+      completed: Boolean(next.videoCompleted)
+    };
+    if (force) {
+      if (swingVideoSaveTimerRef.current) clearTimeout(swingVideoSaveTimerRef.current);
+      swingVideoSaveTimerRef.current = null;
+      void flushSwingVideoProgress();
+    } else if (!swingVideoSaveTimerRef.current) {
+      swingVideoSaveTimerRef.current = setTimeout(() => {
+        swingVideoSaveTimerRef.current = null;
+        void flushSwingVideoProgress();
+      }, 2000);
+    }
+  };
+
+  useEffect(() => () => {
+    if (swingVideoSaveTimerRef.current) clearTimeout(swingVideoSaveTimerRef.current);
+    void flushSwingVideoProgress();
+  }, [currentUser.id]);
   const markLessonComplete = async (field: 'contentCompleted' | 'videoCompleted') => {
     if (!isUnlocked) {
       setNotice('Complete all OOP lessons, assessments, and coding practice to unlock Java Swing.');
       return;
     }
+
     const current = progressDb[activeLesson.id] || { lessonId: activeLesson.id, contentCompleted: false, videoCompleted: false };
     const nextRecord: SwingLessonProgress = {
       ...current,
@@ -244,10 +313,14 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
     setProgressDb({ ...progressDb, [activeLesson.id]: nextRecord });
     
     try {
-      await swingApi.updateProgress({
-        lessonId: activeLesson.id,
-        [field]: true
-      });
+      await swingApi.updateProgress(field === 'videoCompleted'
+        ? {
+            lessonId: activeLesson.id,
+            videoPercentage: current.videoPercentage || 95,
+            lastPosition: current.videoLastPosition || 0,
+            videoCompleted: true
+          }
+        : { lessonId: activeLesson.id, contentCompleted: true });
       onSubmitCompleted({ id: 'dummy_progress' } as any);
     } catch (err) {}
 
@@ -563,7 +636,24 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
               {(() => {
                 const video = JAVA_SWING_VIDEOS.find(item => item.lessonId === activeLesson.id) || JAVA_SWING_VIDEOS[0];
                 return video.embedUrl.endsWith('.mp4') ? (
-                  <video key={video.id + '-' + videoAttempt} src={video.embedUrl} controls className="h-full w-full object-contain" onLoadedData={() => setVideoError(false)} onError={() => setVideoError(true)} />
+                  <video
+                    key={video.id + '-' + videoAttempt}
+                    ref={swingVideoRef}
+                    src={video.embedUrl}
+                    controls
+                    className="h-full w-full object-contain"
+                    onLoadedMetadata={() => {
+                      setVideoError(false);
+                      const saved = progressDb[activeLesson.id]?.videoLastPosition || 0;
+                      if (swingVideoRef.current && saved > 0 && saved < swingVideoRef.current.duration) {
+                        swingVideoRef.current.currentTime = saved;
+                      }
+                    }}
+                    onTimeUpdate={() => persistSwingVideoProgress(false)}
+                    onPause={() => persistSwingVideoProgress(true)}
+                    onEnded={() => persistSwingVideoProgress(true)}
+                    onError={() => setVideoError(true)}
+                  />
                 ) : (
                   <iframe src={video.embedUrl} title={video.title} className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
                 );
@@ -576,7 +666,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
                   <h3 className="mt-1 text-lg font-extrabold text-slate-900">{activeLesson.title}</h3>
                   <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{activeLesson.introduction}</p>
                 </div>
-                <button type="button" disabled={Boolean(lessonLockReason) || progressDb[activeLesson.id]?.videoCompleted || videoError} onClick={() => markLessonComplete('videoCompleted')} className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto">
+                <button type="button" disabled={Boolean(lessonLockReason) || videoCompleted || videoError} onClick={() => markLessonComplete('videoCompleted')} className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto">
                   {progressDb[activeLesson.id]?.videoCompleted ? 'Video Complete' : 'Mark Video Complete'}
                 </button>
               </div>
@@ -684,7 +774,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
             <div className="mt-5 flex justify-center gap-3">
               <button type="button" onClick={() => setQuizMode('review')} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700">Review Answers</button>
               <button type="button" onClick={startQuiz} className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700"><RotateCcw className="h-4 w-4" /> Retake</button>
-              {latestAttempt.passed && <button type="button" onClick={() => setActiveTab('practice')} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white">Open Practice</button>}
+              {latestAttempt.passed ? <button type="button" onClick={() => setActiveTab('practice')} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white">Open Practice</button> : <button type="button" onClick={() => setActiveTab('videos')} className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-black text-white">Return to Tutorial</button>}
             </div>
           </div>
           {quizMode === 'review' && quizQuestions.map((question, index) => {
@@ -716,7 +806,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
             <article key={assessment.id} className={`rounded-2xl border bg-white p-5 shadow-sm ${selected ? 'border-emerald-300' : 'border-slate-200'}`}>
               <span className="font-mono text-[10px] font-black uppercase text-slate-400">Lesson {lesson?.sequence}</span>
               <h3 className="mt-2 text-sm font-extrabold text-slate-900">{assessment.title}</h3>
-              <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">15 randomized MCQs from the full question bank. Unlimited retakes. Passing score: 80%.</p>
+              <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">15 randomized MCQs from the full question bank. Unlimited retakes. Passing score: {SWING_PASSING_PERCENTAGE}%.</p>
               {attempt && <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>Latest: {attempt.percentage}% - Attempt {attempt.attemptNumber}</p>}
               <button type="button" onClick={() => { if (lesson) setActiveLessonId(lesson.id); window.setTimeout(startQuiz, 0); }} className="mt-4 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white">Start Quiz</button>
             </article>
