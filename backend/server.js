@@ -4724,11 +4724,11 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher"]), asyn
                 WHERE u.role = 'student'
                   AND EXISTS (
                     SELECT 1 FROM monitoring_requests mr
-                    WHERE mr.teacher_id = $2
+                    WHERE mr.teacher_id = $1
                       AND mr.status = 'accepted'
                   AND mr.student_id = u.id
                   )
-            `, [req.authUser.role, req.authUser.id]),
+            `, [req.authUser.id]),
             pool.query(`SELECT COUNT(*)::int AS count FROM practice_submissions`),
             pool.query(`
             SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
@@ -4738,18 +4738,18 @@ app.get("/api/practice-submissions", requireAuth, requireRole(["teacher"]), asyn
                    COALESCE(s.section, 'Unassigned') AS section,
                    grader.name AS graded_by_name
             FROM practice_submissions ps
-            JOIN programming_challenges pc ON pc.id = ps.challenge_id
+            LEFT JOIN programming_challenges pc ON pc.id = ps.challenge_id
             LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
             LEFT JOIN students s ON s.user_id = u.id
             LEFT JOIN users grader ON grader.id = ps.graded_by
             WHERE EXISTS (
                 SELECT 1 FROM monitoring_requests mr
-                WHERE mr.teacher_id = $2
+                WHERE mr.teacher_id = $1
                   AND mr.status = 'accepted'
                   AND (mr.student_id = u.id OR mr.student_id::text = ps.student_id)
             )
             ORDER BY ps.submitted_at DESC
-            `, [req.authUser.role, req.authUser.id])
+            `, [req.authUser.id])
         ]);
         const submissions = result.rows.map(normalizeTeacherSubmission);
         console.info('[submission-monitoring]', {

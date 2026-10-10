@@ -573,7 +573,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
 
     try {
       const response = await authApi.login(normalizedEmail, loginPassword);
-      if (response.user.role === 'admin') {
+      if ((response.user.role as string) === 'admin') {
         throw new Error('Administrator accounts are no longer available.');
       }
       const accountSource: AccountSource = 'custom';
@@ -597,7 +597,7 @@ export default function AuthPage({ initialMode, onAuthSuccess, onCancel }: AuthP
       // Check local demo accounts & stored users fallback
       const allAccounts = [...readStoredUsers()];
       const matched = allAccounts.find(
-        acc => acc.role !== 'admin' && acc.email.toLowerCase() === normalizedEmail && acc.password === loginPassword
+        acc => (acc.role as string) !== 'admin' && acc.email.toLowerCase() === normalizedEmail && acc.password === loginPassword
       );
 
       if (matched) {

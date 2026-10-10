@@ -448,26 +448,6 @@ export default function App() {
     const applyLessons = (lessons: VideoLesson[]) => {
       const lessonsWithCitations = lessons.map(applyOopLessonCitation);
       setVideoLessons(lessonsWithCitations);
-      setLessonItems(lessonsWithCitations.map(lesson => ({
-        id: lesson.id,
-        title: lesson.title,
-        module: lesson.module || '',
-        type: 'Video',
-        difficulty: lesson.difficulty || 'Beginner'
-      })));
-      const moduleCounts = lessonsWithCitations.reduce<Record<string, number>>((acc, lesson) => {
-        const moduleName = lesson.module || 'Unassigned Lesson';
-        acc[moduleName] = (acc[moduleName] || 0) + 1;
-        return acc;
-      }, {});
-      setCurriculumModules(Object.entries(moduleCounts).map(([title, lessonsCount], index) => ({
-        id: `module_${index + 1}`,
-        title,
-        status: 'Published',
-        lessonsCount,
-        lastUpdated: new Date().toISOString(),
-        category: 'OOP'
-      })));
     };
 
     const loadFallbackLessons = () => {
@@ -575,7 +555,7 @@ export default function App() {
       .then(response => {
         if (isCancelled) return;
 
-        if (response.user.role === 'admin') {
+        if ((response.user.role as string) === 'admin') {
           throw new Error('Administrator accounts are no longer available.');
         }
 
