@@ -34,6 +34,7 @@ interface StudentDashboardProps {
   onNavigateTo: (view: StudentSubView) => void;
   currentUser: AuthenticatedUser;
   monitoringRequests: MonitoringRequest[];
+  monitoringRequestsError?: string | null;
   onAcceptRequest: (requestId: string) => void;
   onRejectRequest: (requestId: string) => void;
   theme?: 'light' | 'dark';
@@ -52,6 +53,7 @@ export default function StudentDashboard({
   onNavigateTo,
   currentUser,
   monitoringRequests,
+  monitoringRequestsError = null,
   onAcceptRequest,
   onRejectRequest,
   theme,
@@ -252,6 +254,12 @@ export default function StudentDashboard({
             : 'border-sky-200 bg-sky-50 text-sky-800'
         }`}>
           {studentResultsError || 'Loading authoritative progress from the backend...'}
+        </div>
+      )}
+
+      {monitoringRequestsError && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800" role="alert">
+          {monitoringRequestsError}
         </div>
       )}
 

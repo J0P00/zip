@@ -4188,9 +4188,9 @@ app.get("/api/monitoring-requests", requireAuth, requireRole(["teacher", "studen
             FROM monitoring_requests mr
             JOIN users teacher ON teacher.id = mr.teacher_id
             JOIN users student ON student.id = mr.student_id
-            WHERE mr.teacher_id = $2 OR mr.student_id = $2
+            WHERE mr.teacher_id = $1 OR mr.student_id = $1
             ORDER BY mr.created_at DESC
-        `, [req.authUser.role, req.authUser.id]);
+        `, [req.authUser.id]);
         res.json({
             success: true,
             data: result.rows.map(row => ({

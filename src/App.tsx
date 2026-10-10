@@ -729,17 +729,26 @@ export default function App() {
 
   // Monitoring Connection System State
   const [monitoringRequests, setMonitoringRequests] = useState<MonitoringRequest[]>([]);
+  const [monitoringRequestsError, setMonitoringRequestsError] = useState<string | null>(null);
 
   useEffect(() => {
     // Students must load their own pending teacher invitations as well as
     // Teachers and students load the requests relevant to their account.
     if (!currentUser || !['teacher', 'student'].includes(currentUser.role)) {
       setMonitoringRequests([]);
+      setMonitoringRequestsError(null);
       return;
     }
+    setMonitoringRequestsError(null);
     monitoringApi.list()
-      .then(response => setMonitoringRequests(response.data))
-      .catch(error => console.warn('Unable to load monitoring relationships from backend:', error));
+      .then(response => {
+        if (!Array.isArray(response.data)) throw new Error('Invitation service returned an invalid response.');
+        setMonitoringRequests(response.data);
+      })
+      .catch(error => {
+        console.warn('Unable to load monitoring relationships from backend:', error);
+        setMonitoringRequestsError(error instanceof Error ? error.message : 'Unable to load teacher invitations.');
+      });
   }, [currentUser?.id, currentUser?.role, currentUser?.token]);
 
   // Video Management & Progress Handlers
@@ -1412,6 +1421,7 @@ export default function App() {
                 onNavigateTo={handleDirectNavigation}
                 currentUser={displayUser}
                 monitoringRequests={monitoringRequests}
+                monitoringRequestsError={monitoringRequestsError}
                 onAcceptRequest={handleAcceptMonitoringRequest}
                 onRejectRequest={handleRejectMonitoringRequest}
                 theme={theme}
