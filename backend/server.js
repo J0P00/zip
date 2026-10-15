@@ -585,15 +585,38 @@ const requireRole = (roles) => (req, res, next) => {
     return next();
 };
 
+const executeInitQuery = async (stepName, sql, params = []) => {
+    try {
+        return await pool.query(sql, params);
+    } catch (err) {
+        console.error(`PostgreSQL initialization failed at step: [${stepName}]`);
+        if (err.code) {
+            console.error(`PostgreSQL Error Code: ${err.code}`);
+        }
+        if (err.position && typeof sql === 'string') {
+            const pos = parseInt(err.position, 10);
+            if (!isNaN(pos) && pos > 0) {
+                console.error(`PostgreSQL Error Position: ${pos}`);
+                const start = Math.max(0, pos - 60);
+                const end = Math.min(sql.length, pos + 60);
+                const snippet = sql.substring(start, end).replace(/[\r\n\t]+/g, ' ');
+                console.error(`SQL near position ${pos}: "...${snippet}..."`);
+            }
+        }
+        console.error(`Error details: ${err.message}`);
+        throw err;
+    }
+};
+
 const initializeDatabase = async () => {
-    await pool.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
-    await pool.query(`
+    await executeInitQuery("Extension pgcrypto", "CREATE EXTENSION IF NOT EXISTS pgcrypto");
+    await executeInitQuery("Create user_role enum", `
         DO $$ BEGIN
           CREATE TYPE user_role AS ENUM ('student', 'teacher');
         EXCEPTION WHEN duplicate_object THEN NULL;
         END $$
     `);
-    await pool.query(`
+    await executeInitQuery("Migrate user column names", `
         DO $$ BEGIN
           IF EXISTS (
             SELECT 1 FROM information_schema.columns
@@ -625,7 +648,7 @@ const initializeDatabase = async () => {
           END IF;
         END $$
     `);
-    await pool.query(`
+    await executeInitQuery("Core schema and tables", `
         CREATE TABLE IF NOT EXISTS users (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           user_id TEXT UNIQUE NOT NULL,
@@ -1080,6 +1103,7 @@ const initializeDatabase = async () => {
           attempt_number INTEGER NOT NULL DEFAULT 1,
           answers JSONB NOT NULL DEFAULT '{}'::jsonb,
           date_completed TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
         CREATE INDEX IF NOT EXISTS idx_swing_quiz_attempts_student ON swing_quiz_attempts(student_id, lesson_id, attempt_number DESC);
 
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS course_id TEXT DEFAULT 'oop_fundamentals';
@@ -1136,7 +1160,7 @@ const initializeDatabase = async () => {
         VALUES ('oop_pre_test', 'oop_fundamentals', 'Java OOP Pre-Test Assessment', 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.', 240, 20, 1200, 60, 3, 'Published', 'oop_post_test')
         ON CONFLICT (id) DO NOTHING;
     `);
-    const practiceSubmissionColumns = await pool.query(`
+    const practiceSubmissionColumns = await executeInitQuery("Check practice_submissions columns", `
         SELECT column_name
         FROM information_schema.columns
         WHERE table_schema = 'public'
@@ -1342,7 +1366,7 @@ const seedLessons = async () => {
     }
 
     // Create monitoring_requests table
-    await pool.query(`
+    await executeInitQuery("Create monitoring_requests table", `
         CREATE TABLE IF NOT EXISTS monitoring_requests (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1351,11 +1375,11 @@ const seedLessons = async () => {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           UNIQUE(teacher_id, student_id)
-        )
+        );
     `);
 
     // Create teacher_feedback table
-    await pool.query(`
+    await executeInitQuery("Create teacher_feedback table", `
         CREATE TABLE IF NOT EXISTS teacher_feedback (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1366,11 +1390,11 @@ const seedLessons = async () => {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           read_at TIMESTAMPTZ
-        )
+        );
     `);
 
     // Create assessment_sessions table
-    await pool.query(`
+    await executeInitQuery("Create assessment_sessions table", `
         CREATE TABLE IF NOT EXISTS assessment_sessions (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           student_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1399,7 +1423,7 @@ const seedLessons = async () => {
     `);
 
     // Create assessment_security_events table
-    await pool.query(`
+    await executeInitQuery("Create assessment_security_events table", `
         CREATE TABLE IF NOT EXISTS assessment_security_events (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           session_id UUID REFERENCES assessment_sessions(id) ON DELETE CASCADE,
@@ -6434,6 +6458,12 @@ initializeDatabase()
     })
     .catch((err) => {
         console.error("PostgreSQL initialization failed");
+        if (err.code) {
+            console.error(`PostgreSQL Error Code: ${err.code}`);
+        }
+        if (err.position) {
+            console.error(`PostgreSQL Error Position: ${err.position}`);
+        }
         console.error(err);
         process.exit(1);
     });
