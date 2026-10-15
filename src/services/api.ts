@@ -1,4 +1,16 @@
-import { AdaptiveRecommendation, AuthenticatedUser, Persona, RankingEntry } from '../types';
+import {
+  AdaptiveRecommendation,
+  AuthenticatedUser,
+  Persona,
+  RankingEntry,
+  ManagedLesson,
+  ManagedVideo,
+  LearningResource,
+  PreTestConfig,
+  PreTestAttempt,
+  TeacherCourseAnalytics,
+  StudentDeepDiveAnalytics
+} from '../types';
 
 export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://oop-backend-new.onrender.com')
@@ -256,6 +268,132 @@ export const notificationApi = {
 
 export const teacherApi = {
   monitoring: (token?: string) => apiRequest<{ success: boolean; data: any }>('/api/teacher/monitoring', { token })
+};
+
+export const videoApi = {
+  list: (lessonId?: string) => {
+    const query = lessonId ? `?lessonId=${encodeURIComponent(lessonId)}` : '';
+    return apiRequest<{ success: boolean; count: number; data: ManagedVideo[] }>(`/api/videos${query}`);
+  },
+  create: (body: Partial<ManagedVideo>) =>
+    apiRequest<{ success: boolean; data: ManagedVideo }>('/api/videos', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  update: (id: string, body: Partial<ManagedVideo>) =>
+    apiRequest<{ success: boolean; data: ManagedVideo }>(`/api/videos/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    }),
+  remove: (id: string) =>
+    apiRequest<{ success: boolean; message: string }>(`/api/videos/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    })
+};
+
+export const resourceApi = {
+  list: (lessonId?: string) => {
+    const query = lessonId ? `?lessonId=${encodeURIComponent(lessonId)}` : '';
+    return apiRequest<{ success: boolean; count: number; data: LearningResource[] }>(`/api/learning-resources${query}`);
+  },
+  create: (body: Partial<LearningResource>) =>
+    apiRequest<{ success: boolean; data: LearningResource }>('/api/learning-resources', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  update: (id: string, body: Partial<LearningResource>) =>
+    apiRequest<{ success: boolean; data: LearningResource }>(`/api/learning-resources/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    }),
+  remove: (id: string) =>
+    apiRequest<{ success: boolean; message: string }>(`/api/learning-resources/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    })
+};
+
+export const preTestApi = {
+  getConfig: () =>
+    apiRequest<{ success: boolean; data: PreTestConfig }>('/api/pre-test'),
+  updateConfig: (body: Partial<PreTestConfig>) =>
+    apiRequest<{ success: boolean; data: PreTestConfig }>('/api/pre-test', {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    }),
+  getQuestions: (topic?: string) => {
+    const query = topic ? `?topic=${encodeURIComponent(topic)}` : '';
+    return apiRequest<{ success: boolean; count: number; data: any[] }>(`/api/pre-test/questions${query}`);
+  },
+  start: (body?: { studentId?: string }) =>
+    apiRequest<{
+      success: boolean;
+      resumed: boolean;
+      data: {
+        sessionId: string;
+        sessionToken: string;
+        assessmentId: string;
+        lessonId: string;
+        startedAt: string;
+        expiresAt: string;
+        remainingSeconds: number;
+        attemptNumber: number;
+        questions: any[];
+        savedAnswers: Record<string, string>;
+      };
+    }>('/api/pre-test/start', {
+      method: 'POST',
+      body: JSON.stringify(body || {})
+    }),
+  getActive: () =>
+    apiRequest<{
+      success: boolean;
+      data: {
+        sessionId: string;
+        sessionToken: string;
+        assessmentId: string;
+        lessonId: string;
+        startedAt: string;
+        expiresAt: string;
+        remainingSeconds: number;
+        attemptNumber: number;
+        questions: any[];
+        savedAnswers: Record<string, string>;
+      } | null;
+    }>('/api/pre-test/active'),
+  submit: (body: { sessionId?: string; answers: Record<string, string>; timeSpentSeconds?: number }) =>
+    apiRequest<{
+      success: boolean;
+      data: {
+        sessionId: string;
+        assessmentId: string;
+        score: number;
+        total: number;
+        percentage: number;
+        passed: boolean;
+        passingScore: number;
+        attemptNumber: number;
+        dateCompleted: string;
+        review: any[];
+      };
+    }>('/api/pre-test/submit', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  getAttempts: (courseId?: string) => {
+    const query = courseId ? `?courseId=${encodeURIComponent(courseId)}` : '';
+    return apiRequest<{ success: boolean; total: number; data: PreTestAttempt[] }>(`/api/pre-test/attempts${query}`);
+  },
+  getMyAttempts: () =>
+    apiRequest<{ success: boolean; data: PreTestAttempt[] }>('/api/pre-test/my-attempts')
+};
+
+export const analyticsApi = {
+  getTeacherAnalytics: (courseId?: string) => {
+    const query = courseId ? `?courseId=${encodeURIComponent(courseId)}` : '';
+    return apiRequest<{ success: boolean; data: TeacherCourseAnalytics }>(`/api/teacher/analytics${query}`);
+  },
+  getStudentAnalytics: (studentId: string) =>
+    apiRequest<{ success: boolean; data: StudentDeepDiveAnalytics }>(`/api/teacher/analytics/student/${encodeURIComponent(studentId)}`)
 };
 
 export const monitoringApi = {

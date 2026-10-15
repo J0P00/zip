@@ -3285,4 +3285,77 @@ const OOP_PARSED_QUESTIONS = {
   ]
 };
 
-module.exports = { OOP_PARSED_QUESTIONS };
+const TOPIC_NAMES = {
+  oop_lesson_1: "Object & Classes",
+  oop_lesson_2: "Constructors",
+  oop_lesson_3: "Object Methods",
+  oop_lesson_4: "Inheritance",
+  oop_lesson_5: "Method Overriding",
+  oop_lesson_6: "Abstract Class",
+  oop_lesson_7: "Interface",
+  oop_lesson_8: "Abstraction",
+  oop_lesson_9: "Abstraction (Interfaces)",
+  oop_lesson_10: "Array of Objects",
+  oop_lesson_11: "Enum",
+  oop_lesson_12: "Enum"
+};
+
+const ALL_OOP_QUESTIONS = Object.entries(OOP_PARSED_QUESTIONS).flatMap(([lessonId, questions]) =>
+  questions.map((q, idx) => ({
+    ...q,
+    lessonId,
+    topicName: TOPIC_NAMES[lessonId] || lessonId
+  }))
+);
+
+const shuffleArray = (array) => {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+};
+
+/**
+ * Randomly selects exactly `count` distinct questions without replacement
+ * from the 240 questions in the Java OOP Assessment question bank.
+ * Shuffles questions and their choices.
+ * Returns both sanitized student questions (no correct answers) and the secret answer map.
+ */
+const generatePreTestSessionQuestions = (count = 20) => {
+  if (ALL_OOP_QUESTIONS.length < count) {
+    throw new Error(`Insufficient questions in question bank. Required: ${count}, Available: ${ALL_OOP_QUESTIONS.length}`);
+  }
+  // Randomly select distinct questions without replacement
+  const selected = shuffleArray(ALL_OOP_QUESTIONS).slice(0, count);
+
+  // Student-facing questions: shuffled options, NO correct answers or explanations
+  const studentQuestions = selected.map((q, index) => {
+    const shuffledOptions = shuffleArray(q.options || []);
+    return {
+      id: q.id,
+      questionNumber: index + 1,
+      lessonId: q.lessonId,
+      topicName: q.topicName,
+      question: q.question,
+      options: shuffledOptions,
+      difficulty: q.difficulty || "Medium",
+      codeSnippet: q.codeSnippet || ""
+    };
+  });
+
+  return {
+    selectedQuestionIds: selected.map(q => q.id),
+    studentQuestions,
+    questionCount: studentQuestions.length
+  };
+};
+
+module.exports = {
+  OOP_PARSED_QUESTIONS,
+  TOPIC_NAMES,
+  ALL_OOP_QUESTIONS,
+  generatePreTestSessionQuestions,
+  shuffleArray
+};

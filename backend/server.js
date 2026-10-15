@@ -10,7 +10,7 @@ const { execFile } = require("child_process");
 const { promisify } = require("util");
 const jwt = require("jsonwebtoken");
 const pool = require("./db");
-const { OOP_PARSED_QUESTIONS } = require("./questionBank");
+const { OOP_PARSED_QUESTIONS, ALL_OOP_QUESTIONS, TOPIC_NAMES, generatePreTestSessionQuestions } = require("./questionBank");
 const { ACTIVE_OOP_PRACTICE_CHALLENGES, ACTIVE_OOP_PRACTICE_IDS } = require("./oopPracticeCatalog");
 const { validateBasicJavaStructure } = require("./basicJavaValidator");
 const { getJavaToolchainDiagnostics } = require("./javaToolchain");
@@ -59,7 +59,7 @@ const VIDEO_COMPLETION_THRESHOLD = 95;
 const MAX_ASSESSMENT_ATTEMPTS = 3;
 let practiceSubmissionKeyColumn = "id";
 
-const insertCappedAssessmentAttempt = async ({ studentId, assessmentId, storage, fallbackAttemptNumber = 1, insertQuery, buildParams, beforeInsert }) => {
+const insertCappedAssessmentAttempt = async ({ studentId, assessmentId, storage, fallbackAttemptNumber = 1, insertQuery, buildParams, beforeInsert, maxAttempts = MAX_ASSESSMENT_ATTEMPTS }) => {
     const client = await pool.connect();
     try {
         await client.query("BEGIN");
@@ -68,7 +68,7 @@ const insertCappedAssessmentAttempt = async ({ studentId, assessmentId, storage,
         const studentColumn = storage === "swing" ? "student_id" : "student_user_id";
         const countResult = await client.query("SELECT COUNT(*)::int AS attempt_count, COALESCE(MAX(attempt_number), 0)::int AS max_attempt FROM " + attemptTable + " WHERE " + studentColumn + " = $1 AND assessment_id = $2", [studentId, assessmentId]);
         const attemptCount = Number(countResult.rows[0]?.attempt_count || 0);
-        if (attemptCount >= MAX_ASSESSMENT_ATTEMPTS) {
+        if (attemptCount >= maxAttempts) {
             await client.query("ROLLBACK");
             return { limited: true, attemptCount };
         }
@@ -421,6 +421,7 @@ const toClientLesson = (row) => ({
     id: row.id,
     title: row.title,
     module: row.module || "",
+    courseId: row.course_id || "oop_fundamentals",
     sequence: Number(row.sequence || 0),
     duration: row.duration || "",
     videoUrl: row.video_url || "",
@@ -428,6 +429,54 @@ const toClientLesson = (row) => ({
     learningObjectives: row.learning_objectives || [],
     status: row.status || "Draft",
     metadata: row.metadata || {},
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+});
+
+const toClientVideo = (row) => ({
+    id: row.id,
+    lessonId: row.lesson_id,
+    lessonTitle: row.lesson_title || "",
+    title: row.title,
+    videoUrl: row.video_url,
+    duration: row.duration || "",
+    description: row.description || "",
+    sequence: Number(row.sequence || 1),
+    status: row.status || "Published",
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+});
+
+const toClientResource = (row) => ({
+    id: row.id,
+    lessonId: row.lesson_id,
+    lessonTitle: row.lesson_title || "",
+    title: row.title,
+    resourceType: row.resource_type || "pdf",
+    fileUrl: row.file_url,
+    fileSize: row.file_size || "",
+    description: row.description || "",
+    status: row.status || "Published",
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+});
+
+const toClientPreTest = (row) => ({
+    id: row.id || "oop_pre_test",
+    courseId: row.course_id || "oop_fundamentals",
+    title: row.title || "Java OOP Pre-Test Assessment",
+    description: row.description || "",
+    questionPoolCount: Number(row.question_pool_count || 240),
+    questionsPerAttempt: Number(row.questions_per_attempt || 20),
+    timeLimitSeconds: Number(row.time_limit_seconds || 1200),
+    passingScore: Number(row.passing_score || 60),
+    maxAttempts: Number(row.max_attempts || 3),
+    status: row.status || "Published",
+    postTestAssessmentId: row.post_test_assessment_id || "oop_post_test",
+    createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at
 });
@@ -1031,8 +1080,61 @@ const initializeDatabase = async () => {
           attempt_number INTEGER NOT NULL DEFAULT 1,
           answers JSONB NOT NULL DEFAULT '{}'::jsonb,
           date_completed TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
         CREATE INDEX IF NOT EXISTS idx_swing_quiz_attempts_student ON swing_quiz_attempts(student_id, lesson_id, attempt_number DESC);
+
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS course_id TEXT DEFAULT 'oop_fundamentals';
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS created_by UUID;
+
+        CREATE TABLE IF NOT EXISTS lesson_videos (
+          id TEXT PRIMARY KEY DEFAULT ('vid_' || SUBSTRING(gen_random_uuid()::text, 1, 12)),
+          lesson_id TEXT REFERENCES lessons(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          video_url TEXT NOT NULL,
+          duration TEXT DEFAULT '',
+          description TEXT DEFAULT '',
+          sequence INTEGER NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'Published' CHECK (status IN ('Draft', 'Published', 'Archived')),
+          created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_lesson_videos_lesson ON lesson_videos(lesson_id, sequence);
+
+        CREATE TABLE IF NOT EXISTS learning_resources (
+          id TEXT PRIMARY KEY DEFAULT ('res_' || SUBSTRING(gen_random_uuid()::text, 1, 12)),
+          lesson_id TEXT REFERENCES lessons(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          resource_type TEXT NOT NULL DEFAULT 'pdf' CHECK (resource_type IN ('pdf', 'presentation', 'handout', 'code', 'reference', 'link', 'other')),
+          file_url TEXT NOT NULL,
+          file_size TEXT DEFAULT '',
+          description TEXT DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'Published' CHECK (status IN ('Draft', 'Published', 'Archived')),
+          created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_learning_resources_lesson ON learning_resources(lesson_id, status);
+
+        CREATE TABLE IF NOT EXISTS pre_tests (
+          id TEXT PRIMARY KEY DEFAULT 'oop_pre_test',
+          course_id TEXT NOT NULL DEFAULT 'oop_fundamentals',
+          title TEXT NOT NULL DEFAULT 'Java OOP Pre-Test Assessment',
+          description TEXT DEFAULT 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.',
+          question_pool_count INTEGER NOT NULL DEFAULT 240,
+          questions_per_attempt INTEGER NOT NULL DEFAULT 20,
+          time_limit_seconds INTEGER NOT NULL DEFAULT 1200,
+          passing_score NUMERIC NOT NULL DEFAULT 60,
+          max_attempts INTEGER NOT NULL DEFAULT 3,
+          status TEXT NOT NULL DEFAULT 'Published' CHECK (status IN ('Draft', 'Published', 'Archived')),
+          post_test_assessment_id TEXT DEFAULT 'oop_post_test',
+          created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        INSERT INTO pre_tests (id, course_id, title, description, question_pool_count, questions_per_attempt, time_limit_seconds, passing_score, max_attempts, status, post_test_assessment_id)
+        VALUES ('oop_pre_test', 'oop_fundamentals', 'Java OOP Pre-Test Assessment', 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.', 240, 20, 1200, 60, 3, 'Published', 'oop_post_test')
+        ON CONFLICT (id) DO NOTHING;
     `);
     const practiceSubmissionColumns = await pool.query(`
         SELECT column_name
@@ -1202,6 +1304,41 @@ const seedLessons = async () => {
               status = EXCLUDED.status,
               updated_at = NOW()
         `, lesson);
+    }
+
+    try {
+        const existingVideos = await pool.query("SELECT COUNT(*)::int AS count FROM lesson_videos");
+        if (Number(existingVideos.rows[0]?.count || 0) === 0) {
+            for (const lesson of lessons) {
+                const [id, title, _mod, _seq, duration, videoUrl, description] = lesson;
+                await pool.query(`
+                    INSERT INTO lesson_videos (id, lesson_id, title, video_url, duration, description, sequence, status)
+                    VALUES ($1, $2, $3, $4, $5, $6, 1, 'Published')
+                    ON CONFLICT (id) DO NOTHING
+                `, [`vid_${id}`, id, `${title} Video Lecture`, videoUrl, duration, description]);
+            }
+        }
+
+        const existingResources = await pool.query("SELECT COUNT(*)::int AS count FROM learning_resources");
+        if (Number(existingResources.rows[0]?.count || 0) === 0) {
+            const initialResources = [
+                ['res_citation_1', 'oop_lesson_1', 'Java OOP Core Citations & Study Reference', 'reference', '/Citations/Citations%20of%2011%20topics%20in%20Java%20OOP.txt', '2 KB', 'Verified citations and topic syllabus for 11 Java OOP topics.'],
+                ['res_swing_1', 'oop_lesson_1', 'Java Swing Handout: JFrame Components', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%201%20JFrame.pdf', '152 KB', 'Comprehensive study handout on JFrame basics and GUI structure.'],
+                ['res_swing_2', 'oop_lesson_4', 'Java Swing Handout: JLabel & JTextField Encapsulation', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%202%20JLabel,JTextField&JTextArea_Assessment_.pdf', '139 KB', 'Component encapsulation and text input handling.'],
+                ['res_swing_3', 'oop_lesson_6', 'Java Swing Handout: JButton & ActionListener', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%203%20JButton%20&%20ActionListener.pdf', '59 KB', 'Event handling and listener implementation patterns.'],
+                ['res_swing_4', 'oop_lesson_8', 'Java Swing Handout: JPanel & Layout Managers', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%204%20JPanel%20&%20Layout%20Managers.pdf', '57 KB', 'Container hierarchy and layout managers.'],
+                ['res_swing_5', 'oop_lesson_10', 'Java Swing Handout: JOptionPane Dialogs', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%205%20JOptionPane.pdf', '56 KB', 'Standard modal dialog patterns in Java Swing.']
+            ];
+            for (const [id, lessonId, title, rType, url, size, desc] of initialResources) {
+                await pool.query(`
+                    INSERT INTO learning_resources (id, lesson_id, title, resource_type, file_url, file_size, description, status)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, 'Published')
+                    ON CONFLICT (id) DO NOTHING
+                `, [id, lessonId, title, rType, url, size, desc]);
+            }
+        }
+    } catch (e) {
+        console.warn("Non-fatal video/resource seeding error:", e.message);
     }
 
     // Create monitoring_requests table
@@ -2813,6 +2950,990 @@ app.delete("/api/assessments/:id", requireAuth, requireRole(["teacher"]), async 
     }
 });
 
+// ==========================================
+// VIDEO MANAGEMENT ENDPOINTS (Teacher Content)
+// ==========================================
+app.get("/api/videos", requireAuth, async (req, res, next) => {
+    try {
+        const { lessonId, status } = req.query || {};
+        let sql = `
+            SELECT lv.*, l.title AS lesson_title, l.sequence AS lesson_sequence
+            FROM lesson_videos lv
+            LEFT JOIN lessons l ON l.id = lv.lesson_id
+            WHERE 1=1
+        `;
+        const params = [];
+        if (lessonId) {
+            params.push(cleanText(lessonId, 120));
+            sql += ` AND lv.lesson_id = $${params.length}`;
+        }
+        if (req.authUser.role === "student") {
+            sql += ` AND lv.status = 'Published'`;
+        } else if (status) {
+            params.push(cleanText(status, 40));
+            sql += ` AND lv.status = $${params.length}`;
+        }
+        sql += ` ORDER BY l.sequence ASC, lv.sequence ASC, lv.created_at ASC`;
+
+        const result = await pool.query(sql, params);
+        res.json({ success: true, data: result.rows.map(toClientVideo) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        const body = req.body || {};
+        const title = cleanText(body.title || "", 255);
+        const videoUrl = cleanText(body.videoUrl || body.video_url || "", 2000);
+        const lessonId = cleanText(body.lessonId || body.lesson_id || "", 120);
+
+        if (!title || !videoUrl || !lessonId) {
+            return res.status(400).json({ success: false, message: "Title, video URL, and lesson association are required." });
+        }
+
+        const id = cleanText(body.id || `vid_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, 120);
+        const duration = cleanText(body.duration || "15:00", 40);
+        const description = cleanText(body.description || "", 2000);
+        const sequence = Math.floor(clampNumber(body.sequence ?? 1, 1, 1000));
+        const status = cleanText(body.status || "Published", 40);
+
+        const result = await pool.query(`
+            INSERT INTO lesson_videos (id, lesson_id, title, video_url, duration, description, sequence, status, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING *
+        `, [id, lessonId, title, videoUrl, duration, description, sequence, status, req.authUser.id]);
+
+        // Also update lesson's primary video_url if currently empty
+        await pool.query(`
+            UPDATE lessons SET video_url = COALESCE(NULLIF(video_url, ''), $2), duration = COALESCE(NULLIF(duration, ''), $3), updated_at = NOW()
+            WHERE id = $1
+        `, [lessonId, videoUrl, duration]);
+
+        res.status(201).json({ success: true, data: toClientVideo(result.rows[0]) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        const body = req.body || {};
+        const result = await pool.query(`
+            UPDATE lesson_videos SET
+              lesson_id = COALESCE($2, lesson_id),
+              title = COALESCE($3, title),
+              video_url = COALESCE($4, video_url),
+              duration = COALESCE($5, duration),
+              description = COALESCE($6, description),
+              sequence = COALESCE($7, sequence),
+              status = COALESCE($8, status),
+              updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+        `, [
+            req.params.id,
+            body.lessonId === undefined && body.lesson_id === undefined ? null : cleanText(body.lessonId || body.lesson_id || "", 120),
+            body.title === undefined ? null : cleanText(body.title || "", 255),
+            body.videoUrl === undefined && body.video_url === undefined ? null : cleanText(body.videoUrl || body.video_url || "", 2000),
+            body.duration === undefined ? null : cleanText(body.duration || "", 40),
+            body.description === undefined ? null : cleanText(body.description || "", 2000),
+            body.sequence === undefined ? null : Math.floor(clampNumber(body.sequence, 1, 1000)),
+            body.status === undefined ? null : cleanText(body.status || "Published", 40)
+        ]);
+
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Video not found." });
+        res.json({ success: true, data: toClientVideo(result.rows[0]) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.delete("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        const result = await pool.query("DELETE FROM lesson_videos WHERE id = $1 RETURNING id", [req.params.id]);
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Video not found." });
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ==========================================
+// LEARNING RESOURCE MANAGEMENT ENDPOINTS
+// ==========================================
+app.get("/api/learning-resources", requireAuth, async (req, res, next) => {
+    try {
+        const { lessonId, resourceType, status } = req.query || {};
+        let sql = `
+            SELECT lr.*, l.title AS lesson_title, l.sequence AS lesson_sequence
+            FROM learning_resources lr
+            LEFT JOIN lessons l ON l.id = lr.lesson_id
+            WHERE 1=1
+        `;
+        const params = [];
+        if (lessonId) {
+            params.push(cleanText(lessonId, 120));
+            sql += ` AND lr.lesson_id = $${params.length}`;
+        }
+        if (resourceType) {
+            params.push(cleanText(resourceType, 40));
+            sql += ` AND lr.resource_type = $${params.length}`;
+        }
+        if (req.authUser.role === "student") {
+            sql += ` AND lr.status = 'Published'`;
+        } else if (status) {
+            params.push(cleanText(status, 40));
+            sql += ` AND lr.status = $${params.length}`;
+        }
+        sql += ` ORDER BY l.sequence ASC, lr.title ASC`;
+
+        const result = await pool.query(sql, params);
+        res.json({ success: true, data: result.rows.map(toClientResource) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/learning-resources", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        const body = req.body || {};
+        const title = cleanText(body.title || "", 255);
+        const fileUrl = cleanText(body.fileUrl || body.file_url || "", 2000);
+        const lessonId = cleanText(body.lessonId || body.lesson_id || "", 120);
+
+        if (!title || !fileUrl || !lessonId) {
+            return res.status(400).json({ success: false, message: "Title, resource file/URL, and lesson association are required." });
+        }
+
+        const id = cleanText(body.id || `res_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, 120);
+        const resourceType = cleanText(body.resourceType || body.resource_type || "pdf", 40);
+        const fileSize = cleanText(body.fileSize || body.file_size || "", 40);
+        const description = cleanText(body.description || "", 2000);
+        const status = cleanText(body.status || "Published", 40);
+
+        const result = await pool.query(`
+            INSERT INTO learning_resources (id, lesson_id, title, resource_type, file_url, file_size, description, status, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING *
+        `, [id, lessonId, title, resourceType, fileUrl, fileSize, description, status, req.authUser.id]);
+
+        res.status(201).json({ success: true, data: toClientResource(result.rows[0]) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.put("/api/learning-resources/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        const body = req.body || {};
+        const result = await pool.query(`
+            UPDATE learning_resources SET
+              lesson_id = COALESCE($2, lesson_id),
+              title = COALESCE($3, title),
+              resource_type = COALESCE($4, resource_type),
+              file_url = COALESCE($5, file_url),
+              file_size = COALESCE($6, file_size),
+              description = COALESCE($7, description),
+              status = COALESCE($8, status),
+              updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+        `, [
+            req.params.id,
+            body.lessonId === undefined && body.lesson_id === undefined ? null : cleanText(body.lessonId || body.lesson_id || "", 120),
+            body.title === undefined ? null : cleanText(body.title || "", 255),
+            body.resourceType === undefined && body.resource_type === undefined ? null : cleanText(body.resourceType || body.resource_type || "pdf", 40),
+            body.fileUrl === undefined && body.file_url === undefined ? null : cleanText(body.fileUrl || body.file_url || "", 2000),
+            body.fileSize === undefined && body.file_size === undefined ? null : cleanText(body.fileSize || body.file_size || "", 40),
+            body.description === undefined ? null : cleanText(body.description || "", 2000),
+            body.status === undefined ? null : cleanText(body.status || "Published", 40)
+        ]);
+
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Resource not found." });
+        res.json({ success: true, data: toClientResource(result.rows[0]) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.delete("/api/learning-resources/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        const result = await pool.query("DELETE FROM learning_resources WHERE id = $1 RETURNING id", [req.params.id]);
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Resource not found." });
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ==========================================
+// PRE-TEST MANAGEMENT & ASSESSMENT ENDPOINTS
+// ==========================================
+app.get("/api/pre-test", requireAuth, async (_req, res, next) => {
+    try {
+        const result = await pool.query("SELECT * FROM pre_tests WHERE id = 'oop_pre_test' LIMIT 1");
+        const row = result.rows[0] || {
+            id: "oop_pre_test",
+            course_id: "oop_fundamentals",
+            title: "Java OOP Pre-Test Assessment",
+            description: "Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.",
+            question_pool_count: 240,
+            questions_per_attempt: 20,
+            time_limit_seconds: 1200,
+            passing_score: 60,
+            max_attempts: 3,
+            status: "Published",
+            post_test_assessment_id: "oop_post_test"
+        };
+        res.json({ success: true, data: toClientPreTest(row) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.put("/api/pre-test", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        const body = req.body || {};
+        const result = await pool.query(`
+            UPDATE pre_tests SET
+              title = COALESCE($1, title),
+              description = COALESCE($2, description),
+              time_limit_seconds = COALESCE($3, time_limit_seconds),
+              passing_score = COALESCE($4, passing_score),
+              max_attempts = COALESCE($5, max_attempts),
+              status = COALESCE($6, status),
+              post_test_assessment_id = COALESCE($7, post_test_assessment_id),
+              updated_at = NOW()
+            WHERE id = 'oop_pre_test'
+            RETURNING *
+        `, [
+            body.title === undefined ? null : cleanText(body.title, 255),
+            body.description === undefined ? null : cleanText(body.description, 2000),
+            body.timeLimitSeconds === undefined ? null : Math.floor(clampNumber(body.timeLimitSeconds, 60, 7200)),
+            body.passingScore === undefined ? null : clampNumber(body.passingScore, 0, 100),
+            body.maxAttempts === undefined ? null : Math.floor(clampNumber(body.maxAttempts, 1, 100)),
+            body.status === undefined ? null : cleanText(body.status, 40),
+            body.postTestAssessmentId === undefined ? null : cleanText(body.postTestAssessmentId, 120)
+        ]);
+        const row = result.rows[0] || { id: "oop_pre_test", ...body };
+        res.json({ success: true, data: toClientPreTest(row) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/pre-test/questions", requireAuth, requireRole(["teacher"]), async (_req, res, next) => {
+    try {
+        // Teacher preview of all 240 valid questions with answer key
+        res.json({
+            success: true,
+            totalCount: ALL_OOP_QUESTIONS.length,
+            topics: Object.keys(TOPIC_NAMES).map(key => ({ id: key, name: TOPIC_NAMES[key] })),
+            data: ALL_OOP_QUESTIONS
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/pre-test/start", requireAuth, async (req, res, next) => {
+    try {
+        if (req.authUser.role !== "student") {
+            return res.status(403).json({ success: false, message: "Only students can take pre-tests." });
+        }
+
+        // Check if pre-test is published
+        const preTestConfig = await pool.query("SELECT * FROM pre_tests WHERE id = 'oop_pre_test' LIMIT 1");
+        const config = preTestConfig.rows[0] || { status: "Published", max_attempts: 3, time_limit_seconds: 1200, passing_score: 60 };
+        if (config.status !== "Published") {
+            return res.status(403).json({ success: false, message: "The pre-test is currently not available." });
+        }
+
+        const maxAttempts = Number(config.max_attempts || 3);
+        const attemptCountResult = await pool.query(
+            "SELECT COUNT(*)::int AS attempt_count FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = 'oop_pre_test'",
+            [req.authUser.id]
+        );
+        const attemptCount = Number(attemptCountResult.rows[0]?.attempt_count || 0);
+        if (attemptCount >= maxAttempts) {
+            return res.status(429).json({
+                success: false,
+                errorCode: "ATTEMPT_LIMIT_REACHED",
+                attemptCount,
+                maxAttempts,
+                message: `You have used all ${maxAttempts} attempts for the pre-test.`
+            });
+        }
+
+        // Check for existing active session to resume (page refresh / reconnect)
+        const existingActive = await pool.query(`
+            SELECT * FROM assessment_sessions
+            WHERE student_user_id = $1 AND assessment_id = 'oop_pre_test' AND status = 'active'
+            ORDER BY started_at DESC LIMIT 1
+        `, [req.authUser.id]);
+
+        if (existingActive.rowCount > 0) {
+            const activeSession = existingActive.rows[0];
+            const now = Date.now();
+            const expiresAtMs = new Date(activeSession.expires_at).getTime();
+            const remainingSeconds = Math.max(0, Math.floor((expiresAtMs - now) / 1000));
+
+            if (remainingSeconds > 0) {
+                // Resume existing session with exact same 20 questions!
+                return res.json({
+                    success: true,
+                    resumed: true,
+                    data: {
+                        sessionId: activeSession.id,
+                        sessionToken: activeSession.session_token,
+                        assessmentId: "oop_pre_test",
+                        lessonId: "oop_fundamentals",
+                        startedAt: activeSession.started_at,
+                        expiresAt: activeSession.expires_at,
+                        remainingSeconds,
+                        attemptNumber: activeSession.attempt_number,
+                        questions: activeSession.question_order,
+                        savedAnswers: activeSession.answers || {}
+                    }
+                });
+            } else {
+                await pool.query("UPDATE assessment_sessions SET status = 'expired' WHERE id = $1", [activeSession.id]);
+            }
+        }
+
+        // New attempt: randomly select exactly 20 distinct questions without replacement from 240 questions
+        const attemptNumber = attemptCount + 1;
+        const sessionToken = `pretest_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+        const timeLimitSeconds = Number(config.time_limit_seconds || 1200); // 20 minutes
+        const expiresAt = new Date(Date.now() + timeLimitSeconds * 1000);
+
+        const { studentQuestions } = generatePreTestSessionQuestions(20);
+
+        const sessionInsert = await pool.query(`
+            INSERT INTO assessment_sessions (
+              student_user_id, assessment_id, lesson_id, attempt_number, session_token,
+              status, started_at, expires_at, violation_count, time_limit_seconds, question_order
+            )
+            VALUES ($1, 'oop_pre_test', 'oop_fundamentals', $2, $3, 'active', NOW(), $4, 0, $5, $6::jsonb)
+            RETURNING *
+        `, [req.authUser.id, attemptNumber, sessionToken, expiresAt, timeLimitSeconds, JSON.stringify(studentQuestions)]);
+
+        const created = sessionInsert.rows[0];
+        res.json({
+            success: true,
+            resumed: false,
+            data: {
+                sessionId: created.id,
+                sessionToken: created.session_token,
+                assessmentId: "oop_pre_test",
+                lessonId: "oop_fundamentals",
+                startedAt: created.started_at,
+                expiresAt: created.expires_at,
+                remainingSeconds: timeLimitSeconds,
+                attemptNumber,
+                questions: studentQuestions,
+                savedAnswers: {}
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/pre-test/active", requireAuth, async (req, res, next) => {
+    try {
+        if (req.authUser.role !== "student") {
+            return res.json({ success: true, data: null });
+        }
+        const activeResult = await pool.query(`
+            SELECT * FROM assessment_sessions
+            WHERE student_user_id = $1 AND assessment_id = 'oop_pre_test' AND status = 'active'
+            ORDER BY started_at DESC LIMIT 1
+        `, [req.authUser.id]);
+
+        if (!activeResult.rowCount) {
+            return res.json({ success: true, data: null });
+        }
+
+        const activeSession = activeResult.rows[0];
+        const now = Date.now();
+        const expiresAtMs = new Date(activeSession.expires_at).getTime();
+        const remainingSeconds = Math.max(0, Math.floor((expiresAtMs - now) / 1000));
+
+        if (remainingSeconds <= 0) {
+            await pool.query("UPDATE assessment_sessions SET status = 'expired' WHERE id = $1", [activeSession.id]);
+            return res.json({ success: true, data: null });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                sessionId: activeSession.id,
+                sessionToken: activeSession.session_token,
+                assessmentId: "oop_pre_test",
+                lessonId: "oop_fundamentals",
+                startedAt: activeSession.started_at,
+                expiresAt: activeSession.expires_at,
+                remainingSeconds,
+                attemptNumber: activeSession.attempt_number,
+                questions: activeSession.question_order,
+                savedAnswers: activeSession.answers || {}
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/pre-test/submit", requireAuth, async (req, res, next) => {
+    try {
+        if (req.authUser.role !== "student") {
+            return res.status(403).json({ success: false, message: "Only students can submit pre-tests." });
+        }
+        const { sessionId, answers = {} } = req.body || {};
+
+        let sessionResult;
+        if (sessionId) {
+            sessionResult = await pool.query(
+                "SELECT * FROM assessment_sessions WHERE id = $1 AND student_user_id = $2 AND assessment_id = 'oop_pre_test'",
+                [sessionId, req.authUser.id]
+            );
+        } else {
+            sessionResult = await pool.query(
+                "SELECT * FROM assessment_sessions WHERE student_user_id = $1 AND assessment_id = 'oop_pre_test' AND status = 'active' AND expires_at > NOW() ORDER BY started_at DESC LIMIT 1",
+                [req.authUser.id]
+            );
+        }
+
+        if (!sessionResult.rowCount) {
+            return res.status(404).json({ success: false, message: "Pre-test session not found or already completed." });
+        }
+
+        const session = sessionResult.rows[0];
+        if (session.status !== "active" || (session.expires_at && new Date(session.expires_at).getTime() <= Date.now())) {
+            return res.status(409).json({ success: false, message: "This pre-test session has already been completed or expired." });
+        }
+
+        const questions = Array.isArray(session.question_order) ? session.question_order : [];
+        const bankMap = new Map(ALL_OOP_QUESTIONS.map(q => [q.id, q]));
+
+        let score = 0;
+        const total = questions.length || 20;
+        const review = [];
+
+        for (const q of questions) {
+            const master = bankMap.get(q.id);
+            const submittedAnswer = answers[q.id];
+            const isCorrect = Boolean(master && submittedAnswer && master.correctAnswer === submittedAnswer);
+            if (isCorrect) score += 1;
+
+            review.push({
+                id: q.id,
+                lessonId: q.lessonId || master?.lessonId || "oop_fundamentals",
+                topicName: q.topicName || master?.topicName || "OOP Fundamentals",
+                question: q.question,
+                options: q.options,
+                difficulty: q.difficulty || master?.difficulty || "Medium",
+                codeSnippet: q.codeSnippet,
+                selectedAnswer: submittedAnswer || "",
+                correctAnswer: master ? master.correctAnswer : "",
+                explanation: master ? master.explanation : "",
+                isCorrect
+            });
+        }
+
+        const percentage = Math.round((score / total) * 100);
+        const configResult = await pool.query("SELECT passing_score FROM pre_tests WHERE id = 'oop_pre_test' LIMIT 1");
+        const configuredPassing = configResult.rows[0]?.passing_score;
+        const passingScore = (configuredPassing !== undefined && configuredPassing !== null)
+            ? Number(configuredPassing)
+            : ASSESSMENT_PASSING_SCORE;
+        const passed = percentage >= passingScore;
+        const correctAnswers = score;
+        const incorrectAnswers = total - score;
+
+        // Atomically claim the session only if it belongs to authenticated student, is active, and is unexpired
+        const claimResult = await pool.query(`
+            UPDATE assessment_sessions
+            SET status = 'completed', completed_at = NOW(), score = $1, total = $2, percentage = $3, passed = $4, answers = $5::jsonb, updated_at = NOW()
+            WHERE id = $6 AND student_user_id = $7 AND assessment_id = 'oop_pre_test' AND status = 'active' AND expires_at > NOW()
+            RETURNING *
+        `, [score, total, percentage, passed, JSON.stringify(answers), session.id, req.authUser.id]);
+
+        if (!claimResult.rowCount) {
+            return res.status(409).json({ success: false, message: "This pre-test session could not be completed (already submitted or expired)." });
+        }
+
+        // Insert into quiz_attempts only after successful atomic claim
+        await pool.query(`
+            INSERT INTO quiz_attempts (student_user_id, assessment_id, lesson_id, score, total, percentage, correct_answers, incorrect_answers, passed, attempt_number, answers, date_completed)
+            VALUES ($1, 'oop_pre_test', 'oop_fundamentals', $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW())
+        `, [req.authUser.id, score, total, percentage, correctAnswers, incorrectAnswers, passed, session.attempt_number || 1, JSON.stringify(answers)]);
+
+        await awardXP(req.authUser.id, 30, "Java OOP Diagnostic Pre-Test Completion");
+        if (passed) {
+            await awardXP(req.authUser.id, 50, "Java OOP Diagnostic Pre-Test Passed");
+        }
+
+        await logActivity(req.authUser.id, "assessment_submitted", `Completed Java OOP Pre-Test with score ${score}/${total} (${percentage}%)`, {
+            assessmentId: "oop_pre_test",
+            score,
+            total,
+            percentage,
+            passed,
+            isPreTest: true
+        });
+
+        res.json({
+            success: true,
+            data: {
+                sessionId: session.id,
+                assessmentId: "oop_pre_test",
+                score,
+                total,
+                percentage,
+                passed,
+                passingScore,
+                attemptNumber: session.attempt_number || 1,
+                dateCompleted: new Date().toISOString(),
+                review
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/pre-test/attempts", requireAuth, requireRole(["teacher"]), async (_req, res, next) => {
+    try {
+        const result = await pool.query(`
+            WITH pre_attempts AS (
+                SELECT
+                  qa.id,
+                  qa.student_user_id,
+                  u.name AS student_name,
+                  u.email AS student_email,
+                  s.student_number,
+                  s.section,
+                  qa.score,
+                  qa.total,
+                  qa.percentage,
+                  qa.passed,
+                  qa.attempt_number,
+                  qa.date_completed,
+                  qa.answers
+                FROM quiz_attempts qa
+                JOIN users u ON u.id = qa.student_user_id
+                LEFT JOIN students s ON s.user_id = u.id
+                WHERE qa.assessment_id = 'oop_pre_test'
+            ),
+            post_attempts AS (
+                SELECT DISTINCT ON (student_user_id)
+                  student_user_id,
+                  percentage AS post_test_percentage,
+                  date_completed AS post_test_date
+                FROM quiz_attempts
+                WHERE assessment_id = 'oop_post_test'
+                ORDER BY student_user_id, date_completed DESC
+            )
+            SELECT
+              pa.*,
+              po.post_test_percentage,
+              po.post_test_date,
+              CASE
+                WHEN po.post_test_percentage IS NOT NULL
+                  THEN (po.post_test_percentage - pa.percentage)
+                ELSE NULL
+              END AS score_improvement
+            FROM pre_attempts pa
+            LEFT JOIN post_attempts po ON po.student_user_id = pa.student_user_id
+            ORDER BY pa.date_completed DESC
+        `);
+
+        res.json({
+            success: true,
+            data: result.rows.map(row => ({
+                id: row.id,
+                studentId: row.student_user_id,
+                studentName: row.student_name,
+                studentEmail: row.student_email,
+                studentNumber: row.student_number || "",
+                section: row.section || "",
+                score: Number(row.score),
+                total: Number(row.total),
+                percentage: Number(row.percentage),
+                passed: Boolean(row.passed),
+                attemptNumber: Number(row.attempt_number),
+                dateCompleted: row.date_completed,
+                postTestPercentage: row.post_test_percentage !== null ? Number(row.post_test_percentage) : null,
+                postTestDate: row.post_test_date,
+                scoreImprovement: row.score_improvement !== null ? Number(row.score_improvement) : null
+            }))
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/pre-test/my-attempts", requireAuth, async (req, res, next) => {
+    try {
+        const result = await pool.query(`
+            SELECT id, score, total, percentage, passed, attempt_number, date_completed
+            FROM quiz_attempts
+            WHERE student_user_id = $1 AND assessment_id = 'oop_pre_test'
+            ORDER BY attempt_number DESC, date_completed DESC
+        `, [req.authUser.id]);
+
+        res.json({
+            success: true,
+            data: result.rows.map(r => ({
+                id: r.id,
+                score: Number(r.score),
+                total: Number(r.total),
+                percentage: Number(r.percentage),
+                passed: Boolean(r.passed),
+                attemptNumber: Number(r.attempt_number),
+                dateCompleted: r.date_completed
+            }))
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// ==========================================
+// ENHANCED TEACHER LEARNING ANALYTICS
+// ==========================================
+app.get("/api/teacher/analytics", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        // 1. Enrolled students
+        const studentsQuery = await pool.query(`
+            SELECT u.id, u.name, u.email, s.student_number, s.section, s.course, u.created_at AS enrollment_date
+            FROM users u
+            LEFT JOIN students s ON s.user_id = u.id
+            WHERE u.role = 'student'
+            ORDER BY u.name ASC
+        `);
+        const allStudents = studentsQuery.rows;
+        const totalEnrolled = allStudents.length;
+
+        // 2. Published lessons
+        const lessonsQuery = await pool.query(`
+            SELECT id, title, sequence, module FROM lessons WHERE status <> 'Archived' ORDER BY sequence ASC
+        `);
+        const totalLessons = lessonsQuery.rows.length || 12;
+
+        // 3. Quiz attempts across all students
+        const allQuizAttempts = await pool.query(`
+            SELECT qa.*, u.name as student_name
+            FROM quiz_attempts qa
+            JOIN users u ON u.id = qa.student_user_id
+            ORDER BY qa.date_completed DESC
+        `);
+
+        // Calculate Course Overview
+        const studentsWithQuiz = new Set(allQuizAttempts.rows.map(q => q.student_user_id));
+        const quizOnlyLessons = allQuizAttempts.rows.filter(q => q.assessment_id !== "oop_pre_test");
+        const avgQuizScore = quizOnlyLessons.length > 0
+            ? Math.round(quizOnlyLessons.reduce((acc, q) => acc + Number(q.percentage || 0), 0) / quizOnlyLessons.length)
+            : 0;
+        const passedQuizCount = quizOnlyLessons.filter(q => q.passed || Number(q.percentage || 0) >= 60).length;
+        const quizPassRate = quizOnlyLessons.length > 0
+            ? Math.round((passedQuizCount / quizOnlyLessons.length) * 100)
+            : 0;
+
+        // Pre-test & Post-test stats
+        const preTestAttempts = allQuizAttempts.rows.filter(q => q.assessment_id === "oop_pre_test");
+        const postTestAttempts = allQuizAttempts.rows.filter(q => q.assessment_id === "oop_post_test");
+        const uniquePreTestStudents = new Set(preTestAttempts.map(q => q.student_user_id));
+        const uniquePostTestStudents = new Set(postTestAttempts.map(q => q.student_user_id));
+
+        const preTestAvg = preTestAttempts.length > 0
+            ? Math.round(preTestAttempts.reduce((acc, q) => acc + Number(q.percentage || 0), 0) / preTestAttempts.length)
+            : 0;
+        const postTestAvg = postTestAttempts.length > 0
+            ? Math.round(postTestAttempts.reduce((acc, q) => acc + Number(q.percentage || 0), 0) / postTestAttempts.length)
+            : 0;
+        const averageImprovement = postTestAttempts.length > 0 && preTestAttempts.length > 0
+            ? (postTestAvg - preTestAvg)
+            : null;
+
+        // Lesson completions per student
+        const studentCompletedLessonsMap = new Map();
+        for (const s of allStudents) {
+            studentCompletedLessonsMap.set(s.id, new Set());
+        }
+        for (const q of quizOnlyLessons) {
+            if (q.passed || Number(q.percentage || 0) >= 60) {
+                const set = studentCompletedLessonsMap.get(q.student_user_id);
+                if (set && q.lesson_id) set.add(q.lesson_id);
+            }
+        }
+
+        let totalCompletedLessonsCount = 0;
+        let fullyCompletedStudentsCount = 0;
+        for (const [sId, completedSet] of studentCompletedLessonsMap.entries()) {
+            totalCompletedLessonsCount += completedSet.size;
+            if (completedSet.size >= totalLessons) fullyCompletedStudentsCount += 1;
+        }
+
+        const courseCompletionRate = totalEnrolled > 0
+            ? Math.round((fullyCompletedStudentsCount / totalEnrolled) * 100)
+            : 0;
+        const totalRemainingLessons = Math.max(0, (totalEnrolled * totalLessons) - totalCompletedLessonsCount);
+
+        // Score distributions (<60%, 60-69%, 70-79%, 80-89%, 90-100%)
+        const distributionBuckets = {
+            needsImprovement: { label: "< 60% (Needs Review)", count: 0, percentage: 0 },
+            developing: { label: "60% - 69% (Developing)", count: 0, percentage: 0 },
+            proficient: { label: "70% - 79% (Proficient)", count: 0, percentage: 0 },
+            advanced: { label: "80% - 89% (Advanced)", count: 0, percentage: 0 },
+            mastery: { label: "90% - 100% (Mastery)", count: 0, percentage: 0 }
+        };
+
+        for (const s of allStudents) {
+            const studentQuizzes = quizOnlyLessons.filter(q => q.student_user_id === s.id);
+            if (studentQuizzes.length > 0) {
+                const sAvg = Math.round(studentQuizzes.reduce((acc, q) => acc + Number(q.percentage || 0), 0) / studentQuizzes.length);
+                if (sAvg < 60) distributionBuckets.needsImprovement.count++;
+                else if (sAvg < 70) distributionBuckets.developing.count++;
+                else if (sAvg < 80) distributionBuckets.proficient.count++;
+                else if (sAvg < 90) distributionBuckets.advanced.count++;
+                else distributionBuckets.mastery.count++;
+            }
+        }
+        const ratedStudentsCount = Math.max(1, Object.values(distributionBuckets).reduce((acc, b) => acc + b.count, 0));
+        for (const key of Object.keys(distributionBuckets)) {
+            distributionBuckets[key].percentage = Math.round((distributionBuckets[key].count / ratedStudentsCount) * 100);
+        }
+
+        // Topic performance across all 12 OOP topics
+        const topicPerformance = Object.keys(TOPIC_NAMES).map(topicId => {
+            const attempts = quizOnlyLessons.filter(q => q.lesson_id === topicId);
+            const count = attempts.length;
+            const avgScore = count > 0 ? Math.round(attempts.reduce((a, b) => a + Number(b.percentage || 0), 0) / count) : 0;
+            const passCount = attempts.filter(q => q.passed || Number(q.percentage || 0) >= 60).length;
+            const passRate = count > 0 ? Math.round((passCount / count) * 100) : 0;
+            const status = avgScore >= 75 ? "Strong" : avgScore >= 60 ? "Average" : "Struggling";
+            return {
+                topicId,
+                topicName: TOPIC_NAMES[topicId],
+                attemptCount: count,
+                averageScore: avgScore,
+                passRate,
+                status
+            };
+        });
+
+        // Pre-test vs Post-test comparison per student
+        const prePostComparison = allStudents.map(s => {
+            const preAttempt = preTestAttempts.find(q => q.student_user_id === s.id);
+            const postAttempt = postTestAttempts.find(q => q.student_user_id === s.id);
+            const preScore = preAttempt ? Number(preAttempt.percentage) : null;
+            const postScore = postAttempt ? Number(postAttempt.percentage) : null;
+            const diff = (preScore !== null && postScore !== null) ? (postScore - preScore) : null;
+            return {
+                studentId: s.id,
+                name: s.name,
+                email: s.email,
+                studentNumber: s.student_number || "",
+                section: s.section || "",
+                preTestScore: preScore,
+                postTestScore: postScore,
+                scoreImprovement: diff,
+                preTestDate: preAttempt?.date_completed || null,
+                postTestDate: postAttempt?.date_completed || null
+            };
+        });
+
+        // Students Requiring Additional Support (Transparent criteria, NOT solely low pre-test score)
+        const studentsRequiringSupport = [];
+        for (const s of allStudents) {
+            const studentQuizzes = quizOnlyLessons.filter(q => q.student_user_id === s.id);
+            const completedCount = studentCompletedLessonsMap.get(s.id)?.size || 0;
+            const completionPct = Math.round((completedCount / totalLessons) * 100);
+
+            const reasons = [];
+            let recommendation = "";
+
+            // Check criterion 1: Repeated quiz failures (>= 2 failed attempts or failing latest attempt)
+            const failedAttempts = studentQuizzes.filter(q => !q.passed && Number(q.percentage || 0) < 60);
+            if (failedAttempts.length >= 2) {
+                const failedLessons = [...new Set(failedAttempts.map(q => TOPIC_NAMES[q.lesson_id] || q.lesson_id))];
+                reasons.push(`Repeated assessment difficulty in: ${failedLessons.join(", ")}`);
+                recommendation = `Provide targeted 1-on-1 pedagogical review for ${failedLessons[0] || 'core OOP'}.`;
+            }
+
+            // Check criterion 2: Stalled lesson progress
+            if (studentQuizzes.length > 0 && completionPct < 30) {
+                reasons.push(`Progress stalled at ${completionPct}% (${completedCount}/${totalLessons} lessons completed)`);
+                if (!recommendation) recommendation = `Encourage video tutorial completion and guide student through Lesson ${completedCount + 1}.`;
+            }
+
+            // Check criterion 3: Declining assessment performance
+            if (studentQuizzes.length >= 2) {
+                const latest = Number(studentQuizzes[0]?.percentage || 0);
+                const prev = Number(studentQuizzes[1]?.percentage || 0);
+                if (prev - latest >= 20) {
+                    reasons.push(`Score declined significantly from ${prev}% to ${latest}%`);
+                    if (!recommendation) recommendation = `Review recent practice code and clarify misunderstood concepts.`;
+                }
+            }
+
+            if (reasons.length > 0) {
+                studentsRequiringSupport.push({
+                    studentId: s.id,
+                    name: s.name,
+                    email: s.email,
+                    studentNumber: s.student_number || "",
+                    section: s.section || "",
+                    completedLessons: completedCount,
+                    totalLessons,
+                    completionPercentage: completionPct,
+                    quizAttemptsCount: studentQuizzes.length,
+                    reasons,
+                    recommendedAction: recommendation
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            data: {
+                courseOverview: {
+                    totalEnrolled,
+                    courseCompletionRate,
+                    totalLessonsCompleted: totalCompletedLessonsCount,
+                    totalLessonsRemaining: totalRemainingLessons,
+                    assessmentParticipation: totalEnrolled > 0 ? Math.round((studentsWithQuiz.size / totalEnrolled) * 100) : 0,
+                    averageAssessmentScore: avgQuizScore,
+                    assessmentPassingRate: quizPassRate,
+                    preTestAverageScore: preTestAvg,
+                    postTestAverageScore: postTestAvg,
+                    averageScoreImprovement: averageImprovement,
+                    preTestTakersCount: uniquePreTestStudents.size,
+                    postTestTakersCount: uniquePostTestStudents.size
+                },
+                scoreDistribution: distributionBuckets,
+                topicPerformance,
+                prePostComparison,
+                studentsRequiringSupport,
+                studentsList: allStudents.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    email: s.email,
+                    studentNumber: s.student_number || "",
+                    section: s.section || "",
+                    completedLessons: studentCompletedLessonsMap.get(s.id)?.size || 0,
+                    totalLessons
+                }))
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/teacher/analytics/student/:studentId", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        const studentId = req.params.studentId;
+        const studentUser = await pool.query(`
+            SELECT u.id, u.name, u.email, u.created_at, s.student_number, s.section, s.course, s.year_level
+            FROM users u
+            LEFT JOIN students s ON s.user_id = u.id
+            WHERE u.id = $1 AND u.role = 'student'
+        `, [studentId]);
+
+        if (!studentUser.rowCount) {
+            return res.status(404).json({ success: false, message: "Student record not found." });
+        }
+        const student = studentUser.rows[0];
+
+        const [quizzes, preTest, postTest, videos, lessons] = await Promise.all([
+            pool.query("SELECT * FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id <> 'oop_pre_test' ORDER BY date_completed DESC", [studentId]),
+            pool.query("SELECT * FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = 'oop_pre_test' ORDER BY attempt_number DESC LIMIT 1", [studentId]),
+            pool.query("SELECT * FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = 'oop_post_test' ORDER BY attempt_number DESC LIMIT 1", [studentId]),
+            pool.query("SELECT video_id, completion_percentage, completed, updated_at FROM student_progress WHERE student_user_id = $1", [studentId]),
+            pool.query("SELECT id, title, sequence, module FROM lessons WHERE status <> 'Archived' ORDER BY sequence ASC")
+        ]);
+
+        const preScore = preTest.rows[0] ? Number(preTest.rows[0].percentage) : null;
+        const postScore = postTest.rows[0] ? Number(postTest.rows[0].percentage) : null;
+        const improvement = (preScore !== null && postScore !== null) ? (postScore - preScore) : null;
+
+        const topicMap = {};
+        for (const l of lessons.rows) {
+            const lessonQuizzes = quizzes.rows.filter(q => q.lesson_id === l.id);
+            const bestQuiz = lessonQuizzes.length > 0 ? Math.max(...lessonQuizzes.map(q => Number(q.percentage || 0))) : 0;
+            const video = videos.rows.find(v => v.video_id === l.id);
+            topicMap[l.id] = {
+                lessonId: l.id,
+                title: l.title,
+                sequence: l.sequence,
+                videoCompleted: Boolean(video?.completed || Number(video?.completion_percentage || 0) >= 95),
+                videoPercentage: Number(video?.completion_percentage || 0),
+                quizPassed: bestQuiz >= 60,
+                bestQuizScore: bestQuiz,
+                attemptsCount: lessonQuizzes.length
+            };
+        }
+
+        const completedCount = Object.values(topicMap).filter(t => t.videoCompleted && t.quizPassed).length;
+        const totalLessons = lessons.rows.length || 12;
+
+        res.json({
+            success: true,
+            data: {
+                student: {
+                    id: student.id,
+                    name: student.name,
+                    email: student.email,
+                    studentNumber: student.student_number || "",
+                    section: student.section || "",
+                    course: student.course || "",
+                    yearLevel: student.year_level || ""
+                },
+                progress: {
+                    completedLessons: completedCount,
+                    totalLessons,
+                    overallPercentage: Math.round((completedCount / totalLessons) * 100)
+                },
+                preTest: preTest.rows[0] ? {
+                    score: Number(preTest.rows[0].score),
+                    total: Number(preTest.rows[0].total),
+                    percentage: preScore,
+                    passed: Boolean(preTest.rows[0].passed),
+                    dateCompleted: preTest.rows[0].date_completed
+                } : null,
+                postTest: postTest.rows[0] ? {
+                    score: Number(postTest.rows[0].score),
+                    total: Number(postTest.rows[0].total),
+                    percentage: postScore,
+                    passed: Boolean(postTest.rows[0].passed),
+                    dateCompleted: postTest.rows[0].date_completed
+                } : null,
+                scoreImprovement: improvement,
+                topics: Object.values(topicMap),
+                recentQuizAttempts: quizzes.rows.slice(0, 10).map(q => ({
+                    id: q.id,
+                    lessonId: q.lesson_id,
+                    topicName: TOPIC_NAMES[q.lesson_id] || q.lesson_id,
+                    score: Number(q.score),
+                    total: Number(q.total),
+                    percentage: Number(q.percentage),
+                    passed: Boolean(q.passed),
+                    attemptNumber: Number(q.attempt_number),
+                    dateCompleted: q.date_completed
+                }))
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
 // --- Secure Assessment Session Management Endpoints ---
 
 app.post("/api/assessments/session/start", requireAuth, async (req, res, next) => {
@@ -2836,32 +3957,43 @@ app.post("/api/assessments/session/start", requireAuth, async (req, res, next) =
             : "";
         const safeLessonId = definedLessonId || requestedLessonId;
 
-        if (!safeLessonId) {
-            return res.status(400).json({ success: false, message: "lessonId is required for assessment access." });
-        }
-        if (definedLessonId && requestedLessonId && definedLessonId !== requestedLessonId) {
-            return res.status(403).json({ success: false, message: "Assessment does not belong to this lesson." });
+        if (safeAssessmentId !== "oop_pre_test") {
+            if (!safeLessonId) {
+                return res.status(400).json({ success: false, message: "lessonId is required for assessment access." });
+            }
+            if (definedLessonId && requestedLessonId && definedLessonId !== requestedLessonId) {
+                return res.status(403).json({ success: false, message: "Assessment does not belong to this lesson." });
+            }
+
+            // Assessment eligibility is based on the authenticated student's
+            // current-lesson evidence and sequential lesson access.
+            const access = await getLessonAccessState(req.authUser.id, safeLessonId);
+            const evidence = access.current;
+            if (!access.canAccess || !evidence?.assessmentUnlocked) {
+                return res.status(403).json({
+                    success: false,
+                    errorCode: evidence?.assessmentUnlocked ? "LESSON_LOCKED" : "VIDEO_INCOMPLETE",
+                    message: evidence?.assessmentUnlocked
+                        ? (access.reason || "Complete the previous lesson requirements first.")
+                        : "Complete at least 95% of the current lesson video before starting its assessment.",
+                    data: evidence
+                });
+            }
         }
 
-        // Assessment eligibility is based on the authenticated student's
-        // current-lesson evidence and sequential lesson access.
-        const access = await getLessonAccessState(req.authUser.id, safeLessonId);
-        const evidence = access.current;
-        if (!access.canAccess || !evidence?.assessmentUnlocked) {
-            return res.status(403).json({
-                success: false,
-                errorCode: evidence?.assessmentUnlocked ? "LESSON_LOCKED" : "VIDEO_INCOMPLETE",
-                message: evidence?.assessmentUnlocked
-                    ? (access.reason || "Complete the previous lesson requirements first.")
-                    : "Complete at least 95% of the current lesson video before starting its assessment.",
-                data: evidence
-            });
+        let preTestConfig = null;
+        if (safeAssessmentId === "oop_pre_test") {
+            const cfgResult = await pool.query("SELECT * FROM pre_tests WHERE id = 'oop_pre_test' LIMIT 1");
+            preTestConfig = cfgResult.rows[0] || null;
         }
+        const maxAttempts = safeAssessmentId === "oop_pre_test"
+            ? Number(preTestConfig?.max_attempts || MAX_ASSESSMENT_ATTEMPTS)
+            : MAX_ASSESSMENT_ATTEMPTS;
 
         const attemptCountResult = await pool.query("SELECT COUNT(*)::int AS attempt_count FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = $2", [req.authUser.id, safeAssessmentId]);
         const attemptCount = Number(attemptCountResult.rows[0]?.attempt_count || 0);
-        if (attemptCount >= MAX_ASSESSMENT_ATTEMPTS) {
-            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", attemptCount, maxAttempts: MAX_ASSESSMENT_ATTEMPTS, message: "You have used all " + MAX_ASSESSMENT_ATTEMPTS + " attempts for this assessment." });
+        if (attemptCount >= maxAttempts) {
+            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", attemptCount, maxAttempts, message: "You have used all " + maxAttempts + " attempts for this assessment." });
         }
 
         // Check if student has an existing active session for this assessment
@@ -2921,6 +4053,11 @@ app.post("/api/assessments/session/start", requireAuth, async (req, res, next) =
             }
         }
 
+        // Reject new starts if pre-test is not published
+        if (safeAssessmentId === "oop_pre_test" && preTestConfig && preTestConfig.status !== "Published") {
+            return res.status(403).json({ success: false, message: "Pre-test is currently not available." });
+        }
+
         // Generate attempt number
         const attemptResult = await pool.query(
             "SELECT COALESCE(MAX(attempt_number), 0) + 1 AS next_attempt FROM assessment_sessions WHERE student_user_id = $1 AND assessment_id = $2",
@@ -2929,12 +4066,18 @@ app.post("/api/assessments/session/start", requireAuth, async (req, res, next) =
         const attemptNumber = Number(attemptResult.rows[0]?.next_attempt || 1);
 
         const sessionToken = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-        const timeLimitSeconds = 600; // 10 minutes
+        const timeLimitSeconds = safeAssessmentId === "oop_pre_test"
+            ? Number(preTestConfig?.time_limit_seconds || 1200)
+            : 600;
         const expiresAt = new Date(Date.now() + timeLimitSeconds * 1000);
 
         // Fetch question bank and randomize questions and option order
-        const rawQuestions = resolveAssessmentQuestions(safeAssessmentId, safeLessonId);
-        const randomizedQuestions = generateSessionQuestions(rawQuestions, 15);
+        const rawQuestions = safeAssessmentId === "oop_pre_test"
+            ? ALL_OOP_QUESTIONS
+            : resolveAssessmentQuestions(safeAssessmentId, safeLessonId);
+        const randomizedQuestions = safeAssessmentId === "oop_pre_test"
+            ? generatePreTestSessionQuestions(20).studentQuestions
+            : generateSessionQuestions(rawQuestions, 15);
 
         const result = await pool.query(`
             INSERT INTO assessment_sessions (
@@ -3104,23 +4247,27 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
         }
 
         const session = sessionResult.rows[0];
-        const access = await getLessonAccessState(req.authUser.id, session.lesson_id);
-        if (!access.canAccess || !access.current?.assessmentUnlocked) {
-            return res.status(403).json({
-                success: false,
-                errorCode: access.current?.assessmentUnlocked ? "LESSON_LOCKED" : "VIDEO_INCOMPLETE",
-                message: access.current?.assessmentUnlocked
-                    ? (access.reason || "Complete the previous lesson requirements first.")
-                    : "Complete at least 95% of the current lesson video before submitting its assessment.",
-                data: access.current
-            });
+        if (session.assessment_id !== "oop_pre_test") {
+            const access = await getLessonAccessState(req.authUser.id, session.lesson_id);
+            if (!access.canAccess || !access.current?.assessmentUnlocked) {
+                return res.status(403).json({
+                    success: false,
+                    errorCode: access.current?.assessmentUnlocked ? "LESSON_LOCKED" : "VIDEO_INCOMPLETE",
+                    message: access.current?.assessmentUnlocked
+                        ? (access.reason || "Complete the previous lesson requirements first.")
+                        : "Complete at least 95% of the current lesson video before submitting its assessment.",
+                    data: access.current
+                });
+            }
         }
         if (session.status === "completed") {
             return res.status(409).json({ success: false, message: "This assessment session has already been completed." });
         }
 
         const questions = Array.isArray(session.question_order) ? session.question_order : [];
-        const rawBank = resolveAssessmentQuestions(session.assessment_id, session.lesson_id);
+        const rawBank = session.assessment_id === "oop_pre_test"
+            ? ALL_OOP_QUESTIONS
+            : resolveAssessmentQuestions(session.assessment_id, session.lesson_id);
         const bankMap = new Map(rawBank.map(q => [q.id, q]));
 
         let score = 0;
@@ -3147,15 +4294,28 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
             });
         }
 
+        let submitMaxAttempts = MAX_ASSESSMENT_ATTEMPTS;
+        let submitPassingScore = ASSESSMENT_PASSING_SCORE;
+        if (session.assessment_id === "oop_pre_test") {
+            const cfgResult = await pool.query("SELECT * FROM pre_tests WHERE id = 'oop_pre_test' LIMIT 1");
+            const preTestConfig = cfgResult.rows[0];
+            if (preTestConfig) {
+                submitMaxAttempts = Number(preTestConfig.max_attempts || MAX_ASSESSMENT_ATTEMPTS);
+                if (preTestConfig.passing_score !== undefined && preTestConfig.passing_score !== null) {
+                    submitPassingScore = Number(preTestConfig.passing_score);
+                }
+            }
+        }
+
         const percentage = Math.round((score / total) * 100);
-        const passed = percentage >= ASSESSMENT_PASSING_SCORE;
+        const passed = percentage >= submitPassingScore;
         const correctAnswers = score;
         const incorrectAnswers = total - score;
 
         const attemptCountResult = await pool.query("SELECT COUNT(*)::int AS attempt_count FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = $2", [req.authUser.id, session.assessment_id]);
         const attemptCount = Number(attemptCountResult.rows[0]?.attempt_count || 0);
-        if (attemptCount >= MAX_ASSESSMENT_ATTEMPTS) {
-            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", attemptCount, maxAttempts: MAX_ASSESSMENT_ATTEMPTS, message: "You have used all " + MAX_ASSESSMENT_ATTEMPTS + " attempts for this assessment." });
+        if (attemptCount >= submitMaxAttempts) {
+            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", attemptCount, maxAttempts: submitMaxAttempts, message: "You have used all " + submitMaxAttempts + " attempts for this assessment." });
         }
 
 
@@ -3165,12 +4325,13 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
             assessmentId: session.assessment_id,
             storage: "oop",
             fallbackAttemptNumber: session.attempt_number,
+            maxAttempts: submitMaxAttempts,
             beforeInsert: client => client.query("UPDATE assessment_sessions SET status = 'completed', completed_at = NOW(), score = $1, total = $2, percentage = $3, passed = $4, answers = $5::jsonb, updated_at = NOW() WHERE id = $6", [score, total, percentage, passed, JSON.stringify(answers), session.id]),
             insertQuery: "INSERT INTO quiz_attempts (student_user_id, assessment_id, lesson_id, score, total, percentage, correct_answers, incorrect_answers, passed, attempt_number, answers, date_completed) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, NOW()) RETURNING *",
             buildParams: attemptNumber => [req.authUser.id, session.assessment_id, session.lesson_id, score, total, percentage, correctAnswers, incorrectAnswers, passed, attemptNumber, JSON.stringify(answers)]
         });
         if (cappedInsert.limited) {
-            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", attemptCount: cappedInsert.attemptCount, maxAttempts: MAX_ASSESSMENT_ATTEMPTS, message: "You have used all " + MAX_ASSESSMENT_ATTEMPTS + " attempts for this assessment." });
+            return res.status(429).json({ success: false, errorCode: "ATTEMPT_LIMIT_REACHED", attemptCount: cappedInsert.attemptCount, maxAttempts: submitMaxAttempts, message: "You have used all " + submitMaxAttempts + " attempts for this assessment." });
         }
         const attemptInsert = { rows: [cappedInsert.row] };
 

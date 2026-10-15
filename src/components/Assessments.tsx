@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { AlertCircle, Award, Check, CheckCircle, ChevronLeft, ChevronRight, Clock, Lock, RotateCcw, ShieldAlert, X } from 'lucide-react';
+import { AlertCircle, Award, Check, CheckCircle, ChevronLeft, ChevronRight, Clock, Lock, RotateCcw, ShieldAlert, X, ClipboardCheck } from 'lucide-react';
 import { AdaptiveRecommendation, AssessmentReviewQuestion, AssessmentSessionData, AssessmentSessionQuestion, AuthenticatedUser, LessonEvidence, StudentSubView, VideoLesson } from '../types';
 import { OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
-import { assessmentApi, lessonApi, practiceApi, progressApi } from '../services/api';
+import { assessmentApi, lessonApi, practiceApi, progressApi, preTestApi } from '../services/api';
 import RecommendationCard from './RecommendationCard';
 import SecureWatermark from './SecureWatermark';
+import PreTestAssessment from './PreTestAssessment';
 import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 
 const MAX_ASSESSMENT_ATTEMPTS = 3;
@@ -69,6 +70,10 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
   const [view, setView] = useState<'dashboard' | 'active' | 'result' | 'review'>('dashboard');
   const [latestAttempt, setLatestAttempt] = useState<QuizAttempt | null>(null);
   const [reviewQuestions, setReviewQuestions] = useState<AssessmentReviewQuestion[]>([]);
+
+  // Pre-test state
+  const [isTakingPreTest, setIsTakingPreTest] = useState(false);
+  const [preTestAttempt, setPreTestAttempt] = useState<any>(null);
 
   // Security state
   const [violationCount, setViolationCount] = useState(0);
@@ -159,6 +164,12 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
         if (isMounted) setEvidenceLoaded(true);
         console.warn('Unable to load assessment access from backend:', error);
       });
+
+    preTestApi.getMyAttempts().then(res => {
+      if (isMounted && res.data && res.data.length > 0) {
+        setPreTestAttempt(res.data[0]);
+      }
+    }).catch(() => {});
 
     return () => {
       isMounted = false;
@@ -445,6 +456,42 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
         </div>
       </section>
 
+      {/* Java OOP Diagnostic Pre-Test Featured Banner */}
+      <section className="rounded-2xl border-2 border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-sky-500/5 to-transparent p-5 backdrop-blur-md dark:border-emerald-500/20 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                Diagnostic Assessment
+              </span>
+              <span className="text-xs font-bold text-slate-500">
+                20 Randomized Questions • 240 Question Bank Pool
+              </span>
+            </div>
+            <h3 className="mt-2 text-lg font-black text-slate-900 dark:text-white">
+              Java OOP Diagnostic Pre-Test
+            </h3>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-xl">
+              Establish your baseline OOP prior knowledge before beginning course lessons. Non-blocking: You can start Lesson 1 regardless of your pre-test score!
+            </p>
+            {preTestAttempt && (
+              <div className="mt-2 flex items-center gap-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                <CheckCircle className="h-4 w-4" />
+                <span>Completed: {preTestAttempt.score}/{preTestAttempt.total} ({preTestAttempt.percentage}%) • Retake Available</span>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsTakingPreTest(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white hover:bg-emerald-700 shadow-md transition cursor-pointer self-start sm:self-auto shrink-0"
+          >
+            <ClipboardCheck className="h-4 w-4" />
+            {preTestAttempt ? 'Retake Pre-Test' : 'Take Diagnostic Pre-Test'}
+          </button>
+        </div>
+      </section>
+
       {sessionError && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-bold text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
           <AlertCircle className="mb-1 inline h-4 w-4 mr-1 text-rose-600" />
@@ -725,6 +772,25 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
       </div>
     );
   };
+
+  if (isTakingPreTest) {
+    return (
+      <div className="w-full" id="assessments-pre-test">
+        <PreTestAssessment
+          currentUser={currentUser}
+          onFinish={() => {
+            setIsTakingPreTest(false);
+            preTestApi.getMyAttempts().then(res => {
+              if (res.data && res.data.length > 0) {
+                setPreTestAttempt(res.data[0]);
+              }
+            }).catch(() => {});
+          }}
+          onNavigateTo={onNavigateTo}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full" id="assessments-workspace">

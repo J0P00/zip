@@ -562,3 +562,198 @@ export interface AssessmentSubmitResult {
   violationCount: number;
   review: AssessmentReviewQuestion[];
 }
+
+export interface ManagedLesson {
+  id: string;
+  title: string;
+  module: string;
+  courseId: string;
+  sequence: number;
+  duration: string;
+  videoUrl: string;
+  description: string;
+  learningObjectives: string[];
+  status: 'Draft' | 'Published' | 'Archived';
+  metadata?: Record<string, any>;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ManagedVideo {
+  id: string;
+  lessonId: string;
+  lessonTitle?: string;
+  title: string;
+  videoUrl: string;
+  duration: string;
+  description: string;
+  sequence: number;
+  status: 'Draft' | 'Published' | 'Archived';
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LearningResource {
+  id: string;
+  lessonId: string;
+  lessonTitle?: string;
+  title: string;
+  resourceType: 'pdf' | 'presentation' | 'handout' | 'code' | 'reference' | 'link' | 'other';
+  fileUrl: string;
+  fileSize?: string;
+  description?: string;
+  status: 'Draft' | 'Published' | 'Archived';
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PreTestConfig {
+  id: string;
+  courseId: string;
+  title: string;
+  description: string;
+  questionPoolCount: number;
+  questionsPerAttempt: number;
+  timeLimitSeconds: number;
+  passingScore: number;
+  maxAttempts: number;
+  status: 'Draft' | 'Published' | 'Archived';
+  postTestAssessmentId?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PreTestAttempt {
+  id: string;
+  studentId: string;
+  studentName?: string;
+  studentEmail?: string;
+  studentNumber?: string;
+  section?: string;
+  score: number;
+  total: number;
+  percentage: number;
+  passed: boolean;
+  attemptNumber: number;
+  dateCompleted: string;
+  postTestPercentage?: number | null;
+  postTestDate?: string | null;
+  scoreImprovement?: number | null;
+}
+
+export interface TeacherCourseAnalytics {
+  courseOverview: {
+    totalEnrolled: number;
+    courseCompletionRate: number;
+    totalLessonsCompleted: number;
+    totalLessonsRemaining: number;
+    assessmentParticipation: number;
+    averageAssessmentScore: number;
+    assessmentPassingRate: number;
+    preTestAverageScore: number;
+    postTestAverageScore: number;
+    averageScoreImprovement: number | null;
+    preTestTakersCount: number;
+    postTestTakersCount: number;
+  };
+  scoreDistribution: Record<string, { label: string; count: number; percentage: number }>;
+  topicPerformance: Array<{
+    topicId: string;
+    topicName: string;
+    attemptCount: number;
+    averageScore: number;
+    passRate: number;
+    status: 'Strong' | 'Average' | 'Struggling';
+  }>;
+  prePostComparison: Array<{
+    studentId: string;
+    name: string;
+    email: string;
+    studentNumber: string;
+    section: string;
+    preTestScore: number | null;
+    postTestScore: number | null;
+    scoreImprovement: number | null;
+    preTestDate: string | null;
+    postTestDate: string | null;
+  }>;
+  studentsRequiringSupport: Array<{
+    studentId: string;
+    name: string;
+    email: string;
+    studentNumber: string;
+    section: string;
+    completedLessons: number;
+    totalLessons: number;
+    completionPercentage: number;
+    quizAttemptsCount: number;
+    reasons: string[];
+    recommendedAction: string;
+  }>;
+  studentsList: Array<{
+    id: string;
+    name: string;
+    email: string;
+    studentNumber: string;
+    section: string;
+    completedLessons: number;
+    totalLessons: number;
+  }>;
+}
+
+export interface StudentDeepDiveAnalytics {
+  student: {
+    id: string;
+    name: string;
+    email: string;
+    studentNumber: string;
+    section: string;
+    course: string;
+    yearLevel: string;
+  };
+  progress: {
+    completedLessons: number;
+    totalLessons: number;
+    overallPercentage: number;
+  };
+  preTest: {
+    score: number;
+    total: number;
+    percentage: number;
+    passed: boolean;
+    dateCompleted: string;
+  } | null;
+  postTest: {
+    score: number;
+    total: number;
+    percentage: number;
+    passed: boolean;
+    dateCompleted: string;
+  } | null;
+  scoreImprovement: number | null;
+  topics: Array<{
+    lessonId: string;
+    title: string;
+    sequence: number;
+    videoCompleted: boolean;
+    videoPercentage: number;
+    quizPassed: boolean;
+    bestQuizScore: number;
+    attemptsCount: number;
+  }>;
+  recentQuizAttempts: Array<{
+    id: string;
+    lessonId: string;
+    topicName: string;
+    score: number;
+    total: number;
+    percentage: number;
+    passed: boolean;
+    attemptNumber: number;
+    dateCompleted: string;
+  }>;
+}

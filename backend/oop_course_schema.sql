@@ -971,3 +971,58 @@ CREATE TABLE IF NOT EXISTS assessment_security_events (
 
 CREATE INDEX IF NOT EXISTS idx_assessment_security_events_session ON assessment_security_events(session_id, created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_assessment_security_events_student ON assessment_security_events(student_user_id, created_at DESC);
+
+-- Teacher Content Management: Lessons enhancements, Lesson Videos, Learning Resources, and Pre-Tests
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS course_id TEXT DEFAULT 'oop_fundamentals';
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS created_by UUID;
+
+CREATE TABLE IF NOT EXISTS lesson_videos (
+  id TEXT PRIMARY KEY DEFAULT ('vid_' || SUBSTRING(gen_random_uuid()::text, 1, 12)),
+  lesson_id TEXT REFERENCES lessons(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  video_url TEXT NOT NULL,
+  duration TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  sequence INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'Published' CHECK (status IN ('Draft', 'Published', 'Archived')),
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_lesson_videos_lesson ON lesson_videos(lesson_id, sequence);
+
+CREATE TABLE IF NOT EXISTS learning_resources (
+  id TEXT PRIMARY KEY DEFAULT ('res_' || SUBSTRING(gen_random_uuid()::text, 1, 12)),
+  lesson_id TEXT REFERENCES lessons(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  resource_type TEXT NOT NULL DEFAULT 'pdf' CHECK (resource_type IN ('pdf', 'presentation', 'handout', 'code', 'reference', 'link', 'other')),
+  file_url TEXT NOT NULL,
+  file_size TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'Published' CHECK (status IN ('Draft', 'Published', 'Archived')),
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_learning_resources_lesson ON learning_resources(lesson_id, status);
+
+CREATE TABLE IF NOT EXISTS pre_tests (
+  id TEXT PRIMARY KEY DEFAULT 'oop_pre_test',
+  course_id TEXT NOT NULL DEFAULT 'oop_fundamentals',
+  title TEXT NOT NULL DEFAULT 'Java OOP Pre-Test Assessment',
+  description TEXT DEFAULT 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.',
+  question_pool_count INTEGER NOT NULL DEFAULT 240,
+  questions_per_attempt INTEGER NOT NULL DEFAULT 20,
+  time_limit_seconds INTEGER NOT NULL DEFAULT 1200,
+  passing_score NUMERIC NOT NULL DEFAULT 60,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  status TEXT NOT NULL DEFAULT 'Published' CHECK (status IN ('Draft', 'Published', 'Archived')),
+  post_test_assessment_id TEXT DEFAULT 'oop_post_test',
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO pre_tests (id, course_id, title, description, question_pool_count, questions_per_attempt, time_limit_seconds, passing_score, max_attempts, status, post_test_assessment_id)
+VALUES ('oop_pre_test', 'oop_fundamentals', 'Java OOP Pre-Test Assessment', 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.', 240, 20, 1200, 60, 3, 'Published', 'oop_post_test')
+ON CONFLICT (id) DO NOTHING;

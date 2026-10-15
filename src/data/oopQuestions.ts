@@ -3287,3 +3287,44 @@ export const OOP_PARSED_QUESTIONS: Record<string, CourseQuestion[]> = {
     }
   ]
 };
+
+export const OOP_TOPIC_NAMES: Record<string, string> = {
+  oop_lesson_1: "Object & Classes",
+  oop_lesson_2: "Constructors",
+  oop_lesson_3: "Object Methods",
+  oop_lesson_4: "Inheritance",
+  oop_lesson_5: "Method Overriding",
+  oop_lesson_6: "Abstract Class",
+  oop_lesson_7: "Interface",
+  oop_lesson_8: "Abstraction",
+  oop_lesson_9: "Abstraction (Interfaces)",
+  oop_lesson_10: "Array of Objects",
+  oop_lesson_11: "Enum",
+  oop_lesson_12: "Enum"
+};
+
+export const ALL_OOP_QUESTIONS: (CourseQuestion & { topicName: string })[] = Object.entries(OOP_PARSED_QUESTIONS).flatMap(([lessonId, questions]) =>
+  questions.map(q => ({
+    ...q,
+    lessonId,
+    topicName: OOP_TOPIC_NAMES[lessonId] || lessonId
+  }))
+);
+
+export const shuffleArray = <T>(array: T[]): T[] => {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+};
+
+export const getRandomPreTestQuestions = (count = 20) => {
+  const selected = shuffleArray(ALL_OOP_QUESTIONS).slice(0, count);
+  return selected.map((q, index) => ({
+    ...q,
+    questionNumber: index + 1,
+    options: shuffleArray(q.options)
+  }));
+};

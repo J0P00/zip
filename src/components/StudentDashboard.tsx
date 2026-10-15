@@ -19,7 +19,8 @@ import {
   MailOpen,
   Check,
   LockKeyhole,
-  Circle
+  Circle,
+  ClipboardCheck
 } from 'lucide-react';
 import { AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
@@ -382,6 +383,34 @@ export default function StudentDashboard({
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Java OOP Diagnostic Pre-Test Action Banner */}
+        <div className="lg:col-span-12 rounded-2xl border-2 border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-sky-500/5 to-transparent p-5 backdrop-blur-md dark:border-emerald-500/20 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                Diagnostic Pre-Test
+              </span>
+              <span className="text-xs font-bold text-slate-500">
+                20 Randomized Questions • 240 Question Bank Pool
+              </span>
+            </div>
+            <h3 className="mt-2 text-base font-black text-slate-900 dark:text-white">
+              Establish Your Java OOP Diagnostic Baseline
+            </h3>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-2xl">
+              Take the 20-question diagnostic exam to evaluate your baseline prior knowledge. Non-blocking: You can start Lesson 1 regardless of your pre-test score!
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigateTo('assessments')}
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white hover:bg-emerald-700 shadow-md transition cursor-pointer self-start sm:self-auto shrink-0"
+          >
+            <ClipboardCheck className="h-4 w-4" />
+            Launch Pre-Test
+          </button>
         </div>
 
         {/* Authoritative student progress and improvement guidance */}

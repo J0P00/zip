@@ -30,11 +30,17 @@ import {
   Users,
   UserX,
   Wifi,
-  WifiOff
+  WifiOff,
+  FolderOpen
 } from 'lucide-react';
 import { AdaptiveRecommendation, AssessmentSecurityEvent, AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
 import { LeaderboardUser } from '../types';
 import Leaderboard from './Leaderboard.tsx';
+import LessonManagementTab from './teacher/LessonManagementTab';
+import VideoManagementTab from './teacher/VideoManagementTab';
+import ResourceManagementTab from './teacher/ResourceManagementTab';
+import PreTestManagementTab from './teacher/PreTestManagementTab';
+import LearningAnalyticsTab from './teacher/LearningAnalyticsTab';
 import { teacherApi, assessmentApi, progressApi, userApi } from '../services/api';
 import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 import { generateStudentResultsInterpretation, StudentResultsData, StudentResultsInterpretation } from '../services/interpretation';
@@ -55,7 +61,19 @@ interface TeacherPortalProps {
   leaderboardUsers?: LeaderboardUser[];
 }
 
-type TeacherTab = 'monitoring' | 'ranking' | 'invitations' | 'topics' | 'swing' | 'assessments' | 'ide';
+type TeacherTab =
+  | 'monitoring'
+  | 'lessons'
+  | 'videos'
+  | 'resources'
+  | 'pretest'
+  | 'analytics'
+  | 'ranking'
+  | 'invitations'
+  | 'topics'
+  | 'swing'
+  | 'assessments'
+  | 'ide';
 type LearningStage = 'Lesson' | 'Watch Video' | 'Assessment' | 'Practice IDE' | 'Automatic Grading' | 'Adaptive Recommendation' | 'Unlock Next Topic';
 type LearningStatus = 'In Progress' | 'Completed' | 'Mastered' | 'Needs Improvement' | 'At Risk';
 type MonitoringStatus = 'At Risk' | 'Needs Help' | 'Improving' | 'On Track' | 'Excellent';
@@ -1055,6 +1073,11 @@ export default function TeacherPortal({
         <div className="flex min-w-max gap-1">
           {[
             ['monitoring', 'Live Monitoring', Activity],
+            ['lessons', 'Lessons', BookOpen],
+            ['videos', 'Videos', PlayCircle],
+            ['resources', 'Materials', FolderOpen],
+            ['pretest', 'Pre-Test', ClipboardCheck],
+            ['analytics', 'Analytics', BarChart3],
             ['ranking', 'Student Ranking', Trophy],
             ['invitations', 'Invitations', MailPlus],
             ['topics', 'OOP Topics', BookOpen],
@@ -1671,6 +1694,31 @@ export default function TeacherPortal({
           )}
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* LESSON MANAGEMENT TAB (Panel Comment 1) */}
+      {/* ========================================================================= */}
+      {activeTab === 'lessons' && <LessonManagementTab theme={theme} />}
+
+      {/* ========================================================================= */}
+      {/* VIDEO MANAGEMENT TAB (Panel Comment 1) */}
+      {/* ========================================================================= */}
+      {activeTab === 'videos' && <VideoManagementTab theme={theme} />}
+
+      {/* ========================================================================= */}
+      {/* LEARNING RESOURCE MANAGEMENT TAB (Panel Comment 1) */}
+      {/* ========================================================================= */}
+      {activeTab === 'resources' && <ResourceManagementTab theme={theme} />}
+
+      {/* ========================================================================= */}
+      {/* PRE-TEST MANAGEMENT TAB (Panel Comment 2) */}
+      {/* ========================================================================= */}
+      {activeTab === 'pretest' && <PreTestManagementTab theme={theme} />}
+
+      {/* ========================================================================= */}
+      {/* LEARNING ANALYTICS TAB (Panel Comment 2) */}
+      {/* ========================================================================= */}
+      {activeTab === 'analytics' && <LearningAnalyticsTab theme={theme} />}
 
       {/* ========================================================================= */}
       {/* STUDENT RANKING TAB */}
