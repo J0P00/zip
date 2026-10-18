@@ -298,7 +298,7 @@ export default function StudentDashboard({
     return [];
   })();
   return (
-    <div className={`space-y-6 ${isDark ? 'text-slate-100' : 'text-slate-800'}`} id="student-dashboard-root">
+    <div className={`min-h-full space-y-6 bg-[#f8f9ff] p-1 sm:p-2 ${isDark ? 'text-slate-100' : 'text-slate-800'}`} id="student-dashboard-root">
       {(studentResultsLoading || studentResultsError) && (
         <div className={`rounded-xl border p-4 text-sm font-semibold ${
           studentResultsError
@@ -391,7 +391,7 @@ export default function StudentDashboard({
       <div className="grid lg:grid-cols-12 gap-6">
 
         {/* Welcome Back card utilizing dynamic glass details and emerald gradients */}
-        <div className="lg:col-span-12 min-w-0 bg-[#0f172a] border border-slate-700 p-5 sm:p-6 rounded-2xl relative overflow-hidden flex flex-col justify-between shadow-lg" id="student-welcome-card">
+        <div className="lg:col-span-12 min-w-0 bg-[#0f172a] border border-slate-700 p-5 sm:p-6 rounded-xl relative overflow-hidden flex flex-col justify-between shadow-md" id="student-welcome-card">
           <div className="absolute right-5 top-5 hidden items-center gap-4 sm:flex" aria-label={`Course progress ${curriculumProgress}%`}>
             <div className="relative h-20 w-20 rounded-full" style={{ background: `conic-gradient(#10b981 ${curriculumProgress}%, #1e293b 0)` }}>
               <div className="absolute inset-2 flex items-center justify-center rounded-full bg-[#0f172a] text-lg font-black text-white">{curriculumProgress}%</div>
@@ -412,7 +412,7 @@ export default function StudentDashboard({
                 <Zap className="w-3 h-3 fill-current" /> {learningState}
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mt-2">Welcome back, {firstName}!</h1>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mt-2">Welcome back, {firstName}</h1>
             <p className="text-sm font-semibold text-slate-300">{dashboardCurrentModuleLabel}. Your next permitted activity is ready.</p>
             {studentResults && (
               <div className="mt-3 max-w-xl rounded-xl border border-slate-700 bg-slate-900/70 p-3 text-xs font-semibold leading-5 text-slate-300">
@@ -441,7 +441,7 @@ export default function StudentDashboard({
         </div>
 
         {/* Java OOP Diagnostic Pre-Test Action Banner */}
-        <div className="lg:col-span-12 rounded-2xl border-2 border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-sky-500/5 to-transparent p-5 backdrop-blur-md dark:border-emerald-500/20 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="hidden lg:col-span-12 rounded-2xl border-2 border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-sky-500/5 to-transparent p-5 backdrop-blur-md dark:border-emerald-500/20 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
@@ -469,7 +469,7 @@ export default function StudentDashboard({
         </div>
 
         {/* Authoritative student progress and improvement guidance */}
-        <section className="lg:col-span-12 min-w-0 bg-white/90 border border-slate-200 p-5 rounded-2xl shadow-sm" id="student-progress-section" aria-labelledby="student-progress-title">
+        <section className="lg:col-span-12 min-w-0 bg-white border border-slate-200 p-5 rounded-xl shadow-sm" id="student-progress-section" aria-labelledby="student-progress-title">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <span className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Student Progress</span>
@@ -486,9 +486,9 @@ export default function StudentDashboard({
               ['Practice challenges passed', `${completedPracticeCount}/${studentResults?.totalPracticeActivities || lessonCount}`, `${submittedPracticeCount} submitted`, 'text-violet-700'],
               ['Learning streak', `${streak} day${streak === 1 ? '' : 's'}`, `${points} XP earned`, 'text-amber-700']
             ].map(([label, value, detail, color]) => (
-              <div key={label} className="h-full min-w-0 rounded-xl border border-slate-100 bg-slate-50 p-3">
-                <span className="block text-[9px] font-black uppercase tracking-wide text-slate-400">{label}</span>
-                <span className={`mt-1 block text-lg font-black ${color}`}>{value}</span>
+              <div key={label} className="h-full min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <span className="block font-mono text-[9px] font-black uppercase tracking-widest text-slate-500">{label}</span>
+                <span className={`mt-2 block font-mono text-2xl font-black ${color}`}>{value}</span>
                 <span className="block text-[10px] font-bold text-slate-500">{detail}</span>
               </div>
             ))}
@@ -548,6 +548,35 @@ export default function StudentDashboard({
             </div>
           </div>
         </section>
+
+        <section className="lg:col-span-12 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" id="student-next-action" aria-labelledby="student-next-action-title">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
+                <Play className="h-5 w-5 fill-current" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-[9px] font-black uppercase tracking-widest text-emerald-700">Recommended next action</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[9px] font-bold text-slate-500">STEP 1 OF 3</span>
+                </div>
+                <h2 id="student-next-action-title" className="mt-1 text-lg font-extrabold text-slate-900">{journeyNextAction.label}</h2>
+                <p className="mt-1 max-w-3xl text-xs font-semibold text-slate-500">{journeyNextAction.detail}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[9px] font-bold text-slate-500">
+                  <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">1 {journeyNextAction.label}</span>
+                  <ChevronRight className="h-3 w-3 text-slate-400" />
+                  <span className="rounded-full bg-slate-100 px-2 py-1">2 Assessment</span>
+                  <ChevronRight className="h-3 w-3 text-slate-400" />
+                  <span className="rounded-full bg-slate-100 px-2 py-1">3 Practice IDE</span>
+                </div>
+              </div>
+            </div>
+            <button type="button" onClick={() => onNavigateTo(journeyNextAction.view)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[#0f172a] px-4 py-2.5 text-xs font-black text-white transition hover:bg-slate-700">
+              <Play className="h-3.5 w-3.5 fill-current text-emerald-400" /> Continue learning
+            </button>
+          </div>
+        </section>
+
         <section className="lg:col-span-12 min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" id="student-analytics" aria-labelledby="student-analytics-title">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
