@@ -7,22 +7,22 @@ function test(name, fn) {
   console.log(`PASS: ${name}`);
 }
 
-test('Lesson 3 score 11/15 passes', () => {
+test('Lesson 3 score 12/15 passes', () => {
   assert.strictEqual(Math.round(normalizeAssessmentPercentage({ score: 11, total: 15 })), 73);
-  assert.strictEqual(isPassingAssessment({ score: 11, total: 15 }), true);
+  assert.strictEqual(isPassingAssessment({ score: 12, total: 15 }), true);
 });
 
-test('Exactly 60% passes', () => {
-  assert.strictEqual(isPassingAssessment({ score: 3, total: 5 }), true);
+test('Exactly 80% passes', () => {
+  assert.strictEqual(isPassingAssessment({ score: 4, total: 5 }), true);
 });
 
-test('Below 60% fails', () => {
-  assert.strictEqual(isPassingAssessment({ score: 2, total: 5 }), false);
+test('Below 80% fails', () => {
+  assert.strictEqual(isPassingAssessment({ score: 3, total: 5 }), false);
 });
 
 test('Decimal percentage values are normalized from 0..1 to 0..100', () => {
-  assert.strictEqual(isPassingAssessment({ percentage: 0.6 }), true);
-  assert.strictEqual(isPassingAssessment({ percentage: 0.59 }), false);
+  assert.strictEqual(isPassingAssessment({ percentage: 0.8 }), true);
+  assert.strictEqual(isPassingAssessment({ percentage: 0.79 }), false);
 });
 
 test('Missing or invalid results fail safely', () => {
@@ -41,7 +41,7 @@ test('Practice IDs map to the correct lessons and assessments', () => {
 
 test('A previous passing attempt remains valid after a later failed attempt', () => {
   const attempts = [
-    { score: 11, total: 15 },
+    { score: 12, total: 15 },
     { score: 8, total: 15 }
   ];
   assert.strictEqual(attempts.some(isPassingAssessment), true);

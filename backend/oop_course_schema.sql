@@ -249,7 +249,7 @@ CREATE TABLE IF NOT EXISTS assessments (
   lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   quiz_type TEXT NOT NULL DEFAULT 'Multiple Choice',
-  passing_score NUMERIC NOT NULL DEFAULT 60,
+  passing_score NUMERIC NOT NULL DEFAULT 80,
   attempts INTEGER NOT NULL DEFAULT 1,
   questions JSONB NOT NULL DEFAULT '[]'::jsonb,
   status TEXT NOT NULL DEFAULT 'Draft',
@@ -260,7 +260,7 @@ CREATE TABLE IF NOT EXISTS assessments (
 ALTER TABLE assessments ADD COLUMN IF NOT EXISTS lesson_id TEXT;
 ALTER TABLE assessments ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE assessments ADD COLUMN IF NOT EXISTS quiz_type TEXT DEFAULT 'Multiple Choice';
-ALTER TABLE assessments ADD COLUMN IF NOT EXISTS passing_score NUMERIC DEFAULT 60;
+ALTER TABLE assessments ADD COLUMN IF NOT EXISTS passing_score NUMERIC DEFAULT 80;
 ALTER TABLE assessments ADD COLUMN IF NOT EXISTS attempts INTEGER DEFAULT 1;
 ALTER TABLE assessments ADD COLUMN IF NOT EXISTS questions JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE assessments ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Draft';
@@ -590,7 +590,7 @@ CREATE TABLE IF NOT EXISTS oop_video_progress (
 CREATE TABLE IF NOT EXISTS oop_assessments (
   id TEXT PRIMARY KEY,
   lesson_id TEXT NOT NULL REFERENCES oop_lessons(id) ON DELETE CASCADE,
-  passing_percentage NUMERIC NOT NULL DEFAULT 60,
+  passing_percentage NUMERIC NOT NULL DEFAULT 80,
   questions_count INTEGER NOT NULL DEFAULT 25,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -852,7 +852,7 @@ CREATE TABLE IF NOT EXISTS swing_quizzes (
   id TEXT PRIMARY KEY,
   lesson_id TEXT NOT NULL REFERENCES swing_lessons(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
-  passing_percentage INTEGER NOT NULL DEFAULT 60,
+  passing_percentage INTEGER NOT NULL DEFAULT 80,
   question_count INTEGER NOT NULL DEFAULT 10,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

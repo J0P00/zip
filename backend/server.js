@@ -55,7 +55,8 @@ const sendNotificationEvent = (userId, notification) => {
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const isProduction = process.env.NODE_ENV === "production";
-const ASSESSMENT_PASSING_SCORE = 60;
+const ASSESSMENT_PASSING_SCORE = 80;
+const PRE_TEST_PASSING_SCORE = 60;
 const VIDEO_COMPLETION_THRESHOLD = 95;
 const MAX_ASSESSMENT_ATTEMPTS = 3;
 const PRE_TEST_TIME_LIMIT_SECONDS = 10 * 60;
@@ -474,7 +475,7 @@ const toClientPreTest = (row) => ({
     questionPoolCount: Number(row.question_pool_count || 240),
     questionsPerAttempt: Number(row.questions_per_attempt || 20),
     timeLimitSeconds: Number(row.time_limit_seconds || PRE_TEST_TIME_LIMIT_SECONDS),
-    passingScore: Number(row.passing_score || 60),
+    passingScore: Number(row.passing_score || PRE_TEST_PASSING_SCORE),
     maxAttempts: Number(row.max_attempts || 3),
     status: row.status || "Published",
     postTestAssessmentId: row.post_test_assessment_id || "oop_post_test",
@@ -761,7 +762,7 @@ const initializeDatabase = async () => {
           lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
           title TEXT NOT NULL,
           quiz_type TEXT NOT NULL DEFAULT 'Multiple Choice',
-          passing_score NUMERIC NOT NULL DEFAULT 60,
+          passing_score NUMERIC NOT NULL DEFAULT 80,
           attempts INTEGER NOT NULL DEFAULT 1,
           questions JSONB NOT NULL DEFAULT '[]'::jsonb,
           status TEXT NOT NULL DEFAULT 'Draft',
@@ -769,6 +770,7 @@ const initializeDatabase = async () => {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        ALTER TABLE assessments ALTER COLUMN passing_score SET DEFAULT 80;
         CREATE TABLE IF NOT EXISTS student_progress (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           student_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -814,7 +816,7 @@ const initializeDatabase = async () => {
           starter_code TEXT DEFAULT '',
           sample_input TEXT DEFAULT '',
           sample_output TEXT DEFAULT '',
-          passing_score NUMERIC NOT NULL DEFAULT 80,
+          passing_score NUMERIC NOT NULL DEFAULT 70,
           status TEXT NOT NULL DEFAULT 'Draft',
           created_by UUID REFERENCES users(id) ON DELETE SET NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1031,10 +1033,11 @@ const initializeDatabase = async () => {
           id TEXT PRIMARY KEY,
           lesson_id TEXT NOT NULL REFERENCES swing_lessons(id) ON DELETE CASCADE,
           title TEXT NOT NULL,
-          passing_percentage INTEGER NOT NULL DEFAULT 60,
+          passing_percentage INTEGER NOT NULL DEFAULT 80,
           question_count INTEGER NOT NULL DEFAULT 10,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        ALTER TABLE swing_quizzes ALTER COLUMN passing_percentage SET DEFAULT 80;
 
         CREATE TABLE IF NOT EXISTS swing_questions (
           id TEXT PRIMARY KEY,
@@ -3216,7 +3219,7 @@ app.get("/api/pre-test", requireAuth, async (_req, res, next) => {
             question_pool_count: 240,
             questions_per_attempt: 20,
             time_limit_seconds: PRE_TEST_TIME_LIMIT_SECONDS,
-            passing_score: 60,
+            passing_score: PRE_TEST_PASSING_SCORE,
             max_attempts: 3,
             status: "Published",
             post_test_assessment_id: "oop_post_test"
@@ -3280,7 +3283,7 @@ app.post("/api/pre-test/start", requireAuth, async (req, res, next) => {
 
         // Check if pre-test is published
         const preTestConfig = await pool.query("SELECT * FROM pre_tests WHERE id = 'oop_pre_test' LIMIT 1");
-        const config = preTestConfig.rows[0] || { status: "Published", max_attempts: 3, time_limit_seconds: PRE_TEST_TIME_LIMIT_SECONDS, passing_score: 60 };
+        const config = preTestConfig.rows[0] || { status: "Published", max_attempts: 3, time_limit_seconds: PRE_TEST_TIME_LIMIT_SECONDS, passing_score: PRE_TEST_PASSING_SCORE };
         if (config.status !== "Published") {
             return res.status(403).json({ success: false, message: "The pre-test is currently not available." });
         }
@@ -3483,7 +3486,7 @@ app.post("/api/pre-test/submit", requireAuth, async (req, res, next) => {
         const configuredPassing = configResult.rows[0]?.passing_score;
         const passingScore = (configuredPassing !== undefined && configuredPassing !== null)
             ? Number(configuredPassing)
-            : ASSESSMENT_PASSING_SCORE;
+            : PRE_TEST_PASSING_SCORE;
         const passed = percentage >= passingScore;
         const correctAnswers = score;
         const incorrectAnswers = total - score;
@@ -3673,7 +3676,7 @@ app.get("/api/teacher/analytics", requireAuth, requireRole(["teacher"]), async (
         const avgQuizScore = quizOnlyLessons.length > 0
             ? Math.round(quizOnlyLessons.reduce((acc, q) => acc + Number(q.percentage || 0), 0) / quizOnlyLessons.length)
             : 0;
-        const passedQuizCount = quizOnlyLessons.filter(q => q.passed || Number(q.percentage || 0) >= 60).length;
+        const passedQuizCount = quizOnlyLessons.filter(q => q.passed || Number(q.percentage || 0) >= ASSESSMENT_PASSING_SCORE).length;
         const quizPassRate = quizOnlyLessons.length > 0
             ? Math.round((passedQuizCount / quizOnlyLessons.length) * 100)
             : 0;
@@ -3700,7 +3703,7 @@ app.get("/api/teacher/analytics", requireAuth, requireRole(["teacher"]), async (
             studentCompletedLessonsMap.set(s.id, new Set());
         }
         for (const q of quizOnlyLessons) {
-            if (q.passed || Number(q.percentage || 0) >= 60) {
+            if (q.passed || Number(q.percentage || 0) >= ASSESSMENT_PASSING_SCORE) {
                 const set = studentCompletedLessonsMap.get(q.student_user_id);
                 if (set && q.lesson_id) set.add(q.lesson_id);
             }
@@ -3748,7 +3751,7 @@ app.get("/api/teacher/analytics", requireAuth, requireRole(["teacher"]), async (
             const attempts = quizOnlyLessons.filter(q => q.lesson_id === topicId);
             const count = attempts.length;
             const avgScore = count > 0 ? Math.round(attempts.reduce((a, b) => a + Number(b.percentage || 0), 0) / count) : 0;
-            const passCount = attempts.filter(q => q.passed || Number(q.percentage || 0) >= 60).length;
+            const passCount = attempts.filter(q => q.passed || Number(q.percentage || 0) >= ASSESSMENT_PASSING_SCORE).length;
             const passRate = count > 0 ? Math.round((passCount / count) * 100) : 0;
             const status = avgScore >= 75 ? "Strong" : avgScore >= 60 ? "Average" : "Struggling";
             return {
@@ -3908,7 +3911,7 @@ app.get("/api/teacher/analytics/student/:studentId", requireAuth, requireRole(["
                 sequence: l.sequence,
                 videoCompleted: Boolean(video?.completed || Number(video?.completion_percentage || 0) >= 95),
                 videoPercentage: Number(video?.completion_percentage || 0),
-                quizPassed: bestQuiz >= 60,
+                quizPassed: bestQuiz >= ASSESSMENT_PASSING_SCORE,
                 bestQuizScore: bestQuiz,
                 attemptsCount: lessonQuizzes.length
             };
@@ -5350,7 +5353,7 @@ app.post("/api/practice-challenges", requireAuth, requireRole(["teacher"]), asyn
             String(body.starterCode || body.starter_code || "").slice(0, 50000),
             String(body.sampleInput || body.sample_input || "").slice(0, 10000),
             String(body.sampleOutput || body.expectedOutput || body.sample_output || "").slice(0, 10000),
-            clampNumber(body.passingScore ?? body.passing_score ?? 80, 0, 100),
+            clampNumber(body.passingScore ?? body.passing_score ?? 70, 0, 100),
             cleanText(body.status || "Draft", 40),
             req.authUser.id
         ]);
@@ -6204,13 +6207,13 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             success: true,
             data: {
                 ...result.rows[0],
-                passed: true,
-                practiceCompleted: true,
+                passed: Boolean(updatedLessonAccess.current?.practiceCompleted),
+                practiceCompleted: Boolean(updatedLessonAccess.current?.practiceCompleted),
                 lessonCompleted: Boolean(updatedLessonAccess.current?.completed),
                 lessonAccess: updatedLessonAccess.current,
                 nextLessonAccess: nextLessonAccess?.current || null,
                 canRetry: false,
-                editorLocked: true,
+                editorLocked: false,
                 submissionStatus: 'pending_review'
             }
         });
