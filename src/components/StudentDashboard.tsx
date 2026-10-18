@@ -758,7 +758,7 @@ export default function StudentDashboard({
       <div className="space-y-6">
 
         {/* Playlists, Lessons & Guidance block */}
-        <div className="min-w-0 space-y-6">
+        <div className="hidden">
 
           {/* Curriculum Target Milestone Card with emerald themes */}
           <div className="bg-white/70 backdrop-blur-md p-6 rounded-2xl border border-slate-200/80 relative overflow-hidden" id="bento-curriculum-milestone">
