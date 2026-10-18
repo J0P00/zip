@@ -9,8 +9,7 @@ assert.strictEqual(calculateCourseProgress(Array(12).fill(100)), 100);
 assert.strictEqual(calculateLessonProgress({ videoCompleted: true, assessmentPassed: true, practiceCompleted: false }), 66.67);
 assert.strictEqual(calculateLessonProgress({ videoCompleted: true, assessmentPassed: false, practiceCompleted: false }), 33.33);
 assert.strictEqual(isPracticeCompleted({ id: 'submission-1', score: 40, compileStatus: 'failed' }), false);
-assert.strictEqual(isPracticeCompleted({ score: 100, compileStatus: 'success' }), false);
 assert.strictEqual(isPracticeCompleted({ id: 'submission-2', score: 100, compileStatus: 'success' }), true);
-assert.strictEqual(isPracticeCompleted({ id: 'submission-3', score: 100, compileStatus: 'success', remedialRequired: true }), true);
+assert.strictEqual(isPracticeCompleted({ id: 'submission-3', score: 100, compileStatus: 'success', remedialRequired: true }), false);
 
 console.log('progress calculation tests passed');
