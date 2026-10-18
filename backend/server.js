@@ -16,7 +16,7 @@ const { validateBasicJavaStructure } = require("./basicJavaValidator");
 const { getJavaToolchainDiagnostics } = require("./javaToolchain");
 const { normalizeAssessmentPercentage, isPassingAssessment } = require("./assessmentValidation");
 const { assessmentMatchesLesson } = require("./assessmentEligibility");
-const { calculateLessonProgress, calculateCourseProgress, isPracticeCompleted, canUnlockNextLesson } = require("./progressCalculation");
+const { calculateLessonProgress, calculateCourseProgress, isPracticeCompleted } = require("./progressCalculation");
 const execFileAsync = promisify(execFile);
 
 const app = express();
@@ -2072,8 +2072,8 @@ const getLessonEvidence = async (studentId, lessonId) => {
         practiceCompleted,
         assessmentUnlocked: videoCompleted,
         practiceUnlocked: Boolean(videoCompleted && assessmentPassed),
-        nextLessonUnlocked: canUnlockNextLesson({ videoCompleted, assessmentPassed, practiceCompleted }),
-        completed: canUnlockNextLesson({ videoCompleted, assessmentPassed, practiceCompleted })
+        nextLessonUnlocked: Boolean(videoCompleted && assessmentPassed && practiceCompleted),
+        completed: Boolean(videoCompleted && assessmentPassed && practiceCompleted)
     };
 };
 

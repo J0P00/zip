@@ -15,13 +15,10 @@ const isPracticeCompleted = ({ id, score = 0, compileStatus = '', passingScore =
         && compileStatus === 'success';
 };
 
-const canUnlockNextLesson = ({ videoCompleted = false, assessmentPassed = false, practiceCompleted = false }) =>
-    Boolean(videoCompleted && assessmentPassed && practiceCompleted);
-
 const calculateCourseProgress = (lessonProgresses) => {
     const lessons = Array.isArray(lessonProgresses) ? lessonProgresses : [];
     if (!lessons.length) return 0;
     return Math.round((lessons.reduce((sum, progress) => sum + clampPercent(progress), 0) / lessons.length) * 100) / 100;
 };
 
-module.exports = { calculateLessonProgress, calculateCourseProgress, isPracticeCompleted, canUnlockNextLesson };
+module.exports = { calculateLessonProgress, calculateCourseProgress, isPracticeCompleted };
