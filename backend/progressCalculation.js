@@ -9,11 +9,14 @@ const calculateLessonProgress = ({ videoCompleted = false, assessmentPassed = fa
     return Math.round((completedParts / 3) * 10000) / 100;
 };
 
-const isPracticeCompleted = ({ id, score = 0, teacherScore = null, compileStatus = '', passingScore = 70, remedialRequired = false }) => {
-    const recordedScore = Number(teacherScore ?? score ?? 0);
-    const hasValidResult = teacherScore !== null && teacherScore !== undefined || compileStatus === 'success';
-    return Boolean(id) && recordedScore >= Number(passingScore || 70) && hasValidResult && remedialRequired !== true;
+const isPracticeCompleted = ({ id, score = 0, compileStatus = '', passingScore = 70 }) => {
+    return Boolean(id)
+        && Number(score || 0) >= Number(passingScore || 70)
+        && compileStatus === 'success';
 };
+
+const canUnlockNextLesson = ({ videoCompleted = false, assessmentPassed = false, practiceCompleted = false }) =>
+    Boolean(videoCompleted && assessmentPassed && practiceCompleted);
 
 const calculateCourseProgress = (lessonProgresses) => {
     const lessons = Array.isArray(lessonProgresses) ? lessonProgresses : [];
@@ -21,4 +24,4 @@ const calculateCourseProgress = (lessonProgresses) => {
     return Math.round((lessons.reduce((sum, progress) => sum + clampPercent(progress), 0) / lessons.length) * 100) / 100;
 };
 
-module.exports = { calculateLessonProgress, calculateCourseProgress, isPracticeCompleted };
+module.exports = { calculateLessonProgress, calculateCourseProgress, isPracticeCompleted, canUnlockNextLesson };

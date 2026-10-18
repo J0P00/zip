@@ -307,7 +307,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
               const challengeKey = `${studentKey}:${challenge.id}`;
               const status = submissionDb[challengeKey]?.submissionStatus;
               const lessonAccess = accessDb[challenge.lessonId];
-              const done = Boolean(lessonAccess?.current?.practiceUnlocked && (status === 'submitted' || status === 'graded'));
+              const done = Boolean(lessonAccess?.current?.practiceUnlocked && (status === 'submitted' || status === 'pending_review' || status === 'graded'));
               return (
                 <button
                   key={challenge.id}
@@ -318,7 +318,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
                   <span className="block font-mono text-[10px] text-slate-400">Topic {index + 1}</span>
                   <span className="block truncate">{challenge.title}</span>
                   <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[9px] uppercase ${done ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
-                    {!lessonAccess?.canAccess ? 'Locked until previous lesson is completed' : status === 'graded' ? 'Graded' : status === 'submitted' ? 'Waiting for review' : status === 'returned' ? 'Returned for revision' : lessonAccess?.current?.practiceUnlocked ? 'Available' : 'Locked until video and assessment are complete'}
+                    {!lessonAccess?.canAccess ? 'Locked until previous lesson is completed' : status === 'graded' ? 'Graded' : (status === 'submitted' || status === 'pending_review') ? 'Waiting for review' : status === 'returned' ? 'Returned for revision' : lessonAccess?.current?.practiceUnlocked ? 'Available' : 'Locked until video and assessment are complete'}
                   </span>
                 </button>
               );

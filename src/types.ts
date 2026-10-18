@@ -448,7 +448,7 @@ export interface PracticeSubmission {
   gradedAt?: string;
   gradedBy?: string;
   reviewStatus?: string;
-  submissionStatus?: 'submitted' | 'graded' | 'returned';
+  submissionStatus?: 'submitted' | 'pending_review' | 'graded' | 'returned';
   remedialRequired?: boolean;
 }
 
