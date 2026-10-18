@@ -16,6 +16,7 @@ const { validateBasicJavaStructure } = require("./basicJavaValidator");
 const { getJavaToolchainDiagnostics } = require("./javaToolchain");
 const { normalizeAssessmentPercentage, isPassingAssessment } = require("./assessmentValidation");
 const { assessmentMatchesLesson } = require("./assessmentEligibility");
+const { calculateLessonProgress, calculateCourseProgress, isPracticeCompleted } = require("./progressCalculation");
 const execFileAsync = promisify(execFile);
 
 const app = express();
@@ -1707,11 +1708,10 @@ const getStudentProgressSummary = async (studentId) => {
         });
 
         // 6. Get challenges list to check if a lesson has challenges
-        const challengeRes = await pool.query("SELECT id, lesson_id FROM programming_challenges");
+        const challengeRes = await pool.query("SELECT id, lesson_id, passing_score FROM programming_challenges");
         const challenges = challengeRes.rows;
 
         // 7. Calculate per-lesson progress
-        let totalLessonProgressSum = 0;
         let completedVideos = 0;
         let passedQuizzes = 0;
         let passedPractices = 0;
@@ -1729,9 +1729,18 @@ const getStudentProgressSummary = async (studentId) => {
             const quizPercent = Number(quiz?.percentage || 0);
             const quizCompletedAt = quiz?.date_completed || null;
 
-            const hasChallenge = challenges.some(c => c.lesson_id === lesson.id);
-            const practicePassed = hasChallenge ? (practice?.score >= 70) : true;
-            const practiceScore = hasChallenge ? Number(practice?.score || 0) : 100;
+            const challenge = challenges.find(c => c.lesson_id === lesson.id);
+            const hasChallenge = Boolean(challenge);
+            // A missing challenge is missing evidence, not a completed practice.
+            const practicePassed = isPracticeCompleted({
+                id: practice?.id,
+                score: practice?.score,
+                teacherScore: practice?.teacher_score,
+                compileStatus: practice?.compile_status,
+                passingScore: challenge?.passing_score,
+                remedialRequired: practice?.remedial_required
+            });
+            const practiceScore = hasChallenge ? Number(practice?.score || 0) : 0;
             const practiceSubmittedAt = practice?.submitted_at || null;
 
             if (videoCompleted) completedVideos++;
@@ -1739,13 +1748,7 @@ const getStudentProgressSummary = async (studentId) => {
             if (practicePassed && hasChallenge) passedPractices++;
 
             // Weight calculation
-            let overallLessonProgress = 0;
-            if (videoCompleted) overallLessonProgress += 33.33;
-            if (quizPassed) overallLessonProgress += 33.33;
-            if (practicePassed) overallLessonProgress += 33.34;
-            overallLessonProgress = Math.min(100, Math.round(overallLessonProgress * 100) / 100);
-
-            totalLessonProgressSum += overallLessonProgress;
+            const overallLessonProgress = calculateLessonProgress({ videoCompleted, assessmentPassed: quizPassed, practiceCompleted: practicePassed });
 
             return {
                 lessonId: lesson.id,
@@ -1765,9 +1768,7 @@ const getStudentProgressSummary = async (studentId) => {
         });
 
         // Overall progress: Average of all lessons progress
-        const overallCourseProgress = lessons.length > 0
-            ? Math.min(100, Math.round((totalLessonProgressSum / lessons.length) * 100) / 100)
-            : 0;
+        const overallCourseProgress = calculateCourseProgress(lessonProgresses.map(lesson => lesson.overallLessonProgress));
 
         // Points, Streak, Badges
         const points = await getStudentPoints(studentId);
@@ -2039,7 +2040,14 @@ const getLessonEvidence = async (studentId, lessonId) => {
         const practice = challengeResult.rows[0];
         // Practice completion is authoritative only when a student submission
         // exists. Teacher review is a separate workflow.
-        practiceCompleted = Boolean(practice?.id);
+        practiceCompleted = isPracticeCompleted({
+            id: practice?.id,
+            score: practice?.score,
+            teacherScore: practice?.teacher_score,
+            compileStatus: practice?.compile_status,
+            passingScore: practice?.passing_score,
+            remedialRequired: practice?.remedial_required
+        });
     } else {
         const swingProgressResult = await pool.query(
             `SELECT video_completed, video_percentage, video_last_position, quiz_passed, exercise_completed, overall_percentage
@@ -4568,7 +4576,11 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             pool.query(`
                 SELECT COUNT(pc.id)::int AS total_practice_activities,
                        COUNT(ps.challenge_id)::int AS submitted_practice_activities,
-                      COUNT(ps.challenge_id)::int AS completed_practice_activities,
+                       COUNT(DISTINCT ps.challenge_id) FILTER (
+                         WHERE COALESCE(ps.teacher_score, ps.score, 0) >= pc.passing_score
+                           AND (ps.teacher_score IS NOT NULL OR ps.compile_status = 'success')
+                           AND COALESCE(ps.remedial_required, FALSE) = FALSE
+                       )::int AS completed_practice_activities,
                       COALESCE(ROUND(AVG(ps.teacher_score)), 0)::int AS average_practice_score
                 FROM programming_challenges pc
                 LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND ps.student_id = $1::text
@@ -5560,7 +5572,7 @@ app.get("/api/teacher/monitoring", requireAuth, requireRole(["teacher"]), async 
                           AND ${normalizedAssessmentPercentageSql("qa")} >= ${ASSESSMENT_PASSING_SCORE}
                       ) AS assessment_passed,
                       CASE
-                        WHEN pc.id IS NULL THEN TRUE
+                        WHEN pc.id IS NULL THEN FALSE
                         ELSE COALESCE(practice.teacher_score, practice.score, 0) >= pc.passing_score
                           AND (practice.teacher_score IS NOT NULL OR practice.compile_status = 'success')
                           AND COALESCE(practice.remedial_required, FALSE) = FALSE

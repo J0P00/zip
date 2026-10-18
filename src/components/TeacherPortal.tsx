@@ -727,11 +727,11 @@ export default function TeacherPortal({
         topicCompletion: overallProgress,
         recommendation: 'Progress is synced from the student account activity.',
         topics: syncedTopics || [],
-        swingTopics: getLiveSwingTopics(request.studentEmail, overallProgress >= 100 ? 100 : 0, index),
+        swingTopics: [],
         swing: overallProgress >= 100 ? { video: 100, assessment: 100, ide: 100, miniProject: 100 } : { video: 0, assessment: 0, ide: 0, miniProject: 0 }
       };
 
-      return syncedTopics ? student : withTopicProgress(student, index);
+      return student;
     }
 
     const existing = students.find(student =>
@@ -745,12 +745,13 @@ export default function TeacherPortal({
       sub.studentId === request.studentId
     );
     const score = Number(latestSubmission?.score ?? latestSubmission?.grade ?? 0);
-    const quizScore = score || 80;
-    const practiceScore = score || 70;
-    const overallProgress = score >= 70 ? 72 : 45;
-    const performanceIndex = Math.round(quizScore * 0.35 + practiceScore * 0.4 + overallProgress * 0.25);
+    const hasRecordedActivity = Boolean(latestSubmission);
+    const quizScore = hasRecordedActivity ? score : 0;
+    const practiceScore = hasRecordedActivity ? score : 0;
+    const overallProgress = hasRecordedActivity ? 0 : 0;
+    const performanceIndex = hasRecordedActivity ? Math.round(quizScore * 0.35 + practiceScore * 0.4 + overallProgress * 0.25) : 0;
 
-    return withTopicProgress({
+    return {
       id: request.studentId || request.studentEmail,
       name: request.studentName,
       email: request.studentEmail,
@@ -764,12 +765,12 @@ export default function TeacherPortal({
       overallProgress,
       moduleProgress: overallProgress,
       topicProgress: overallProgress,
-      videoCompletion: Math.max(0, Math.min(100, overallProgress + 10)),
+      videoCompletion: 0,
       quizScore,
       practiceScore,
       challengesCompleted: latestSubmission ? 1 : 0,
       performanceIndex,
-      learningStatus: performanceIndex >= 80 ? 'Completed' : performanceIndex >= 70 ? 'In Progress' : 'Needs Improvement',
+      learningStatus: hasRecordedActivity ? 'In Progress' : 'At Risk',
       lastActivity: latestSubmission ? 'Submitted Practice' : 'Activity unavailable',
       moduleCompletion: overallProgress,
       topicCompletion: overallProgress,
@@ -777,12 +778,10 @@ export default function TeacherPortal({
       topics: [],
       swingTopics: [],
       swing: { video: 0, assessment: 0, ide: 0, miniProject: 0 }
-    }, index);
+    };
   });
 
-  const visibleStudents = backendStudents.map((student, index) =>
-    student.topics?.length ? student : withTopicProgress(student, index)
-  );
+  const visibleStudents = backendStudents;
 
   const activeViewingStudent = viewingStudent;
   const activeViewingResults = viewingStudentResults;
