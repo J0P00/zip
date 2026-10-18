@@ -655,6 +655,12 @@ export default function TeacherPortal({
     }
   }, [viewingStudentId, fetchSpecificStudentProgress]);
 
+  useEffect(() => {
+    if (activeTab === 'topics' && selectedStudentId && viewingStudent?.id !== selectedStudentId) {
+      fetchSpecificStudentProgress(selectedStudentId);
+    }
+  }, [activeTab, fetchSpecificStudentProgress, selectedStudentId, viewingStudent?.id]);
+
   // Inspect security events for a specific assessment session
   const handleInspectSession = async (session: any, studentName: string) => {
     setInspectorSession(session);
@@ -781,7 +787,12 @@ export default function TeacherPortal({
     };
   });
 
-  const visibleStudents = backendStudents;
+  const visibleStudents = backendStudents.map(student => {
+    const detailedStudentMatches = viewingStudent && (
+      viewingStudent.id === student.id || viewingStudent.email.toLowerCase() === student.email.toLowerCase()
+    );
+    return detailedStudentMatches && viewingStudent.topics.length > 0 ? viewingStudent : student;
+  });
 
   const activeViewingStudent = viewingStudent;
   const activeViewingResults = viewingStudentResults;
