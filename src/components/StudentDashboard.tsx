@@ -260,6 +260,17 @@ export default function StudentDashboard({
       evidenceCount: values.length
     };
   });
+  const chronologicalAssessments = [...assessmentHistory].sort((a, b) => new Date(a.dateCompleted).getTime() - new Date(b.dateCompleted).getTime());
+  const lessonAssessmentRows = topicMetrics
+    .map(({ lesson, topic }) => ({ lesson, score: topic?.quizPercentage ?? null }))
+    .filter(item => item.score !== null);
+  const activityCounts = activityTimeline.reduce((counts, activity) => {
+    const type = activity.type === 'assessment' ? 'Assessments' : activity.type === 'practice' ? 'Practice IDE' : 'Video learning';
+    counts[type] = (counts[type] || 0) + 1;
+    return counts;
+  }, {} as Record<string, number>);
+  const activeLearningDays = new Set(activityTimeline.map(activity => new Date(activity.timestamp).toLocaleDateString())).size;
+  const recentPracticeActivity = activityTimeline.find(activity => activity.type === 'practice');
 
   const areasForImprovement = studentResults
     ? topicMetrics.flatMap(({ lesson, topic }) => {
@@ -479,12 +490,13 @@ export default function StudentDashboard({
             <span className={`rounded-xl px-3 py-1.5 text-xs font-black ${learningStateClass}`}>{learningState} · {performanceIndex}%</span>
           </div>
 
-          <div className="mt-4 grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {[
-              ['Lessons', `${curriculumCompletedLessons}/${curriculumLessonCount}`, 'OOP + Java Swing', 'text-emerald-700'],
+              ['Lessons', `${curriculumCompletedLessons}/${curriculumLessonCount}`, `${curriculumProgress}% complete`, 'text-emerald-700'],
               ['Average assessment score', studentResults?.quizAttempts ? `${studentResults.averageQuizScore}%` : '--', `${passedAssessmentCount} passed · latest ${latestAssessmentScore === null ? '--' : `${latestAssessmentScore}%`}`, 'text-sky-700'],
-              ['Practice challenges passed', `${completedPracticeCount}/${studentResults?.totalPracticeActivities || lessonCount}`, `${submittedPracticeCount} submitted`, 'text-violet-700'],
-              ['Learning streak', `${streak} day${streak === 1 ? '' : 's'}`, `${points} XP earned`, 'text-amber-700']
+              ['Video learning', `${studentResults?.completedVideos || 0}/${studentResults?.totalVideos || lessonCount}`, `${videoProgress}% average completion`, 'text-cyan-700'],
+              ['Practice IDE', `${submittedPracticeCount} submitted`, `${completedPracticeCount} completed`, 'text-violet-700'],
+              ['Active learning', `${activeLearningDays} day${activeLearningDays === 1 ? '' : 's'}`, 'in selected activity range', 'text-amber-700']
             ].map(([label, value, detail, color]) => (
               <div key={label} className="h-full min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <span className="block font-mono text-[9px] font-black uppercase tracking-widest text-slate-500">{label}</span>
@@ -618,6 +630,64 @@ export default function StudentDashboard({
               <div className="flex items-center gap-2 text-[10px] font-black uppercase text-amber-700"><CheckCircle2 className="h-3.5 w-3.5" /> Curriculum progress</div>
               <div className="mt-1 text-xl font-black text-slate-900">{curriculumCompletedLessons}/{curriculumLessonCount}</div>
               <p className="text-[10px] font-semibold text-slate-500">{curriculumProgress}% across OOP and Swing</p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4" aria-labelledby="assessment-trend-title">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 id="assessment-trend-title" className="text-sm font-extrabold text-slate-900">Assessment score trend</h3>
+                  <p className="mt-1 text-[10px] font-semibold text-slate-500">Chronological assessment attempts; the dashed line marks the {ASSESSMENT_PASSING_SCORE}% passing threshold.</p>
+                </div>
+                <TrendingUp className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+              </div>
+              {chronologicalAssessments.length ? (
+                <svg className="mt-4 h-44 w-full" viewBox="0 0 520 180" role="img" aria-label="Assessment score trend chart">
+                  <line x1="32" y1="24" x2="32" y2="150" stroke="#cbd5e1" />
+                  <line x1="32" y1="150" x2="500" y2="150" stroke="#cbd5e1" />
+                  <line x1="32" y1={150 - ASSESSMENT_PASSING_SCORE * 1.26} x2="500" y2={150 - ASSESSMENT_PASSING_SCORE * 1.26} stroke="#f59e0b" strokeDasharray="5 5" />
+                  <text x="36" y={146 - ASSESSMENT_PASSING_SCORE * 1.26} fill="#b45309" fontSize="9">PASS {ASSESSMENT_PASSING_SCORE}%</text>
+                  <polyline fill="none" stroke="#059669" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" points={chronologicalAssessments.map((item, index) => {
+                    const x = chronologicalAssessments.length === 1 ? 266 : 36 + (index * 460) / (chronologicalAssessments.length - 1);
+                    return `${x},${150 - item.percentage * 1.26}`;
+                  }).join(' ')} />
+                  {chronologicalAssessments.map((item, index) => {
+                    const x = chronologicalAssessments.length === 1 ? 266 : 36 + (index * 460) / (chronologicalAssessments.length - 1);
+                    const y = 150 - item.percentage * 1.26;
+                    return <g key={item.id}><circle cx={x} cy={y} r="4" fill={item.passed ? '#059669' : '#f59e0b'} /><title>{item.lessonTitle}: {item.percentage}% on {new Date(item.dateCompleted).toLocaleDateString()}</title></g>;
+                  })}
+                  <text x="10" y="28" fill="#64748b" fontSize="9">100</text><text x="16" y="154" fill="#64748b" fontSize="9">0</text>
+                </svg>
+              ) : <p className="mt-5 rounded-lg border border-dashed border-slate-300 p-6 text-center text-xs font-semibold text-slate-500">No assessment attempts yet. Complete an unlocked assessment to create a trend.</p>}
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4" aria-labelledby="lesson-performance-title">
+              <div className="flex items-start justify-between gap-3">
+                <div><h3 id="lesson-performance-title" className="text-sm font-extrabold text-slate-900">Assessment performance by lesson</h3><p className="mt-1 text-[10px] font-semibold text-slate-500">Latest validated assessment score for each attempted lesson.</p></div>
+                <BarChart3 className="h-4 w-4 shrink-0 text-sky-600" aria-hidden="true" />
+              </div>
+              {lessonAssessmentRows.length ? <div className="mt-4 space-y-3">
+                {lessonAssessmentRows.map(({ lesson, score }) => <button type="button" key={lesson.id} onClick={() => onNavigateTo('assessments')} className="block w-full text-left" aria-label={`Open assessment for ${lesson.title}`}>
+                  <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-600"><span className="truncate">{lesson.sequence}. {lesson.title}</span><span>{score}%</span></div>
+                  <div className="relative mt-1 h-2 rounded-full bg-slate-200"><div className={`h-full rounded-full ${score >= ASSESSMENT_PASSING_SCORE ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${score}%` }} /><span className="absolute left-[60%] top-[-2px] h-3 w-px bg-slate-500" /></div>
+                </button>)}
+                <div className="flex items-center gap-2 text-[9px] font-semibold text-slate-500"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Passing <span className="ml-2 h-2 w-2 rounded-full bg-amber-500" /> Needs review <span className="ml-2 h-3 w-px bg-slate-500" /> 60% threshold</div>
+              </div> : <p className="mt-5 rounded-lg border border-dashed border-slate-300 p-6 text-center text-xs font-semibold text-slate-500">No lesson scores are available yet.</p>}
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4" aria-labelledby="activity-breakdown-title">
+              <h3 id="activity-breakdown-title" className="text-sm font-extrabold text-slate-900">Learning activity breakdown</h3>
+              <p className="mt-1 text-[10px] font-semibold text-slate-500">Recorded events in the selected range, grouped by event type.</p>
+              <div className="mt-4 flex items-center gap-5">
+                <div className="h-24 w-24 shrink-0 rounded-full" style={{ background: `conic-gradient(#059669 0 ${((activityCounts['Video learning'] || 0) / Math.max(1, activityTimeline.length)) * 100}%, #0284c7 ${((activityCounts['Video learning'] || 0) / Math.max(1, activityTimeline.length)) * 100}% ${(((activityCounts['Video learning'] || 0) + (activityCounts.Assessments || 0)) / Math.max(1, activityTimeline.length)) * 100}%, #8b5cf6 0 100%)` }} aria-label="Learning activity breakdown chart" role="img"><div className="m-3 flex h-18 w-18 items-center justify-center rounded-full bg-slate-50 text-center font-mono text-xs font-black text-slate-700">{activityTimeline.length}<span className="block text-[8px] font-sans font-bold">events</span></div></div>
+                <div className="space-y-2 text-[10px] font-bold text-slate-600"><div><span className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-600" />Video learning: {activityCounts['Video learning'] || 0}</div><div><span className="mr-2 inline-block h-2 w-2 rounded-full bg-sky-600" />Assessments: {activityCounts.Assessments || 0}</div><div><span className="mr-2 inline-block h-2 w-2 rounded-full bg-violet-500" />Practice IDE: {activityCounts['Practice IDE'] || 0}</div></div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4" aria-labelledby="activity-over-time-title">
+              <div className="flex items-start justify-between gap-3"><div><h3 id="activity-over-time-title" className="text-sm font-extrabold text-slate-900">Learning activity over time</h3><p className="mt-1 text-[10px] font-semibold text-slate-500">Unique active days, based on recorded video, assessment, and practice events.</p></div><Activity className="h-4 w-4 shrink-0 text-violet-600" aria-hidden="true" /></div>
+              <div className="mt-5 flex h-28 items-end gap-1 border-b border-slate-200 pb-1">{Array.from({ length: analyticsRange === '7' ? 7 : 14 }, (_, index) => { const day = new Date(Date.now() - (analyticsRange === '7' ? 6 - index : 13 - index) * 86400000); const count = activityTimeline.filter(item => new Date(item.timestamp).toLocaleDateString() === day.toLocaleDateString()).length; return <div key={day.toISOString()} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1" title={`${day.toLocaleDateString()}: ${count} events`}><div className="w-full max-w-5 rounded-t bg-violet-500" style={{ height: `${Math.max(count ? 8 : 2, (count / Math.max(1, activityTimeline.length)) * 88)}px` }} /><span className="text-[8px] text-slate-400">{day.getDate()}</span></div>; })}</div>
             </div>
           </div>
 
