@@ -260,21 +260,10 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
       setLastResult(null);
       setConsoleLogs([
         '✓ Practice submitted successfully.',
-        'Code submitted successfully. The next lesson is now unlocked.',
-        'Your code has also been submitted to your teacher for optional review.',
+        'Your code has been submitted to your teacher for review.',
         'Status: Waiting for Teacher Review',
         `Submitted: ${formatDateTime(savedSubmission.submittedAt || new Date().toISOString())}`
       ]);
-      const nextLessonAccess = response.data?.nextLessonAccess;
-      if (nextLessonAccess?.lessonId) {
-        setAccessDb(prev => ({
-          ...prev,
-          [nextLessonAccess.lessonId]: {
-            canAccess: Boolean(nextLessonAccess.lessonUnlocked),
-            current: nextLessonAccess
-          }
-        }));
-      }
       onSubmitCompleted(savedSubmission);
       Promise.all(OOP_COURSE_LESSONS.map(lesson => lessonApi.getAccess(lesson.id, currentUser.token)))
         .then(accessResponses => {
