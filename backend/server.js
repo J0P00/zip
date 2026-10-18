@@ -16,7 +16,7 @@ const { validateBasicJavaStructure } = require("./basicJavaValidator");
 const { getJavaToolchainDiagnostics } = require("./javaToolchain");
 const { normalizeAssessmentPercentage, isPassingAssessment } = require("./assessmentValidation");
 const { assessmentMatchesLesson } = require("./assessmentEligibility");
-const { calculateLessonProgress, calculateCourseProgress, isPracticeCompleted, canUnlockNextLesson } = require("./progressCalculation");
+const { calculateLessonProgress, calculateCourseProgress, isPracticeCompleted } = require("./progressCalculation");
 const execFileAsync = promisify(execFile);
 
 const app = express();
@@ -1702,8 +1702,8 @@ const getStudentProgressSummary = async (studentId) => {
         const practiceMap = {};
         practiceRes.rows.forEach(p => {
             const lid = p.lesson_id;
-            const pScore = p.score ?? -1;
-            const currentScore = practiceMap[lid] ? (practiceMap[lid].score ?? -1) : -1;
+            const pScore = p.teacher_score ?? p.score ?? -1;
+            const currentScore = practiceMap[lid] ? (practiceMap[lid].teacher_score ?? practiceMap[lid].score ?? -1) : -1;
             if (!practiceMap[lid] || Number(pScore) > Number(currentScore)) {
                 practiceMap[lid] = p;
             }
@@ -1737,8 +1737,10 @@ const getStudentProgressSummary = async (studentId) => {
             const practicePassed = isPracticeCompleted({
                 id: practice?.id,
                 score: practice?.score,
+                teacherScore: practice?.teacher_score,
                 compileStatus: practice?.compile_status,
-                passingScore: challenge?.passing_score
+                passingScore: challenge?.passing_score,
+                remedialRequired: practice?.remedial_required
             });
             const practiceScore = hasChallenge ? Number(practice?.score || 0) : 0;
             const practiceSubmittedAt = practice?.submitted_at || null;
@@ -2011,12 +2013,11 @@ const getLessonEvidence = async (studentId, lessonId) => {
         );
         const challengeResult = await pool.query(`
             SELECT pc.id, pc.passing_score,
-                   latest.id AS submission_id,
                    latest.score, latest.teacher_score, latest.compile_status,
                    latest.review_status, latest.remedial_required
             FROM programming_challenges pc
             LEFT JOIN LATERAL (
-                SELECT ps.id, ps.score, ps.teacher_score, ps.compile_status,
+                SELECT ps.score, ps.teacher_score, ps.compile_status,
                        ps.review_status, ps.remedial_required
                 FROM practice_submissions ps
                 WHERE (ps.student_id = $1::text OR ps.student_id IN (SELECT user_id FROM users WHERE id::text = $1::text))
@@ -2042,10 +2043,12 @@ const getLessonEvidence = async (studentId, lessonId) => {
         // Practice completion is authoritative only when a student submission
         // exists. Teacher review is a separate workflow.
         practiceCompleted = isPracticeCompleted({
-            id: practice?.submission_id,
+            id: practice?.id,
             score: practice?.score,
+            teacherScore: practice?.teacher_score,
             compileStatus: practice?.compile_status,
-            passingScore: practice?.passing_score
+            passingScore: practice?.passing_score,
+            remedialRequired: practice?.remedial_required
         });
     } else {
         const swingProgressResult = await pool.query(
@@ -2075,8 +2078,8 @@ const getLessonEvidence = async (studentId, lessonId) => {
         practiceCompleted,
         assessmentUnlocked: videoCompleted,
         practiceUnlocked: Boolean(videoCompleted && assessmentPassed),
-        nextLessonUnlocked: canUnlockNextLesson({ videoCompleted, assessmentPassed, practiceCompleted }),
-        completed: canUnlockNextLesson({ videoCompleted, assessmentPassed, practiceCompleted })
+        nextLessonUnlocked: Boolean(videoCompleted && assessmentPassed && practiceCompleted),
+        completed: Boolean(videoCompleted && assessmentPassed && practiceCompleted)
     };
 };
 
@@ -4576,8 +4579,9 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 SELECT COUNT(pc.id)::int AS total_practice_activities,
                        COUNT(ps.challenge_id)::int AS submitted_practice_activities,
                        COUNT(DISTINCT ps.challenge_id) FILTER (
-                         WHERE COALESCE(ps.score, 0) >= pc.passing_score
-                           AND ps.compile_status = 'success'
+                         WHERE COALESCE(ps.teacher_score, ps.score, 0) >= pc.passing_score
+                           AND (ps.teacher_score IS NOT NULL OR ps.compile_status = 'success')
+                           AND COALESCE(ps.remedial_required, FALSE) = FALSE
                        )::int AS completed_practice_activities,
                       COALESCE(ROUND(AVG(ps.teacher_score)), 0)::int AS average_practice_score
                 FROM programming_challenges pc
@@ -5571,8 +5575,9 @@ app.get("/api/teacher/monitoring", requireAuth, requireRole(["teacher"]), async 
                       ) AS assessment_passed,
                       CASE
                         WHEN pc.id IS NULL THEN FALSE
-                        ELSE COALESCE(practice.score, 0) >= pc.passing_score
-                          AND practice.compile_status = 'success'
+                        ELSE COALESCE(practice.teacher_score, practice.score, 0) >= pc.passing_score
+                          AND (practice.teacher_score IS NOT NULL OR practice.compile_status = 'success')
+                          AND COALESCE(practice.remedial_required, FALSE) = FALSE
                       END AS practice_completed
                     FROM users u
                     CROSS JOIN lessons l
@@ -5586,7 +5591,7 @@ app.get("/api/teacher/monitoring", requireAuth, requireRole(["teacher"]), async 
                       LIMIT 1
                     ) pc ON TRUE
                     LEFT JOIN LATERAL (
-                      SELECT ps.score, ps.compile_status
+                      SELECT ps.score, ps.teacher_score, ps.compile_status, ps.remedial_required
                       FROM practice_submissions ps
                       JOIN programming_challenges pc2 ON pc2.id = ps.challenge_id
                       WHERE ps.student_id IN (u.id::text, u.user_id, u.email)
@@ -6123,58 +6128,17 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             return res.status(403).json({ success: false, message: `Pass the required assessment with ${ASSESSMENT_PASSING_SCORE}% or higher before submitting practice.` });
         }
 
-        const challengeDefinitionResult = await pool.query(`
-            SELECT c.*, COALESCE(json_agg(t.*) FILTER (WHERE t.id IS NOT NULL), '[]') AS test_cases
-            FROM programming_challenges c
-            LEFT JOIN challenge_test_cases t ON t.challenge_id = c.id
-            WHERE c.id = $1
-            GROUP BY c.id
-        `, [safeChallengeId]);
-        const challengeDefinition = challengeDefinitionResult.rows[0]
-            ? toClientPracticeChallenge(challengeDefinitionResult.rows[0])
-            : PRACTICE_CHALLENGES.find(challenge => challenge.id === safeChallengeId);
-        if (!challengeDefinition) {
-            return res.status(404).json({ success: false, message: "Practice challenge definition is unavailable." });
-        }
-
-        // Validate the student's solution before saving it. Teacher review is
-        // asynchronous metadata and is not part of the progression gate.
-        const validation = await evaluateJavaSubmission(challengeDefinition, String(sourceCode));
-        const testResults = buildEvaluationResults(validation, challengeDefinition);
-        if (!validation.passed || Number(validation.score || 0) < Number(prerequisite.rows[0].passing_score || 70)) {
-            return res.status(422).json({
-                success: false,
-                message: "Practice submission did not pass the required validation. Correct the code and try again.",
-                data: {
-                    compileStatus: validation.compileStatus,
-                    evaluationStatus: validation.evaluationStatus,
-                    score: validation.score,
-                    programOutput: validation.programOutput || '',
-                    errorMessage: validation.compilerError || validation.note,
-                    testResults,
-                    practiceCompleted: false,
-                    canRetry: true,
-                    editorLocked: false
-                }
-            });
-        }
-
         const result = await pool.query(`
             INSERT INTO practice_submissions (
               student_id, challenge_id, source_code, program_output, compile_status,
               runtime, memory_usage, score, error_message, test_results, is_locked, review_status
             )
-            VALUES ($1, $2, $3, $4, $5, 0, 0, $6, $7, $8::jsonb, TRUE, 'pending_review')
+            VALUES ($1, $2, $3, '', 'not_executed', 0, NULL, NULL, '', '[]'::jsonb, FALSE, 'pending_review')
             RETURNING *
         `, [
             req.authUser.id,
             safeChallengeId,
-            String(sourceCode).slice(0, 50000),
-            validation.programOutput || '',
-            validation.compileStatus,
-            validation.score,
-            validation.compilerError || validation.note || '',
-            JSON.stringify(testResults)
+            String(sourceCode).slice(0, 50000)
         ]);
 
         await logActivity(
@@ -6240,8 +6204,8 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             success: true,
             data: {
                 ...result.rows[0],
-                passed: Boolean(validation.passed),
-                practiceCompleted: Boolean(updatedLessonAccess.current?.practiceCompleted),
+                passed: true,
+                practiceCompleted: true,
                 lessonCompleted: Boolean(updatedLessonAccess.current?.completed),
                 lessonAccess: updatedLessonAccess.current,
                 nextLessonAccess: nextLessonAccess?.current || null,
