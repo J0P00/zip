@@ -257,6 +257,24 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
       const savedSubmission = mapBackendSubmission(response.data);
       const next = { ...submissionDb, [submissionKey]: savedSubmission };
       setSubmissionDb(next);
+      const currentLessonAccess = response.data?.lessonAccess;
+      const nextLessonAccess = response.data?.nextLessonAccess;
+      setAccessDb(previous => {
+        const updated = { ...previous };
+        if (currentLessonAccess?.lessonId) {
+          updated[currentLessonAccess.lessonId] = {
+            canAccess: true,
+            current: currentLessonAccess
+          };
+        }
+        if (nextLessonAccess?.lessonId) {
+          updated[nextLessonAccess.lessonId] = {
+            canAccess: Boolean(response.data?.nextLessonUnlocked ?? nextLessonAccess.lessonUnlocked ?? true),
+            current: nextLessonAccess
+          };
+        }
+        return updated;
+      });
       setLastResult(null);
       setConsoleLogs([
         '✓ Practice submitted successfully.',

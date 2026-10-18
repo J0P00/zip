@@ -2016,11 +2016,12 @@ const getLessonEvidence = async (studentId, lessonId) => {
         );
         const challengeResult = await pool.query(`
             SELECT pc.id, pc.passing_score,
+                   latest.id AS submission_id,
                    latest.score, latest.teacher_score, latest.compile_status,
                    latest.review_status, latest.remedial_required
             FROM programming_challenges pc
             LEFT JOIN LATERAL (
-                SELECT ps.score, ps.teacher_score, ps.compile_status,
+                SELECT ps.id, ps.score, ps.teacher_score, ps.compile_status,
                        ps.review_status, ps.remedial_required
                 FROM practice_submissions ps
                 WHERE (ps.student_id = $1::text OR ps.student_id IN (SELECT user_id FROM users WHERE id::text = $1::text))
@@ -2039,18 +2040,15 @@ const getLessonEvidence = async (studentId, lessonId) => {
         assessmentScore = quizResult.rows[0]?.percentage === null || quizResult.rows[0]?.percentage === undefined
             ? null : Number(quizResult.rows[0].percentage);
 
-        // Every lesson requires a submission. Teacher review fields are
-        // deliberately excluded from progression.
+        // Every lesson requires a persisted submission. Teacher review fields
+        // are separate from progression and must not delay unlocking.
         practiceRequired = true;
         const practice = challengeResult.rows[0];
-        // Practice completion is authoritative only when a student submission
-        // exists. Teacher review is a separate workflow.
+        // The submission ID is the authoritative evidence. A pending review
+        // has already been persisted and therefore completes practice unless
+        // it is explicitly marked remedial.
         practiceCompleted = isPracticeCompleted({
-            id: practice?.id,
-            score: practice?.score,
-            teacherScore: practice?.teacher_score,
-            compileStatus: practice?.compile_status,
-            passingScore: practice?.passing_score,
+            submissionId: practice?.submission_id,
             remedialRequired: practice?.remedial_required
         });
     } else {
@@ -6207,11 +6205,14 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             success: true,
             data: {
                 ...result.rows[0],
+                submissionId: result.rows[0].id,
+                practiceSubmitted: true,
                 passed: Boolean(updatedLessonAccess.current?.practiceCompleted),
                 practiceCompleted: Boolean(updatedLessonAccess.current?.practiceCompleted),
                 lessonCompleted: Boolean(updatedLessonAccess.current?.completed),
                 lessonAccess: updatedLessonAccess.current,
                 nextLessonAccess: nextLessonAccess?.current || null,
+                nextLessonUnlocked: Boolean(nextLessonAccess?.canAccess),
                 canRetry: false,
                 editorLocked: false,
                 submissionStatus: 'pending_review'

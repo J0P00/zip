@@ -9,11 +9,8 @@ const calculateLessonProgress = ({ videoCompleted = false, assessmentPassed = fa
     return Math.round((completedParts / 3) * 10000) / 100;
 };
 
-const isPracticeCompleted = ({ id, score = 0, teacherScore = null, compileStatus = '', passingScore = 70, remedialRequired = false }) => {
-    const recordedScore = Number(teacherScore ?? score ?? 0);
-    const hasValidResult = teacherScore !== null && teacherScore !== undefined || compileStatus === 'success';
-    return Boolean(id) && recordedScore >= Number(passingScore || 70) && hasValidResult && remedialRequired !== true;
-};
+const isPracticeCompleted = ({ id, submissionId = null, remedialRequired = false, validationFailed = false }) =>
+    Boolean(submissionId || id) && validationFailed !== true && remedialRequired !== true;
 
 const calculateCourseProgress = (lessonProgresses) => {
     const lessons = Array.isArray(lessonProgresses) ? lessonProgresses : [];
