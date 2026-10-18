@@ -391,44 +391,50 @@ export default function StudentDashboard({
       <div className="grid lg:grid-cols-12 gap-6">
 
         {/* Welcome Back card utilizing dynamic glass details and emerald gradients */}
-        <div className="lg:col-span-12 min-w-0 bg-white/70 backdrop-blur-md border border-slate-200/80 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between" id="student-welcome-card">
+        <div className="lg:col-span-12 min-w-0 bg-[#0f172a] border border-slate-700 p-5 sm:p-6 rounded-2xl relative overflow-hidden flex flex-col justify-between shadow-lg" id="student-welcome-card">
           <div className="absolute right-5 top-5 hidden items-center gap-4 sm:flex" aria-label={`Course progress ${curriculumProgress}%`}>
-            <div className="relative h-20 w-20 rounded-full" style={{ background: `conic-gradient(#10b981 ${curriculumProgress}%, #d1fae5 0)` }}>
-              <div className="absolute inset-2 flex items-center justify-center rounded-full bg-white text-lg font-black text-slate-800">{curriculumProgress}%</div>
+            <div className="relative h-20 w-20 rounded-full" style={{ background: `conic-gradient(#10b981 ${curriculumProgress}%, #1e293b 0)` }}>
+              <div className="absolute inset-2 flex items-center justify-center rounded-full bg-[#0f172a] text-lg font-black text-white">{curriculumProgress}%</div>
             </div>
             <div className="min-w-[150px]">
-              <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">Course progress</span>
-              <span className="mt-1 block text-xs font-bold text-slate-800">{curriculumCompletedLessons} of {curriculumLessonCount} lessons completed</span>
-              <div className="mt-2 h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${curriculumProgress}%` }} /></div>
+              <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">Overall curriculum progress</span>
+              <span className="mt-1 block text-xs font-bold text-slate-200">{curriculumCompletedLessons} of {curriculumLessonCount} lessons completed</span>
+              <div className="mt-2 h-2 rounded-full bg-slate-700"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${curriculumProgress}%` }} /></div>
             </div>
           </div>
           {/* Decorative subtle top mesh glow */}
-          <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-20 bg-[radial-gradient(circle_at_bottom_right,ellipse,rgba(16,185,129,0.3)_0%,rgba(255,255,255,0)_70%)] pointer-events-none"></div>
+          <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-30 bg-[radial-gradient(circle_at_bottom_right,ellipse,rgba(16,185,129,0.35)_0%,rgba(15,23,42,0)_70%)] pointer-events-none"></div>
 
           <div className="space-y-2 relative z-10 sm:pr-56">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold rounded">Student Workspace</span>
+              <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 bg-emerald-950 border border-emerald-700 text-emerald-300 font-bold rounded">Academic Track: OOP + Java Swing</span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 ${learningStateClass}`}>
                 <Zap className="w-3 h-3 fill-current" /> {learningState}
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mt-2">Welcome back, {firstName}! 👋</h1>
-            <p className="text-sm font-semibold text-slate-600">Your next step is clear. Keep building your OOP skills.</p>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mt-2">Welcome back, {firstName}!</h1>
+            <p className="text-sm font-semibold text-slate-300">{dashboardCurrentModuleLabel}. Your next permitted activity is ready.</p>
             {studentResults && (
-              <div className="mt-3 max-w-xl rounded-xl border border-slate-200 bg-white/70 p-3 text-xs font-semibold leading-5 text-slate-600">
-                <span className="font-black text-slate-800">Learning Score: {studentResults.learningScore}%.</span> {studentResults.learningStateInterpretation}
+              <div className="mt-3 max-w-xl rounded-xl border border-slate-700 bg-slate-900/70 p-3 text-xs font-semibold leading-5 text-slate-300">
+                <span className="font-black text-white">Learning Score: {studentResults.learningScore}%.</span> {studentResults.learningStateInterpretation}
               </div>
             )}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button type="button" onClick={() => onNavigateTo(journeyNextAction.view)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-500">
+                <Play className="h-3.5 w-3.5 fill-current" /> {journeyNextAction.view === 'dashboard' ? 'Course Complete' : journeyNextAction.label}
+              </button>
+              <span className="rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-[10px] font-bold text-slate-300">Gate: 95% video · {ASSESSMENT_PASSING_SCORE}% assessment</span>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-6 pt-4 border-t border-slate-200/80 mt-4 relative z-10">
-            <div className="flex items-center gap-2 border-l border-slate-200 pl-6 first:border-l-0 first:pl-0">
-              <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center">
-                <Clock className="w-4.5 h-4.5 text-sky-600" />
+          <div className="flex flex-wrap items-center gap-6 pt-4 border-t border-slate-700 mt-4 relative z-10">
+            <div className="flex items-center gap-2 border-l border-slate-700 pl-6 first:border-l-0 first:pl-0">
+              <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center">
+                <Clock className="w-4.5 h-4.5 text-emerald-400" />
               </div>
               <div>
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider font-mono">Mastery Completed</div>
-                <div className="text-xs sm:text-sm font-extrabold text-slate-800 font-mono">{curriculumCompletedLessons}/{curriculumLessonCount} Lessons</div>
+                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider font-mono">Verified course progress</div>
+                <div className="text-xs sm:text-sm font-extrabold text-slate-200 font-mono">{curriculumCompletedLessons}/{curriculumLessonCount} Lessons</div>
               </div>
             </div>
           </div>
