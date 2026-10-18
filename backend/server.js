@@ -58,6 +58,7 @@ const isProduction = process.env.NODE_ENV === "production";
 const ASSESSMENT_PASSING_SCORE = 60;
 const VIDEO_COMPLETION_THRESHOLD = 95;
 const MAX_ASSESSMENT_ATTEMPTS = 3;
+const PRE_TEST_TIME_LIMIT_SECONDS = 10 * 60;
 let practiceSubmissionKeyColumn = "id";
 
 const insertCappedAssessmentAttempt = async ({ studentId, assessmentId, storage, fallbackAttemptNumber = 1, insertQuery, buildParams, beforeInsert, maxAttempts = MAX_ASSESSMENT_ATTEMPTS }) => {
@@ -472,7 +473,7 @@ const toClientPreTest = (row) => ({
     description: row.description || "",
     questionPoolCount: Number(row.question_pool_count || 240),
     questionsPerAttempt: Number(row.questions_per_attempt || 20),
-    timeLimitSeconds: Number(row.time_limit_seconds || 1200),
+    timeLimitSeconds: Number(row.time_limit_seconds || PRE_TEST_TIME_LIMIT_SECONDS),
     passingScore: Number(row.passing_score || 60),
     maxAttempts: Number(row.max_attempts || 3),
     status: row.status || "Published",
@@ -1147,7 +1148,7 @@ const initializeDatabase = async () => {
           description TEXT DEFAULT 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.',
           question_pool_count INTEGER NOT NULL DEFAULT 240,
           questions_per_attempt INTEGER NOT NULL DEFAULT 20,
-          time_limit_seconds INTEGER NOT NULL DEFAULT 1200,
+          time_limit_seconds INTEGER NOT NULL DEFAULT 600,
           passing_score NUMERIC NOT NULL DEFAULT 60,
           max_attempts INTEGER NOT NULL DEFAULT 3,
           status TEXT NOT NULL DEFAULT 'Published' CHECK (status IN ('Draft', 'Published', 'Archived')),
@@ -1158,8 +1159,9 @@ const initializeDatabase = async () => {
         );
 
         INSERT INTO pre_tests (id, course_id, title, description, question_pool_count, questions_per_attempt, time_limit_seconds, passing_score, max_attempts, status, post_test_assessment_id)
-        VALUES ('oop_pre_test', 'oop_fundamentals', 'Java OOP Pre-Test Assessment', 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.', 240, 20, 1200, 60, 3, 'Published', 'oop_post_test')
+        VALUES ('oop_pre_test', 'oop_fundamentals', 'Java OOP Pre-Test Assessment', 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.', 240, 20, 600, 60, 3, 'Published', 'oop_post_test')
         ON CONFLICT (id) DO NOTHING;
+        UPDATE pre_tests SET time_limit_seconds = 600 WHERE id = 'oop_pre_test' AND time_limit_seconds = 1200;
     `);
     const practiceSubmissionColumns = await executeInitQuery("Check practice_submissions columns", `
         SELECT column_name
@@ -3213,7 +3215,7 @@ app.get("/api/pre-test", requireAuth, async (_req, res, next) => {
             description: "Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.",
             question_pool_count: 240,
             questions_per_attempt: 20,
-            time_limit_seconds: 1200,
+            time_limit_seconds: PRE_TEST_TIME_LIMIT_SECONDS,
             passing_score: 60,
             max_attempts: 3,
             status: "Published",
@@ -3278,7 +3280,7 @@ app.post("/api/pre-test/start", requireAuth, async (req, res, next) => {
 
         // Check if pre-test is published
         const preTestConfig = await pool.query("SELECT * FROM pre_tests WHERE id = 'oop_pre_test' LIMIT 1");
-        const config = preTestConfig.rows[0] || { status: "Published", max_attempts: 3, time_limit_seconds: 1200, passing_score: 60 };
+        const config = preTestConfig.rows[0] || { status: "Published", max_attempts: 3, time_limit_seconds: PRE_TEST_TIME_LIMIT_SECONDS, passing_score: 60 };
         if (config.status !== "Published") {
             return res.status(403).json({ success: false, message: "The pre-test is currently not available." });
         }
@@ -3338,7 +3340,7 @@ app.post("/api/pre-test/start", requireAuth, async (req, res, next) => {
         // New attempt: randomly select exactly 20 distinct questions without replacement from 240 questions
         const attemptNumber = attemptCount + 1;
         const sessionToken = `pretest_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-        const timeLimitSeconds = Number(config.time_limit_seconds || 1200); // 20 minutes
+        const timeLimitSeconds = Number(config.time_limit_seconds || PRE_TEST_TIME_LIMIT_SECONDS);
         const expiresAt = new Date(Date.now() + timeLimitSeconds * 1000);
 
         const { studentQuestions } = generatePreTestSessionQuestions(20);
@@ -4099,7 +4101,7 @@ app.post("/api/assessments/session/start", requireAuth, async (req, res, next) =
 
         const sessionToken = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
         const timeLimitSeconds = safeAssessmentId === "oop_pre_test"
-            ? Number(preTestConfig?.time_limit_seconds || 1200)
+            ? Number(preTestConfig?.time_limit_seconds || PRE_TEST_TIME_LIMIT_SECONDS)
             : 600;
         const expiresAt = new Date(Date.now() + timeLimitSeconds * 1000);
 

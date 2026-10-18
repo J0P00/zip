@@ -1013,7 +1013,7 @@ CREATE TABLE IF NOT EXISTS pre_tests (
   description TEXT DEFAULT 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.',
   question_pool_count INTEGER NOT NULL DEFAULT 240,
   questions_per_attempt INTEGER NOT NULL DEFAULT 20,
-  time_limit_seconds INTEGER NOT NULL DEFAULT 1200,
+  time_limit_seconds INTEGER NOT NULL DEFAULT 600,
   passing_score NUMERIC NOT NULL DEFAULT 60,
   max_attempts INTEGER NOT NULL DEFAULT 3,
   status TEXT NOT NULL DEFAULT 'Published' CHECK (status IN ('Draft', 'Published', 'Archived')),
@@ -1024,5 +1024,5 @@ CREATE TABLE IF NOT EXISTS pre_tests (
 );
 
 INSERT INTO pre_tests (id, course_id, title, description, question_pool_count, questions_per_attempt, time_limit_seconds, passing_score, max_attempts, status, post_test_assessment_id)
-VALUES ('oop_pre_test', 'oop_fundamentals', 'Java OOP Pre-Test Assessment', 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.', 240, 20, 1200, 60, 3, 'Published', 'oop_post_test')
+VALUES ('oop_pre_test', 'oop_fundamentals', 'Java OOP Pre-Test Assessment', 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.', 240, 20, 600, 60, 3, 'Published', 'oop_post_test')
 ON CONFLICT (id) DO NOTHING;

@@ -38,6 +38,8 @@ interface PreTestQuestionItem {
   explanation?: string;
 }
 
+const PRE_TEST_TIME_LIMIT_SECONDS = 10 * 60;
+
 export default function PreTestAssessment({
   currentUser,
   onFinish,
@@ -56,7 +58,7 @@ export default function PreTestAssessment({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [attemptNumber, setAttemptNumber] = useState(1);
   const [passingScore, setPassingScore] = useState(70);
-  const [remainingSeconds, setRemainingSeconds] = useState(1200); // 20 min
+  const [remainingSeconds, setRemainingSeconds] = useState(PRE_TEST_TIME_LIMIT_SECONDS);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
@@ -144,7 +146,7 @@ export default function PreTestAssessment({
         if (data.remainingSeconds !== undefined && data.remainingSeconds !== null) {
           setRemainingSeconds(Math.max(0, Number(data.remainingSeconds)));
         } else {
-          setRemainingSeconds(1200);
+          setRemainingSeconds(PRE_TEST_TIME_LIMIT_SECONDS);
         }
         setCurrentIndex(0);
         setAnswers(data.savedAnswers || {});
@@ -180,7 +182,7 @@ export default function PreTestAssessment({
       const res = await preTestApi.submit({
         sessionId: sessionId || undefined,
         answers,
-        timeSpentSeconds: Math.max(0, 1200 - remainingSeconds)
+        timeSpentSeconds: Math.max(0, PRE_TEST_TIME_LIMIT_SECONDS - remainingSeconds)
       });
       const data = res.data;
       if (data) {
@@ -257,7 +259,7 @@ export default function PreTestAssessment({
             <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4">
               <span className="text-[10px] font-black uppercase text-slate-400 block">Time Allocation</span>
               <strong className="mt-1 block font-mono text-xl font-black text-slate-900 dark:text-white">
-                20 Minutes
+                10 Minutes
               </strong>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 A server-synchronized countdown timer ensures authentic diagnostic conditions.

@@ -23,6 +23,8 @@ import { PreTestConfig, PreTestAttempt } from '../../types';
 import { preTestApi } from '../../services/api';
 import { ALL_OOP_QUESTIONS, OOP_TOPIC_NAMES } from '../../data/oopQuestions';
 
+const PRE_TEST_TIME_LIMIT_SECONDS = 10 * 60;
+
 interface PreTestManagementTabProps {
   theme?: 'light' | 'dark';
 }
@@ -50,7 +52,7 @@ export default function PreTestManagementTab({ theme = 'light' }: PreTestManagem
     title: 'Java OOP Diagnostic Pre-Test',
     description: 'Prior-knowledge diagnostic exam randomly sampling 20 questions from the 240-question Java OOP Assessment Bank.',
     questionsPerAttempt: 20,
-    timeLimitSeconds: 1200,
+    timeLimitSeconds: PRE_TEST_TIME_LIMIT_SECONDS,
     passingScore: 70,
     maxAttempts: 3,
     status: 'Published' as 'Draft' | 'Published' | 'Archived',
@@ -79,7 +81,7 @@ export default function PreTestManagementTab({ theme = 'light' }: PreTestManagem
           title: cfgRes.value.data.title,
           description: cfgRes.value.data.description,
           questionsPerAttempt: cfgRes.value.data.questionsPerAttempt || 20,
-          timeLimitSeconds: cfgRes.value.data.timeLimitSeconds || 1200,
+          timeLimitSeconds: cfgRes.value.data.timeLimitSeconds || PRE_TEST_TIME_LIMIT_SECONDS,
           passingScore: cfgRes.value.data.passingScore || 70,
           maxAttempts: cfgRes.value.data.maxAttempts || 3,
           status: cfgRes.value.data.status || 'Published',
@@ -261,7 +263,7 @@ export default function PreTestManagementTab({ theme = 'light' }: PreTestManagem
               Time Limit
             </div>
             <strong className="mt-1 block font-mono text-xl font-black text-slate-900 dark:text-white">
-              {Math.floor((config?.timeLimitSeconds || 1200) / 60)} min
+              {Math.floor((config?.timeLimitSeconds || PRE_TEST_TIME_LIMIT_SECONDS) / 60)} min
             </strong>
             <span className="text-[10px] text-slate-400">Auto-submit at expiry</span>
           </div>
