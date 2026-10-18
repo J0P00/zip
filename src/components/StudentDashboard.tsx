@@ -56,6 +56,34 @@ type DashboardResults = StudentResultsData & {
   activityTimeline?: DashboardActivity[];
 };
 
+const getTopicGuidance = (title: string) => {
+  const normalized = title.toLowerCase();
+  if (normalized.includes('encapsulation') || normalized.includes('access')) return {
+    focus: 'Private fields, data hiding, and controlled access through getter and setter methods.',
+    recommendation: 'Review how private variables protect an object state, then practice creating a Java class with getters and setters.'
+  };
+  if (normalized.includes('inheritance') || normalized.includes('subclass')) return {
+    focus: 'Parent-child relationships, inherited members, and safe use of extends.',
+    recommendation: 'Review the inheritance examples, then practice extending a parent class and reusing its members.'
+  };
+  if (normalized.includes('polymorph')) return {
+    focus: 'Method overriding, dynamic dispatch, and choosing behavior at runtime.',
+    recommendation: 'Review overriding and runtime dispatch, then practice calling overridden methods through a parent reference.'
+  };
+  if (normalized.includes('abstract') || normalized.includes('interface')) return {
+    focus: 'Abstract contracts, interfaces, and implementing required behavior.',
+    recommendation: 'Review abstract classes and interfaces, then implement a small class that satisfies an interface contract.'
+  };
+  if (normalized.includes('constructor') || normalized.includes('object')) return {
+    focus: 'Object initialization, constructor parameters, and valid construction order.',
+    recommendation: 'Review constructor parameters and initialization, then create objects using the correct constructor.'
+  };
+  return {
+    focus: 'The core concepts and examples presented in this lesson.',
+    recommendation: 'Review the lesson video and examples, then retry the assessment when the required activity is available.'
+  };
+};
+
 interface StudentDashboardProps {
   userName: string;
   streak: number;
@@ -272,24 +300,27 @@ export default function StudentDashboard({
   const activeLearningDays = new Set(activityTimeline.map(activity => new Date(activity.timestamp).toLocaleDateString())).size;
   const recentPracticeActivity = activityTimeline.find(activity => activity.type === 'practice');
 
-  const areasForImprovement = studentResults
-    ? topicMetrics.flatMap(({ lesson, topic }) => {
-        if (!topic || topic.lessonUnlocked === false || topic.lessonCompleted) return [];
-        if (!topic.videoCompleted || (topic.videoPercentage ?? 0) < 95) {
-          return [{ lesson, label: 'Video incomplete', detail: `${topic.videoPercentage ?? 0}% watched; at least 95% is required.`, view: 'videos' as StudentSubView }];
-        }
-        if (topic.quizPassed !== true) {
-          const score = topic.quizPercentage === null ? 'Not attempted' : `${topic.quizPercentage}%`;
-          return [{ lesson, label: 'Assessment needs attention', detail: `Latest score: ${score}. A passing score is ${ASSESSMENT_PASSING_SCORE}%.`, view: 'assessments' as StudentSubView }];
-        }
-        if (topic.practiceCompleted !== true) {
-          const practiceDetail = topic.practiceScore === null || topic.practiceScore === undefined
-            ? 'Practice has not been submitted.'
-            : `Practice is submitted at ${topic.practiceScore}%, but is not marked complete.`;
-          return [{ lesson, label: 'Practice needs attention', detail: practiceDetail, view: 'ide' as StudentSubView }];
-        }
-        return [];
-      }).slice(0, 4)
+  const improvementRecommendations = studentResults
+    ? topicMetrics
+      .filter(({ topic }) => topic?.attempted && topic.quizPercentage !== null && topic.quizPercentage !== undefined)
+      .map(({ lesson, topic }) => {
+        const score = topic!.quizPercentage!;
+        const guidance = getTopicGuidance(lesson.title);
+        const status = score < ASSESSMENT_PASSING_SCORE ? 'Needs Improvement' : score < 75 ? 'Developing' : 'Good Understanding';
+        const evidence = `${score}% latest assessment score${topic!.quizPassed ? '' : `; below the ${ASSESSMENT_PASSING_SCORE}% passing threshold`}.`;
+        return {
+          lesson,
+          topic: topic!,
+          score,
+          status,
+          guidance,
+          evidence,
+          priority: score < ASSESSMENT_PASSING_SCORE ? 0 : score < 75 ? 1 : 2
+        };
+      })
+      .filter(item => item.priority < 2)
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 3)
     : [];
 
   const recommendedNextSteps = (() => {
@@ -525,20 +556,36 @@ export default function StudentDashboard({
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
             <div>
               <h3 className="text-sm font-extrabold text-slate-900">Areas to Improve</h3>
-              <div className="mt-2 space-y-2">
-                {areasForImprovement.length ? areasForImprovement.map(item => (
-                  <div key={item.lesson.id} className="rounded-xl border border-amber-100 bg-amber-50/50 p-3">
+              <p className="mt-1 text-[10px] font-semibold leading-4 text-slate-500">Discover which concepts need more practice and get personalized recommendations based on your assessment results.</p>
+              <div className="mt-3 space-y-3">
+                {improvementRecommendations.length ? improvementRecommendations.map(item => (
+                  <article key={item.lesson.id} className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <span className="text-[9px] font-black uppercase tracking-wide text-amber-700">Lesson {item.lesson.sequence}</span>
-                        <h4 className="mt-0.5 text-xs font-extrabold text-slate-900">{item.lesson.title}</h4>
-                        <p className="mt-1 text-[10px] font-semibold text-slate-600"><strong>{item.label}:</strong> {item.detail}</p>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[9px] font-black uppercase tracking-wide text-amber-700">Lesson {item.lesson.sequence}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${item.priority === 0 ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}`}>{item.status}</span>
+                        </div>
+                        <h4 className="mt-1 text-xs font-extrabold text-slate-900">{item.lesson.title}</h4>
+                        <div className="mt-2 grid gap-2 text-[10px] leading-4 text-slate-600">
+                          <p><strong className="text-slate-800">Evidence:</strong> {item.evidence}</p>
+                          <p><strong className="text-slate-800">Focus on:</strong> {item.guidance.focus}</p>
+                          <p><strong className="text-slate-800">Recommendation:</strong> {item.guidance.recommendation}</p>
+                        </div>
+                        <div className="mt-2 h-1.5 rounded-full bg-amber-100" role="progressbar" aria-label={`${item.lesson.title} assessment score`} aria-valuenow={item.score} aria-valuemin={0} aria-valuemax={100}><div className={`h-full rounded-full ${item.priority === 0 ? 'bg-rose-500' : 'bg-amber-500'}`} style={{ width: `${item.score}%` }} /></div>
                       </div>
-                      <button type="button" onClick={() => onNavigateTo(item.view)} className="shrink-0 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-[10px] font-black text-amber-800 hover:border-amber-400">Open</button>
+                      <div className="flex shrink-0 flex-col gap-1.5">
+                        <button type="button" onClick={() => onNavigateTo('videos')} className="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-[10px] font-black text-amber-800 hover:border-amber-400">Review lesson</button>
+                        {item.topic.practiceUnlocked && <button type="button" onClick={() => onNavigateTo('ide')} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-emerald-700">Practice topic</button>}
+                      </div>
                     </div>
-                  </div>
-                )) : (
-                  <p className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-[10px] font-bold text-emerald-800">No active improvement items. Keep going.</p>
+                  </article>
+                )) : studentResults && studentResults.quizAttempts === 0 ? (
+                  <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-[10px] font-bold text-slate-600">No assessment data yet. Complete your first assessment to receive personalized learning recommendations.</p>
+                ) : studentResults ? (
+                  <p className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-[10px] font-bold text-emerald-800">No topics currently need improvement based on the available assessment evidence. Keep building on your strong performance.</p>
+                ) : (
+                  <p className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-[10px] font-bold text-slate-600">Learning recommendations are loading from your authenticated records.</p>
                 )}
               </div>
             </div>
