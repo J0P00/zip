@@ -21,11 +21,40 @@ import {
   LockKeyhole,
   Circle,
   ClipboardCheck
+  ,Activity
+  ,BarChart3
+  ,Target
+  ,History
 } from 'lucide-react';
 import { AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
 import { getCurrentPracticeChallenge, PRACTICE_CHALLENGES } from '../oopPracticeCatalog';
 import type { StudentResultsData } from '../services/interpretation';
+import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
+
+type DashboardAssessment = {
+  id: string;
+  lessonId: string;
+  lessonTitle: string;
+  assessmentId: string;
+  percentage: number;
+  passed: boolean;
+  attemptNumber: number;
+  dateCompleted: string;
+};
+
+type DashboardActivity = {
+  id: string;
+  type: string;
+  detail: string;
+  lessonId?: string | null;
+  timestamp: string;
+};
+
+type DashboardResults = StudentResultsData & {
+  assessmentHistory?: DashboardAssessment[];
+  activityTimeline?: DashboardActivity[];
+};
 
 interface StudentDashboardProps {
   userName: string;
@@ -65,6 +94,7 @@ export default function StudentDashboard({
   studentResultsLoading = false
 }: StudentDashboardProps) {
   const firstName = userName.trim().split(/\s+/)[0] || 'Student';
+  const dashboardResults = studentResults as DashboardResults | null;
   const effectiveCompletedLessons = studentResults?.completedLessons ?? completedLessonsCount;
   const hasProgress = Boolean(studentResults?.hasActivity) || streak > 0 || points > 0 || effectiveCompletedLessons > 0;
   const lessonCount = OOP_COURSE_LESSONS.length;
@@ -211,6 +241,25 @@ export default function StudentDashboard({
   const assessmentProgress = Math.round((passedAssessmentCount / Math.max(1, lessonCount)) * 100);
   const practiceProgress = Math.round((completedPracticeCount / Math.max(1, lessonCount)) * 100);
   const videoProgress = studentResults?.videoPercentage ?? 0;
+  const curriculumLessonCount = lessonCount + 5;
+  const curriculumCompletedLessons = effectiveCompletedLessons + swingProgress.completedLessons;
+  const curriculumProgress = Math.round(((journeyProgress * lessonCount) + (swingProgress.completedLessons * 100)) / curriculumLessonCount);
+  const [analyticsRange, setAnalyticsRange] = React.useState<'7' | '30' | 'all'>('all');
+  const analyticsSince = analyticsRange === 'all' ? 0 : Date.now() - Number(analyticsRange) * 24 * 60 * 60 * 1000;
+  const assessmentHistory = (dashboardResults?.assessmentHistory || []).filter(item => !analyticsSince || new Date(item.dateCompleted).getTime() >= analyticsSince);
+  const activityTimeline = (dashboardResults?.activityTimeline || []).filter(item => !analyticsSince || new Date(item.timestamp).getTime() >= analyticsSince);
+  const assessmentTrend = assessmentHistory.length >= 2
+    ? assessmentHistory[0].percentage - assessmentHistory[assessmentHistory.length - 1].percentage
+    : null;
+  const masteryRows = topicMetrics.map(({ lesson, topic }) => {
+    const values = [topic?.quizPercentage, topic?.practiceScore].filter((value): value is number => value !== null && value !== undefined);
+    return {
+      lesson,
+      topic,
+      mastery: values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null,
+      evidenceCount: values.length
+    };
+  });
 
   const areasForImprovement = studentResults
     ? topicMetrics.flatMap(({ lesson, topic }) => {
@@ -220,7 +269,7 @@ export default function StudentDashboard({
         }
         if (topic.quizPassed !== true) {
           const score = topic.quizPercentage === null ? 'Not attempted' : `${topic.quizPercentage}%`;
-          return [{ lesson, label: 'Assessment needs attention', detail: `Latest score: ${score}. A passing score is 60%.`, view: 'assessments' as StudentSubView }];
+          return [{ lesson, label: 'Assessment needs attention', detail: `Latest score: ${score}. A passing score is ${ASSESSMENT_PASSING_SCORE}%.`, view: 'assessments' as StudentSubView }];
         }
         if (topic.practiceCompleted !== true) {
           const practiceDetail = topic.practiceScore === null || topic.practiceScore === undefined
@@ -241,7 +290,7 @@ export default function StudentDashboard({
       return [{ lesson, title: 'Finish the lesson video', reason: `${topic.title} is at ${topic.videoPercentage ?? 0}%; reach 95% to unlock the assessment.`, view: 'videos' as StudentSubView, action: 'Continue video' }];
     }
     if (topic.quizPassed !== true && topic.assessmentUnlocked !== false) {
-      return [{ lesson, title: topic.quizPercentage === null ? 'Take the lesson assessment' : 'Retake the lesson assessment', reason: topic.quizPercentage === null ? 'This assessment has not been attempted.' : `The latest score is ${topic.quizPercentage}%; 60% is required to pass.`, view: 'assessments' as StudentSubView, action: topic.quizPercentage === null ? 'Start assessment' : 'Retake assessment' }];
+      return [{ lesson, title: topic.quizPercentage === null ? 'Take the lesson assessment' : 'Retake the lesson assessment', reason: topic.quizPercentage === null ? 'This assessment has not been attempted.' : `The latest score is ${topic.quizPercentage}%; ${ASSESSMENT_PASSING_SCORE}% is required to pass.`, view: 'assessments' as StudentSubView, action: topic.quizPercentage === null ? 'Start assessment' : 'Retake assessment' }];
     }
     if (topic.quizPassed === true && topic.practiceCompleted !== true && topic.practiceUnlocked !== false) {
       return [{ lesson, title: 'Complete the coding practice', reason: topic.practiceScore === null || topic.practiceScore === undefined ? 'The eligible practice problem has not been submitted.' : 'The practice submission is not yet marked complete.', view: 'ide' as StudentSubView, action: 'Open Practice IDE' }];
@@ -343,14 +392,14 @@ export default function StudentDashboard({
 
         {/* Welcome Back card utilizing dynamic glass details and emerald gradients */}
         <div className="lg:col-span-12 min-w-0 bg-white/70 backdrop-blur-md border border-slate-200/80 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between" id="student-welcome-card">
-          <div className="absolute right-5 top-5 hidden items-center gap-4 sm:flex" aria-label={`Course progress ${journeyProgress}%`}>
-            <div className="relative h-20 w-20 rounded-full" style={{ background: `conic-gradient(#10b981 ${journeyProgress}%, #d1fae5 0)` }}>
-              <div className="absolute inset-2 flex items-center justify-center rounded-full bg-white text-lg font-black text-slate-800">{journeyProgress}%</div>
+          <div className="absolute right-5 top-5 hidden items-center gap-4 sm:flex" aria-label={`Course progress ${curriculumProgress}%`}>
+            <div className="relative h-20 w-20 rounded-full" style={{ background: `conic-gradient(#10b981 ${curriculumProgress}%, #d1fae5 0)` }}>
+              <div className="absolute inset-2 flex items-center justify-center rounded-full bg-white text-lg font-black text-slate-800">{curriculumProgress}%</div>
             </div>
             <div className="min-w-[150px]">
               <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">Course progress</span>
-              <span className="mt-1 block text-xs font-bold text-slate-800">{effectiveCompletedLessons} of {lessonCount} lessons completed</span>
-              <div className="mt-2 h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${journeyProgress}%` }} /></div>
+              <span className="mt-1 block text-xs font-bold text-slate-800">{curriculumCompletedLessons} of {curriculumLessonCount} lessons completed</span>
+              <div className="mt-2 h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${curriculumProgress}%` }} /></div>
             </div>
           </div>
           {/* Decorative subtle top mesh glow */}
@@ -379,7 +428,7 @@ export default function StudentDashboard({
               </div>
               <div>
                 <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider font-mono">Mastery Completed</div>
-                <div className="text-xs sm:text-sm font-extrabold text-slate-800 font-mono">{effectiveCompletedLessons}/{studentResults?.totalLessons || lessonCount} Lessons</div>
+                <div className="text-xs sm:text-sm font-extrabold text-slate-800 font-mono">{curriculumCompletedLessons}/{curriculumLessonCount} Lessons</div>
               </div>
             </div>
           </div>
@@ -426,9 +475,10 @@ export default function StudentDashboard({
 
           <div className="mt-4 grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              ['Lessons', `${effectiveCompletedLessons}/${lessonCount}`, 'completed', 'text-emerald-700'],
-              ['Assessments', studentResults?.quizAttempts ? `${studentResults.averageQuizScore}%` : '--', `${passedAssessmentCount} passed · latest ${latestAssessmentScore === null ? '--' : `${latestAssessmentScore}%`}`, 'text-sky-700'],              ['Coding practice', `${completedPracticeCount}/${lessonCount}`, `${submittedPracticeCount} submitted`, 'text-violet-700'],
-              ['Learning score', `${performanceIndex}%`, learningState, 'text-amber-700']
+              ['Lessons', `${curriculumCompletedLessons}/${curriculumLessonCount}`, 'OOP + Java Swing', 'text-emerald-700'],
+              ['Average assessment score', studentResults?.quizAttempts ? `${studentResults.averageQuizScore}%` : '--', `${passedAssessmentCount} passed · latest ${latestAssessmentScore === null ? '--' : `${latestAssessmentScore}%`}`, 'text-sky-700'],
+              ['Practice challenges passed', `${completedPracticeCount}/${studentResults?.totalPracticeActivities || lessonCount}`, `${submittedPracticeCount} submitted`, 'text-violet-700'],
+              ['Learning streak', `${streak} day${streak === 1 ? '' : 's'}`, `${points} XP earned`, 'text-amber-700']
             ].map(([label, value, detail, color]) => (
               <div key={label} className="h-full min-w-0 rounded-xl border border-slate-100 bg-slate-50 p-3">
                 <span className="block text-[9px] font-black uppercase tracking-wide text-slate-400">{label}</span>
@@ -441,7 +491,7 @@ export default function StudentDashboard({
           <div className="mt-4 grid items-start gap-3 sm:grid-cols-3" aria-label="Learning activity progress">
             {[
               ['Video lessons', videoProgress, '95% required per lesson'],
-              ['Assessments passed', assessmentProgress, '60% required to pass'],
+              ['Assessments passed', assessmentProgress, `${ASSESSMENT_PASSING_SCORE}% required to pass`],
               ['Coding practice completed', practiceProgress, 'Submission is not completion']
             ].map(([label, value, detail]) => (
               <div key={label}>
@@ -490,6 +540,111 @@ export default function StudentDashboard({
                 )}
               </div>
             </div>
+          </div>
+        </section>
+        <section className="lg:col-span-12 min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" id="student-analytics" aria-labelledby="student-analytics-title">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-widest text-sky-700">Learning Analytics</span>
+              <h2 id="student-analytics-title" className="mt-1 text-lg font-extrabold text-slate-900">Evidence from your learning activity</h2>
+              <p className="mt-1 text-xs font-semibold text-slate-500">Only authenticated assessment, video, and practice records are included.</p>
+            </div>
+            <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1" aria-label="Analytics time range">
+              {(['7', '30', 'all'] as const).map(range => (
+                <button
+                  key={range}
+                  type="button"
+                  onClick={() => setAnalyticsRange(range)}
+                  className={`rounded-md px-2.5 py-1.5 text-[10px] font-black ${analyticsRange === range ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  {range === 'all' ? 'All time' : `${range} days`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-3">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase text-sky-700"><BarChart3 className="h-3.5 w-3.5" /> Assessment attempts</div>
+              <div className="mt-1 text-xl font-black text-slate-900">{assessmentHistory.length}</div>
+              <p className="text-[10px] font-semibold text-slate-500">{assessmentTrend === null ? 'Not enough history for a trend' : `${assessmentTrend >= 0 ? '+' : ''}${assessmentTrend}% from earliest to latest`}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase text-emerald-700"><Target className="h-3.5 w-3.5" /> Assessment average</div>
+              <div className="mt-1 text-xl font-black text-slate-900">{assessmentHistory.length ? `${Math.round(assessmentHistory.reduce((sum, item) => sum + item.percentage, 0) / assessmentHistory.length)}%` : '--'}</div>
+              <p className="text-[10px] font-semibold text-slate-500">Passing mark: {ASSESSMENT_PASSING_SCORE}%</p>
+            </div>
+            <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-3">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase text-violet-700"><Activity className="h-3.5 w-3.5" /> Learning events</div>
+              <div className="mt-1 text-xl font-black text-slate-900">{activityTimeline.length}</div>
+              <p className="text-[10px] font-semibold text-slate-500">Recorded in selected period</p>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase text-amber-700"><CheckCircle2 className="h-3.5 w-3.5" /> Curriculum progress</div>
+              <div className="mt-1 text-xl font-black text-slate-900">{curriculumCompletedLessons}/{curriculumLessonCount}</div>
+              <p className="text-[10px] font-semibold text-slate-500">{curriculumProgress}% across OOP and Swing</p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-5 xl:grid-cols-2">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><GraduationCap className="h-4 w-4 text-emerald-600" /> OOP skill mastery</h3>
+                <span className="text-[10px] font-semibold text-slate-400">Assessment + validated practice</span>
+              </div>
+              <div className="mt-3 space-y-3">
+                {masteryRows.map(({ lesson, topic, mastery }) => {
+                  const lessonProgress = Math.round(((Math.min(100, (topic?.videoPercentage || 0) / 95 * 100) / 100) + (topic?.quizPassed ? 1 : 0) + (topic?.practiceCompleted ? 1 : 0)) / 3 * 100);
+                  return (
+                    <div key={lesson.id}>
+                      <div className="flex items-center justify-between gap-3 text-[10px] font-bold">
+                        <span className="min-w-0 truncate text-slate-700">{lesson.sequence}. {lesson.title}</span>
+                        <span className="shrink-0 text-slate-500">{mastery === null ? 'Not enough data' : `${mastery}%`}</span>
+                      </div>
+                      <div className="mt-1 h-2 rounded-full bg-slate-100" role="progressbar" aria-label={`${lesson.title} progress`} aria-valuenow={lessonProgress} aria-valuemin={0} aria-valuemax={100}>
+                        <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500" style={{ width: `${lessonProgress}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                {!masteryRows.length && <p className="rounded-xl border border-dashed border-slate-200 p-4 text-xs font-semibold text-slate-500">No OOP skill evidence is available yet.</p>}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><History className="h-4 w-4 text-sky-600" /> Recent learning activity</h3>
+                <span className="text-[10px] font-semibold text-slate-400">Real account events</span>
+              </div>
+              <div className="mt-3 space-y-2">
+                {activityTimeline.slice(0, 6).map(activity => (
+                  <button key={`${activity.type}-${activity.id}`} type="button" onClick={() => activity.lessonId && onNavigateTo(activity.type === 'assessment' ? 'assessments' : activity.type === 'practice' ? 'ide' : 'videos')} className="flex w-full items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 text-left hover:border-sky-200 hover:bg-sky-50/40">
+                    <span className="mt-0.5 rounded-lg bg-white p-1.5 text-sky-600"><Activity className="h-3.5 w-3.5" /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[11px] font-extrabold text-slate-800">{activity.detail}</span>
+                      <span className="mt-0.5 block text-[10px] font-semibold text-slate-500">{new Date(activity.timestamp).toLocaleString()}</span>
+                    </span>
+                  </button>
+                ))}
+                {!activityTimeline.length && <p className="rounded-xl border border-dashed border-slate-200 p-4 text-xs font-semibold text-slate-500">No activity in this time range. Start the next available lesson to create learning evidence.</p>}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 overflow-x-auto rounded-xl border border-slate-100">
+            <div className="flex min-w-[560px] items-center gap-3 border-b border-slate-100 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-500">
+              <span className="w-8">#</span><span className="min-w-40 flex-1">Assessment</span><span className="w-20">Score</span><span className="w-20">Status</span><span className="w-28">Completed</span>
+            </div>
+            {assessmentHistory.slice(0, 8).map(attempt => (
+              <div key={attempt.id} className="flex min-w-[560px] items-center gap-3 border-b border-slate-100 px-3 py-2.5 text-[10px] last:border-0">
+                <span className="w-8 font-mono text-slate-400">{attempt.attemptNumber}</span>
+                <span className="min-w-40 flex-1 truncate font-bold text-slate-700">{attempt.lessonTitle}</span>
+                <span className="w-20 font-black text-slate-800">{attempt.percentage}%</span>
+                <span className={`w-20 font-black ${attempt.passed ? 'text-emerald-600' : 'text-amber-600'}`}>{attempt.passed ? 'Passed' : 'Retry'}</span>
+                <span className="w-28 text-slate-500">{new Date(attempt.dateCompleted).toLocaleDateString()}</span>
+              </div>
+            ))}
+            {!assessmentHistory.length && <p className="p-4 text-xs font-semibold text-slate-500">No assessment history is available for this period.</p>}
           </div>
         </section>
         {/* Backend-backed learning journey */}
@@ -605,7 +760,7 @@ export default function StudentDashboard({
               <div className="space-y-1">
                 <span className="text-[9px] font-bold font-mono tracking-wider bg-emerald-50 border border-emerald-200 px-2 py-0.5 uppercase rounded text-emerald-700">{hasProgress ? 'Currently Studying' : 'Ready to Start'}</span>
                 <h2 className="text-lg font-bold text-slate-900">{dashboardCurrentModuleLabel}</h2>
-                <p className="text-xs text-slate-500 font-medium">{hasProgress ? `Continue ${dashboardCurrentLesson.title.toLowerCase()} and complete its video and 60% assessment.` : 'Begin with foundational class structure, object creation, and method basics.'}</p>
+                <p className="text-xs text-slate-500 font-medium">{hasProgress ? `Continue ${dashboardCurrentLesson.title.toLowerCase()} and complete its video and ${ASSESSMENT_PASSING_SCORE}% assessment.` : 'Begin with foundational class structure, object creation, and method basics.'}</p>
               </div>
               <span className="text-xs font-bold font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">{moduleProgress}% Completed</span>
             </div>

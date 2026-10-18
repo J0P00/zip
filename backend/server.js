@@ -4580,11 +4580,10 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 SELECT COUNT(pc.id)::int AS total_practice_activities,
                        COUNT(ps.challenge_id)::int AS submitted_practice_activities,
                        COUNT(DISTINCT ps.challenge_id) FILTER (
-                         WHERE COALESCE(ps.teacher_score, ps.score, 0) >= pc.passing_score
-                           AND (ps.teacher_score IS NOT NULL OR ps.compile_status = 'success')
+                         WHERE ps.id IS NOT NULL
                            AND COALESCE(ps.remedial_required, FALSE) = FALSE
                        )::int AS completed_practice_activities,
-                      COALESCE(ROUND(AVG(ps.teacher_score)), 0)::int AS average_practice_score
+                      COALESCE(ROUND(AVG(ps.score)), 0)::int AS average_practice_score
                 FROM programming_challenges pc
                 LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND ps.student_id = $1::text
                 WHERE pc.status <> 'Archived'
@@ -4617,7 +4616,8 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                 LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND sp.video_id = l.id
                                 LEFT JOIN lesson_progress lp ON lp.student_id = $1 AND lp.lesson_id = l.id
                                 LEFT JOIN LATERAL (
-                                    SELECT id, percentage, passed
+                                    SELECT id, percentage, passed,
+                                           (SELECT COUNT(*)::int FROM quiz_attempts counted WHERE counted.student_user_id = $1 AND counted.lesson_id = l.id) AS attempt_count
                                     FROM quiz_attempts
                                     WHERE student_user_id = $1 AND lesson_id = l.id
                                     ORDER BY attempt_number DESC, date_completed DESC
@@ -4668,6 +4668,39 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                 ORDER BY sl.sequence, sl.title
                         `, [dbStudentId])
         ]);
+        const [assessmentHistoryResult, activityTimelineResult] = await Promise.all([
+            pool.query(`
+                SELECT qa.id, qa.lesson_id, qa.assessment_id, qa.percentage, qa.passed,
+                       qa.attempt_number, qa.date_completed, COALESCE(l.title, qa.assessment_id) AS lesson_title
+                FROM quiz_attempts qa
+                LEFT JOIN lessons l ON l.id = qa.lesson_id
+                WHERE qa.student_user_id = $1 AND qa.assessment_id <> 'oop_pre_test'
+                ORDER BY qa.date_completed DESC, qa.attempt_number DESC
+                LIMIT 50
+            `, [dbStudentId]),
+            pool.query(`
+                SELECT id, 'video' AS type,
+                       CASE WHEN completed OR completion_percentage >= 95 THEN 'Completed video' ELSE 'Updated video progress' END AS detail,
+                       video_id AS lesson_id, updated_at AS timestamp
+                FROM student_progress
+                WHERE student_user_id = $1
+                UNION ALL
+                SELECT qa.id, 'assessment' AS type,
+                       'Completed assessment with ' || ROUND(qa.percentage)::text || '%' AS detail,
+                       qa.lesson_id, qa.date_completed AS timestamp
+                FROM quiz_attempts qa
+                WHERE qa.student_user_id = $1 AND qa.assessment_id <> 'oop_pre_test'
+                UNION ALL
+                SELECT ps.id, 'practice' AS type,
+                       'Submitted practice code' AS detail,
+                       pc.lesson_id, ps.submitted_at AS timestamp
+                FROM practice_submissions ps
+                JOIN programming_challenges pc ON pc.id = ps.challenge_id
+                WHERE ps.student_id = $1::text
+                ORDER BY timestamp DESC
+                LIMIT 30
+            `, [dbStudentId])
+        ]);
         const row = { ...course.rows[0], ...videos.rows[0], ...quizzes.rows[0], ...practice.rows[0], ...swing.rows[0] };
         const totalLessons = Number(row.total_lessons || 0);
         const totalVideos = Number(row.total_videos || totalLessons);
@@ -4684,6 +4717,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 videoPercentage: topic.video_percentage === null ? null : Number(topic.video_percentage),
                 videoCompleted: Boolean(topic.video_completed),
                 quizPercentage: topic.quiz_percentage === null ? null : Number(topic.quiz_percentage),
+                quizAttemptCount: Number(topic.attempt_count || 0),
                 quizPassed: topic.quiz_passed === null ? null : Boolean(topic.quiz_passed),
                 practiceScore: topic.practice_score === null ? null : Number(topic.practice_score),
                 practiceCompleted: Boolean(evidence?.practiceCompleted),
@@ -4780,7 +4814,24 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 oopComplete: oopCompletion.oopComplete,
                 swingUnlocked: oopCompletion.oopComplete,
                 oopTopics: oopTopicRows,
-                swingTopics: swingTopicRows
+                swingTopics: swingTopicRows,
+                assessmentHistory: assessmentHistoryResult.rows.map(attempt => ({
+                    id: attempt.id,
+                    lessonId: attempt.lesson_id || '',
+                    lessonTitle: attempt.lesson_title || attempt.assessment_id,
+                    assessmentId: attempt.assessment_id,
+                    percentage: Number(attempt.percentage || 0),
+                    passed: Number(attempt.percentage || 0) >= ASSESSMENT_PASSING_SCORE,
+                    attemptNumber: Number(attempt.attempt_number || 0),
+                    dateCompleted: attempt.date_completed
+                })),
+                activityTimeline: activityTimelineResult.rows.map(activity => ({
+                    id: activity.id,
+                    type: activity.type,
+                    detail: activity.detail,
+                    lessonId: activity.lesson_id || null,
+                    timestamp: activity.timestamp
+                }))
             }
         });
     } catch (error) {
