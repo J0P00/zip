@@ -1506,7 +1506,7 @@ const seedLessons = async () => {
         ],
         [
             "oop_lesson_10",
-            "Array of Objects",
+            "Interfaces",
             "Advanced OOP",
             10,
             "18:40",

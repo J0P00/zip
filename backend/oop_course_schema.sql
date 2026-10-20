@@ -801,7 +801,7 @@ VALUES
   ('oop_lesson_7', 'oop_fundamentals', 7, 'Polymorphism', '/videos/lesson7.mp4', '14:20', 'oop_assessment_7'),
   ('oop_lesson_8', 'oop_fundamentals', 8, 'Abstract Classes', '/videos/lesson8.mp4', '11:55', 'oop_assessment_8'),
   ('oop_lesson_9', 'oop_fundamentals', 9, 'Interfaces / Abstraction', '/videos/lesson9.mp4', '13:35', 'oop_assessment_9'),
-  ('oop_lesson_10', 'oop_fundamentals', 10, 'Array of Objects', '/videos/lesson10.mp4', '18:40', 'oop_assessment_10'),
+  ('oop_lesson_10', 'oop_fundamentals', 10, 'Interfaces', '/videos/lesson10.mp4', '18:40', 'oop_assessment_10'),
   ('oop_lesson_11', 'oop_fundamentals', 11, 'Enum', '/videos/lesson11.mp4', '15:25', 'oop_assessment_11')
 ON CONFLICT (id) DO UPDATE
 SET title = EXCLUDED.title,

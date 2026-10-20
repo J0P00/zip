@@ -3298,7 +3298,7 @@ export const OOP_TOPIC_NAMES: Record<string, string> = {
   oop_lesson_7: "Interface",
   oop_lesson_8: "Abstraction",
   oop_lesson_9: "Abstraction (Interfaces)",
-  oop_lesson_10: "Array of Objects",
+  oop_lesson_10: "Interfaces",
   oop_lesson_11: "Enum",
   oop_lesson_12: "Enum"
 };
