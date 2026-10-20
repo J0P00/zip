@@ -978,6 +978,7 @@ ALTER TABLE lessons ADD COLUMN IF NOT EXISTS created_by UUID;
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_provider TEXT;
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_key TEXT;
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_content_type TEXT;
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_size BIGINT;
 
 CREATE TABLE IF NOT EXISTS lesson_videos (
   id TEXT PRIMARY KEY DEFAULT ('vid_' || SUBSTRING(gen_random_uuid()::text, 1, 12)),

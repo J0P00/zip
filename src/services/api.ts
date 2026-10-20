@@ -186,12 +186,12 @@ export const lessonApi = {
       body: JSON.stringify(body)
     }),
   update: (id: string, body: Record<string, unknown>) =>
-    apiRequest<{ success: boolean; data: any }>(`/api/lessons/${id}`, {
+    apiRequest<{ success: boolean; data: any }>(`/api/lessons/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify(body)
     }),
   remove: (id: string) =>
-    apiRequest<{ success: boolean; data: any }>(`/api/lessons/${id}`, {
+    apiRequest<{ success: boolean; data: any }>(`/api/lessons/${encodeURIComponent(id)}`, {
       method: 'DELETE'
     })
 };
@@ -204,12 +204,12 @@ export const assessmentApi = {
       body: JSON.stringify(body)
     }),
   update: (id: string, body: Record<string, unknown>) =>
-    apiRequest<{ success: boolean; data: any }>(`/api/assessments/${id}`, {
+    apiRequest<{ success: boolean; data: any }>(`/api/assessments/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify(body)
     }),
   remove: (id: string) =>
-    apiRequest<{ success: boolean; data: any }>(`/api/assessments/${id}`, {
+    apiRequest<{ success: boolean; data: any }>(`/api/assessments/${encodeURIComponent(id)}`, {
       method: 'DELETE'
     }),
   startSession: (body: { assessmentId: string; lessonId?: string; sessionToken?: string }) =>

@@ -90,6 +90,10 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
         }));
       }
       setLessons(lessonList);
+      setFormData(prev => ({
+        ...prev,
+        lessonId: prev.lessonId || lessonList[0]?.id || ''
+      }));
 
       // 2. Load videos
       const videoRes = await videoApi.list();
@@ -128,7 +132,7 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
 
   const handleOpenCreate = () => {
     setFormData({
-      lessonId: lessons[0]?.id || 'oop_lesson_1',
+      lessonId: lessons[0]?.id || '',
       title: '',
       videoUrl: '',
       description: '',
@@ -151,6 +155,10 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
   const handleSaveVideo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
+    if (!formData.lessonId || !formData.lessonId.trim() || formData.lessonId === '0' || formData.lessonId === 'NaN') {
+      setFeedback({ type: 'error', message: 'Target lesson is required. Please select a valid lesson.' });
+      return;
+    }
     if (!formData.title.trim()) {
       setFeedback({ type: 'error', message: 'Video title is required.' });
       return;
@@ -420,6 +428,9 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
                   onChange={e => setFormData({ ...formData, lessonId: e.target.value })}
                   className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
                 >
+                  {!formData.lessonId && (
+                    <option value="" disabled>Select a target lesson...</option>
+                  )}
                   {lessons.map(l => (
                     <option key={l.id} value={l.id}>
                       Lesson {l.sequence}: {l.title}

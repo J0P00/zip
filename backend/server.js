@@ -201,6 +201,106 @@ const isValidVideoUrl = value => {
     }
 };
 
+const logDiagnosticError = (operation, paramName, rawValue, reason) => {
+    let sanitizedVal = rawValue;
+    if (typeof rawValue === "object" && rawValue !== null) {
+        sanitizedVal = "[Object]";
+    } else {
+        sanitizedVal = String(rawValue ?? "").slice(0, 100);
+    }
+    console.warn(`[Content Management Error] Failing operation: "${operation}", Invalid parameter: "${paramName}" (value: "${sanitizedVal}") - Reason: ${reason}`);
+};
+
+const validateId = (id, paramName = "id", operation = "unknown", { required = true } = {}) => {
+    if (id === undefined || id === null) {
+        if (!required) return { valid: true, value: null };
+        logDiagnosticError(operation, paramName, id, "Missing required identifier");
+        return { valid: false, status: 400, message: `${paramName} is required.` };
+    }
+    const str = String(id).trim();
+    if (!str) {
+        if (!required) return { valid: true, value: null };
+        logDiagnosticError(operation, paramName, id, "Empty identifier");
+        return { valid: false, status: 400, message: `${paramName} cannot be empty.` };
+    }
+    if (str === "NaN" || str === "undefined" || str === "null" || (typeof id === "number" && Number.isNaN(id))) {
+        logDiagnosticError(operation, paramName, id, "Identifier is NaN, undefined, or null string");
+        return { valid: false, status: 400, message: `Invalid ${paramName}: cannot be "${str}".` };
+    }
+    if (str === "0" || (typeof id === "number" && id === 0)) {
+        logDiagnosticError(operation, paramName, id, "Identifier cannot be zero (no arbitrary substitute)");
+        return { valid: false, status: 400, message: `Invalid ${paramName}: 0 is not a valid identifier.` };
+    }
+    if (/^\d+$/.test(str)) {
+        const num = Number(str);
+        if (!Number.isSafeInteger(num) || num <= 0) {
+            logDiagnosticError(operation, paramName, id, "Numeric identifier out of safe range or <= 0");
+            return { valid: false, status: 400, message: `Invalid numeric ${paramName}: must be a positive integer.` };
+        }
+    }
+    if (!/^[a-zA-Z0-9_\-.:@]+$/.test(str)) {
+        logDiagnosticError(operation, paramName, id, "Identifier contains invalid characters");
+        return { valid: false, status: 400, message: `Invalid ${paramName}: contains invalid characters.` };
+    }
+    return { valid: true, value: str };
+};
+
+const validateStorageSize = (rawSize, operation = "unknown") => {
+    if (rawSize === undefined) return { valid: true, value: undefined };
+    if (rawSize === null || rawSize === "") return { valid: true, value: null };
+    if (typeof rawSize === "string" && rawSize.trim().toLowerCase() === "nan") {
+        logDiagnosticError(operation, "storageSize", rawSize, "storageSize passed as NaN string");
+        return { valid: false, status: 400, message: "storageSize cannot be NaN." };
+    }
+    const num = Number(rawSize);
+    if (!Number.isFinite(num) || Number.isNaN(num) || num < 0) {
+        logDiagnosticError(operation, "storageSize", rawSize, `Invalid non-finite or negative storageSize: ${rawSize}`);
+        return { valid: false, status: 400, message: "storageSize must be a valid non-negative integer or null." };
+    }
+    return { valid: true, value: Math.floor(num) };
+};
+
+const validateSequenceNumber = (rawSeq, operation = "unknown", { required = false, defaultVal = null, min = 1, max = 10000 } = {}) => {
+    if (rawSeq === undefined || rawSeq === null) {
+        if (required) {
+            logDiagnosticError(operation, "sequence", rawSeq, "Missing required sequence number");
+            return { valid: false, status: 400, message: "Sequence number is required." };
+        }
+        return { valid: true, value: defaultVal };
+    }
+    if (typeof rawSeq === "string" && (rawSeq.trim() === "" || rawSeq.trim().toLowerCase() === "nan")) {
+        logDiagnosticError(operation, "sequence", rawSeq, "Sequence is empty or NaN string");
+        return { valid: false, status: 400, message: "Sequence must be a valid number, not NaN or empty." };
+    }
+    const num = Number(rawSeq);
+    if (!Number.isFinite(num) || Number.isNaN(num)) {
+        logDiagnosticError(operation, "sequence", rawSeq, `Sequence is not a finite number: ${rawSeq}`);
+        return { valid: false, status: 400, message: "Sequence must be a valid number." };
+    }
+    const clamped = Math.floor(clampNumber(num, min, max));
+    return { valid: true, value: clamped };
+};
+
+const validateScoreNumber = (rawScore, paramName = "passingScore", operation = "unknown", { min = 0, max = 100, defaultVal = null, required = false } = {}) => {
+    if (rawScore === undefined || rawScore === null) {
+        if (required) {
+            logDiagnosticError(operation, paramName, rawScore, `Missing required ${paramName}`);
+            return { valid: false, status: 400, message: `${paramName} is required.` };
+        }
+        return { valid: true, value: defaultVal };
+    }
+    if (typeof rawScore === "string" && (rawScore.trim() === "" || rawScore.trim().toLowerCase() === "nan")) {
+        logDiagnosticError(operation, paramName, rawScore, `${paramName} is empty or NaN string`);
+        return { valid: false, status: 400, message: `${paramName} must be a valid number, not NaN or empty.` };
+    }
+    const num = Number(rawScore);
+    if (!Number.isFinite(num) || Number.isNaN(num) || num < min || num > max) {
+        logDiagnosticError(operation, paramName, rawScore, `${paramName} is out of bounds [${min}, ${max}] or NaN: ${rawScore}`);
+        return { valid: false, status: 400, message: `${paramName} must be a number between ${min} and ${max}.` };
+    }
+    return { valid: true, value: num };
+};
+
 const STORAGE_PROVIDER = "local";
 const configuredMaxVideoSize = Number(process.env.LOCAL_VIDEO_MAX_BYTES);
 const MAX_VIDEO_SIZE_BYTES = Number.isInteger(configuredMaxVideoSize) && configuredMaxVideoSize > 0
@@ -1387,6 +1487,7 @@ const initializeDatabase = async () => {
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_provider TEXT;
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_key TEXT;
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_content_type TEXT;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_size BIGINT;
 
         CREATE TABLE IF NOT EXISTS lesson_videos (
           id TEXT PRIMARY KEY DEFAULT ('vid_' || SUBSTRING(gen_random_uuid()::text, 1, 12)),
@@ -3106,9 +3207,19 @@ app.get("/api/lessons", optionalAuth, async (req, res, next) => {
 app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const body = req.body || {};
-        const id = cleanText(body.id || `lesson_${Date.now()}`, 120);
+        let id;
+        if (body.id !== undefined && body.id !== null) {
+            const idCheck = validateId(body.id, "id", "POST /api/lessons");
+            if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+            id = idCheck.value;
+        } else {
+            id = `lesson_${Date.now()}`;
+        }
         const title = cleanText(body.title || body.lessonTitle || "", 255);
-        if (!title) return res.status(400).json({ success: false, message: "Lesson title is required." });
+        if (!title) {
+            logDiagnosticError("POST /api/lessons", "title", body.title, "Lesson title is required");
+            return res.status(400).json({ success: false, message: "Lesson title is required." });
+        }
         const objectives = Array.isArray(body.learningObjectives)
             ? body.learningObjectives.slice(0, 20)
             : String(body.learningObjectives || "").split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
@@ -3117,32 +3228,48 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
             : "";
         const storageKey = cleanText(body.storageKey || body.storage_key || "", 500);
         const storageContentType = cleanText(body.storageContentType || body.storage_content_type || "", 120).toLowerCase();
-        const storageSize = body.storageSize === undefined && body.storage_size === undefined ? null : Number(body.storageSize ?? body.storage_size);
+
+        const storageSizeCheck = validateStorageSize(body.storageSize ?? body.storage_size, "POST /api/lessons");
+        if (!storageSizeCheck.valid) return res.status(storageSizeCheck.status).json({ success: false, message: storageSizeCheck.message });
+        const storageSize = storageSizeCheck.value ?? null;
+
         if (storageProvider) {
-            if (storageProvider !== STORAGE_PROVIDER) return res.status(400).json({ success: false, message: "Unsupported storage provider." });
+            if (storageProvider !== STORAGE_PROVIDER) {
+                logDiagnosticError("POST /api/lessons", "storageProvider", storageProvider, "Unsupported storage provider");
+                return res.status(400).json({ success: false, message: "Unsupported storage provider." });
+            }
             validateVideoUpload({ contentType: storageContentType, fileSize: storageSize });
             await assertStorageObject(storageKey, storageContentType, storageSize, req.authUser.id);
         }
 
+        const seqCheck = validateSequenceNumber(body.sequence ?? body.lessonOrder, "POST /api/lessons", { min: 0, defaultVal: 0 });
+        if (!seqCheck.valid) return res.status(seqCheck.status).json({ success: false, message: seqCheck.message });
+        const sequence = seqCheck.value;
+
+        const videoUrl = storageProvider === STORAGE_PROVIDER && storageKey
+            ? storageMarker(storageKey)
+            : cleanText(body.videoUrl || body.video_url || "", 2000);
+
         const result = await pool.query(`
-            INSERT INTO lessons (id, title, module, sequence, duration, video_url, description, learning_objectives, status, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb)
+            INSERT INTO lessons (id, title, module, sequence, duration, video_url, description, learning_objectives, status, metadata, storage_provider, storage_key, storage_content_type, storage_size)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14)
             RETURNING *
         `, [
             id,
             title,
             cleanText(body.module || "", 255),
-            Math.floor(clampNumber(body.sequence ?? body.lessonOrder ?? 0, 0, 10000)),
+            sequence,
             cleanText(body.duration || "", 40),
-            cleanText(body.videoUrl || body.video_url || "", 2000),
+            videoUrl,
             cleanText(body.description || "", 5000),
             JSON.stringify(objectives),
             cleanText(body.status || "Draft", 40),
-            JSON.stringify(body.metadata && typeof body.metadata === "object" ? body.metadata : {})
+            JSON.stringify(body.metadata && typeof body.metadata === "object" ? body.metadata : {}),
+            storageProvider || null,
+            storageKey || null,
+            storageContentType || null,
+            storageSize
         ]);
-        if (storageProvider) {
-            await pool.query("UPDATE lessons SET storage_provider = $2, storage_key = $3, storage_content_type = $4, video_url = $5, updated_at = NOW() WHERE id = $1", [id, storageProvider, storageKey, storageContentType, storageMarker(storageKey)]);
-        }
         res.status(201).json({ success: true, data: toClientLesson(result.rows[0]) });
     } catch (error) {
         next(error);
@@ -3151,6 +3278,10 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
 
 app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
+        const idCheck = validateId(req.params.id, "id", "PUT /api/lessons/:id");
+        if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+        const lessonId = idCheck.value;
+
         const body = req.body || {};
         const objectives = Array.isArray(body.learningObjectives)
             ? body.learningObjectives.slice(0, 20)
@@ -3161,12 +3292,31 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
         const storageProvider = body.storageProvider === undefined && body.storage_provider === undefined ? null : cleanText(body.storageProvider || body.storage_provider || "", 40).toLowerCase();
         const storageKey = body.storageKey === undefined && body.storage_key === undefined ? null : cleanText(body.storageKey || body.storage_key || "", 500);
         const storageContentType = body.storageContentType === undefined && body.storage_content_type === undefined ? null : cleanText(body.storageContentType || body.storage_content_type || "", 120).toLowerCase();
-        const storageSize = body.storageSize === undefined && body.storage_size === undefined ? null : Number(body.storageSize ?? body.storage_size);
-        if (storageProvider !== null) {
-            if (storageProvider !== STORAGE_PROVIDER) return res.status(400).json({ success: false, message: "Unsupported storage provider." });
+
+        const hasStorageSizeUpdate = body.storageSize !== undefined || body.storage_size !== undefined;
+        let storageSize = null;
+        if (hasStorageSizeUpdate) {
+            const storageSizeCheck = validateStorageSize(body.storageSize ?? body.storage_size, "PUT /api/lessons/:id");
+            if (!storageSizeCheck.valid) return res.status(storageSizeCheck.status).json({ success: false, message: storageSizeCheck.message });
+            storageSize = storageSizeCheck.value;
+        }
+
+        if (storageProvider !== null && storageProvider !== "") {
+            if (storageProvider !== STORAGE_PROVIDER) {
+                logDiagnosticError("PUT /api/lessons/:id", "storageProvider", storageProvider, "Unsupported storage provider");
+                return res.status(400).json({ success: false, message: "Unsupported storage provider." });
+            }
             validateVideoUpload({ contentType: storageContentType, fileSize: storageSize });
             await assertStorageObject(storageKey, storageContentType, storageSize, req.authUser.id);
         }
+
+        let sequence = null;
+        if (body.sequence !== undefined || body.lessonOrder !== undefined) {
+            const seqCheck = validateSequenceNumber(body.sequence ?? body.lessonOrder, "PUT /api/lessons/:id", { min: 0 });
+            if (!seqCheck.valid) return res.status(seqCheck.status).json({ success: false, message: seqCheck.message });
+            sequence = seqCheck.value;
+        }
+
         const result = await pool.query(`
             UPDATE lessons SET
               title = COALESCE($2, title),
@@ -3181,15 +3331,15 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
               storage_provider = CASE WHEN $11 = '' THEN NULL ELSE COALESCE($11, storage_provider) END,
               storage_key = CASE WHEN $11 = '' THEN NULL ELSE COALESCE($12, storage_key) END,
               storage_content_type = CASE WHEN $11 = '' THEN NULL ELSE COALESCE($13, storage_content_type) END,
-              storage_size = CASE WHEN $11 = '' THEN NULL ELSE COALESCE($14, storage_size) END,
+              storage_size = CASE WHEN $11 = '' THEN NULL WHEN $16 THEN $15 ELSE storage_size END,
               updated_at = NOW()
             WHERE id = $1
             RETURNING *
         `, [
-            req.params.id,
+            lessonId,
             body.title === undefined && body.lessonTitle === undefined ? null : cleanText(body.title || body.lessonTitle || "", 255),
             body.module === undefined ? null : cleanText(body.module || "", 255),
-            body.sequence === undefined && body.lessonOrder === undefined ? null : Math.floor(clampNumber(body.sequence ?? body.lessonOrder, 0, 10000)),
+            sequence,
             body.duration === undefined ? null : cleanText(body.duration || "", 40),
             body.videoUrl === undefined && body.video_url === undefined ? null : cleanText(body.videoUrl || body.video_url || "", 2000),
             body.description === undefined ? null : cleanText(body.description || "", 5000),
@@ -3199,7 +3349,9 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
             storageProvider,
             storageKey,
             storageContentType,
-            storageProvider === STORAGE_PROVIDER && storageKey ? storageMarker(storageKey) : null
+            storageProvider === STORAGE_PROVIDER && storageKey ? storageMarker(storageKey) : null,
+            storageSize,
+            hasStorageSizeUpdate
         ]);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Lecture not found." });
         res.json({ success: true, data: toClientLesson(result.rows[0]) });
@@ -3210,7 +3362,9 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
 
 app.delete("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
-        const result = await pool.query("DELETE FROM lessons WHERE id = $1 RETURNING id", [req.params.id]);
+        const idCheck = validateId(req.params.id, "id", "DELETE /api/lessons/:id");
+        if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+        const result = await pool.query("DELETE FROM lessons WHERE id = $1 RETURNING id", [idCheck.value]);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Lecture not found." });
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
@@ -3230,10 +3384,29 @@ app.get("/api/assessments", requireAuth, async (_req, res, next) => {
 app.post("/api/assessments", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const body = req.body || {};
-        const id = cleanText(body.id || `quiz_${Date.now()}`, 120);
+        let id;
+        if (body.id !== undefined && body.id !== null) {
+            const idCheck = validateId(body.id, "id", "POST /api/assessments");
+            if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+            id = idCheck.value;
+        } else {
+            id = `quiz_${Date.now()}`;
+        }
         const title = cleanText(body.title || "", 255);
-        const lessonId = cleanText(body.lessonId || body.lesson_id || "", 120);
-        if (!title || !lessonId) return res.status(400).json({ success: false, message: "Quiz title and lesson are required." });
+        const lessonIdCheck = validateId(body.lessonId ?? body.lesson_id, "lessonId", "POST /api/assessments");
+        if (!lessonIdCheck.valid) return res.status(lessonIdCheck.status).json({ success: false, message: lessonIdCheck.message });
+        const lessonId = lessonIdCheck.value;
+
+        if (!title) {
+            logDiagnosticError("POST /api/assessments", "title", body.title, "Quiz title is required");
+            return res.status(400).json({ success: false, message: "Quiz title and lesson are required." });
+        }
+        const passingScoreCheck = validateScoreNumber(body.passingScore ?? body.passing_score, "passingScore", "POST /api/assessments", { defaultVal: ASSESSMENT_PASSING_SCORE, min: 0, max: 100 });
+        if (!passingScoreCheck.valid) return res.status(passingScoreCheck.status).json({ success: false, message: passingScoreCheck.message });
+
+        const attemptsCheck = validateSequenceNumber(body.attempts, "POST /api/assessments", { min: 1, max: 100, defaultVal: 1 });
+        if (!attemptsCheck.valid) return res.status(attemptsCheck.status).json({ success: false, message: attemptsCheck.message });
+
         const result = await pool.query(`
             INSERT INTO assessments (id, lesson_id, title, quiz_type, passing_score, attempts, questions, status, created_by)
             VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
@@ -3243,8 +3416,8 @@ app.post("/api/assessments", requireAuth, requireRole(["teacher"]), async (req, 
             lessonId,
             title,
             cleanText(body.quizType || "Multiple Choice", 80),
-            clampNumber(body.passingScore ?? body.passing_score ?? ASSESSMENT_PASSING_SCORE, 0, 100),
-            Math.floor(clampNumber(body.attempts ?? 1, 1, 100)),
+            passingScoreCheck.value,
+            attemptsCheck.value,
             JSON.stringify(Array.isArray(body.questions) ? body.questions : []),
             cleanText(body.status || "Draft", 40),
             req.authUser.id
@@ -3257,7 +3430,32 @@ app.post("/api/assessments", requireAuth, requireRole(["teacher"]), async (req, 
 
 app.put("/api/assessments/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
+        const idCheck = validateId(req.params.id, "id", "PUT /api/assessments/:id");
+        if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+        const assessmentId = idCheck.value;
+
         const body = req.body || {};
+        let lessonId = null;
+        if (body.lessonId !== undefined || body.lesson_id !== undefined) {
+            const lessonIdCheck = validateId(body.lessonId ?? body.lesson_id, "lessonId", "PUT /api/assessments/:id");
+            if (!lessonIdCheck.valid) return res.status(lessonIdCheck.status).json({ success: false, message: lessonIdCheck.message });
+            lessonId = lessonIdCheck.value;
+        }
+
+        let passingScore = null;
+        if (body.passingScore !== undefined || body.passing_score !== undefined) {
+            const scoreCheck = validateScoreNumber(body.passingScore ?? body.passing_score, "passingScore", "PUT /api/assessments/:id", { min: 0, max: 100 });
+            if (!scoreCheck.valid) return res.status(scoreCheck.status).json({ success: false, message: scoreCheck.message });
+            passingScore = scoreCheck.value;
+        }
+
+        let attempts = null;
+        if (body.attempts !== undefined) {
+            const attemptsCheck = validateSequenceNumber(body.attempts, "PUT /api/assessments/:id", { min: 1, max: 100 });
+            if (!attemptsCheck.valid) return res.status(attemptsCheck.status).json({ success: false, message: attemptsCheck.message });
+            attempts = attemptsCheck.value;
+        }
+
         const result = await pool.query(`
             UPDATE assessments SET
               lesson_id = COALESCE($2, lesson_id),
@@ -3271,12 +3469,12 @@ app.put("/api/assessments/:id", requireAuth, requireRole(["teacher"]), async (re
             WHERE id = $1
             RETURNING *
         `, [
-            req.params.id,
-            body.lessonId === undefined && body.lesson_id === undefined ? null : cleanText(body.lessonId || body.lesson_id || "", 120),
+            assessmentId,
+            lessonId,
             body.title === undefined ? null : cleanText(body.title || "", 255),
             body.quizType === undefined ? null : cleanText(body.quizType || "", 80),
-            body.passingScore === undefined && body.passing_score === undefined ? null : clampNumber(body.passingScore ?? body.passing_score, 0, 100),
-            body.attempts === undefined ? null : Math.floor(clampNumber(body.attempts, 1, 100)),
+            passingScore,
+            attempts,
             body.questions === undefined ? null : JSON.stringify(Array.isArray(body.questions) ? body.questions : []),
             body.status === undefined ? null : cleanText(body.status || "Draft", 40)
         ]);
@@ -3289,7 +3487,9 @@ app.put("/api/assessments/:id", requireAuth, requireRole(["teacher"]), async (re
 
 app.delete("/api/assessments/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
-        const result = await pool.query("DELETE FROM assessments WHERE id = $1 RETURNING id", [req.params.id]);
+        const idCheck = validateId(req.params.id, "id", "DELETE /api/assessments/:id");
+        if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+        const result = await pool.query("DELETE FROM assessments WHERE id = $1 RETURNING id", [idCheck.value]);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Quiz not found." });
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
@@ -3395,7 +3595,10 @@ app.get("/api/videos/storage-playback", requireAuth, requireRole(["teacher", "st
 
 app.get("/api/videos/lesson/:lessonId/playback-url", requireAuth, requireRole(["teacher", "student"]), async (req, res, next) => {
     try {
-        const lessonId = cleanText(req.params.lessonId, 120);
+        const lessonIdCheck = validateId(req.params.lessonId, "lessonId", "GET /api/videos/lesson/:lessonId/playback-url");
+        if (!lessonIdCheck.valid) return res.status(lessonIdCheck.status).json({ success: false, message: lessonIdCheck.message });
+        const lessonId = lessonIdCheck.value;
+
         if (req.authUser.role === "student") {
             const access = await getLessonAccessState(req.authUser.id, lessonId);
             if (!access.canAccess) return res.status(403).json({ success: false, message: access.reason || "You do not have access to this lesson." });
@@ -3420,8 +3623,10 @@ app.get("/api/videos", requireAuth, async (req, res, next) => {
             WHERE 1=1
         `;
         const params = [];
-        if (lessonId) {
-            params.push(cleanText(lessonId, 120));
+        if (lessonId !== undefined && lessonId !== null && String(lessonId).trim() !== "") {
+            const lessonIdCheck = validateId(lessonId, "lessonId", "GET /api/videos");
+            if (!lessonIdCheck.valid) return res.status(lessonIdCheck.status).json({ success: false, message: lessonIdCheck.message });
+            params.push(lessonIdCheck.value);
             sql += ` AND lv.lesson_id = $${params.length}`;
         }
         if (req.authUser.role === "student") {
@@ -3446,18 +3651,32 @@ app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, 
     try {
         const body = req.body || {};
         const title = cleanText(body.title || "", 255);
-        const lessonId = cleanText(body.lessonId || body.lesson_id || "", 120);
+        const lessonIdCheck = validateId(body.lessonId ?? body.lesson_id, "lessonId", "POST /api/videos");
+        if (!lessonIdCheck.valid) return res.status(lessonIdCheck.status).json({ success: false, message: lessonIdCheck.message });
+        const lessonId = lessonIdCheck.value;
+
         const storageProvider = cleanText(body.storageProvider || body.storage_provider || "", 40).toLowerCase();
         storageKey = cleanText(body.storageKey || body.storage_key || "", 500);
         const storageContentType = cleanText(body.storageContentType || body.storage_content_type || "", 120).toLowerCase();
-        const storageSize = body.storageSize === undefined && body.storage_size === undefined ? null : Number(body.storageSize ?? body.storage_size);
+
+        const storageSizeCheck = validateStorageSize(body.storageSize ?? body.storage_size, "POST /api/videos");
+        if (!storageSizeCheck.valid) return res.status(storageSizeCheck.status).json({ success: false, message: storageSizeCheck.message });
+        const storageSize = storageSizeCheck.value ?? null;
+
         const videoUrl = storageProvider === STORAGE_PROVIDER && storageKey ? storageMarker(storageKey) : cleanText(body.videoUrl || body.video_url || "", 2000);
 
-        if (!title || !videoUrl || !lessonId) {
+        if (!title || !videoUrl) {
+            logDiagnosticError("POST /api/videos", "title/videoUrl", { title, videoUrl }, "Title and video URL are required");
             return res.status(400).json({ success: false, message: "Title, video URL, and lesson association are required." });
         }
-        if (!isValidVideoUrl(videoUrl)) return res.status(400).json({ success: false, message: "Enter a valid http(s) video URL." });
-        if (storageProvider && storageProvider !== STORAGE_PROVIDER) return res.status(400).json({ success: false, message: "Unsupported storage provider." });
+        if (!isValidVideoUrl(videoUrl)) {
+            logDiagnosticError("POST /api/videos", "videoUrl", videoUrl, "Invalid video URL format");
+            return res.status(400).json({ success: false, message: "Enter a valid http(s) video URL." });
+        }
+        if (storageProvider && storageProvider !== STORAGE_PROVIDER) {
+            logDiagnosticError("POST /api/videos", "storageProvider", storageProvider, "Unsupported storage provider");
+            return res.status(400).json({ success: false, message: "Unsupported storage provider." });
+        }
         if (storageProvider === STORAGE_PROVIDER) {
             validateVideoUpload({ contentType: storageContentType, fileSize: storageSize });
             await assertStorageObject(storageKey, storageContentType, storageSize, req.authUser.id);
@@ -3466,10 +3685,19 @@ app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, 
             ? null
             : cleanText(body.videoUrl || body.video_url || "", 2000);
         if (submittedVideoUrl !== null && !isValidVideoUrl(submittedVideoUrl)) {
+            logDiagnosticError("POST /api/videos", "submittedVideoUrl", submittedVideoUrl, "Invalid submitted video URL format");
             return res.status(400).json({ success: false, message: "Enter a valid http(s) video URL." });
         }
 
-        const id = cleanText(body.id || `vid_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, 120);
+        let id;
+        if (body.id !== undefined && body.id !== null) {
+            const idCheck = validateId(body.id, "id", "POST /api/videos");
+            if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+            id = idCheck.value;
+        } else {
+            id = `vid_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        }
+
         const duration = cleanText(body.duration || "", 40);
         const description = cleanText(body.description || "", 2000);
         client = await pool.connect();
@@ -3495,9 +3723,10 @@ app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, 
                 storage_provider = CASE WHEN $4 = $7 THEN $4 ELSE storage_provider END,
                 storage_key = CASE WHEN $4 = $7 THEN $5 ELSE storage_key END,
                 storage_content_type = CASE WHEN $4 = $7 THEN $6 ELSE storage_content_type END,
+                storage_size = CASE WHEN $4 = $7 THEN $8 ELSE storage_size END,
                 updated_at = NOW()
             WHERE id = $1
-        `, [lessonId, videoUrl, duration, storageProvider, storageKey || null, storageContentType || null, STORAGE_PROVIDER]);
+        `, [lessonId, videoUrl, duration, storageProvider, storageKey || null, storageContentType || null, STORAGE_PROVIDER, storageSize]);
 
         await client.query("COMMIT");
         committed = true;
@@ -3519,12 +3748,34 @@ app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, 
 
 app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
+        const idCheck = validateId(req.params.id, "id", "PUT /api/videos/:id");
+        if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+        const videoId = idCheck.value;
+
         const body = req.body || {};
+        let lessonId = null;
+        if (body.lessonId !== undefined || body.lesson_id !== undefined) {
+            const lessonIdCheck = validateId(body.lessonId ?? body.lesson_id, "lessonId", "PUT /api/videos/:id");
+            if (!lessonIdCheck.valid) return res.status(lessonIdCheck.status).json({ success: false, message: lessonIdCheck.message });
+            lessonId = lessonIdCheck.value;
+        }
+
         const storageProvider = cleanText(body.storageProvider || body.storage_provider || "", 40).toLowerCase();
         const storageKey = cleanText(body.storageKey || body.storage_key || "", 500);
         const storageContentType = cleanText(body.storageContentType || body.storage_content_type || "", 120).toLowerCase();
-        const storageSize = body.storageSize === undefined && body.storage_size === undefined ? null : Number(body.storageSize ?? body.storage_size);
-        if (storageProvider && storageProvider !== STORAGE_PROVIDER) return res.status(400).json({ success: false, message: "Unsupported storage provider." });
+
+        const hasStorageSizeUpdate = body.storageSize !== undefined || body.storage_size !== undefined;
+        let storageSize = null;
+        if (hasStorageSizeUpdate) {
+            const storageSizeCheck = validateStorageSize(body.storageSize ?? body.storage_size, "PUT /api/videos/:id");
+            if (!storageSizeCheck.valid) return res.status(storageSizeCheck.status).json({ success: false, message: storageSizeCheck.message });
+            storageSize = storageSizeCheck.value;
+        }
+
+        if (storageProvider && storageProvider !== STORAGE_PROVIDER) {
+            logDiagnosticError("PUT /api/videos/:id", "storageProvider", storageProvider, "Unsupported storage provider");
+            return res.status(400).json({ success: false, message: "Unsupported storage provider." });
+        }
         if (storageProvider === STORAGE_PROVIDER) {
             validateVideoUpload({ contentType: storageContentType, fileSize: storageSize });
             await assertStorageObject(storageKey, storageContentType, storageSize, req.authUser.id);
@@ -3533,8 +3784,17 @@ app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, re
             ? null
             : cleanText(body.videoUrl || body.video_url || "", 2000);
         if (submittedVideoUrl !== null && !isValidVideoUrl(submittedVideoUrl)) {
+            logDiagnosticError("PUT /api/videos/:id", "submittedVideoUrl", submittedVideoUrl, "Invalid submitted video URL format");
             return res.status(400).json({ success: false, message: "Enter a valid http(s) video URL." });
         }
+
+        let sequence = null;
+        if (body.sequence !== undefined) {
+            const seqCheck = validateSequenceNumber(body.sequence, "PUT /api/videos/:id", { min: 1, max: 1000 });
+            if (!seqCheck.valid) return res.status(seqCheck.status).json({ success: false, message: seqCheck.message });
+            sequence = seqCheck.value;
+        }
+
         const result = await pool.query(`
             UPDATE lesson_videos SET
               lesson_id = COALESCE($2, lesson_id),
@@ -3549,25 +3809,26 @@ app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, re
               storage_provider = CASE WHEN $11 = '' THEN NULL ELSE COALESCE($11, storage_provider) END,
               storage_key = CASE WHEN $12 = '' THEN NULL ELSE COALESCE($12, storage_key) END,
               storage_content_type = CASE WHEN $13 = '' THEN NULL ELSE COALESCE($13, storage_content_type) END,
-              storage_size = CASE WHEN $14 IS NULL THEN NULL ELSE COALESCE($14, storage_size) END,
+              storage_size = CASE WHEN $15 THEN $14 ELSE storage_size END,
               updated_at = NOW()
             WHERE id = $1
             RETURNING *
         `, [
-            req.params.id,
-            body.lessonId === undefined && body.lesson_id === undefined ? null : cleanText(body.lessonId || body.lesson_id || "", 120),
+            videoId,
+            lessonId,
             body.title === undefined ? null : cleanText(body.title || "", 255),
             body.videoUrl === undefined && body.video_url === undefined ? null : cleanText(body.videoUrl || body.video_url || "", 2000),
             body.duration === undefined ? null : cleanText(body.duration || "", 40),
             body.description === undefined ? null : cleanText(body.description || "", 2000),
-            body.sequence === undefined ? null : Math.floor(clampNumber(body.sequence, 1, 1000)),
+            sequence,
             body.status === undefined ? null : cleanText(body.status || "Published", 40),
             body.cloudinaryPublicId === undefined && body.cloudinary_public_id === undefined ? null : cleanText(body.cloudinaryPublicId || body.cloudinary_public_id || "", 500),
             body.cloudinaryResourceType === undefined && body.cloudinary_resource_type === undefined ? null : cleanText(body.cloudinaryResourceType || body.cloudinary_resource_type || "", 40),
             body.storageProvider === undefined && body.storage_provider === undefined ? null : storageProvider,
             body.storageKey === undefined && body.storage_key === undefined ? null : storageKey,
             body.storageContentType === undefined && body.storage_content_type === undefined ? null : storageContentType,
-            body.storageSize === undefined && body.storage_size === undefined ? null : storageSize
+            storageSize,
+            hasStorageSizeUpdate
         ]);
 
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Video not found." });
@@ -3585,7 +3846,9 @@ app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, re
 
 app.delete("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
-        const result = await pool.query("DELETE FROM lesson_videos WHERE id = $1 RETURNING id", [req.params.id]);
+        const idCheck = validateId(req.params.id, "id", "DELETE /api/videos/:id");
+        if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+        const result = await pool.query("DELETE FROM lesson_videos WHERE id = $1 RETURNING id", [idCheck.value]);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Video not found." });
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
@@ -3606,8 +3869,10 @@ app.get("/api/learning-resources", requireAuth, async (req, res, next) => {
             WHERE 1=1
         `;
         const params = [];
-        if (lessonId) {
-            params.push(cleanText(lessonId, 120));
+        if (lessonId !== undefined && lessonId !== null && String(lessonId).trim() !== "") {
+            const lessonIdCheck = validateId(lessonId, "lessonId", "GET /api/learning-resources");
+            if (!lessonIdCheck.valid) return res.status(lessonIdCheck.status).json({ success: false, message: lessonIdCheck.message });
+            params.push(lessonIdCheck.value);
             sql += ` AND lr.lesson_id = $${params.length}`;
         }
         if (resourceType) {
@@ -3634,13 +3899,23 @@ app.post("/api/learning-resources", requireAuth, requireRole(["teacher"]), async
         const body = req.body || {};
         const title = cleanText(body.title || "", 255);
         const fileUrl = cleanText(body.fileUrl || body.file_url || "", 2000);
-        const lessonId = cleanText(body.lessonId || body.lesson_id || "", 120);
+        const lessonIdCheck = validateId(body.lessonId ?? body.lesson_id, "lessonId", "POST /api/learning-resources");
+        if (!lessonIdCheck.valid) return res.status(lessonIdCheck.status).json({ success: false, message: lessonIdCheck.message });
+        const lessonId = lessonIdCheck.value;
 
-        if (!title || !fileUrl || !lessonId) {
+        if (!title || !fileUrl) {
+            logDiagnosticError("POST /api/learning-resources", "title/fileUrl", { title, fileUrl }, "Title and file URL are required");
             return res.status(400).json({ success: false, message: "Title, resource file/URL, and lesson association are required." });
         }
 
-        const id = cleanText(body.id || `res_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, 120);
+        let id;
+        if (body.id !== undefined && body.id !== null) {
+            const idCheck = validateId(body.id, "id", "POST /api/learning-resources");
+            if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+            id = idCheck.value;
+        } else {
+            id = `res_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        }
         const resourceType = cleanText(body.resourceType || body.resource_type || "pdf", 40);
         const fileSize = cleanText(body.fileSize || body.file_size || "", 40);
         const description = cleanText(body.description || "", 2000);
@@ -3660,7 +3935,18 @@ app.post("/api/learning-resources", requireAuth, requireRole(["teacher"]), async
 
 app.put("/api/learning-resources/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
+        const idCheck = validateId(req.params.id, "id", "PUT /api/learning-resources/:id");
+        if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+        const resourceId = idCheck.value;
+
         const body = req.body || {};
+        let lessonId = null;
+        if (body.lessonId !== undefined || body.lesson_id !== undefined) {
+            const lessonIdCheck = validateId(body.lessonId ?? body.lesson_id, "lessonId", "PUT /api/learning-resources/:id");
+            if (!lessonIdCheck.valid) return res.status(lessonIdCheck.status).json({ success: false, message: lessonIdCheck.message });
+            lessonId = lessonIdCheck.value;
+        }
+
         const result = await pool.query(`
             UPDATE learning_resources SET
               lesson_id = COALESCE($2, lesson_id),
@@ -3674,8 +3960,8 @@ app.put("/api/learning-resources/:id", requireAuth, requireRole(["teacher"]), as
             WHERE id = $1
             RETURNING *
         `, [
-            req.params.id,
-            body.lessonId === undefined && body.lesson_id === undefined ? null : cleanText(body.lessonId || body.lesson_id || "", 120),
+            resourceId,
+            lessonId,
             body.title === undefined ? null : cleanText(body.title || "", 255),
             body.resourceType === undefined && body.resource_type === undefined ? null : cleanText(body.resourceType || body.resource_type || "pdf", 40),
             body.fileUrl === undefined && body.file_url === undefined ? null : cleanText(body.fileUrl || body.file_url || "", 2000),
@@ -3693,7 +3979,9 @@ app.put("/api/learning-resources/:id", requireAuth, requireRole(["teacher"]), as
 
 app.delete("/api/learning-resources/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
-        const result = await pool.query("DELETE FROM learning_resources WHERE id = $1 RETURNING id", [req.params.id]);
+        const idCheck = validateId(req.params.id, "id", "DELETE /api/learning-resources/:id");
+        if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+        const result = await pool.query("DELETE FROM learning_resources WHERE id = $1 RETURNING id", [idCheck.value]);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Resource not found." });
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
@@ -4977,7 +5265,10 @@ app.get("/lessons", async (_req, res, next) => {
 
 app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
     try {
-        if (req.authUser.role === "student" && req.authUser.id !== req.params.studentId) {
+        const studentIdCheck = validateId(req.params.studentId, "studentId", "GET /api/progress/:studentId");
+        if (!studentIdCheck.valid) return res.status(studentIdCheck.status).json({ success: false, message: studentIdCheck.message });
+        const studentId = studentIdCheck.value;
+        if (req.authUser.role === "student" && req.authUser.id !== studentId) {
             return res.status(403).json({ success: false, message: "Students can only view their own progress." });
         }
         const result = await pool.query(
@@ -4988,7 +5279,7 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
              FROM student_progress sp
              WHERE sp.student_user_id = $1
              ORDER BY sp.updated_at DESC`,
-            [req.params.studentId]
+            [studentId]
         );
         res.json({ success: true, data: result.rows });
     } catch (error) {
@@ -4998,7 +5289,9 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
 
 app.get("/api/lesson-access/:lessonId", requireAuth, requireRole(["student"]), async (req, res, next) => {
     try {
-        const access = await getLessonAccessState(req.authUser.id, cleanText(req.params.lessonId, 120));
+        const lessonIdCheck = validateId(req.params.lessonId, "lessonId", "GET /api/lesson-access/:lessonId");
+        if (!lessonIdCheck.valid) return res.status(lessonIdCheck.status).json({ success: false, message: lessonIdCheck.message });
+        const access = await getLessonAccessState(req.authUser.id, lessonIdCheck.value);
         const current = access.current;
         res.json({
             success: true,
@@ -5339,13 +5632,16 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
 
 app.put("/api/progress", requireAuth, async (req, res, next) => {
     try {
-        const { videoId, lastPosition = 0, completionPercentage = 0, completed = false, notes = "" } = req.body || {};
-        if (!videoId) return res.status(400).json({ success: false, message: "videoId is required." });
+        const { videoId, lessonId, lastPosition = 0, completionPercentage = 0, completed = false, notes = "" } = req.body || {};
+        const idToValidate = videoId || lessonId;
+        const videoIdCheck = validateId(idToValidate, "videoId", "PUT /api/progress");
+        if (!videoIdCheck.valid) return res.status(videoIdCheck.status).json({ success: false, message: videoIdCheck.message });
+        const safeVideoId = videoIdCheck.value;
+
         if (req.authUser.role !== "student") {
             return res.status(403).json({ success: false, message: "Only students can update lesson progress." });
         }
 
-        const safeVideoId = cleanText(videoId, 120);
         const safeLastPosition = clampNumber(lastPosition, 0, 60 * 60 * 6);
         const safeCompletionPercentage = clampNumber(completionPercentage, 0, 100);
         const safeCompleted = safeCompletionPercentage >= 95;
@@ -5427,7 +5723,11 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
 
 app.get("/api/quiz-attempts/:studentId", requireAuth, async (req, res, next) => {
     try {
-        if (req.authUser.role === "student" && req.authUser.id !== req.params.studentId) {
+        const studentIdCheck = validateId(req.params.studentId, "studentId", "GET /api/quiz-attempts/:studentId");
+        if (!studentIdCheck.valid) return res.status(studentIdCheck.status).json({ success: false, message: studentIdCheck.message });
+        const studentId = studentIdCheck.value;
+
+        if (req.authUser.role === "student" && req.authUser.id !== studentId) {
             return res.status(403).json({ success: false, message: "Students can only view their own quiz attempts." });
         }
         const result = await pool.query(`
@@ -5438,7 +5738,7 @@ app.get("/api/quiz-attempts/:studentId", requireAuth, async (req, res, next) => 
             FROM quiz_attempts qa
             WHERE qa.student_user_id = $1
             ORDER BY qa.assessment_id, qa.attempt_number DESC, qa.date_completed DESC
-        `, [req.params.studentId]);
+        `, [studentId]);
         res.json({ success: true, data: result.rows });
     } catch (error) {
         next(error);
@@ -5460,11 +5760,21 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
             dateCompleted
         } = req.body || {};
 
-        if (!assessmentId) return res.status(400).json({ success: false, message: "assessmentId is required." });
+        const assessmentIdCheck = validateId(assessmentId, "assessmentId", "POST /api/quiz-attempts");
+        if (!assessmentIdCheck.valid) return res.status(assessmentIdCheck.status).json({ success: false, message: assessmentIdCheck.message });
+        const safeAssessmentId = assessmentIdCheck.value;
+
         if (req.authUser.role !== "student") {
             return res.status(403).json({ success: false, message: "Only students can submit quiz attempts." });
         }
-        const safeLessonId = cleanText(lessonId, 120);
+
+        let safeLessonId = "";
+        if (lessonId !== undefined && lessonId !== null && String(lessonId).trim() !== "") {
+            const lessonIdCheck = validateId(lessonId, "lessonId", "POST /api/quiz-attempts");
+            if (!lessonIdCheck.valid) return res.status(lessonIdCheck.status).json({ success: false, message: lessonIdCheck.message });
+            safeLessonId = lessonIdCheck.value;
+        }
+
         const lessonAccess = await getLessonAccessState(req.authUser.id, safeLessonId);
         if (!lessonAccess.canAccess || !lessonAccess.current.videoCompleted) {
             return res.status(403).json({ success: false, message: lessonAccess.reason || "Complete the current lesson prerequisites before starting its assessment." });
@@ -5475,7 +5785,6 @@ app.post("/api/quiz-attempts", requireAuth, async (req, res, next) => {
         const computedPercentage = Math.round(normalizeAssessmentPercentage({ score: safeScore, total: safeTotal }));
         const safeCorrectAnswers = Math.floor(clampNumber(correctAnswers, 0, safeTotal));
         const safeIncorrectAnswers = Math.floor(clampNumber(incorrectAnswers, 0, safeTotal));
-        const safeAssessmentId = cleanText(assessmentId, 120);
         const attemptResult = await pool.query(
             "SELECT COALESCE(MAX(attempt_number), 0) + 1 AS next_attempt FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = $2",
             [req.authUser.id, safeAssessmentId]

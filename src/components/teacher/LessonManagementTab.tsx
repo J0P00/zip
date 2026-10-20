@@ -187,7 +187,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     setLinkedContent((lesson as any).content || null);
   };
   const persistLinkedVideo = async (lessonId: string, videoUrl: string) => {
-    if (!videoUrl) return;
+    if (!videoUrl || !lessonId || lessonId === '0' || lessonId === 'NaN') return;
     const existing = (await videoApi.list(lessonId)).data?.[0];
     const videoPayload: any = {
       lessonId,
@@ -212,6 +212,18 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       return;
     }
 
+    const seq = Number(formData.sequence);
+    if (!Number.isFinite(seq) || Number.isNaN(seq) || seq < 0) {
+      setFeedback({ type: 'error', message: 'Lesson sequence must be a valid non-negative number.' });
+      return;
+    }
+
+    const passScore = Number(formData.assessmentPassingScore);
+    if (!Number.isFinite(passScore) || Number.isNaN(passScore) || passScore < 0 || passScore > 100) {
+      setFeedback({ type: 'error', message: 'Assessment passing score must be between 0 and 100.' });
+      return;
+    }
+
     const objectives = formData.learningObjectives
       .split('\n')
       .map(o => o.trim())
@@ -229,7 +241,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       id: lessonId,
       title: formData.title.trim(),
       module: formData.module.trim(),
-      sequence: Number(formData.sequence),
+      sequence: seq,
       duration: formData.duration.trim(),
       videoUrl: formData.videoUrl.trim(),
       description: formData.description.trim(),
@@ -253,11 +265,11 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
         setFeedback({ type: 'success', message: `Lesson "${formData.title}" created successfully.` });
       }
       await persistLinkedVideo(savedId, formData.videoUrl.trim());
-      if (linkedContent?.assessment?.id) {
+      if (linkedContent?.assessment?.id && savedId && savedId !== '0' && savedId !== 'NaN') {
         await assessmentApi.update(linkedContent.assessment.id, {
           lessonId: savedId,
           title: `${formData.title.trim()} Assessment`,
-          passingScore: Number(formData.assessmentPassingScore)
+          passingScore: passScore
         });
       }
       if (linkedContent?.practice?.id && formData.practiceTitle.trim()) {
