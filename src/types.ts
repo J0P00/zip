@@ -576,6 +576,13 @@ export interface ManagedLesson {
   description: string;
   learningObjectives: string[];
   status: 'Draft' | 'Published' | 'Archived';
+  storageProvider?: string;
+  storageKey?: string;
+  content?: {
+    video?: { id: string; title: string; status: string; storageProvider?: string; storageKey?: string } | null;
+    assessment?: { id: string; title: string; passingScore: number; status: string } | null;
+    practice?: { id: string; title: string; description: string; status: string } | null;
+  } | null;
   metadata?: Record<string, any>;
   createdBy?: string;
   createdAt?: string;

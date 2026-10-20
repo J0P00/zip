@@ -308,6 +308,41 @@ export const storageApi = {
     }>('/api/videos/storage-status')
 };
 
+export const uploadLessonVideo = (
+  file: File,
+  lessonId: string,
+  onProgress: (progress: number) => void
+) => new Promise<{
+  provider: 'local';
+  key: string;
+  contentType: string;
+  fileSize: number;
+  storageReference: string;
+}>((resolve, reject) => {
+  const body = new FormData();
+  body.append('lessonId', lessonId);
+  body.append('video', file, file.name);
+  const request = new XMLHttpRequest();
+  request.open('POST', `${API_BASE_URL}/api/videos/upload`);
+  const token = getAuthToken();
+  if (token) request.setRequestHeader('Authorization', `Bearer ${token}`);
+  request.upload.onprogress = event => {
+    if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+  };
+  request.onerror = () => reject(new Error('Video upload could not be completed.'));
+  request.onabort = () => reject(new Error('Video upload was cancelled.'));
+  request.onload = () => {
+    let response: any = null;
+    try { response = JSON.parse(request.responseText); } catch { /* handled below */ }
+    if (request.status >= 200 && request.status < 300 && response?.data) {
+      resolve(response.data);
+      return;
+    }
+    reject(new Error(response?.message || `Video upload failed (HTTP ${request.status}).`));
+  };
+  request.send(body);
+});
+
 export const resourceApi = {
   list: (lessonId?: string) => {
     const query = lessonId ? `?lessonId=${encodeURIComponent(lessonId)}` : '';

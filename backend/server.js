@@ -592,6 +592,55 @@ const toClientLesson = (row) => ({
     updatedAt: row.updated_at
 });
 
+const getLessonContent = async (lessonId) => {
+    const [videoResult, assessmentResult, practiceResult] = await Promise.all([
+        pool.query(`
+            SELECT id, title, video_url, duration, status, storage_provider, storage_key, storage_content_type, storage_size
+            FROM lesson_videos
+            WHERE lesson_id = $1
+            ORDER BY sequence ASC, created_at ASC
+            LIMIT 1
+        `, [lessonId]),
+        pool.query(`
+            SELECT id, title, passing_score, status
+            FROM assessments
+            WHERE lesson_id = $1
+            ORDER BY updated_at DESC, created_at ASC
+            LIMIT 1
+        `, [lessonId]),
+        pool.query(`
+            SELECT id, title, description, status
+            FROM programming_challenges
+            WHERE lesson_id = $1
+            ORDER BY updated_at DESC, created_at ASC
+            LIMIT 1
+        `, [lessonId])
+    ]);
+    return {
+        video: videoResult.rows[0] ? {
+            id: videoResult.rows[0].id,
+            title: videoResult.rows[0].title,
+            status: videoResult.rows[0].status,
+            storageProvider: videoResult.rows[0].storage_provider || "",
+            storageKey: videoResult.rows[0].storage_key || "",
+            contentType: videoResult.rows[0].storage_content_type || "",
+            size: videoResult.rows[0].storage_size === null || videoResult.rows[0].storage_size === undefined ? null : Number(videoResult.rows[0].storage_size)
+        } : null,
+        assessment: assessmentResult.rows[0] ? {
+            id: assessmentResult.rows[0].id,
+            title: assessmentResult.rows[0].title,
+            passingScore: Number(assessmentResult.rows[0].passing_score || 60),
+            status: assessmentResult.rows[0].status || "Published"
+        } : null,
+        practice: practiceResult.rows[0] ? {
+            id: practiceResult.rows[0].id,
+            title: practiceResult.rows[0].title,
+            description: practiceResult.rows[0].description || "",
+            status: practiceResult.rows[0].status || "Published"
+        } : null
+    };
+};
+
 const toClientVideo = (row) => ({
     id: row.id,
     lessonId: row.lesson_id,
@@ -615,6 +664,7 @@ const toClientVideo = (row) => ({
 
 const toClientLessonForRequest = async (row, req) => {
     const lesson = toClientLesson(row);
+    lesson.content = await getLessonContent(row.id);
     if (row.storage_provider === STORAGE_PROVIDER && row.storage_key) {
         lesson.videoUrl = "";
         let canPlay = Boolean(req.authUser && ["student", "teacher"].includes(req.authUser.role));
@@ -3051,6 +3101,17 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
         const objectives = Array.isArray(body.learningObjectives)
             ? body.learningObjectives.slice(0, 20)
             : String(body.learningObjectives || "").split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
+        const storageProvider = body.storageProvider || body.storage_provider
+            ? cleanText(body.storageProvider || body.storage_provider || "", 40).toLowerCase()
+            : "";
+        const storageKey = cleanText(body.storageKey || body.storage_key || "", 500);
+        const storageContentType = cleanText(body.storageContentType || body.storage_content_type || "", 120).toLowerCase();
+        const storageSize = body.storageSize === undefined && body.storage_size === undefined ? null : Number(body.storageSize ?? body.storage_size);
+        if (storageProvider) {
+            if (storageProvider !== STORAGE_PROVIDER) return res.status(400).json({ success: false, message: "Unsupported storage provider." });
+            validateVideoUpload({ contentType: storageContentType, fileSize: storageSize });
+            await assertStorageObject(storageKey, storageContentType, storageSize, req.authUser.id);
+        }
 
         const result = await pool.query(`
             INSERT INTO lessons (id, title, module, sequence, duration, video_url, description, learning_objectives, status, metadata)
@@ -3068,6 +3129,9 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
             cleanText(body.status || "Draft", 40),
             JSON.stringify(body.metadata && typeof body.metadata === "object" ? body.metadata : {})
         ]);
+        if (storageProvider) {
+            await pool.query("UPDATE lessons SET storage_provider = $2, storage_key = $3, storage_content_type = $4, video_url = $5, updated_at = NOW() WHERE id = $1", [id, storageProvider, storageKey, storageContentType, storageMarker(storageKey)]);
+        }
         res.status(201).json({ success: true, data: toClientLesson(result.rows[0]) });
     } catch (error) {
         next(error);
@@ -3083,17 +3147,30 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
                 ? undefined
                 : String(body.learningObjectives || "").split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
 
+        const storageProvider = body.storageProvider === undefined && body.storage_provider === undefined ? null : cleanText(body.storageProvider || body.storage_provider || "", 40).toLowerCase();
+        const storageKey = body.storageKey === undefined && body.storage_key === undefined ? null : cleanText(body.storageKey || body.storage_key || "", 500);
+        const storageContentType = body.storageContentType === undefined && body.storage_content_type === undefined ? null : cleanText(body.storageContentType || body.storage_content_type || "", 120).toLowerCase();
+        const storageSize = body.storageSize === undefined && body.storage_size === undefined ? null : Number(body.storageSize ?? body.storage_size);
+        if (storageProvider !== null) {
+            if (storageProvider !== STORAGE_PROVIDER) return res.status(400).json({ success: false, message: "Unsupported storage provider." });
+            validateVideoUpload({ contentType: storageContentType, fileSize: storageSize });
+            await assertStorageObject(storageKey, storageContentType, storageSize, req.authUser.id);
+        }
         const result = await pool.query(`
             UPDATE lessons SET
               title = COALESCE($2, title),
               module = COALESCE($3, module),
               sequence = COALESCE($4, sequence),
               duration = COALESCE($5, duration),
-              video_url = COALESCE($6, video_url),
+              video_url = CASE WHEN $11 = 'local' THEN $14 ELSE COALESCE($6, video_url) END,
               description = COALESCE($7, description),
               learning_objectives = COALESCE($8::jsonb, learning_objectives),
               status = COALESCE($9, status),
               metadata = COALESCE($10::jsonb, metadata),
+              storage_provider = CASE WHEN $11 = '' THEN NULL ELSE COALESCE($11, storage_provider) END,
+              storage_key = CASE WHEN $11 = '' THEN NULL ELSE COALESCE($12, storage_key) END,
+              storage_content_type = CASE WHEN $11 = '' THEN NULL ELSE COALESCE($13, storage_content_type) END,
+              storage_size = CASE WHEN $11 = '' THEN NULL ELSE COALESCE($14, storage_size) END,
               updated_at = NOW()
             WHERE id = $1
             RETURNING *
@@ -3107,7 +3184,11 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
             body.description === undefined ? null : cleanText(body.description || "", 5000),
             objectives === undefined ? null : JSON.stringify(objectives),
             body.status === undefined ? null : cleanText(body.status || "Draft", 40),
-            body.metadata === undefined ? null : JSON.stringify(body.metadata && typeof body.metadata === "object" ? body.metadata : {})
+            body.metadata === undefined ? null : JSON.stringify(body.metadata && typeof body.metadata === "object" ? body.metadata : {}),
+            storageProvider,
+            storageKey,
+            storageContentType,
+            storageProvider === STORAGE_PROVIDER && storageKey ? storageMarker(storageKey) : null
         ]);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Lecture not found." });
         res.json({ success: true, data: toClientLesson(result.rows[0]) });

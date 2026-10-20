@@ -16,10 +16,12 @@ import {
   Clock,
   Sparkles,
   X,
-  Play
+  Play,
+  Upload,
+  Link2
 } from 'lucide-react';
 import { ManagedLesson } from '../../types';
-import { lessonApi } from '../../services/api';
+import { assessmentApi, lessonApi, practiceApi, uploadLessonVideo, videoApi } from '../../services/api';
 import { OOP_COURSE_LESSONS } from '../../data/oopCourse';
 
 interface LessonManagementTabProps {
@@ -33,6 +35,11 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Published' | 'Draft' | 'Archived'>('All');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [videoSource, setVideoSource] = useState<'link' | 'upload'>('link');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -49,8 +56,13 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     videoUrl: '',
     description: '',
     learningObjectives: '',
+    assessmentPassingScore: 60,
+    practiceTitle: '',
+    practiceDescription: '',
     status: 'Published' as 'Draft' | 'Published' | 'Archived'
   });
+
+  const [linkedContent, setLinkedContent] = useState<any>(null);
 
   const cardClass = isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900';
   const inputClass = isDark
@@ -84,6 +96,9 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
             ? JSON.parse(l.learning_objectives || '[]')
             : [],
           status: l.status || 'Published',
+          storageProvider: l.storageProvider || l.storage_provider || '',
+          storageKey: l.storageKey || l.storage_key || '',
+          content: l.content || null,
           createdBy: l.created_by || l.createdBy,
           createdAt: l.created_at || l.createdAt,
           updatedAt: l.updated_at || l.updatedAt
@@ -150,8 +165,15 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       videoUrl: '',
       description: '',
       learningObjectives: '',
+      assessmentPassingScore: 60,
+      practiceTitle: '',
+      practiceDescription: '',
       status: 'Published'
     });
+    setVideoSource('link');
+    setSelectedFile(null);
+    setUploadProgress(0);
+    setLinkedContent(null);
     setIsCreateOpen(true);
   };
 
@@ -165,8 +187,56 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       videoUrl: lesson.videoUrl,
       description: lesson.description,
       learningObjectives: lesson.learningObjectives.join('\n'),
+      assessmentPassingScore: Number((lesson as any).content?.assessment?.passingScore || 60),
+      practiceTitle: (lesson as any).content?.practice?.title || '',
+      practiceDescription: (lesson as any).content?.practice?.description || '',
       status: lesson.status
     });
+    setVideoSource(lesson.storageProvider === 'local' ? 'upload' : 'link');
+    setSelectedFile(null);
+    setUploadProgress(0);
+    setLinkedContent((lesson as any).content || null);
+  };
+
+  const handleFileChange = (file?: File) => {
+    if (!file) return;
+    if (file.type !== 'video/mp4' || !file.name.toLowerCase().endsWith('.mp4')) {
+      setFeedback({ type: 'error', message: 'Only MP4 video files are supported.' });
+      return;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      setFeedback({ type: 'error', message: 'Video files must be 25 MB or smaller.' });
+      return;
+    }
+    setFeedback(null);
+    setSelectedFile(file);
+    setUploadProgress(0);
+  };
+
+  const persistLinkedVideo = async (lessonId: string, videoUrl: string, upload?: { provider: string; key: string; contentType: string; fileSize: number; storageReference: string }) => {
+    if (!videoUrl && !upload) return;
+    const existing = (await videoApi.list(lessonId)).data?.[0];
+    const videoPayload: any = {
+      lessonId,
+      title: formData.title.trim(),
+      videoUrl: upload?.storageReference || videoUrl,
+      duration: formData.duration.trim(),
+      description: formData.description.trim(),
+      status: formData.status,
+      ...(upload ? {
+        storageProvider: upload.provider,
+        storageKey: upload.key,
+        storageContentType: upload.contentType,
+        storageSize: upload.fileSize
+      } : {
+        storageProvider: '',
+        storageKey: '',
+        storageContentType: '',
+        storageSize: null
+      })
+    };
+    if (existing) await videoApi.update(existing.id, videoPayload);
+    else await videoApi.create(videoPayload);
   };
 
   const handleSaveLesson = async (e: React.FormEvent) => {
@@ -181,35 +251,79 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       .map(o => o.trim())
       .filter(Boolean);
 
+    if (videoSource === 'upload' && !editingLesson && !selectedFile) {
+      setFeedback({ type: 'error', message: 'Choose an MP4 video file before creating this lesson.' });
+      return;
+    }
+
+    setIsSaving(true);
+    setUploadProgress(0);
+    const lessonId = editingLesson?.id || `oop_lesson_${Date.now()}`;
     const payload = {
+      id: lessonId,
       title: formData.title.trim(),
       module: formData.module.trim(),
       sequence: Number(formData.sequence),
       duration: formData.duration.trim(),
-      videoUrl: formData.videoUrl.trim(),
+      videoUrl: videoSource === 'link' ? formData.videoUrl.trim() : '',
       description: formData.description.trim(),
       learningObjectives: objectives,
       concepts: objectives,
-      status: formData.status
+      status: videoSource === 'upload' ? 'Draft' : formData.status,
+      ...(videoSource === 'link' && editingLesson?.storageProvider === 'local' ? {
+        storageProvider: '',
+        storageKey: '',
+        storageContentType: ''
+      } : {})
     };
 
     try {
+      let savedId = lessonId;
       if (editingLesson) {
         await lessonApi.update(editingLesson.id, payload);
         setFeedback({ type: 'success', message: `Lesson "${formData.title}" updated successfully.` });
         setEditingLesson(null);
       } else {
-        await lessonApi.create({
-          id: `oop_lesson_${Date.now()}`,
-          courseId: 'oop_course_java',
-          ...payload
-        });
+        await lessonApi.create({ courseId: 'oop_course_java', ...payload });
         setFeedback({ type: 'success', message: `Lesson "${formData.title}" created successfully.` });
-        setIsCreateOpen(false);
       }
+      let upload: any;
+      if (videoSource === 'upload' && selectedFile) {
+        upload = await uploadLessonVideo(selectedFile, savedId, setUploadProgress);
+        await lessonApi.update(savedId, {
+          videoUrl: upload.storageReference,
+          storageProvider: upload.provider,
+          storageKey: upload.key,
+          storageContentType: upload.contentType,
+          storageSize: upload.fileSize
+        });
+      }
+      await persistLinkedVideo(savedId, videoSource === 'link' ? formData.videoUrl.trim() : '', upload);
+      if (linkedContent?.assessment?.id) {
+        await assessmentApi.update(linkedContent.assessment.id, {
+          lessonId: savedId,
+          title: `${formData.title.trim()} Assessment`,
+          passingScore: Number(formData.assessmentPassingScore)
+        });
+      }
+      if (linkedContent?.practice?.id && formData.practiceTitle.trim()) {
+        await practiceApi.updateChallenge(linkedContent.practice.id, {
+          title: formData.practiceTitle.trim(),
+          description: formData.practiceDescription.trim(),
+          status: formData.status
+        });
+      }
+      if (videoSource === 'upload' && formData.status !== 'Draft') {
+        await lessonApi.update(savedId, { status: formData.status });
+      }
+      setSelectedFile(null);
+      setUploadProgress(0);
+      if (!editingLesson) setIsCreateOpen(false);
       fetchLessons();
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Failed to save lesson.' });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -575,15 +689,58 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
 
               <div>
                 <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
-                  Video URL
+                  Lesson Video
                 </label>
-                <input
-                  type="text"
-                  placeholder="https://www.youtube.com/watch?v=... or /videos/lesson1.mp4"
-                  value={formData.videoUrl}
-                  onChange={e => setFormData({ ...formData, videoUrl: e.target.value })}
-                  className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
-                />
+                <div className={`flex rounded-xl border p-1 ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-50'}`}>
+                  <button type="button" onClick={() => setVideoSource('link')} className={`flex-1 rounded-lg px-3 py-2 text-xs font-black ${videoSource === 'link' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}>
+                    <Link2 className="mr-1 inline h-3.5 w-3.5" /> Video Link
+                  </button>
+                  <button type="button" onClick={() => setVideoSource('upload')} className={`flex-1 rounded-lg px-3 py-2 text-xs font-black ${videoSource === 'upload' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}>
+                    <Upload className="mr-1 inline h-3.5 w-3.5" /> Upload MP4
+                  </button>
+                </div>
+                {videoSource === 'link' ? (
+                  <input
+                    type="text"
+                    placeholder="https://www.youtube.com/watch?v=... or /videos/lesson1.mp4"
+                    value={formData.videoUrl}
+                    onChange={e => setFormData({ ...formData, videoUrl: e.target.value })}
+                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                  />
+                ) : (
+                  <div className={`mt-2 rounded-xl border border-dashed p-3 ${isDark ? 'border-slate-700 bg-slate-950/50' : 'border-slate-200 bg-slate-50'}`}>
+                    <input ref={fileInputRef} type="file" accept="video/mp4,.mp4" className="hidden" onChange={e => handleFileChange(e.target.files?.[0])} />
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white">
+                      Choose MP4 video
+                    </button>
+                    <span className="ml-2 text-[11px] font-bold text-slate-400">Maximum 25 MB</span>
+                    {selectedFile && <p className="mt-2 text-xs font-bold text-emerald-600">{selectedFile.name} · {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB</p>}
+                    {isSaving && videoSource === 'upload' && <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div className="h-full bg-emerald-600 transition-all" style={{ width: `${uploadProgress}%` }} /></div>}
+                    {editingLesson && !selectedFile && <p className="mt-2 text-[11px] font-bold text-slate-400">Leave the file empty to keep the existing uploaded video.</p>}
+                  </div>
+                )}
+              </div>
+
+              <div className={`rounded-xl border p-3 ${isDark ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-slate-50'}`}>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Linked learning content</p>
+                <div className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
+                  <span className="font-bold">Video: <b className="text-emerald-600">{linkedContent?.video?.status || (videoSource === 'upload' ? 'Ready to save' : formData.videoUrl ? 'Linked' : 'Not linked')}</b></span>
+                  <span className="font-bold">Assessment: <b className="text-emerald-600">{linkedContent?.assessment?.title || 'Not linked'}</b></span>
+                  <span className="font-bold">Practice: <b className="text-emerald-600">{linkedContent?.practice?.title || 'Not configured'}</b></span>
+                </div>
+                {linkedContent?.assessment?.id && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <label className="text-[11px] font-black text-slate-500">Passing score</label>
+                    <input type="number" min={0} max={100} value={formData.assessmentPassingScore} onChange={e => setFormData({ ...formData, assessmentPassingScore: Number(e.target.value) })} className={`w-20 rounded-lg border px-2 py-1 text-xs font-bold ${inputClass}`} />
+                    <span className="text-[11px] font-bold text-slate-400">Existing assessment; no duplicate is created.</span>
+                  </div>
+                )}
+                {linkedContent?.practice?.id && (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <input value={formData.practiceTitle} onChange={e => setFormData({ ...formData, practiceTitle: e.target.value })} placeholder="Practice activity title" className={`rounded-lg border px-2 py-1.5 text-xs font-bold ${inputClass}`} />
+                    <input value={formData.practiceDescription} onChange={e => setFormData({ ...formData, practiceDescription: e.target.value })} placeholder="Practice activity description" className={`rounded-lg border px-2 py-1.5 text-xs font-bold ${inputClass}`} />
+                  </div>
+                )}
               </div>
 
               <div>
@@ -625,9 +782,10 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                 </button>
                 <button
                   type="submit"
+                  disabled={isSaving}
                   className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-black text-white hover:bg-emerald-700 shadow-sm transition cursor-pointer"
                 >
-                  {editingLesson ? 'Save Changes' : 'Create Lesson'}
+                  {isSaving ? (videoSource === 'upload' ? `Uploading… ${uploadProgress}%` : 'Saving…') : (editingLesson ? 'Save Lesson Content' : 'Create Lesson Content')}
                 </button>
               </div>
             </form>
