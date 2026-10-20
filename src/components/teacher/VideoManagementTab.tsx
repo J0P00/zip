@@ -18,7 +18,7 @@ import {
   Video
 } from 'lucide-react';
 import { ManagedVideo, ManagedLesson } from '../../types';
-import { videoApi, lessonApi, storageApi } from '../../services/api';
+import { API_BASE_URL, getAuthToken, videoApi, lessonApi } from '../../services/api';
 import { OOP_COURSE_LESSONS } from '../../data/oopCourse';
 
 interface VideoManagementTabProps {
@@ -58,8 +58,8 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
     status: 'Published' as 'Draft' | 'Published' | 'Archived'
   });
 
-  const MAX_VIDEO_SIZE = 2 * 1024 * 1024 * 1024;
-  const SUPPORTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo', 'video/mpeg'];
+  const MAX_VIDEO_SIZE = 25 * 1024 * 1024;
+  const SUPPORTED_VIDEO_TYPES = ['video/mp4'];
 
   useEffect(() => {
     return () => {
@@ -110,7 +110,11 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
       // 2. Load videos
       const videoRes = await videoApi.list();
       if (videoRes.data && Array.isArray(videoRes.data)) {
-        setVideos(videoRes.data);
+        setVideos(videoRes.data.map((video: ManagedVideo) => (
+          video.storageProvider === 'local' && video.videoUrl.startsWith('/api/')
+            ? { ...video, videoUrl: `${API_BASE_URL}${video.videoUrl}` }
+            : video
+        )));
       } else {
         setVideos([]);
       }
@@ -181,14 +185,14 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
   const handleFileChange = (file: File | undefined) => {
     if (!file) return;
     const extension = file.name.split('.').pop()?.toLowerCase();
-    const supported = SUPPORTED_VIDEO_TYPES.includes(file.type) || ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mpeg', 'mpg'].includes(extension || '');
+    const supported = SUPPORTED_VIDEO_TYPES.includes(file.type) && extension === 'mp4';
     if (!supported) {
-      setFeedback({ type: 'error', message: 'Unsupported video format. Use MP4, WebM, OGG, MOV, AVI, or MPEG.' });
+      setFeedback({ type: 'error', message: 'Unsupported video format. Upload an MP4 file with an .mp4 extension.' });
       clearSelectedFile();
       return;
     }
     if (file.size > MAX_VIDEO_SIZE) {
-      setFeedback({ type: 'error', message: 'Video files must be 2 GB or smaller.' });
+      setFeedback({ type: 'error', message: 'Video files must be 25 MB or smaller.' });
       clearSelectedFile();
       return;
     }
@@ -198,75 +202,30 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
   };
 
   const uploadToStorage = async (file: File) => {
-    const statusResponse = await storageApi.getStatus();
-    if (!statusResponse.data.configured) {
-      throw new Error('Video storage is unavailable. Ask an administrator to configure the backend S3 storage variables.');
-    }
-    const sessionResponse = await storageApi.start({
-      lessonId: formData.lessonId,
-      fileName: file.name,
-      contentType: file.type,
-      fileSize: file.size
-    });
-    const session = sessionResponse.data;
-    const put = (url: string, body: Blob, contentType?: string, headers: Record<string, string> = {}) => new Promise<string>((resolve, reject) => {
+    const body = new FormData();
+    body.append('lessonId', formData.lessonId);
+    body.append('video', file, file.name);
+    return new Promise<any>((resolve, reject) => {
       const request = new XMLHttpRequest();
-      request.open('PUT', url);
+      request.open('POST', `${API_BASE_URL}/api/videos/upload`);
+      const token = getAuthToken();
+      if (token) request.setRequestHeader('Authorization', `Bearer ${token}`);
       request.upload.onprogress = event => {
-        if (event.lengthComputable && session.uploadType === 'single') setUploadProgress(Math.round((event.loaded / event.total) * 100));
+        if (event.lengthComputable) setUploadProgress(Math.round((event.loaded / event.total) * 100));
       };
-      request.onerror = () => reject(new Error('Video storage upload could not be completed.'));
-      request.onabort = () => reject(new Error('Video storage upload was cancelled.'));
+      request.onerror = () => reject(new Error('Video upload could not be completed.'));
+      request.onabort = () => reject(new Error('Video upload was cancelled.'));
       request.onload = () => {
         if (request.status >= 200 && request.status < 300) {
-          resolve(request.getResponseHeader('ETag') || '');
+          try { resolve(JSON.parse(request.responseText)); } catch { reject(new Error('The backend returned an invalid upload response.')); }
         } else {
-          reject(new Error(`Video storage rejected the upload (HTTP ${request.status}).`));
+          let message = `Video upload failed (HTTP ${request.status}).`;
+          try { message = JSON.parse(request.responseText)?.message || message; } catch { /* use fallback */ }
+          reject(new Error(message));
         }
       };
-      if (contentType) request.setRequestHeader('Content-Type', contentType);
-      Object.entries(headers).forEach(([name, value]) => request.setRequestHeader(name, value));
       request.send(body);
     });
-
-    let parts: Array<{ partNumber: number; etag: string }> = [];
-    try {
-      if (session.uploadType === 'multipart') {
-        const partSize = Number(session.partSize);
-        const totalParts = Math.ceil(file.size / partSize);
-        for (let index = 0; index < totalParts; index += 1) {
-          const partNumber = index + 1;
-          const start = index * partSize;
-          const chunk = file.slice(start, Math.min(start + partSize, file.size));
-          let etag = '';
-          let lastError: unknown;
-          for (let attempt = 1; attempt <= 3 && !etag; attempt += 1) {
-            try {
-              const partUrl = await storageApi.partUrl({ key: session.key, uploadId: session.uploadId, partNumber });
-              etag = await put(partUrl.data.uploadUrl, chunk);
-            } catch (error) {
-              lastError = error;
-            }
-          }
-          if (!etag) throw lastError instanceof Error ? lastError : new Error(`Part ${partNumber} failed to upload.`);
-          parts.push({ partNumber, etag });
-          setUploadProgress(Math.round((partNumber / totalParts) * 100));
-        }
-      } else {
-        await put(session.uploadUrl, file, file.type, session.uploadHeaders || {});
-        setUploadProgress(100);
-      }
-      return await storageApi.complete({
-        key: session.key,
-        uploadId: session.uploadId,
-        parts,
-        contentType: file.type,
-        fileSize: file.size
-      });
-    } catch (error) {
-      if (session.uploadId) await storageApi.abort({ key: session.key, uploadId: session.uploadId }).catch(() => undefined);
-      throw error;
-    }
   };
 
   const handleSaveVideo = async (e: React.FormEvent) => {
@@ -647,7 +606,7 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
                     >
                       Choose Video File
                     </button>
-                    <p className="mt-2 text-[11px] text-slate-400">MP4, WebM, OGG, MOV, AVI, or MPEG · maximum 2 GB</p>
+                    <p className="mt-2 text-[11px] text-slate-400">MP4 only · maximum 25 MB</p>
                   </div>
                   {selectedFile && (
                     <div className="mt-2 rounded-lg bg-indigo-500/10 px-3 py-2 text-xs text-indigo-600">

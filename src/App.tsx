@@ -78,7 +78,7 @@ import TeacherPortal from './components/TeacherPortal';
 import AuthPage from './components/AuthPage';
 import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
-import { appApi, authApi, getAuthToken, monitoringApi, notificationApi, practiceApi, progressApi, recommendationApi, setAuthToken, userApi } from './services/api';
+import { API_BASE_URL, appApi, authApi, getAuthToken, monitoringApi, notificationApi, practiceApi, progressApi, recommendationApi, setAuthToken, userApi } from './services/api';
 import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
 import { getCanonicalStudentId, recommendationBelongsToStudent } from './services/identity';
 const NEW_STUDENT_PROGRESS = {
@@ -467,8 +467,11 @@ export default function App() {
         }
         const normalizedLessons = backendLessons.map((lesson: any) => {
           const fallback = OOP_COURSE_LESSONS.find(item => item.id === lesson.id);
-          const backendVideoUrl = lesson.videoUrl || lesson.video_url || '';
-          const hasPrivateStorage = lesson.storageProvider === 's3';
+          const rawBackendVideoUrl = lesson.videoUrl || lesson.video_url || '';
+          const backendVideoUrl = lesson.storageProvider === 'local' && rawBackendVideoUrl.startsWith('/api/')
+            ? `${API_BASE_URL}${rawBackendVideoUrl}`
+            : rawBackendVideoUrl;
+          const hasPrivateStorage = lesson.storageProvider === 'local';
           const usesMissingPlaceholder = backendVideoUrl.startsWith('/videos/') || backendVideoUrl.startsWith('/OOP%20Lesson/');
           return {
             ...fallback,

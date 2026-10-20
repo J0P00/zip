@@ -11,18 +11,11 @@ This project is a React/TypeScript learning hub with an Express/PostgreSQL backe
 - `src/services/interpretation.ts` and `src/services/recommendationEngine.ts` contain the rule-based learning engines.
 - `backend/server.js` is the active Express API and PostgreSQL integration; `backend/oop_course_schema.sql` defines the database schema.
 
-### S3 video uploads
+### Temporary local video uploads
 
-New teacher video uploads use private Amazon S3 storage with browser-direct presigned uploads. Configure these backend-only environment variables:
+Teacher video uploads are sent as `multipart/form-data` to the Render backend and stored under `backend/uploads/videos` by default. Only MP4 files up to 25 MB are accepted. The maximum can be changed on the backend with `LOCAL_VIDEO_MAX_BYTES`; the storage directory can be changed with `LOCAL_VIDEO_DIR`.
 
-- `S3_BUCKET`
-- `AWS_REGION`
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-
-The AWS secret must never be added to Vite/`VITE_*` variables or client-side code. Grant the backend identity only the required bucket permissions for multipart upload, HEAD, signed GET, abort, and cleanup operations.
-
-Configure the S3 bucket CORS policy for the deployed Vercel origin to allow `PUT`, `GET`, and `HEAD` requests with `Content-Type` and `x-amz-meta-uploadedby` headers, and expose the `ETag` response header for multipart uploads.
+This is demonstration storage only. Render's default filesystem is ephemeral, so uploaded videos may disappear after restarts, redeployments, or instance replacement. No AWS S3, Cloudinary, or Supabase credentials are required for this flow.
 
 Student monitoring uses the selected student's canonical `id`, falling back to `userId` and then email. The backend resolves that value to `users.id` before querying progress and assessment data.
 

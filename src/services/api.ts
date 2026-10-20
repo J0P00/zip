@@ -299,32 +299,13 @@ export const storageApi = {
       success: boolean;
       data: {
         configured: boolean;
-        bucketConfigured: boolean;
-        regionConfigured: boolean;
-        provider: 's3';
+        maxFileSizeBytes: number;
+        maxFileSizeMb: number;
+        acceptedTypes: string[];
+        provider: 'local';
         uploadEndpoint: string;
       };
-    }>('/api/videos/storage-status'),
-  start: (body: { lessonId: string; fileName: string; contentType: string; fileSize: number }) =>
-    apiRequest<{ success: boolean; data: any }>('/api/videos/storage-upload/start', {
-      method: 'POST',
-      body: JSON.stringify(body)
-    }),
-  partUrl: (body: { key: string; uploadId: string; partNumber: number }) =>
-    apiRequest<{ success: boolean; data: { uploadUrl: string; partNumber: number } }>('/api/videos/storage-upload/part-url', {
-      method: 'POST',
-      body: JSON.stringify(body)
-    }),
-  complete: (body: { key: string; uploadId?: string; parts?: Array<{ partNumber: number; etag: string }>; contentType: string; fileSize: number }) =>
-    apiRequest<{ success: boolean; data: { provider: 's3'; key: string; contentType: string; fileSize: number; storageReference: string } }>('/api/videos/storage-upload/complete', {
-      method: 'POST',
-      body: JSON.stringify(body)
-    }),
-  abort: (body: { key: string; uploadId: string }) =>
-    apiRequest<{ success: boolean }>('/api/videos/storage-upload/abort', {
-      method: 'POST',
-      body: JSON.stringify(body)
-    })
+    }>('/api/videos/storage-status')
 };
 
 export const resourceApi = {

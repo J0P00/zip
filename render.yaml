@@ -17,11 +17,3 @@ services:
         sync: false
       - key: JAVA_HOME
         value: /usr/lib/jvm/java-17-openjdk-amd64
-      - key: S3_BUCKET
-        sync: false
-      - key: AWS_REGION
-        value: us-east-1
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
