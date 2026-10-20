@@ -196,6 +196,10 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
   };
 
   const uploadToCloudinary = async (file: File) => {
+    const statusResponse = await cloudinaryApi.getStatus();
+    if (!statusResponse.data.configured) {
+      throw new Error('Cloudinary upload is unavailable. Ask an administrator to configure the backend Cloudinary environment variables.');
+    }
     const signatureResponse = await cloudinaryApi.getUploadSignature();
     const signature = signatureResponse.data;
     return new Promise<{ secure_url: string; public_id: string; duration?: number }>((resolve, reject) => {

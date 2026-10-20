@@ -292,6 +292,17 @@ export const videoApi = {
 };
 
 export const cloudinaryApi = {
+  getStatus: () =>
+    apiRequest<{
+      success: boolean;
+      data: {
+        configured: boolean;
+        cloudNameConfigured: boolean;
+        apiKeyConfigured: boolean;
+        apiSecretConfigured: boolean;
+        uploadEndpoint: string;
+      };
+    }>('/api/videos/cloudinary-status'),
   getUploadSignature: () =>
     apiRequest<{
       success: boolean;

@@ -1,5 +1,3 @@
-require("dotenv").config();
-
 const bcrypt = require("bcrypt");
 const cors = require("cors");
 const express = require("express");
@@ -7,6 +5,9 @@ const fs = require("fs/promises");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
+const dotenv = require("dotenv");
+dotenv.config({ path: path.join(__dirname, ".env") });
+dotenv.config();
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 const jwt = require("jsonwebtoken");
@@ -3039,6 +3040,20 @@ app.delete("/api/assessments/:id", requireAuth, requireRole(["teacher"]), async 
 // ==========================================
 // VIDEO MANAGEMENT ENDPOINTS (Teacher Content)
 // ==========================================
+app.get("/api/videos/cloudinary-status", requireAuth, requireRole(["teacher"]), async (_req, res) => {
+    const config = getCloudinaryConfig();
+    res.json({
+        success: true,
+        data: {
+            configured: Boolean(config.cloudName && config.apiKey && config.apiSecret),
+            cloudNameConfigured: Boolean(config.cloudName),
+            apiKeyConfigured: Boolean(config.apiKey),
+            apiSecretConfigured: Boolean(config.apiSecret),
+            uploadEndpoint: "/api/videos/upload-signature"
+        }
+    });
+});
+
 app.get("/api/videos/upload-signature", requireAuth, requireRole(["teacher"]), async (_req, res, next) => {
     try {
         const config = requireCloudinaryConfig();
