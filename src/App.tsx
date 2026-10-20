@@ -468,12 +468,13 @@ export default function App() {
         const normalizedLessons = backendLessons.map((lesson: any) => {
           const fallback = OOP_COURSE_LESSONS.find(item => item.id === lesson.id);
           const backendVideoUrl = lesson.videoUrl || lesson.video_url || '';
+          const hasPrivateStorage = lesson.storageProvider === 's3';
           const usesMissingPlaceholder = backendVideoUrl.startsWith('/videos/') || backendVideoUrl.startsWith('/OOP%20Lesson/');
           return {
             ...fallback,
             ...lesson,
             id: lesson.id,
-            videoUrl: (!usesMissingPlaceholder && backendVideoUrl) ? backendVideoUrl : (lessonVideos.oop[lesson.id as keyof typeof lessonVideos.oop]?.secureUrl || (usesMissingPlaceholder ? (fallback?.videoUrl || backendVideoUrl) : (backendVideoUrl || fallback?.videoUrl || ''))),
+            videoUrl: hasPrivateStorage ? backendVideoUrl : ((!usesMissingPlaceholder && backendVideoUrl) ? backendVideoUrl : (lessonVideos.oop[lesson.id as keyof typeof lessonVideos.oop]?.secureUrl || (usesMissingPlaceholder ? (fallback?.videoUrl || backendVideoUrl) : (backendVideoUrl || fallback?.videoUrl || '')))),
             duration: lesson.duration || fallback?.duration || ''
           } as VideoLesson;
         });
@@ -483,7 +484,7 @@ export default function App() {
         console.warn('Backend lessons check failed:', error);
         loadFallbackLessons();
       });
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     const token = getAuthToken();

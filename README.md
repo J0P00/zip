@@ -11,15 +11,18 @@ This project is a React/TypeScript learning hub with an Express/PostgreSQL backe
 - `src/services/interpretation.ts` and `src/services/recommendationEngine.ts` contain the rule-based learning engines.
 - `backend/server.js` is the active Express API and PostgreSQL integration; `backend/oop_course_schema.sql` defines the database schema.
 
-### Cloudinary video uploads
+### S3 video uploads
 
-The teacher video upload flow uses a backend-signed Cloudinary upload. Configure these backend-only environment variables before enabling uploads:
+New teacher video uploads use private Amazon S3 storage with browser-direct presigned uploads. Configure these backend-only environment variables:
 
-- `CLOUDINARY_CLOUD_NAME`
-- `CLOUDINARY_API_KEY`
-- `CLOUDINARY_API_SECRET`
+- `S3_BUCKET`
+- `AWS_REGION`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
 
-The API secret must never be added to Vite/`VITE_*` variables or client-side code. Render is configured with these three variables as secret environment values.
+The AWS secret must never be added to Vite/`VITE_*` variables or client-side code. Grant the backend identity only the required bucket permissions for multipart upload, HEAD, signed GET, abort, and cleanup operations.
+
+Configure the S3 bucket CORS policy for the deployed Vercel origin to allow `PUT`, `GET`, and `HEAD` requests with `Content-Type` and `x-amz-meta-uploadedby` headers, and expose the `ETag` response header for multipart uploads.
 
 Student monitoring uses the selected student's canonical `id`, falling back to `userId` and then email. The backend resolves that value to `users.id` before querying progress and assessment data.
 

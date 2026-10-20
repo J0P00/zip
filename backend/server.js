@@ -8,6 +8,18 @@ const crypto = require("crypto");
 const dotenv = require("dotenv");
 dotenv.config({ path: path.join(__dirname, ".env") });
 dotenv.config();
+const {
+    S3Client,
+    PutObjectCommand,
+    CreateMultipartUploadCommand,
+    UploadPartCommand,
+    CompleteMultipartUploadCommand,
+    AbortMultipartUploadCommand,
+    HeadObjectCommand,
+    DeleteObjectCommand,
+    GetObjectCommand
+} = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 const jwt = require("jsonwebtoken");
@@ -189,50 +201,118 @@ const evaluateJavaSubmission = async (challenge, sourceCode) => {
 
 const cleanText = (value, maxLength = 255) => String(value ?? "").trim().slice(0, maxLength);
 
-const getCloudinaryConfig = () => ({
-    cloudName: cleanText(process.env.CLOUDINARY_CLOUD_NAME, 120),
-    apiKey: cleanText(process.env.CLOUDINARY_API_KEY, 120),
-    apiSecret: String(process.env.CLOUDINARY_API_SECRET || "")
+const STORAGE_PROVIDER = "s3";
+const MAX_VIDEO_SIZE_BYTES = 2 * 1024 * 1024 * 1024;
+const MULTIPART_THRESHOLD_BYTES = 50 * 1024 * 1024;
+const MULTIPART_PART_SIZE_BYTES = 10 * 1024 * 1024;
+const SIGNED_URL_TTL_SECONDS = 15 * 60;
+const SUPPORTED_VIDEO_TYPES = new Set([
+    "video/mp4",
+    "video/webm",
+    "video/ogg",
+    "video/quicktime",
+    "video/x-msvideo",
+    "video/mpeg"
+]);
+
+const getStorageConfig = () => ({
+    bucket: cleanText(process.env.S3_BUCKET, 255),
+    region: cleanText(process.env.AWS_REGION || "us-east-1", 80),
+    endpoint: cleanText(process.env.S3_ENDPOINT, 500),
+    forcePathStyle: String(process.env.S3_FORCE_PATH_STYLE || "false").toLowerCase() === "true"
 });
 
-const requireCloudinaryConfig = () => {
-    const config = getCloudinaryConfig();
-    if (!config.cloudName || !config.apiKey || !config.apiSecret) {
-        const error = new Error("Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET on the backend.");
+const requireStorageConfig = () => {
+    const config = getStorageConfig();
+    if (!config.bucket || !config.region) {
+        const error = new Error("S3 storage is not configured. Set S3_BUCKET and AWS_REGION on the backend.");
         error.status = 503;
         throw error;
     }
     return config;
 };
 
-const signCloudinaryParams = (params, apiSecret) => {
-    const serialized = Object.keys(params)
-        .filter((key) => params[key] !== undefined && params[key] !== null && params[key] !== "")
-        .sort()
-        .map((key) => `${key}=${params[key]}`)
-        .join("&");
-    return crypto.createHash("sha1").update(serialized + apiSecret).digest("hex");
+let storageClient;
+const getStorageClient = () => {
+    const config = requireStorageConfig();
+    if (!storageClient) {
+        storageClient = new S3Client({
+            region: config.region,
+            ...(config.endpoint ? { endpoint: config.endpoint, forcePathStyle: config.forcePathStyle } : {})
+        });
+    }
+    return storageClient;
 };
 
-const destroyCloudinaryVideo = async (publicId) => {
-    if (!publicId) return;
-    const config = requireCloudinaryConfig();
-    const timestamp = Math.floor(Date.now() / 1000);
-    const params = { public_id: publicId, timestamp, invalidate: true };
-    const body = new URLSearchParams({
-        ...params,
-        api_key: config.apiKey,
-        signature: signCloudinaryParams(params, config.apiSecret)
-    });
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(config.cloudName)}/video/destroy`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.result === "not found") {
-        throw new Error(result.error?.message || "Cloudinary asset cleanup failed.");
+const validateVideoUpload = ({ contentType, fileSize }) => {
+    const safeType = cleanText(contentType, 120).toLowerCase();
+    const safeSize = Number(fileSize);
+    if (!SUPPORTED_VIDEO_TYPES.has(safeType)) {
+        const error = new Error("Unsupported video type. Use MP4, WebM, OGG, MOV, AVI, or MPEG video.");
+        error.status = 400;
+        throw error;
     }
+    if (!Number.isInteger(safeSize) || safeSize <= 0 || safeSize > MAX_VIDEO_SIZE_BYTES) {
+        const error = new Error("Video files must be larger than zero and no more than 2 GB.");
+        error.status = 400;
+        throw error;
+    }
+    return { contentType: safeType, fileSize: safeSize };
+};
+
+const safeFileExtension = (fileName, contentType) => {
+    const extension = String(fileName || "").toLowerCase().match(/\.[a-z0-9]{1,8}$/)?.[0];
+    if (extension) return extension;
+    const map = { "video/mp4": ".mp4", "video/webm": ".webm", "video/ogg": ".ogv", "video/quicktime": ".mov", "video/x-msvideo": ".avi", "video/mpeg": ".mpeg" };
+    return map[contentType] || ".video";
+};
+
+const buildStorageKey = (lessonId, fileName, contentType) => {
+    const baseName = String(fileName || "video").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "video";
+    return `lesson-videos/${cleanText(lessonId, 120)}/${crypto.randomUUID()}-${baseName}${safeFileExtension(fileName, contentType)}`;
+};
+
+const isStorageKey = (key) => typeof key === "string" && /^lesson-videos\/[a-zA-Z0-9._-]+\/[a-f0-9-]+-[^/]+$/i.test(key);
+
+const storageMarker = (key) => `storage://${STORAGE_PROVIDER}/${key}`;
+
+const assertStorageObject = async (key, expectedType, expectedSize, userId) => {
+    const config = requireStorageConfig();
+    if (!isStorageKey(key)) {
+        const error = new Error("Invalid storage object key.");
+        error.status = 400;
+        throw error;
+    }
+    const head = await getStorageClient().send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
+    const metadata = head.Metadata || {};
+    if (userId && metadata.uploadedby && metadata.uploadedby !== String(userId)) {
+        const error = new Error("The uploaded object does not belong to this teacher.");
+        error.status = 403;
+        throw error;
+    }
+    if (expectedType && head.ContentType && head.ContentType !== expectedType) {
+        const error = new Error("Stored video content type does not match the upload.");
+        error.status = 400;
+        throw error;
+    }
+    if (expectedSize && Number(head.ContentLength) !== Number(expectedSize)) {
+        const error = new Error("Stored video size does not match the upload.");
+        error.status = 400;
+        throw error;
+    }
+    return head;
+};
+
+const getStoragePlaybackUrl = async (key, contentType) => {
+    const config = requireStorageConfig();
+    await assertStorageObject(key, contentType, null, null);
+    return getSignedUrl(getStorageClient(), new GetObjectCommand({ Bucket: config.bucket, Key: key }), { expiresIn: SIGNED_URL_TTL_SECONDS });
+};
+
+const deleteStorageObject = async (key) => {
+    if (!isStorageKey(key)) return;
+    const config = requireStorageConfig();
+    await getStorageClient().send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
 };
 
 const buildEvaluationResults = (validation, challenge) => [
@@ -476,6 +556,9 @@ const toClientLesson = (row) => ({
     sequence: Number(row.sequence || 0),
     duration: row.duration || "",
     videoUrl: row.video_url || "",
+    storageProvider: row.storage_provider || "",
+    storageKey: row.storage_key || "",
+    storageContentType: row.storage_content_type || "",
     description: row.description || "",
     learningObjectives: row.learning_objectives || [],
     status: row.status || "Draft",
@@ -497,10 +580,49 @@ const toClientVideo = (row) => ({
     status: row.status || "Published",
     cloudinaryPublicId: row.cloudinary_public_id || "",
     cloudinaryResourceType: row.cloudinary_resource_type || "",
+    storageProvider: row.storage_provider || "",
+    storageKey: row.storage_key || "",
+    storageContentType: row.storage_content_type || "",
+    storageSize: row.storage_size === null || row.storage_size === undefined ? null : Number(row.storage_size),
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at
 });
+
+const toClientLessonForRequest = async (row, req) => {
+    const lesson = toClientLesson(row);
+    if (row.storage_provider === STORAGE_PROVIDER && row.storage_key) {
+        lesson.videoUrl = "";
+        let canPlay = Boolean(req.authUser && ["student", "teacher"].includes(req.authUser.role));
+        if (canPlay && req.authUser.role === "student") {
+            const access = await getLessonAccessState(req.authUser.id, row.id);
+            canPlay = Boolean(access.canAccess);
+        }
+        if (canPlay) {
+            try {
+                lesson.videoUrl = await getStoragePlaybackUrl(row.storage_key, row.storage_content_type || undefined);
+            } catch (error) {
+                console.error("Stored lesson video could not be verified:", error.message);
+            }
+        }
+    }
+    return lesson;
+};
+
+const toClientVideoForRequest = async (row, req) => {
+    const video = toClientVideo(row);
+    if (row.storage_provider === STORAGE_PROVIDER && row.storage_key) {
+        video.videoUrl = "";
+        if (req.authUser && ["student", "teacher"].includes(req.authUser.role)) {
+            try {
+                video.videoUrl = await getStoragePlaybackUrl(row.storage_key, row.storage_content_type || undefined);
+            } catch (error) {
+                console.error("Stored managed video could not be verified:", error.message);
+            }
+        }
+    }
+    return video;
+};
 
 const toClientResource = (row) => ({
     id: row.id,
@@ -628,6 +750,20 @@ const requireAuth = async (req, res, next) => {
     } catch {
         return res.status(401).json({ success: false, message: "Invalid or expired authentication token." });
     }
+};
+
+const optionalAuth = async (req, _res, next) => {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+    if (!token) return next();
+    try {
+        const payload = jwt.verify(token, JWT_SECRET);
+        const result = await pool.query("SELECT id, user_id, email, role FROM users WHERE id = $1", [payload.id]);
+        if (result.rowCount && result.rows[0].role !== "admin") req.authUser = { ...payload, ...result.rows[0] };
+    } catch {
+        // Anonymous lesson requests retain legacy behavior; private storage URLs are omitted.
+    }
+    return next();
 };
 
 const requireRole = (roles) => (req, res, next) => {
@@ -1163,6 +1299,9 @@ const initializeDatabase = async () => {
 
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS course_id TEXT DEFAULT 'oop_fundamentals';
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS created_by UUID;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_provider TEXT;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_key TEXT;
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_content_type TEXT;
 
         CREATE TABLE IF NOT EXISTS lesson_videos (
           id TEXT PRIMARY KEY DEFAULT ('vid_' || SUBSTRING(gen_random_uuid()::text, 1, 12)),
@@ -1179,7 +1318,12 @@ const initializeDatabase = async () => {
         );
         ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS cloudinary_public_id TEXT;
         ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS cloudinary_resource_type TEXT;
+        ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS storage_provider TEXT;
+        ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS storage_key TEXT;
+        ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS storage_content_type TEXT;
+        ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS storage_size BIGINT;
         CREATE INDEX IF NOT EXISTS idx_lesson_videos_lesson ON lesson_videos(lesson_id, sequence);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_lesson_videos_storage_key_unique ON lesson_videos(storage_key) WHERE storage_key IS NOT NULL;
 
         CREATE TABLE IF NOT EXISTS learning_resources (
           id TEXT PRIMARY KEY DEFAULT ('res_' || SUBSTRING(gen_random_uuid()::text, 1, 12)),
@@ -2865,10 +3009,10 @@ app.get("/api/admin/overview", requireAuth, requireRole(["admin"]), async (_req,
 });
 */
 
-app.get("/api/lessons", async (_req, res, next) => {
+app.get("/api/lessons", optionalAuth, async (req, res, next) => {
     try {
         const result = await pool.query("SELECT * FROM lessons ORDER BY sequence, title");
-        res.json({ success: true, data: result.rows.map(toClientLesson) });
+        res.json({ success: true, data: await Promise.all(result.rows.map(row => toClientLessonForRequest(row, req))) });
     } catch (error) {
         next(error);
     }
@@ -3040,37 +3184,182 @@ app.delete("/api/assessments/:id", requireAuth, requireRole(["teacher"]), async 
 // ==========================================
 // VIDEO MANAGEMENT ENDPOINTS (Teacher Content)
 // ==========================================
-app.get("/api/videos/cloudinary-status", requireAuth, requireRole(["teacher"]), async (_req, res) => {
-    const config = getCloudinaryConfig();
+app.get("/api/videos/storage-status", requireAuth, requireRole(["teacher"]), async (_req, res) => {
+    const config = getStorageConfig();
     res.json({
         success: true,
         data: {
-            configured: Boolean(config.cloudName && config.apiKey && config.apiSecret),
-            cloudNameConfigured: Boolean(config.cloudName),
-            apiKeyConfigured: Boolean(config.apiKey),
-            apiSecretConfigured: Boolean(config.apiSecret),
-            uploadEndpoint: "/api/videos/upload-signature"
+            configured: Boolean(config.bucket && config.region),
+            bucketConfigured: Boolean(config.bucket),
+            regionConfigured: Boolean(config.region),
+            provider: STORAGE_PROVIDER,
+            uploadEndpoint: "/api/videos/storage-upload/start"
         }
     });
 });
 
-app.get("/api/videos/upload-signature", requireAuth, requireRole(["teacher"]), async (_req, res, next) => {
+app.post("/api/videos/storage-upload/start", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
-        const config = requireCloudinaryConfig();
-        const timestamp = Math.floor(Date.now() / 1000);
-        const folder = "oop-hub/videos";
-        const params = { folder, timestamp };
+        const body = req.body || {};
+        const lessonId = cleanText(body.lessonId || body.lesson_id || "", 120);
+        if (!lessonId) return res.status(400).json({ success: false, message: "A lesson association is required." });
+        const lesson = await pool.query("SELECT id FROM lessons WHERE id = $1 AND status <> 'Archived'", [lessonId]);
+        if (!lesson.rowCount) return res.status(404).json({ success: false, message: "Lesson not found or archived." });
+        const { contentType, fileSize } = validateVideoUpload({ contentType: body.contentType, fileSize: body.fileSize });
+        const config = requireStorageConfig();
+        const key = buildStorageKey(lessonId, cleanText(body.fileName || "video", 160), contentType);
+        const client = getStorageClient();
+        const metadata = { uploadedby: String(req.authUser.id) };
+        if (fileSize > MULTIPART_THRESHOLD_BYTES) {
+            const multipart = await client.send(new CreateMultipartUploadCommand({
+                Bucket: config.bucket,
+                Key: key,
+                ContentType: contentType,
+                Metadata: metadata
+            }));
+            return res.status(201).json({
+                success: true,
+                data: {
+                    provider: STORAGE_PROVIDER,
+                    uploadType: "multipart",
+                    key,
+                    uploadId: multipart.UploadId,
+                    partSize: MULTIPART_PART_SIZE_BYTES,
+                    expiresIn: 900
+                }
+            });
+        }
+        const uploadUrl = await getSignedUrl(client, new PutObjectCommand({
+            Bucket: config.bucket,
+            Key: key,
+            ContentType: contentType,
+            Metadata: metadata
+        }), { expiresIn: 900 });
         res.json({
             success: true,
             data: {
-                cloudName: config.cloudName,
-                apiKey: config.apiKey,
-                timestamp,
-                folder,
-                signature: signCloudinaryParams(params, config.apiSecret),
-                resourceType: "video"
+                provider: STORAGE_PROVIDER,
+                uploadType: "single",
+                key,
+                uploadUrl,
+                uploadHeaders: { "Content-Type": contentType, "x-amz-meta-uploadedby": String(req.authUser.id) },
+                contentType,
+                expiresIn: 900
             }
         });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/videos/storage-upload/part-url", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        const body = req.body || {};
+        const key = cleanText(body.key || "", 500);
+        const uploadId = cleanText(body.uploadId || "", 500);
+        const partNumber = Math.floor(Number(body.partNumber));
+        if (!isStorageKey(key) || !uploadId || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+            return res.status(400).json({ success: false, message: "Invalid multipart upload part request." });
+        }
+        const config = requireStorageConfig();
+        const uploadUrl = await getSignedUrl(getStorageClient(), new UploadPartCommand({
+            Bucket: config.bucket,
+            Key: key,
+            UploadId: uploadId,
+            PartNumber: partNumber
+        }), { expiresIn: 900 });
+        res.json({ success: true, data: { uploadUrl, partNumber, expiresIn: 900 } });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post("/api/videos/storage-upload/complete", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        const body = req.body || {};
+        const key = cleanText(body.key || "", 500);
+        const uploadId = cleanText(body.uploadId || "", 500);
+        const contentType = cleanText(body.contentType || "", 120).toLowerCase();
+        const fileSize = Number(body.fileSize);
+        if (!isStorageKey(key) || !contentType || !Number.isInteger(fileSize)) {
+            return res.status(400).json({ success: false, message: "Invalid storage completion request." });
+        }
+        const config = requireStorageConfig();
+        if (uploadId) {
+            const parts = Array.isArray(body.parts)
+                ? body.parts.map(part => ({ ETag: cleanText(part.ETag || part.etag || "", 300), PartNumber: Math.floor(Number(part.PartNumber || part.partNumber)) })).filter(part => part.ETag && part.PartNumber > 0).sort((a, b) => a.PartNumber - b.PartNumber)
+                : [];
+            if (!parts.length) return res.status(400).json({ success: false, message: "Multipart upload parts are required." });
+            await getStorageClient().send(new CompleteMultipartUploadCommand({
+                Bucket: config.bucket,
+                Key: key,
+                UploadId: uploadId,
+                MultipartUpload: { Parts: parts }
+            }));
+        }
+        const head = await assertStorageObject(key, contentType, fileSize, req.authUser.id);
+        res.json({ success: true, data: { provider: STORAGE_PROVIDER, key, contentType: head.ContentType || contentType, fileSize: Number(head.ContentLength || fileSize), storageReference: storageMarker(key) } });
+    } catch (error) {
+        const body = req.body || {};
+        const failedKey = cleanText(body.key || "", 500);
+        const failedUploadId = cleanText(body.uploadId || "", 500);
+        try {
+            if (isStorageKey(failedKey) && failedUploadId) {
+                const config = requireStorageConfig();
+                await getStorageClient().send(new AbortMultipartUploadCommand({ Bucket: config.bucket, Key: failedKey, UploadId: failedUploadId }));
+            }
+            if (isStorageKey(failedKey)) await deleteStorageObject(failedKey);
+        } catch (cleanupError) {
+            console.error("S3 cleanup after upload completion failure failed:", cleanupError.message);
+        }
+        next(error);
+    }
+});
+
+app.post("/api/videos/storage-upload/abort", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        const body = req.body || {};
+        const key = cleanText(body.key || "", 500);
+        const uploadId = cleanText(body.uploadId || "", 500);
+        if (isStorageKey(key) && uploadId) {
+            const config = requireStorageConfig();
+            await getStorageClient().send(new AbortMultipartUploadCommand({ Bucket: config.bucket, Key: key, UploadId: uploadId }));
+        }
+        res.json({ success: true });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/videos/lesson/:lessonId/playback-url", requireAuth, requireRole(["teacher", "student"]), async (req, res, next) => {
+    try {
+        const lessonId = cleanText(req.params.lessonId, 120);
+        if (req.authUser.role === "student") {
+            const access = await getLessonAccessState(req.authUser.id, lessonId);
+            if (!access.canAccess) return res.status(403).json({ success: false, message: access.reason || "You do not have access to this lesson." });
+        }
+        const result = await pool.query("SELECT storage_provider, storage_key, storage_content_type FROM lessons WHERE id = $1", [lessonId]);
+        const row = result.rows[0];
+        if (!row || row.storage_provider !== STORAGE_PROVIDER || !row.storage_key) return res.status(404).json({ success: false, message: "A private video is not configured for this lesson." });
+        const videoUrl = await getStoragePlaybackUrl(row.storage_key, row.storage_content_type || undefined);
+        res.json({ success: true, data: { videoUrl, expiresIn: SIGNED_URL_TTL_SECONDS } });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/videos/lesson/:lessonId/playback-url", requireAuth, requireRole(["teacher", "student"]), async (req, res, next) => {
+    try {
+        const lessonId = cleanText(req.params.lessonId, 120);
+        if (req.authUser.role === "student") {
+            const access = await getLessonAccessState(req.authUser.id, lessonId);
+            if (!access.canAccess) return res.status(403).json({ success: false, message: access.reason || "You do not have access to this lesson." });
+        }
+        const result = await pool.query("SELECT storage_provider, storage_key, storage_content_type FROM lessons WHERE id = $1", [lessonId]);
+        const row = result.rows[0];
+        if (!row || row.storage_provider !== STORAGE_PROVIDER || !row.storage_key) return res.status(404).json({ success: false, message: "A private video is not configured for this lesson." });
+        const videoUrl = await getStoragePlaybackUrl(row.storage_key, row.storage_content_type || undefined);
+        res.json({ success: true, data: { videoUrl, expiresIn: SIGNED_URL_TTL_SECONDS } });
     } catch (error) {
         next(error);
     }
@@ -3099,7 +3388,7 @@ app.get("/api/videos", requireAuth, async (req, res, next) => {
         sql += ` ORDER BY l.sequence ASC, lv.sequence ASC, lv.created_at ASC`;
 
         const result = await pool.query(sql, params);
-        res.json({ success: true, data: result.rows.map(toClientVideo) });
+        res.json({ success: true, data: await Promise.all(result.rows.map(row => toClientVideoForRequest(row, req))) });
     } catch (error) {
         next(error);
     }
@@ -3107,25 +3396,25 @@ app.get("/api/videos", requireAuth, async (req, res, next) => {
 
 app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     let client;
-    let cloudinaryPublicId = "";
+    let storageKey = "";
+    let committed = false;
     try {
         const body = req.body || {};
         const title = cleanText(body.title || "", 255);
-        const videoUrl = cleanText(body.videoUrl || body.video_url || "", 2000);
         const lessonId = cleanText(body.lessonId || body.lesson_id || "", 120);
+        const storageProvider = cleanText(body.storageProvider || body.storage_provider || "", 40).toLowerCase();
+        storageKey = cleanText(body.storageKey || body.storage_key || "", 500);
+        const storageContentType = cleanText(body.storageContentType || body.storage_content_type || "", 120).toLowerCase();
+        const storageSize = body.storageSize === undefined && body.storage_size === undefined ? null : Number(body.storageSize ?? body.storage_size);
+        const videoUrl = storageProvider === STORAGE_PROVIDER && storageKey ? storageMarker(storageKey) : cleanText(body.videoUrl || body.video_url || "", 2000);
 
         if (!title || !videoUrl || !lessonId) {
             return res.status(400).json({ success: false, message: "Title, video URL, and lesson association are required." });
         }
-
-        const cloudinaryResourceType = cleanText(body.cloudinaryResourceType || body.cloudinary_resource_type || "", 40);
-        cloudinaryPublicId = cleanText(body.cloudinaryPublicId || body.cloudinary_public_id || "", 500);
-        if (cloudinaryPublicId) {
-            const config = requireCloudinaryConfig();
-            const expectedPrefix = `https://res.cloudinary.com/${config.cloudName}/video/upload/`;
-            if (cloudinaryResourceType !== "video" || !videoUrl.startsWith(expectedPrefix)) {
-                return res.status(400).json({ success: false, message: "The Cloudinary upload result could not be verified." });
-            }
+        if (storageProvider && storageProvider !== STORAGE_PROVIDER) return res.status(400).json({ success: false, message: "Unsupported storage provider." });
+        if (storageProvider === STORAGE_PROVIDER) {
+            validateVideoUpload({ contentType: storageContentType, fileSize: storageSize });
+            await assertStorageObject(storageKey, storageContentType, storageSize, req.authUser.id);
         }
 
         const id = cleanText(body.id || `vid_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, 120);
@@ -3141,29 +3430,33 @@ app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, 
         const status = cleanText(body.status || "Published", 40);
 
         const result = await client.query(`
-            INSERT INTO lesson_videos (id, lesson_id, title, video_url, duration, description, sequence, status, created_by, cloudinary_public_id, cloudinary_resource_type)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            INSERT INTO lesson_videos (id, lesson_id, title, video_url, duration, description, sequence, status, created_by, storage_provider, storage_key, storage_content_type, storage_size)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING *
-        `, [id, lessonId, title, videoUrl, duration, description, sequence, status, req.authUser.id, cloudinaryPublicId || null, cloudinaryResourceType || null]);
+        `, [id, lessonId, title, videoUrl, duration, description, sequence, status, req.authUser.id, storageProvider || null, storageKey || null, storageContentType || null, storageSize]);
 
         // Also update lesson's primary video_url if currently empty
         await client.query(`
             UPDATE lessons
-            SET video_url = CASE WHEN $4 = 'video' THEN $2 ELSE COALESCE(NULLIF(video_url, ''), $2) END,
-                duration = CASE WHEN $4 = 'video' AND $3 <> '' THEN $3 ELSE COALESCE(NULLIF(duration, ''), $3) END,
+            SET video_url = CASE WHEN $4 = 's3' THEN $2 ELSE COALESCE(NULLIF(video_url, ''), $2) END,
+                duration = CASE WHEN $4 = 's3' AND $3 <> '' THEN $3 ELSE COALESCE(NULLIF(duration, ''), $3) END,
+                storage_provider = CASE WHEN $4 = 's3' THEN $4 ELSE storage_provider END,
+                storage_key = CASE WHEN $4 = 's3' THEN $5 ELSE storage_key END,
+                storage_content_type = CASE WHEN $4 = 's3' THEN $6 ELSE storage_content_type END,
                 updated_at = NOW()
             WHERE id = $1
-        `, [lessonId, videoUrl, duration, cloudinaryResourceType]);
+        `, [lessonId, videoUrl, duration, storageProvider, storageKey || null, storageContentType || null]);
 
         await client.query("COMMIT");
+        committed = true;
         res.status(201).json({ success: true, data: toClientVideo(result.rows[0]) });
     } catch (error) {
         if (client) {
             try { await client.query("ROLLBACK"); } catch {}
         }
-        if (cloudinaryPublicId) {
-            try { await destroyCloudinaryVideo(cloudinaryPublicId); } catch (cleanupError) {
-                console.error("Cloudinary cleanup after video save failure failed:", cleanupError);
+        if (!committed && storageKey) {
+            try { await deleteStorageObject(storageKey); } catch (cleanupError) {
+                console.error("S3 cleanup after video save failure failed:", cleanupError.message);
             }
         }
         next(error);
@@ -3175,6 +3468,15 @@ app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, 
 app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const body = req.body || {};
+        const storageProvider = cleanText(body.storageProvider || body.storage_provider || "", 40).toLowerCase();
+        const storageKey = cleanText(body.storageKey || body.storage_key || "", 500);
+        const storageContentType = cleanText(body.storageContentType || body.storage_content_type || "", 120).toLowerCase();
+        const storageSize = body.storageSize === undefined && body.storage_size === undefined ? null : Number(body.storageSize ?? body.storage_size);
+        if (storageProvider && storageProvider !== STORAGE_PROVIDER) return res.status(400).json({ success: false, message: "Unsupported storage provider." });
+        if (storageProvider === STORAGE_PROVIDER) {
+            validateVideoUpload({ contentType: storageContentType, fileSize: storageSize });
+            await assertStorageObject(storageKey, storageContentType, storageSize, req.authUser.id);
+        }
         const result = await pool.query(`
             UPDATE lesson_videos SET
               lesson_id = COALESCE($2, lesson_id),
@@ -3186,6 +3488,10 @@ app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, re
               status = COALESCE($8, status),
               cloudinary_public_id = COALESCE($9, cloudinary_public_id),
               cloudinary_resource_type = COALESCE($10, cloudinary_resource_type),
+              storage_provider = COALESCE($11, storage_provider),
+              storage_key = COALESCE($12, storage_key),
+              storage_content_type = COALESCE($13, storage_content_type),
+              storage_size = COALESCE($14, storage_size),
               updated_at = NOW()
             WHERE id = $1
             RETURNING *
@@ -3199,7 +3505,11 @@ app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, re
             body.sequence === undefined ? null : Math.floor(clampNumber(body.sequence, 1, 1000)),
             body.status === undefined ? null : cleanText(body.status || "Published", 40),
             body.cloudinaryPublicId === undefined && body.cloudinary_public_id === undefined ? null : cleanText(body.cloudinaryPublicId || body.cloudinary_public_id || "", 500),
-            body.cloudinaryResourceType === undefined && body.cloudinary_resource_type === undefined ? null : cleanText(body.cloudinaryResourceType || body.cloudinary_resource_type || "", 40)
+            body.cloudinaryResourceType === undefined && body.cloudinary_resource_type === undefined ? null : cleanText(body.cloudinaryResourceType || body.cloudinary_resource_type || "", 40),
+            body.storageProvider === undefined && body.storage_provider === undefined ? null : storageProvider,
+            body.storageKey === undefined && body.storage_key === undefined ? null : storageKey,
+            body.storageContentType === undefined && body.storage_content_type === undefined ? null : storageContentType,
+            body.storageSize === undefined && body.storage_size === undefined ? null : storageSize
         ]);
 
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Video not found." });

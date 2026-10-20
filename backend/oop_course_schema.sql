@@ -975,6 +975,9 @@ CREATE INDEX IF NOT EXISTS idx_assessment_security_events_student ON assessment_
 -- Teacher Content Management: Lessons enhancements, Lesson Videos, Learning Resources, and Pre-Tests
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS course_id TEXT DEFAULT 'oop_fundamentals';
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS created_by UUID;
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_provider TEXT;
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_key TEXT;
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS storage_content_type TEXT;
 
 CREATE TABLE IF NOT EXISTS lesson_videos (
   id TEXT PRIMARY KEY DEFAULT ('vid_' || SUBSTRING(gen_random_uuid()::text, 1, 12)),
@@ -991,7 +994,12 @@ CREATE TABLE IF NOT EXISTS lesson_videos (
 );
 ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS cloudinary_public_id TEXT;
 ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS cloudinary_resource_type TEXT;
+ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS storage_provider TEXT;
+ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS storage_key TEXT;
+ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS storage_content_type TEXT;
+ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS storage_size BIGINT;
 CREATE INDEX IF NOT EXISTS idx_lesson_videos_lesson ON lesson_videos(lesson_id, sequence);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_lesson_videos_storage_key_unique ON lesson_videos(storage_key) WHERE storage_key IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS learning_resources (
   id TEXT PRIMARY KEY DEFAULT ('res_' || SUBSTRING(gen_random_uuid()::text, 1, 12)),

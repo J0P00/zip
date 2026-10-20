@@ -147,6 +147,8 @@ export const rankingApi = {
 
 export const lessonApi = {
   list: () => apiRequest<{ success: boolean; data: any[] }>('/api/lessons'),
+  getPlaybackUrl: (lessonId: string, token?: string) =>
+    apiRequest<{ success: boolean; data: { videoUrl: string; expiresIn: number } }>(`/api/videos/lesson/${encodeURIComponent(lessonId)}/playback-url`, { token }),
   getAccess: (lessonId: string, token?: string) =>
     apiRequest<{ success: boolean; data: { canAccess: boolean; canStart: boolean; reason?: string | null; videoProgress: number; passingScore: number; current?: import('../types').LessonEvidence } }>(
       `/api/lesson-access/${encodeURIComponent(lessonId)}`,
@@ -291,30 +293,38 @@ export const videoApi = {
     })
 };
 
-export const cloudinaryApi = {
+export const storageApi = {
   getStatus: () =>
     apiRequest<{
       success: boolean;
       data: {
         configured: boolean;
-        cloudNameConfigured: boolean;
-        apiKeyConfigured: boolean;
-        apiSecretConfigured: boolean;
+        bucketConfigured: boolean;
+        regionConfigured: boolean;
+        provider: 's3';
         uploadEndpoint: string;
       };
-    }>('/api/videos/cloudinary-status'),
-  getUploadSignature: () =>
-    apiRequest<{
-      success: boolean;
-      data: {
-        cloudName: string;
-        apiKey: string;
-        timestamp: number;
-        folder: string;
-        signature: string;
-        resourceType: 'video';
-      };
-    }>('/api/videos/upload-signature')
+    }>('/api/videos/storage-status'),
+  start: (body: { lessonId: string; fileName: string; contentType: string; fileSize: number }) =>
+    apiRequest<{ success: boolean; data: any }>('/api/videos/storage-upload/start', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  partUrl: (body: { key: string; uploadId: string; partNumber: number }) =>
+    apiRequest<{ success: boolean; data: { uploadUrl: string; partNumber: number } }>('/api/videos/storage-upload/part-url', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  complete: (body: { key: string; uploadId?: string; parts?: Array<{ partNumber: number; etag: string }>; contentType: string; fileSize: number }) =>
+    apiRequest<{ success: boolean; data: { provider: 's3'; key: string; contentType: string; fileSize: number; storageReference: string } }>('/api/videos/storage-upload/complete', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }),
+  abort: (body: { key: string; uploadId: string }) =>
+    apiRequest<{ success: boolean }>('/api/videos/storage-upload/abort', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    })
 };
 
 export const resourceApi = {

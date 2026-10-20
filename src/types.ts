@@ -92,6 +92,8 @@ export interface VideoLesson {
   sequence: number;
   status: 'completed' | 'active' | 'locked';
   videoUrl: string;
+  storageProvider?: string;
+  storageKey?: string;
   description: string;
   concepts: string[];
   thumbnailUrl?: string;
@@ -110,7 +112,7 @@ export interface VideoLesson {
   notStartedStudents?: string[];
   progressPercent?: number;
   
-  // Cloudinary & metadata extensions
+  // Legacy provider and metadata extensions
   cloudinaryPublicID?: string;
   yearLevel?: string;
   createdAt?: string;
@@ -592,6 +594,10 @@ export interface ManagedVideo {
   status: 'Draft' | 'Published' | 'Archived';
   cloudinaryPublicId?: string;
   cloudinaryResourceType?: string;
+  storageProvider?: string;
+  storageKey?: string;
+  storageContentType?: string;
+  storageSize?: number | null;
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;

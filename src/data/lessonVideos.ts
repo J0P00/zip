@@ -3,7 +3,7 @@ export interface LessonVideoAsset {
   secureUrl: string;
 }
 
-// Verified Cloudinary delivery URLs. Keep provider credentials out of this file.
+// Existing external delivery URLs. Keep provider credentials out of this file.
 export const lessonVideos = {
   oop: {
     oop_lesson_1: { publicId: 'Lesson_1Classes_Objects', secureUrl: 'https://res.cloudinary.com/jaudkms2/video/upload/v1791200171/Lesson_1Classes_Objects.mp4' },

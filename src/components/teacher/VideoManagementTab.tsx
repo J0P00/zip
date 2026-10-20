@@ -18,7 +18,7 @@ import {
   Video
 } from 'lucide-react';
 import { ManagedVideo, ManagedLesson } from '../../types';
-import { videoApi, lessonApi, cloudinaryApi } from '../../services/api';
+import { videoApi, lessonApi, storageApi } from '../../services/api';
 import { OOP_COURSE_LESSONS } from '../../data/oopCourse';
 
 interface VideoManagementTabProps {
@@ -38,6 +38,7 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
   const [uploadProgress, setUploadProgress] = useState(0);
   const [videoSource, setVideoSource] = useState<'link' | 'upload'>('link');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedDuration, setSelectedDuration] = useState(0);
   const [previewUrl, setPreviewUrl] = useState('');
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -57,8 +58,8 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
     status: 'Published' as 'Draft' | 'Published' | 'Archived'
   });
 
-  const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
-  const SUPPORTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
+  const MAX_VIDEO_SIZE = 2 * 1024 * 1024 * 1024;
+  const SUPPORTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo', 'video/mpeg'];
 
   useEffect(() => {
     return () => {
@@ -165,6 +166,7 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
 
   const clearSelectedFile = () => {
     setSelectedFile(null);
+    setSelectedDuration(0);
     setPreviewUrl('');
     setUploadProgress(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -179,14 +181,14 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
   const handleFileChange = (file: File | undefined) => {
     if (!file) return;
     const extension = file.name.split('.').pop()?.toLowerCase();
-    const supported = SUPPORTED_VIDEO_TYPES.includes(file.type) || ['mp4', 'webm', 'ogg', 'mov'].includes(extension || '');
+    const supported = SUPPORTED_VIDEO_TYPES.includes(file.type) || ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mpeg', 'mpg'].includes(extension || '');
     if (!supported) {
-      setFeedback({ type: 'error', message: 'Unsupported video format. Use MP4, WebM, OGG, or MOV.' });
+      setFeedback({ type: 'error', message: 'Unsupported video format. Use MP4, WebM, OGG, MOV, AVI, or MPEG.' });
       clearSelectedFile();
       return;
     }
     if (file.size > MAX_VIDEO_SIZE) {
-      setFeedback({ type: 'error', message: 'Video files must be 100 MB or smaller.' });
+      setFeedback({ type: 'error', message: 'Video files must be 2 GB or smaller.' });
       clearSelectedFile();
       return;
     }
@@ -195,38 +197,76 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
     setPreviewUrl(URL.createObjectURL(file));
   };
 
-  const uploadToCloudinary = async (file: File) => {
-    const statusResponse = await cloudinaryApi.getStatus();
+  const uploadToStorage = async (file: File) => {
+    const statusResponse = await storageApi.getStatus();
     if (!statusResponse.data.configured) {
-      throw new Error('Cloudinary upload is unavailable. Ask an administrator to configure the backend Cloudinary environment variables.');
+      throw new Error('Video storage is unavailable. Ask an administrator to configure the backend S3 storage variables.');
     }
-    const signatureResponse = await cloudinaryApi.getUploadSignature();
-    const signature = signatureResponse.data;
-    return new Promise<{ secure_url: string; public_id: string; duration?: number }>((resolve, reject) => {
+    const sessionResponse = await storageApi.start({
+      lessonId: formData.lessonId,
+      fileName: file.name,
+      contentType: file.type,
+      fileSize: file.size
+    });
+    const session = sessionResponse.data;
+    const put = (url: string, body: Blob, contentType?: string, headers: Record<string, string> = {}) => new Promise<string>((resolve, reject) => {
       const request = new XMLHttpRequest();
-      request.open('POST', `https://api.cloudinary.com/v1_1/${encodeURIComponent(signature.cloudName)}/video/upload`);
+      request.open('PUT', url);
       request.upload.onprogress = event => {
-        if (event.lengthComputable) setUploadProgress(Math.round((event.loaded / event.total) * 100));
+        if (event.lengthComputable && session.uploadType === 'single') setUploadProgress(Math.round((event.loaded / event.total) * 100));
       };
-      request.onerror = () => reject(new Error('Cloudinary upload could not be completed.'));
-      request.onabort = () => reject(new Error('Cloudinary upload was cancelled.'));
+      request.onerror = () => reject(new Error('Video storage upload could not be completed.'));
+      request.onabort = () => reject(new Error('Video storage upload was cancelled.'));
       request.onload = () => {
-        let response: any = null;
-        try { response = JSON.parse(request.responseText); } catch { response = null; }
-        if (request.status >= 200 && request.status < 300 && response?.secure_url && response?.public_id) {
-          resolve(response);
+        if (request.status >= 200 && request.status < 300) {
+          resolve(request.getResponseHeader('ETag') || '');
         } else {
-          reject(new Error(response?.error?.message || 'Cloudinary rejected the video upload.'));
+          reject(new Error(`Video storage rejected the upload (HTTP ${request.status}).`));
         }
       };
-      const body = new FormData();
-      body.append('file', file);
-      body.append('api_key', signature.apiKey);
-      body.append('timestamp', String(signature.timestamp));
-      body.append('folder', signature.folder);
-      body.append('signature', signature.signature);
+      if (contentType) request.setRequestHeader('Content-Type', contentType);
+      Object.entries(headers).forEach(([name, value]) => request.setRequestHeader(name, value));
       request.send(body);
     });
+
+    let parts: Array<{ partNumber: number; etag: string }> = [];
+    try {
+      if (session.uploadType === 'multipart') {
+        const partSize = Number(session.partSize);
+        const totalParts = Math.ceil(file.size / partSize);
+        for (let index = 0; index < totalParts; index += 1) {
+          const partNumber = index + 1;
+          const start = index * partSize;
+          const chunk = file.slice(start, Math.min(start + partSize, file.size));
+          let etag = '';
+          let lastError: unknown;
+          for (let attempt = 1; attempt <= 3 && !etag; attempt += 1) {
+            try {
+              const partUrl = await storageApi.partUrl({ key: session.key, uploadId: session.uploadId, partNumber });
+              etag = await put(partUrl.data.uploadUrl, chunk);
+            } catch (error) {
+              lastError = error;
+            }
+          }
+          if (!etag) throw lastError instanceof Error ? lastError : new Error(`Part ${partNumber} failed to upload.`);
+          parts.push({ partNumber, etag });
+          setUploadProgress(Math.round((partNumber / totalParts) * 100));
+        }
+      } else {
+        await put(session.uploadUrl, file, file.type, session.uploadHeaders || {});
+        setUploadProgress(100);
+      }
+      return await storageApi.complete({
+        key: session.key,
+        uploadId: session.uploadId,
+        parts,
+        contentType: file.type,
+        fileSize: file.size
+      });
+    } catch (error) {
+      if (session.uploadId) await storageApi.abort({ key: session.key, uploadId: session.uploadId }).catch(() => undefined);
+      throw error;
+    }
   };
 
   const handleSaveVideo = async (e: React.FormEvent) => {
@@ -242,20 +282,29 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
     try {
       let videoUrl = formData.videoUrl.trim();
       let duration = '';
-      let cloudinaryPublicId = '';
-      let cloudinaryResourceType = '';
+      let storageProvider = '';
+      let storageKey = '';
+      let storageContentType = '';
+      let storageSize: number | null = null;
       if (videoSource === 'upload') {
         if (!selectedFile) throw new Error('Choose a video file before saving.');
-        const uploaded = await uploadToCloudinary(selectedFile);
-        videoUrl = uploaded.secure_url;
-        cloudinaryPublicId = uploaded.public_id;
-        cloudinaryResourceType = 'video';
-        duration = formatDuration(Number(uploaded.duration || 0));
+        const uploaded = await uploadToStorage(selectedFile);
+        videoUrl = uploaded.data.storageReference;
+        storageProvider = uploaded.data.provider;
+        storageKey = uploaded.data.key;
+        storageContentType = uploaded.data.contentType;
+        storageSize = uploaded.data.fileSize;
+        duration = formatDuration(Number(selectedDuration || 0));
       } else if (!videoUrl) {
         throw new Error('Video URL is required.');
       }
 
-      const payload = { ...formData, videoUrl, duration, cloudinaryPublicId, cloudinaryResourceType };
+      const payload = {
+        ...formData,
+        videoUrl,
+        duration,
+        ...(storageProvider ? { storageProvider, storageKey, storageContentType, storageSize } : {})
+      };
       if (editingVideo) {
         await videoApi.update(editingVideo.id, payload);
         setFeedback({ type: 'success', message: `Video "${formData.title}" updated successfully.` });
@@ -598,26 +647,26 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
                     >
                       Choose Video File
                     </button>
-                    <p className="mt-2 text-[11px] text-slate-400">MP4, WebM, OGG, or MOV · maximum 100 MB</p>
+                    <p className="mt-2 text-[11px] text-slate-400">MP4, WebM, OGG, MOV, AVI, or MPEG · maximum 2 GB</p>
                   </div>
                   {selectedFile && (
                     <div className="mt-2 rounded-lg bg-indigo-500/10 px-3 py-2 text-xs text-indigo-600">
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate font-black">{selectedFile.name}</p>
-                          <p className="mt-0.5 text-[11px] font-bold">{(selectedFile.size / (1024 * 1024)).toFixed(1)} MB · {selectedFile.type || 'video file'}</p>
+                          <p className="mt-0.5 text-[11px] font-bold">{(selectedFile.size / (1024 * 1024)).toFixed(1)} MB · {selectedFile.type || 'video file'}{selectedDuration > 0 ? ` · ${formatDuration(selectedDuration)}` : ''}</p>
                         </div>
                         <button type="button" onClick={clearSelectedFile} className="shrink-0 font-black underline hover:text-indigo-800">Remove</button>
                       </div>
                       {previewUrl && (
-                        <video src={previewUrl} controls preload="metadata" className="mt-3 max-h-40 w-full rounded-lg bg-black" aria-label="Selected video preview" />
+                        <video src={previewUrl} controls preload="metadata" onLoadedMetadata={event => setSelectedDuration(event.currentTarget.duration)} className="mt-3 max-h-40 w-full rounded-lg bg-black" aria-label="Selected video preview" />
                       )}
                     </div>
                   )}
                   {isSaving && videoSource === 'upload' && (
                     <div className="mt-3">
                       <div className="mb-1 flex justify-between text-[11px] font-black text-slate-400">
-                        <span>Uploading to Cloudinary…</span><span>{uploadProgress}%</span>
+                        <span>Uploading to secure storage…</span><span>{uploadProgress}%</span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
                         <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${uploadProgress}%` }} />
