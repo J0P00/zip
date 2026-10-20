@@ -274,6 +274,35 @@ const isMp4File = async (filePath) => {
     }
 };
 
+const finalizeLocalUpload = async (sourcePath, storageKey) => {
+    const destinationPath = localStoragePath(storageKey);
+    const destinationTempPath = `${destinationPath}.${crypto.randomUUID()}.partial`;
+    try {
+        await fs.mkdir(path.dirname(destinationPath), { recursive: true });
+        await fs.copyFile(sourcePath, destinationTempPath);
+
+        const [sourceStat, destinationTempStat] = await Promise.all([
+            fs.stat(sourcePath),
+            fs.stat(destinationTempPath)
+        ]);
+        if (!sourceStat.isFile() || !destinationTempStat.isFile() || sourceStat.size !== destinationTempStat.size) {
+            const error = new Error("Video upload could not be finalized because the copied file size did not match.");
+            error.status = 500;
+            throw error;
+        }
+
+        // Both paths are now inside the Render upload filesystem, so this rename is atomic.
+        await fs.rename(destinationTempPath, destinationPath);
+        await fs.rm(sourcePath, { force: true }).catch(error => {
+            console.warn("Temporary video cleanup after finalization failed:", error.message);
+        });
+        return destinationPath;
+    } catch (error) {
+        await fs.rm(destinationTempPath, { force: true }).catch(() => undefined);
+        throw error;
+    }
+};
+
 const assertStorageObject = async (key, expectedType, expectedSize, userId) => {
     const filePath = localStoragePath(key);
     const stat = await fs.stat(filePath).catch(() => null);
@@ -3218,9 +3247,7 @@ app.post("/api/videos/upload", requireAuth, requireRole(["teacher"]), (req, res,
                 throw invalid;
             }
             const key = buildStorageKey(lessonId, req.file.originalname, contentType);
-            const destination = localStoragePath(key);
-            await fs.mkdir(path.dirname(destination), { recursive: true });
-            await fs.rename(temporaryPath, destination);
+            await finalizeLocalUpload(temporaryPath, key);
             temporaryPath = "";
             await assertStorageObject(key, contentType, fileSize, req.authUser.id);
             return res.status(201).json({ success: true, data: { provider: STORAGE_PROVIDER, key, contentType, fileSize, storageReference: storageMarker(key) } });
