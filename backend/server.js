@@ -3371,8 +3371,9 @@ app.delete("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req
     try {
         const idCheck = validateId(req.params.id, "id", "DELETE /api/lessons/:id");
         if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+        await pool.query("DELETE FROM programming_challenges WHERE lesson_id = $1", [idCheck.value]);
         const result = await pool.query("DELETE FROM lessons WHERE id = $1 RETURNING id", [idCheck.value]);
-        if (!result.rowCount) return res.status(404).json({ success: false, message: "Lecture not found." });
+        if (!result.rowCount) return res.status(404).json({ success: false, message: "Lesson not found." });
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
         next(error);

@@ -83,6 +83,8 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   const [editingLesson, setEditingLesson] = useState<ManagedLesson | null>(null);
   const [previewingLesson, setPreviewingLesson] = useState<ManagedLesson | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<ManagedLesson | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ManagedLesson | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Consolidated Modal Tabs
   const [activeModalTab, setActiveModalTab] = useState<'lesson' | 'video' | 'assessment' | 'practice'>('lesson');
@@ -546,6 +548,30 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     }
   };
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await lessonApi.remove(deleteTarget.id);
+      setFeedback({
+        type: 'success',
+        message: `Lesson "${deleteTarget.title}" and its linked content were deleted permanently.`
+      });
+      setDeleteTarget(null);
+      if (editingLesson?.id === deleteTarget.id) {
+        setEditingLesson(null);
+      }
+      fetchLessons();
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'Failed to delete lesson.'
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleMoveSequence = async (lesson: ManagedLesson, direction: 'up' | 'down') => {
     const currentIndex = filteredLessons.findIndex(l => l.id === lesson.id);
     if (currentIndex === -1) return;
@@ -825,10 +851,18 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                           <button
                             type="button"
                             onClick={() => setArchiveTarget(lesson)}
-                            className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 transition cursor-pointer"
+                            className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:text-amber-600 transition cursor-pointer"
                             title="Archive Lesson"
                           >
                             <Archive className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(lesson)}
+                            className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 transition cursor-pointer"
+                            title="Delete Lesson"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       </td>
@@ -1435,6 +1469,16 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {editingLesson && (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(editingLesson)}
+                      className="rounded-xl border border-rose-200 dark:border-rose-900/40 px-3 py-2 text-xs font-black text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete Lesson
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -1575,7 +1619,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       {archiveTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl ${cardClass}`}>
-            <div className="flex items-center gap-3 text-rose-600 mb-3">
+            <div className="flex items-center gap-3 text-amber-600 mb-3">
               <AlertCircle className="h-6 w-6 shrink-0" />
               <h3 className="text-base font-black text-slate-900 dark:text-white">Archive Lesson?</h3>
             </div>
@@ -1594,9 +1638,47 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
               <button
                 type="button"
                 onClick={handleArchiveConfirm}
-                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-black text-white hover:bg-rose-700 transition cursor-pointer"
+                className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-black text-white hover:bg-amber-700 transition cursor-pointer"
               >
                 Confirm Archive
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl ${cardClass}`}>
+            <div className="flex items-center gap-3 text-rose-600 mb-3">
+              <div className="rounded-full bg-rose-500/10 p-2 text-rose-600">
+                <Trash2 className="h-6 w-6 shrink-0" />
+              </div>
+              <h3 className="text-base font-black text-slate-900 dark:text-white">Delete Lesson Permanently?</h3>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Are you sure you want to permanently delete <strong>"{deleteTarget.title}"</strong>?
+            </p>
+            <div className="mt-3 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/20 p-3 text-[11px] text-rose-800 dark:text-rose-300">
+              <strong>Warning:</strong> This will permanently delete the lesson along with any associated video records, assessment quizzes, student progress, and practice challenges. This action cannot be undone.
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-xl px-4 py-2 text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteConfirm}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-black text-white hover:bg-rose-700 transition cursor-pointer flex items-center gap-1.5"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Permanently'}
               </button>
             </div>
           </div>
