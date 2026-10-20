@@ -989,6 +989,8 @@ CREATE TABLE IF NOT EXISTS lesson_videos (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS cloudinary_public_id TEXT;
+ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS cloudinary_resource_type TEXT;
 CREATE INDEX IF NOT EXISTS idx_lesson_videos_lesson ON lesson_videos(lesson_id, sequence);
 
 CREATE TABLE IF NOT EXISTS learning_resources (

@@ -6,6 +6,7 @@ const express = require("express");
 const fs = require("fs/promises");
 const os = require("os");
 const path = require("path");
+const crypto = require("crypto");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 const jwt = require("jsonwebtoken");
@@ -186,6 +187,52 @@ const evaluateJavaSubmission = async (challenge, sourceCode) => {
 };
 
 const cleanText = (value, maxLength = 255) => String(value ?? "").trim().slice(0, maxLength);
+
+const getCloudinaryConfig = () => ({
+    cloudName: cleanText(process.env.CLOUDINARY_CLOUD_NAME, 120),
+    apiKey: cleanText(process.env.CLOUDINARY_API_KEY, 120),
+    apiSecret: String(process.env.CLOUDINARY_API_SECRET || "")
+});
+
+const requireCloudinaryConfig = () => {
+    const config = getCloudinaryConfig();
+    if (!config.cloudName || !config.apiKey || !config.apiSecret) {
+        const error = new Error("Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET on the backend.");
+        error.status = 503;
+        throw error;
+    }
+    return config;
+};
+
+const signCloudinaryParams = (params, apiSecret) => {
+    const serialized = Object.keys(params)
+        .filter((key) => params[key] !== undefined && params[key] !== null && params[key] !== "")
+        .sort()
+        .map((key) => `${key}=${params[key]}`)
+        .join("&");
+    return crypto.createHash("sha1").update(serialized + apiSecret).digest("hex");
+};
+
+const destroyCloudinaryVideo = async (publicId) => {
+    if (!publicId) return;
+    const config = requireCloudinaryConfig();
+    const timestamp = Math.floor(Date.now() / 1000);
+    const params = { public_id: publicId, timestamp, invalidate: true };
+    const body = new URLSearchParams({
+        ...params,
+        api_key: config.apiKey,
+        signature: signCloudinaryParams(params, config.apiSecret)
+    });
+    const response = await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(config.cloudName)}/video/destroy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.result === "not found") {
+        throw new Error(result.error?.message || "Cloudinary asset cleanup failed.");
+    }
+};
 
 const buildEvaluationResults = (validation, challenge) => [
     {
@@ -447,6 +494,8 @@ const toClientVideo = (row) => ({
     description: row.description || "",
     sequence: Number(row.sequence || 1),
     status: row.status || "Published",
+    cloudinaryPublicId: row.cloudinary_public_id || "",
+    cloudinaryResourceType: row.cloudinary_resource_type || "",
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -1127,6 +1176,8 @@ const initializeDatabase = async () => {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS cloudinary_public_id TEXT;
+        ALTER TABLE lesson_videos ADD COLUMN IF NOT EXISTS cloudinary_resource_type TEXT;
         CREATE INDEX IF NOT EXISTS idx_lesson_videos_lesson ON lesson_videos(lesson_id, sequence);
 
         CREATE TABLE IF NOT EXISTS learning_resources (
@@ -2988,6 +3039,28 @@ app.delete("/api/assessments/:id", requireAuth, requireRole(["teacher"]), async 
 // ==========================================
 // VIDEO MANAGEMENT ENDPOINTS (Teacher Content)
 // ==========================================
+app.get("/api/videos/upload-signature", requireAuth, requireRole(["teacher"]), async (_req, res, next) => {
+    try {
+        const config = requireCloudinaryConfig();
+        const timestamp = Math.floor(Date.now() / 1000);
+        const folder = "oop-hub/videos";
+        const params = { folder, timestamp };
+        res.json({
+            success: true,
+            data: {
+                cloudName: config.cloudName,
+                apiKey: config.apiKey,
+                timestamp,
+                folder,
+                signature: signCloudinaryParams(params, config.apiSecret),
+                resourceType: "video"
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.get("/api/videos", requireAuth, async (req, res, next) => {
     try {
         const { lessonId, status } = req.query || {};
@@ -3018,6 +3091,8 @@ app.get("/api/videos", requireAuth, async (req, res, next) => {
 });
 
 app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    let client;
+    let cloudinaryPublicId = "";
     try {
         const body = req.body || {};
         const title = cleanText(body.title || "", 255);
@@ -3028,27 +3103,57 @@ app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, 
             return res.status(400).json({ success: false, message: "Title, video URL, and lesson association are required." });
         }
 
+        const cloudinaryResourceType = cleanText(body.cloudinaryResourceType || body.cloudinary_resource_type || "", 40);
+        cloudinaryPublicId = cleanText(body.cloudinaryPublicId || body.cloudinary_public_id || "", 500);
+        if (cloudinaryPublicId) {
+            const config = requireCloudinaryConfig();
+            const expectedPrefix = `https://res.cloudinary.com/${config.cloudName}/video/upload/`;
+            if (cloudinaryResourceType !== "video" || !videoUrl.startsWith(expectedPrefix)) {
+                return res.status(400).json({ success: false, message: "The Cloudinary upload result could not be verified." });
+            }
+        }
+
         const id = cleanText(body.id || `vid_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, 120);
-        const duration = cleanText(body.duration || "15:00", 40);
+        const duration = cleanText(body.duration || "", 40);
         const description = cleanText(body.description || "", 2000);
-        const sequence = Math.floor(clampNumber(body.sequence ?? 1, 1, 1000));
+        client = await pool.connect();
+        await client.query("BEGIN");
+        const sequenceResult = await client.query(
+            "SELECT COALESCE(MAX(sequence), 0) + 1 AS next_sequence FROM lesson_videos WHERE lesson_id = $1",
+            [lessonId]
+        );
+        const sequence = Math.floor(clampNumber(sequenceResult.rows[0]?.next_sequence || 1, 1, 1000));
         const status = cleanText(body.status || "Published", 40);
 
-        const result = await pool.query(`
-            INSERT INTO lesson_videos (id, lesson_id, title, video_url, duration, description, sequence, status, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        const result = await client.query(`
+            INSERT INTO lesson_videos (id, lesson_id, title, video_url, duration, description, sequence, status, created_by, cloudinary_public_id, cloudinary_resource_type)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING *
-        `, [id, lessonId, title, videoUrl, duration, description, sequence, status, req.authUser.id]);
+        `, [id, lessonId, title, videoUrl, duration, description, sequence, status, req.authUser.id, cloudinaryPublicId || null, cloudinaryResourceType || null]);
 
         // Also update lesson's primary video_url if currently empty
-        await pool.query(`
-            UPDATE lessons SET video_url = COALESCE(NULLIF(video_url, ''), $2), duration = COALESCE(NULLIF(duration, ''), $3), updated_at = NOW()
+        await client.query(`
+            UPDATE lessons
+            SET video_url = CASE WHEN $4 = 'video' THEN $2 ELSE COALESCE(NULLIF(video_url, ''), $2) END,
+                duration = CASE WHEN $4 = 'video' AND $3 <> '' THEN $3 ELSE COALESCE(NULLIF(duration, ''), $3) END,
+                updated_at = NOW()
             WHERE id = $1
-        `, [lessonId, videoUrl, duration]);
+        `, [lessonId, videoUrl, duration, cloudinaryResourceType]);
 
+        await client.query("COMMIT");
         res.status(201).json({ success: true, data: toClientVideo(result.rows[0]) });
     } catch (error) {
+        if (client) {
+            try { await client.query("ROLLBACK"); } catch {}
+        }
+        if (cloudinaryPublicId) {
+            try { await destroyCloudinaryVideo(cloudinaryPublicId); } catch (cleanupError) {
+                console.error("Cloudinary cleanup after video save failure failed:", cleanupError);
+            }
+        }
         next(error);
+    } finally {
+        if (client) client.release();
     }
 });
 
@@ -3064,6 +3169,8 @@ app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, re
               description = COALESCE($6, description),
               sequence = COALESCE($7, sequence),
               status = COALESCE($8, status),
+              cloudinary_public_id = COALESCE($9, cloudinary_public_id),
+              cloudinary_resource_type = COALESCE($10, cloudinary_resource_type),
               updated_at = NOW()
             WHERE id = $1
             RETURNING *
@@ -3075,7 +3182,9 @@ app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, re
             body.duration === undefined ? null : cleanText(body.duration || "", 40),
             body.description === undefined ? null : cleanText(body.description || "", 2000),
             body.sequence === undefined ? null : Math.floor(clampNumber(body.sequence, 1, 1000)),
-            body.status === undefined ? null : cleanText(body.status || "Published", 40)
+            body.status === undefined ? null : cleanText(body.status || "Published", 40),
+            body.cloudinaryPublicId === undefined && body.cloudinary_public_id === undefined ? null : cleanText(body.cloudinaryPublicId || body.cloudinary_public_id || "", 500),
+            body.cloudinaryResourceType === undefined && body.cloudinary_resource_type === undefined ? null : cleanText(body.cloudinaryResourceType || body.cloudinary_resource_type || "", 40)
         ]);
 
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Video not found." });

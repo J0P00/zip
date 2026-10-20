@@ -473,7 +473,7 @@ export default function App() {
             ...fallback,
             ...lesson,
             id: lesson.id,
-            videoUrl: lessonVideos.oop[lesson.id as keyof typeof lessonVideos.oop]?.secureUrl || (usesMissingPlaceholder ? (fallback?.videoUrl || backendVideoUrl) : (backendVideoUrl || fallback?.videoUrl || '')),
+            videoUrl: (!usesMissingPlaceholder && backendVideoUrl) ? backendVideoUrl : (lessonVideos.oop[lesson.id as keyof typeof lessonVideos.oop]?.secureUrl || (usesMissingPlaceholder ? (fallback?.videoUrl || backendVideoUrl) : (backendVideoUrl || fallback?.videoUrl || ''))),
             duration: lesson.duration || fallback?.duration || ''
           } as VideoLesson;
         });

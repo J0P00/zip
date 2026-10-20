@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   PlayCircle,
   Plus,
@@ -18,7 +18,7 @@ import {
   Video
 } from 'lucide-react';
 import { ManagedVideo, ManagedLesson } from '../../types';
-import { videoApi, lessonApi } from '../../services/api';
+import { videoApi, lessonApi, cloudinaryApi } from '../../services/api';
 import { OOP_COURSE_LESSONS } from '../../data/oopCourse';
 
 interface VideoManagementTabProps {
@@ -34,6 +34,13 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
   const [lessonFilter, setLessonFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Published' | 'Draft' | 'Archived'>('All');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [videoSource, setVideoSource] = useState<'link' | 'upload'>('link');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -46,11 +53,18 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
     lessonId: '',
     title: '',
     videoUrl: '',
-    duration: '10:00',
     description: '',
-    sequence: 1,
     status: 'Published' as 'Draft' | 'Published' | 'Archived'
   });
+
+  const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+  const SUPPORTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   const cardClass = isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900';
   const inputClass = isDark
@@ -128,11 +142,11 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
       lessonId: lessons[0]?.id || 'oop_lesson_1',
       title: '',
       videoUrl: '',
-      duration: '10:00',
       description: '',
-      sequence: 1,
       status: 'Published'
     });
+    setVideoSource('link');
+    clearSelectedFile();
     setIsCreateOpen(true);
   };
 
@@ -142,33 +156,117 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
       lessonId: v.lessonId,
       title: v.title,
       videoUrl: v.videoUrl,
-      duration: v.duration,
       description: v.description,
-      sequence: v.sequence,
       status: v.status
+    });
+    setVideoSource('link');
+    clearSelectedFile();
+  };
+
+  const clearSelectedFile = () => {
+    setSelectedFile(null);
+    setPreviewUrl('');
+    setUploadProgress(0);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const formatDuration = (seconds: number) => {
+    if (!Number.isFinite(seconds) || seconds <= 0) return '';
+    const total = Math.round(seconds);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  };
+
+  const handleFileChange = (file: File | undefined) => {
+    if (!file) return;
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    const supported = SUPPORTED_VIDEO_TYPES.includes(file.type) || ['mp4', 'webm', 'ogg', 'mov'].includes(extension || '');
+    if (!supported) {
+      setFeedback({ type: 'error', message: 'Unsupported video format. Use MP4, WebM, OGG, or MOV.' });
+      clearSelectedFile();
+      return;
+    }
+    if (file.size > MAX_VIDEO_SIZE) {
+      setFeedback({ type: 'error', message: 'Video files must be 100 MB or smaller.' });
+      clearSelectedFile();
+      return;
+    }
+    setFeedback(null);
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const uploadToCloudinary = async (file: File) => {
+    const signatureResponse = await cloudinaryApi.getUploadSignature();
+    const signature = signatureResponse.data;
+    return new Promise<{ secure_url: string; public_id: string; duration?: number }>((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open('POST', `https://api.cloudinary.com/v1_1/${encodeURIComponent(signature.cloudName)}/video/upload`);
+      request.upload.onprogress = event => {
+        if (event.lengthComputable) setUploadProgress(Math.round((event.loaded / event.total) * 100));
+      };
+      request.onerror = () => reject(new Error('Cloudinary upload could not be completed.'));
+      request.onabort = () => reject(new Error('Cloudinary upload was cancelled.'));
+      request.onload = () => {
+        let response: any = null;
+        try { response = JSON.parse(request.responseText); } catch { response = null; }
+        if (request.status >= 200 && request.status < 300 && response?.secure_url && response?.public_id) {
+          resolve(response);
+        } else {
+          reject(new Error(response?.error?.message || 'Cloudinary rejected the video upload.'));
+        }
+      };
+      const body = new FormData();
+      body.append('file', file);
+      body.append('api_key', signature.apiKey);
+      body.append('timestamp', String(signature.timestamp));
+      body.append('folder', signature.folder);
+      body.append('signature', signature.signature);
+      request.send(body);
     });
   };
 
   const handleSaveVideo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title.trim() || !formData.videoUrl.trim()) {
-      setFeedback({ type: 'error', message: 'Video title and URL are required.' });
+    if (isSaving) return;
+    if (!formData.title.trim()) {
+      setFeedback({ type: 'error', message: 'Video title is required.' });
       return;
     }
 
+    setIsSaving(true);
+    setUploadProgress(0);
     try {
+      let videoUrl = formData.videoUrl.trim();
+      let duration = '';
+      let cloudinaryPublicId = '';
+      let cloudinaryResourceType = '';
+      if (videoSource === 'upload') {
+        if (!selectedFile) throw new Error('Choose a video file before saving.');
+        const uploaded = await uploadToCloudinary(selectedFile);
+        videoUrl = uploaded.secure_url;
+        cloudinaryPublicId = uploaded.public_id;
+        cloudinaryResourceType = 'video';
+        duration = formatDuration(Number(uploaded.duration || 0));
+      } else if (!videoUrl) {
+        throw new Error('Video URL is required.');
+      }
+
+      const payload = { ...formData, videoUrl, duration, cloudinaryPublicId, cloudinaryResourceType };
       if (editingVideo) {
-        await videoApi.update(editingVideo.id, formData);
+        await videoApi.update(editingVideo.id, payload);
         setFeedback({ type: 'success', message: `Video "${formData.title}" updated successfully.` });
         setEditingVideo(null);
       } else {
-        await videoApi.create(formData);
+        await videoApi.create(payload);
         setFeedback({ type: 'success', message: `Video "${formData.title}" added successfully.` });
         setIsCreateOpen(false);
       }
+      clearSelectedFile();
       loadData();
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Failed to save video.' });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -387,6 +485,7 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
                 onClick={() => {
                   setIsCreateOpen(false);
                   setEditingVideo(null);
+                  clearSelectedFile();
                 }}
                 className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
@@ -429,43 +528,102 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
 
               <div>
                 <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
-                  Video URL (YouTube embed, direct MP4, or web stream) *
+                  Video Source *
                 </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="https://www.youtube.com/watch?v=... or /videos/lesson1.mp4"
-                  value={formData.videoUrl}
-                  onChange={e => setFormData({ ...formData, videoUrl: e.target.value })}
-                  className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
-                />
+                <div className={`flex rounded-xl border p-1 ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-50'}`}>
+                  <button
+                    type="button"
+                    onClick={() => setVideoSource('link')}
+                    className={`flex-1 rounded-lg px-3 py-2 text-xs font-black transition ${videoSource === 'link' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}
+                  >
+                    Video Link
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVideoSource('upload')}
+                    className={`flex-1 rounded-lg px-3 py-2 text-xs font-black transition ${videoSource === 'upload' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}
+                  >
+                    Upload from Device
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {videoSource === 'link' ? (
                 <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
-                    Duration
+                    Video URL *
                   </label>
                   <input
                     type="text"
-                    placeholder="12:30"
-                    value={formData.duration}
-                    onChange={e => setFormData({ ...formData, duration: e.target.value })}
+                    required
+                    placeholder="https://www.youtube.com/watch?v=... or /videos/lesson1.mp4"
+                    value={formData.videoUrl}
+                    onChange={e => setFormData({ ...formData, videoUrl: e.target.value })}
                     className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
                   />
                 </div>
+              ) : (
                 <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
-                    Sequence
+                    Video File *
                   </label>
                   <input
-                    type="number"
-                    min={1}
-                    value={formData.sequence}
-                    onChange={e => setFormData({ ...formData, sequence: Number(e.target.value) })}
-                    className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                    ref={fileInputRef}
+                    type="file"
+                    required={videoSource === 'upload' && !editingVideo}
+                    accept="video/*"
+                    onChange={e => handleFileChange(e.target.files?.[0])}
+                    className="hidden"
                   />
+                  <div
+                    onDragEnter={e => { e.preventDefault(); setIsDraggingFile(true); }}
+                    onDragOver={e => e.preventDefault()}
+                    onDragLeave={e => { e.preventDefault(); setIsDraggingFile(false); }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      setIsDraggingFile(false);
+                      handleFileChange(e.dataTransfer.files?.[0]);
+                    }}
+                    className={`rounded-xl border-2 border-dashed p-4 text-center transition ${isDraggingFile ? 'border-indigo-500 bg-indigo-500/10' : isDark ? 'border-slate-700 bg-slate-950/50' : 'border-slate-200 bg-slate-50'}`}
+                  >
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Drag and drop a video here</p>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="mt-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-700"
+                    >
+                      Choose Video File
+                    </button>
+                    <p className="mt-2 text-[11px] text-slate-400">MP4, WebM, OGG, or MOV · maximum 100 MB</p>
+                  </div>
+                  {selectedFile && (
+                    <div className="mt-2 rounded-lg bg-indigo-500/10 px-3 py-2 text-xs text-indigo-600">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-black">{selectedFile.name}</p>
+                          <p className="mt-0.5 text-[11px] font-bold">{(selectedFile.size / (1024 * 1024)).toFixed(1)} MB · {selectedFile.type || 'video file'}</p>
+                        </div>
+                        <button type="button" onClick={clearSelectedFile} className="shrink-0 font-black underline hover:text-indigo-800">Remove</button>
+                      </div>
+                      {previewUrl && (
+                        <video src={previewUrl} controls preload="metadata" className="mt-3 max-h-40 w-full rounded-lg bg-black" aria-label="Selected video preview" />
+                      )}
+                    </div>
+                  )}
+                  {isSaving && videoSource === 'upload' && (
+                    <div className="mt-3">
+                      <div className="mb-1 flex justify-between text-[11px] font-black text-slate-400">
+                        <span>Uploading to Cloudinary…</span><span>{uploadProgress}%</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                        <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${uploadProgress}%` }} />
+                      </div>
+                    </div>
+                  )}
                 </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
                     Status
@@ -501,6 +659,7 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
                   onClick={() => {
                     setIsCreateOpen(false);
                     setEditingVideo(null);
+                    clearSelectedFile();
                   }}
                   className="rounded-xl px-4 py-2 text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
@@ -508,9 +667,10 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-black text-white hover:bg-indigo-700 shadow-sm transition cursor-pointer"
+                  disabled={isSaving}
+                  className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-black text-white hover:bg-indigo-700 shadow-sm transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {editingVideo ? 'Save Changes' : 'Add Video'}
+                  {isSaving ? (videoSource === 'upload' ? 'Uploading…' : 'Saving…') : (editingVideo ? 'Save Changes' : 'Add Video')}
                 </button>
               </div>
             </form>

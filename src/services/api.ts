@@ -291,6 +291,21 @@ export const videoApi = {
     })
 };
 
+export const cloudinaryApi = {
+  getUploadSignature: () =>
+    apiRequest<{
+      success: boolean;
+      data: {
+        cloudName: string;
+        apiKey: string;
+        timestamp: number;
+        folder: string;
+        signature: string;
+        resourceType: 'video';
+      };
+    }>('/api/videos/upload-signature')
+};
+
 export const resourceApi = {
   list: (lessonId?: string) => {
     const query = lessonId ? `?lessonId=${encodeURIComponent(lessonId)}` : '';

@@ -590,6 +590,8 @@ export interface ManagedVideo {
   description: string;
   sequence: number;
   status: 'Draft' | 'Published' | 'Archived';
+  cloudinaryPublicId?: string;
+  cloudinaryResourceType?: string;
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
