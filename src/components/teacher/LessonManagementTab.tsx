@@ -11,21 +11,63 @@ import {
   AlertCircle,
   ArrowUp,
   ArrowDown,
-  ExternalLink,
   Layers,
-  Clock,
   Sparkles,
   X,
   Play,
-  Link2
+  Link2,
+  FileQuestion,
+  Code2,
+  Video,
+  Trash2,
+  Check,
+  ChevronRight,
+  ChevronLeft,
+  Code,
+  ListOrdered,
+  HelpCircle
 } from 'lucide-react';
 import { ManagedLesson } from '../../types';
 import { assessmentApi, lessonApi, practiceApi, validateVideoUrl, videoApi } from '../../services/api';
-import { OOP_COURSE_LESSONS } from '../../data/oopCourse';
+import { OOP_COURSE_LESSONS, OOP_ASSESSMENTS } from '../../data/oopCourse';
+import { PRACTICE_CHALLENGES } from '../../data/practiceChallenges';
 
 interface LessonManagementTabProps {
   theme?: 'light' | 'dark';
 }
+
+export interface AssessmentQuestionDraft {
+  id: string;
+  question: string;
+  codeSnippet?: string;
+  options: {
+    id: string;
+    text: string;
+    rationale?: string;
+  }[];
+  correctOptionId: string;
+}
+
+const DEFAULT_STARTER_CODE = `public class Main {
+    public static void main(String[] args) {
+        // Implement your solution here
+        System.out.println("Hello, World!");
+    }
+}
+`;
+
+const createDefaultQuestion = (index = 1): AssessmentQuestionDraft => ({
+  id: `q_${Date.now()}_${index}`,
+  question: 'What is the primary role of this concept in Java OOP?',
+  codeSnippet: '',
+  options: [
+    { id: 'opt_a', text: 'Enforces data encapsulation and access control', rationale: 'Correct encapsulation principle.' },
+    { id: 'opt_b', text: 'Increases CPU cache miss rate', rationale: 'Incorrect, does not relate to hardware cache.' },
+    { id: 'opt_c', text: 'Replaces bytecode with native assembly', rationale: 'Incorrect, JVM manages bytecode execution.' },
+    { id: 'opt_d', text: 'Disables garbage collection permanently', rationale: 'Incorrect, GC remains active.' }
+  ],
+  correctOptionId: 'opt_a'
+});
 
 export default function LessonManagementTab({ theme = 'light' }: LessonManagementTabProps) {
   const isDark = theme === 'dark';
@@ -42,19 +84,42 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   const [previewingLesson, setPreviewingLesson] = useState<ManagedLesson | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<ManagedLesson | null>(null);
 
+  // Consolidated Modal Tabs
+  const [activeModalTab, setActiveModalTab] = useState<'lesson' | 'video' | 'assessment' | 'practice'>('lesson');
+  const [jsonMode, setJsonMode] = useState(false);
+  const [rawQuestionsJson, setRawQuestionsJson] = useState('');
+
   // Form state
   const [formData, setFormData] = useState({
+    // 1. Basic Lesson Details
     title: '',
     module: 'Object-Oriented Programming (Java)',
     sequence: 1,
-    duration: '10:00',
-    videoUrl: '',
+    status: 'Published' as 'Draft' | 'Published' | 'Archived',
     description: '',
     learningObjectives: '',
+
+    // 2. Video Integration
+    videoUrl: '',
+
+    // 3. Assessment Configuration
+    enableAssessment: true,
+    assessmentTitle: '',
+    assessmentQuizType: 'Multiple Choice',
     assessmentPassingScore: 60,
+    assessmentAttempts: 1,
+    assessmentStatus: 'Published' as 'Draft' | 'Published',
+    assessmentQuestions: [] as AssessmentQuestionDraft[],
+
+    // 4. Practice IDE Configuration
+    enablePractice: true,
     practiceTitle: '',
     practiceDescription: '',
-    status: 'Published' as 'Draft' | 'Published' | 'Archived'
+    practiceStarterCode: DEFAULT_STARTER_CODE,
+    practiceSampleInput: '',
+    practiceSampleOutput: 'Hello, World!',
+    practicePassingScore: 70,
+    practiceStatus: 'Published' as 'Draft' | 'Published'
   });
 
   const [linkedContent, setLinkedContent] = useState<any>(null);
@@ -76,7 +141,6 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
           module: l.module || 'Object-Oriented Programming (Java)',
           courseId: l.course_id || l.courseId || 'oop_course_java',
           sequence: Number(l.sequence || 1),
-          duration: l.duration || '10:00',
           videoUrl: l.video_url || l.videoUrl || '',
           description: l.description || '',
           learningObjectives: Array.isArray(l.learningObjectives)
@@ -108,7 +172,6 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
           module: 'Object-Oriented Programming (Java)',
           courseId: 'oop_course_java',
           sequence: l.sequence || i + 1,
-          duration: l.duration || '10:00',
           videoUrl: l.videoUrl,
           description: l.description,
           learningObjectives: l.concepts || [],
@@ -124,7 +187,6 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
         module: 'Object-Oriented Programming (Java)',
         courseId: 'oop_course_java',
         sequence: l.sequence || i + 1,
-        duration: l.duration || '10:00',
         videoUrl: l.videoUrl,
         description: l.description,
         learningObjectives: l.concepts || [],
@@ -152,76 +214,212 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   }, [lessons, searchTerm, statusFilter]);
 
   const handleOpenCreate = () => {
+    const nextSeq = lessons.length > 0 ? Math.max(...lessons.map(l => l.sequence)) + 1 : 1;
+    const initialQuestion = createDefaultQuestion(1);
     setFormData({
       title: '',
       module: 'Object-Oriented Programming (Java)',
-      sequence: lessons.length + 1,
-      duration: '10:00',
-      videoUrl: '',
+      sequence: nextSeq,
+      status: 'Published',
       description: '',
       learningObjectives: '',
+      videoUrl: '',
+      enableAssessment: true,
+      assessmentTitle: '',
+      assessmentQuizType: 'Multiple Choice',
       assessmentPassingScore: 60,
+      assessmentAttempts: 1,
+      assessmentStatus: 'Published',
+      assessmentQuestions: [initialQuestion],
+      enablePractice: true,
       practiceTitle: '',
       practiceDescription: '',
-      status: 'Published'
+      practiceStarterCode: DEFAULT_STARTER_CODE,
+      practiceSampleInput: '',
+      practiceSampleOutput: 'Hello, World!',
+      practicePassingScore: 70,
+      practiceStatus: 'Published'
     });
+    setRawQuestionsJson(JSON.stringify([initialQuestion], null, 2));
+    setJsonMode(false);
     setLinkedContent(null);
+    setActiveModalTab('lesson');
     setIsCreateOpen(true);
   };
 
   const handleOpenEdit = (lesson: ManagedLesson) => {
     setEditingLesson(lesson);
+    const content = (lesson as any).content || {};
+    const existingAssessment = content.assessment;
+    const existingPractice = content.practice;
+
+    // Baseline from static data if not present in DB
+    const staticAssessment = OOP_ASSESSMENTS.find(a => a.lessonId === lesson.id);
+    const initialQuestions: AssessmentQuestionDraft[] =
+      Array.isArray(existingAssessment?.questions) && existingAssessment.questions.length > 0
+        ? existingAssessment.questions
+        : staticAssessment?.questions?.map((q: any) => ({
+            id: q.id,
+            question: q.question,
+            codeSnippet: q.codeSnippet || '',
+            options: q.options || [],
+            correctOptionId: q.correctOptionId || q.options?.[0]?.id || 'opt_a'
+          })) || [createDefaultQuestion(1)];
+
+    const staticPractice = PRACTICE_CHALLENGES.find(c => c.lessonId === lesson.id);
+
     setFormData({
       title: lesson.title,
       module: lesson.module,
       sequence: lesson.sequence,
-      duration: lesson.duration,
-      videoUrl: lesson.videoUrl,
-      description: lesson.description,
-      learningObjectives: lesson.learningObjectives.join('\n'),
-      assessmentPassingScore: Number((lesson as any).content?.assessment?.passingScore || 60),
-      practiceTitle: (lesson as any).content?.practice?.title || '',
-      practiceDescription: (lesson as any).content?.practice?.description || '',
-      status: lesson.status
+      status: lesson.status,
+      description: lesson.description || '',
+      learningObjectives: Array.isArray(lesson.learningObjectives) ? lesson.learningObjectives.join('\n') : '',
+      videoUrl: lesson.videoUrl || '',
+      enableAssessment: true,
+      assessmentTitle: existingAssessment?.title || staticAssessment?.title || `${lesson.title} Assessment`,
+      assessmentQuizType: existingAssessment?.quizType || 'Multiple Choice',
+      assessmentPassingScore: Number(existingAssessment?.passingScore ?? staticAssessment?.passingPercentage ?? 60),
+      assessmentAttempts: Number(existingAssessment?.attempts ?? 1),
+      assessmentStatus: (existingAssessment?.status as any) || 'Published',
+      assessmentQuestions: initialQuestions,
+      enablePractice: true,
+      practiceTitle: existingPractice?.title || staticPractice?.title || `${lesson.title} Practice Challenge`,
+      practiceDescription: existingPractice?.description || staticPractice?.description || '',
+      practiceStarterCode: existingPractice?.starterCode || staticPractice?.starterCode || DEFAULT_STARTER_CODE,
+      practiceSampleInput: existingPractice?.sampleInput || staticPractice?.sampleInput || '',
+      practiceSampleOutput: existingPractice?.sampleOutput || staticPractice?.sampleOutput || 'Expected Program Output',
+      practicePassingScore: Number(existingPractice?.passingScore ?? staticPractice?.passingScore ?? 70),
+      practiceStatus: (existingPractice?.status as any) || 'Published'
     });
-    setLinkedContent((lesson as any).content || null);
+
+    setRawQuestionsJson(JSON.stringify(initialQuestions, null, 2));
+    setJsonMode(false);
+    setLinkedContent(content);
+    setActiveModalTab('lesson');
   };
+
   const persistLinkedVideo = async (lessonId: string, videoUrl: string) => {
     if (!videoUrl || !lessonId || lessonId === '0' || lessonId === 'NaN') return;
-    const existing = (await videoApi.list(lessonId)).data?.[0];
-    const videoPayload: any = {
-      lessonId,
-      title: formData.title.trim(),
-      videoUrl,
-      duration: formData.duration.trim(),
-      description: formData.description.trim(),
-      status: formData.status,
-      storageProvider: '',
-      storageKey: '',
-      storageContentType: '',
-      storageSize: null
-    };
-    if (existing) await videoApi.update(existing.id, videoPayload);
-    else await videoApi.create(videoPayload);
+    try {
+      const existing = (await videoApi.list(lessonId)).data?.[0];
+      const videoPayload: any = {
+        lessonId,
+        title: formData.title.trim(),
+        videoUrl,
+        description: formData.description.trim(),
+        status: formData.status,
+        storageProvider: '',
+        storageKey: '',
+        storageContentType: '',
+        storageSize: null
+      };
+      if (existing) await videoApi.update(existing.id, videoPayload);
+      else await videoApi.create(videoPayload);
+    } catch (err: any) {
+      console.warn('Persist linked video warning:', err.message);
+    }
+  };
+
+  // Question manipulation helpers
+  const handleAddQuestion = () => {
+    const newQ = createDefaultQuestion(formData.assessmentQuestions.length + 1);
+    const updated = [...formData.assessmentQuestions, newQ];
+    setFormData({ ...formData, assessmentQuestions: updated });
+    setRawQuestionsJson(JSON.stringify(updated, null, 2));
+  };
+
+  const handleRemoveQuestion = (idx: number) => {
+    const updated = formData.assessmentQuestions.filter((_, i) => i !== idx);
+    setFormData({ ...formData, assessmentQuestions: updated });
+    setRawQuestionsJson(JSON.stringify(updated, null, 2));
+  };
+
+  const handleUpdateQuestion = (idx: number, patch: Partial<AssessmentQuestionDraft>) => {
+    const updated = formData.assessmentQuestions.map((q, i) => (i === idx ? { ...q, ...patch } : q));
+    setFormData({ ...formData, assessmentQuestions: updated });
+    setRawQuestionsJson(JSON.stringify(updated, null, 2));
+  };
+
+  const handleApplyQuestionsJson = () => {
+    try {
+      const parsed = JSON.parse(rawQuestionsJson);
+      if (Array.isArray(parsed)) {
+        setFormData({ ...formData, assessmentQuestions: parsed });
+        setJsonMode(false);
+        setFeedback({ type: 'success', message: `Successfully loaded ${parsed.length} assessment questions from JSON.` });
+      } else {
+        setFeedback({ type: 'error', message: 'JSON root must be an array of question objects.' });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: `Invalid JSON syntax: ${err.message}` });
+    }
   };
 
   const handleSaveLesson = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 1. Validate Lesson
     if (!formData.title.trim()) {
       setFeedback({ type: 'error', message: 'Lesson title is required.' });
+      setActiveModalTab('lesson');
       return;
     }
 
     const seq = Number(formData.sequence);
     if (!Number.isFinite(seq) || Number.isNaN(seq) || seq < 0) {
       setFeedback({ type: 'error', message: 'Lesson sequence must be a valid non-negative number.' });
+      setActiveModalTab('lesson');
       return;
     }
 
-    const passScore = Number(formData.assessmentPassingScore);
-    if (!Number.isFinite(passScore) || Number.isNaN(passScore) || passScore < 0 || passScore > 100) {
-      setFeedback({ type: 'error', message: 'Assessment passing score must be between 0 and 100.' });
-      return;
+    // 2. Validate Video
+    if (formData.videoUrl.trim()) {
+      const urlError = validateVideoUrl(formData.videoUrl);
+      if (urlError) {
+        setFeedback({ type: 'error', message: urlError });
+        setActiveModalTab('video');
+        return;
+      }
+    }
+
+    // 3. Validate Assessment
+    if (formData.enableAssessment) {
+      const passScore = Number(formData.assessmentPassingScore);
+      if (!Number.isFinite(passScore) || Number.isNaN(passScore) || passScore < 0 || passScore > 100) {
+        setFeedback({ type: 'error', message: 'Assessment passing score must be between 0 and 100.' });
+        setActiveModalTab('assessment');
+        return;
+      }
+      const attempts = Number(formData.assessmentAttempts);
+      if (!Number.isFinite(attempts) || attempts < 1) {
+        setFeedback({ type: 'error', message: 'Assessment attempts must be at least 1.' });
+        setActiveModalTab('assessment');
+        return;
+      }
+      for (let i = 0; i < formData.assessmentQuestions.length; i++) {
+        const q = formData.assessmentQuestions[i];
+        if (!q.question.trim()) {
+          setFeedback({ type: 'error', message: `Question #${i + 1} requires a question prompt.` });
+          setActiveModalTab('assessment');
+          return;
+        }
+      }
+    }
+
+    // 4. Validate Practice IDE
+    if (formData.enablePractice) {
+      if (!formData.practiceTitle.trim()) {
+        setFeedback({ type: 'error', message: 'Practice IDE challenge title is required when practice is enabled.' });
+        setActiveModalTab('practice');
+        return;
+      }
+      const passScore = Number(formData.practicePassingScore);
+      if (!Number.isFinite(passScore) || Number.isNaN(passScore) || passScore < 0 || passScore > 100) {
+        setFeedback({ type: 'error', message: 'Practice passing score must be between 0 and 100.' });
+        setActiveModalTab('practice');
+        return;
+      }
     }
 
     const objectives = formData.learningObjectives
@@ -229,20 +427,13 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       .map(o => o.trim())
       .filter(Boolean);
 
-    const urlError = validateVideoUrl(formData.videoUrl);
-    if (urlError) {
-      setFeedback({ type: 'error', message: urlError });
-      return;
-    }
-
     setIsSaving(true);
     const lessonId = editingLesson?.id || `oop_lesson_${Date.now()}`;
-    const payload = {
+    const lessonPayload = {
       id: lessonId,
       title: formData.title.trim(),
       module: formData.module.trim(),
       sequence: seq,
-      duration: formData.duration.trim(),
       videoUrl: formData.videoUrl.trim(),
       description: formData.description.trim(),
       learningObjectives: objectives,
@@ -257,32 +448,73 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     try {
       let savedId = lessonId;
       if (editingLesson) {
-        await lessonApi.update(editingLesson.id, payload);
-        setFeedback({ type: 'success', message: `Lesson "${formData.title}" updated successfully.` });
-        setEditingLesson(null);
+        const res = await lessonApi.update(editingLesson.id, lessonPayload);
+        savedId = res.data?.id || editingLesson.id;
+        setFeedback({ type: 'success', message: `Lesson "${formData.title}" updated successfully with consolidated content.` });
       } else {
-        await lessonApi.create({ courseId: 'oop_course_java', ...payload });
-        setFeedback({ type: 'success', message: `Lesson "${formData.title}" created successfully.` });
+        const res = await lessonApi.create({ courseId: 'oop_course_java', ...lessonPayload });
+        savedId = res.data?.id || lessonId;
+        setFeedback({ type: 'success', message: `Lesson "${formData.title}" created successfully with linked content.` });
       }
-      await persistLinkedVideo(savedId, formData.videoUrl.trim());
-      if (linkedContent?.assessment?.id && savedId && savedId !== '0' && savedId !== 'NaN') {
-        await assessmentApi.update(linkedContent.assessment.id, {
+
+      // Persist Video
+      if (formData.videoUrl.trim() && savedId) {
+        await persistLinkedVideo(savedId, formData.videoUrl.trim());
+      }
+
+      // Persist Assessment
+      if (formData.enableAssessment && savedId && savedId !== '0' && savedId !== 'NaN') {
+        const assessmentTitle = formData.assessmentTitle.trim() || `${formData.title.trim()} Assessment`;
+        const assessmentPayload = {
           lessonId: savedId,
-          title: `${formData.title.trim()} Assessment`,
-          passingScore: passScore
-        });
+          title: assessmentTitle,
+          quizType: formData.assessmentQuizType,
+          passingScore: Number(formData.assessmentPassingScore),
+          attempts: Number(formData.assessmentAttempts),
+          questions: formData.assessmentQuestions,
+          status: formData.assessmentStatus
+        };
+
+        if (linkedContent?.assessment?.id) {
+          await assessmentApi.update(linkedContent.assessment.id, assessmentPayload);
+        } else {
+          await assessmentApi.create({
+            id: `quiz_${savedId}_${Date.now()}`,
+            ...assessmentPayload
+          });
+        }
       }
-      if (linkedContent?.practice?.id && formData.practiceTitle.trim()) {
-        await practiceApi.updateChallenge(linkedContent.practice.id, {
-          title: formData.practiceTitle.trim(),
+
+      // Persist Practice IDE Challenge
+      if (formData.enablePractice && savedId && savedId !== '0' && savedId !== 'NaN') {
+        const practiceTitle = formData.practiceTitle.trim() || `${formData.title.trim()} Practice Exercise`;
+        const practicePayload = {
+          lessonId: savedId,
+          topicId: 'oop',
+          title: practiceTitle,
           description: formData.practiceDescription.trim(),
-          status: formData.status
-        });
+          starterCode: formData.practiceStarterCode,
+          sampleOutput: formData.practiceSampleOutput,
+          sampleInput: formData.practiceSampleInput,
+          passingScore: Number(formData.practicePassingScore),
+          status: formData.practiceStatus
+        };
+
+        if (linkedContent?.practice?.id) {
+          await practiceApi.updateChallenge(linkedContent.practice.id, practicePayload);
+        } else {
+          await practiceApi.createChallenge({
+            id: `practice_${savedId}_${Date.now()}`,
+            ...practicePayload
+          });
+        }
       }
-      if (!editingLesson) setIsCreateOpen(false);
+
+      setIsCreateOpen(false);
+      setEditingLesson(null);
       fetchLessons();
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message || 'Failed to save lesson.' });
+      setFeedback({ type: 'error', message: err.message || 'Failed to save lesson and consolidated content.' });
     } finally {
       setIsSaving(false);
     }
@@ -341,15 +573,15 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-black text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                 <BookOpen className="h-3.5 w-3.5" />
-                Curriculum Control
+                Consolidated Curriculum Hub
               </span>
               <span className="text-xs text-slate-400 font-bold">
                 {lessons.length} Total Lessons ({lessons.filter(l => l.status === 'Published').length} Published)
               </span>
             </div>
-            <h2 className="mt-2 text-xl font-black">Lesson Management</h2>
+            <h2 className="mt-2 text-xl font-black">Lesson & Content Management</h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Create, sequence, edit, publish, and preview course lessons. Student progress and unlocks automatically align with the active sequence.
+              Manage complete pedagogical workflows in a single place: Lesson metadata, Video tutorials, Assessments, and Practice IDE exercises.
             </p>
           </div>
           <button
@@ -417,7 +649,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
               <tr>
                 <th className="px-4 py-3.5 font-black text-center w-16">Seq</th>
                 <th className="px-4 py-3.5 font-black">Lesson Title & Module</th>
-                <th className="px-4 py-3.5 font-black">Duration</th>
+                <th className="px-4 py-3.5 font-black">Linked Workflow Content</th>
                 <th className="px-4 py-3.5 font-black">Objectives</th>
                 <th className="px-4 py-3.5 font-black text-center">Status</th>
                 <th className="px-4 py-3.5 font-black text-right">Actions</th>
@@ -437,146 +669,196 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                   </td>
                 </tr>
               ) : (
-                filteredLessons.map((lesson, idx) => (
-                  <tr key={lesson.id} className={`transition ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50/70'}`}>
-                    {/* Sequence with Move Up/Down */}
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <span className="font-mono text-xs font-black text-emerald-600 dark:text-emerald-400">
-                          #{lesson.sequence}
-                        </span>
-                        <div className="flex flex-col">
+                filteredLessons.map((lesson, idx) => {
+                  const hasVideo = Boolean(lesson.videoUrl || lesson.content?.video?.id);
+                  const hasAssessment = Boolean(lesson.content?.assessment?.id || OOP_ASSESSMENTS.some(a => a.lessonId === lesson.id));
+                  const hasPractice = Boolean(lesson.content?.practice?.id || PRACTICE_CHALLENGES.some(c => c.lessonId === lesson.id));
+
+                  return (
+                    <tr key={lesson.id} className={`transition ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50/70'}`}>
+                      {/* Sequence with Move Up/Down */}
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <span className="font-mono text-xs font-black text-emerald-600 dark:text-emerald-400">
+                            #{lesson.sequence}
+                          </span>
+                          <div className="flex flex-col">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => handleMoveSequence(lesson, 'up')}
+                              className="p-0.5 text-slate-400 hover:text-emerald-600 disabled:opacity-20 cursor-pointer"
+                              title="Move Up"
+                            >
+                              <ArrowUp className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === filteredLessons.length - 1}
+                              onClick={() => handleMoveSequence(lesson, 'down')}
+                              className="p-0.5 text-slate-400 hover:text-emerald-600 disabled:opacity-20 cursor-pointer"
+                              title="Move Down"
+                            >
+                              <ArrowDown className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Title & Description */}
+                      <td className="px-4 py-3">
+                        <div>
+                          <strong className="block text-xs font-black text-slate-900 dark:text-white">
+                            {lesson.title}
+                          </strong>
+                          <span className="block text-[11px] text-slate-400 truncate max-w-sm">
+                            {lesson.description || 'No description provided.'}
+                          </span>
+                          <span className="mt-0.5 inline-block text-[10px] font-bold text-slate-400">
+                            {lesson.module}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Consolidated Linked Content Badges */}
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {/* Video Badge */}
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black ${
+                              hasVideo
+                                ? 'bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800'
+                                : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                            }`}
+                            title={hasVideo ? 'Video tutorial linked' : 'No video linked'}
+                          >
+                            <Play className="h-2.5 w-2.5" />
+                            Video
+                          </span>
+
+                          {/* Assessment Badge */}
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black ${
+                              hasAssessment
+                                ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                                : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                            }`}
+                            title={hasAssessment ? 'Assessment configured' : 'No assessment'}
+                          >
+                            <FileQuestion className="h-2.5 w-2.5" />
+                            Quiz ({lesson.content?.assessment?.passingScore || 60}%)
+                          </span>
+
+                          {/* Practice IDE Badge */}
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black ${
+                              hasPractice
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                            }`}
+                            title={hasPractice ? 'Practice IDE challenge configured' : 'No IDE challenge'}
+                          >
+                            <Code2 className="h-2.5 w-2.5" />
+                            Practice IDE
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Learning Objectives */}
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1 max-w-xs">
+                          {(lesson.learningObjectives || []).slice(0, 2).map((obj, i) => (
+                            <span
+                              key={i}
+                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                                isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {obj}
+                            </span>
+                          ))}
+                          {(lesson.learningObjectives || []).length > 2 && (
+                            <span className="text-[10px] text-slate-400 font-bold self-center">
+                              +{lesson.learningObjectives.length - 2} more
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Status Badge */}
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePublish(lesson)}
+                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider cursor-pointer transition ${
+                            lesson.status === 'Published'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-200'
+                              : lesson.status === 'Draft'
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 hover:bg-amber-200'
+                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                          }`}
+                          title="Click to toggle publish status"
+                        >
+                          {lesson.status}
+                        </button>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            disabled={idx === 0}
-                            onClick={() => handleMoveSequence(lesson, 'up')}
-                            className="p-0.5 text-slate-400 hover:text-emerald-600 disabled:opacity-20 cursor-pointer"
-                            title="Move Up"
+                            onClick={() => setPreviewingLesson(lesson)}
+                            className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 transition cursor-pointer"
+                            title="Preview Consolidated Lesson"
                           >
-                            <ArrowUp className="h-3 w-3" />
+                            <Eye className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
-                            disabled={idx === filteredLessons.length - 1}
-                            onClick={() => handleMoveSequence(lesson, 'down')}
-                            className="p-0.5 text-slate-400 hover:text-emerald-600 disabled:opacity-20 cursor-pointer"
-                            title="Move Down"
+                            onClick={() => handleOpenEdit(lesson)}
+                            className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-emerald-600 transition cursor-pointer"
+                            title="Edit Lesson & Content"
                           >
-                            <ArrowDown className="h-3 w-3" />
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setArchiveTarget(lesson)}
+                            className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 transition cursor-pointer"
+                            title="Archive Lesson"
+                          >
+                            <Archive className="h-3.5 w-3.5" />
                           </button>
                         </div>
-                      </div>
-                    </td>
-
-                    {/* Title & Description */}
-                    <td className="px-4 py-3">
-                      <div>
-                        <strong className="block text-xs font-black text-slate-900 dark:text-white">
-                          {lesson.title}
-                        </strong>
-                        <span className="block text-[11px] text-slate-400 truncate max-w-sm">
-                          {lesson.description || 'No description provided.'}
-                        </span>
-                        <span className="mt-0.5 inline-block text-[10px] font-bold text-slate-400">
-                          {lesson.module}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Duration */}
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1 font-mono text-xs text-slate-500 dark:text-slate-400">
-                        <Clock className="h-3 w-3" />
-                        {lesson.duration}
-                      </span>
-                    </td>
-
-                    {/* Learning Objectives */}
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1 max-w-xs">
-                        {(lesson.learningObjectives || []).slice(0, 3).map((obj, i) => (
-                          <span
-                            key={i}
-                            className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
-                              isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            {obj}
-                          </span>
-                        ))}
-                        {(lesson.learningObjectives || []).length > 3 && (
-                          <span className="text-[10px] text-slate-400 font-bold self-center">
-                            +{lesson.learningObjectives.length - 3} more
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Status Badge */}
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleTogglePublish(lesson)}
-                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider cursor-pointer transition ${
-                          lesson.status === 'Published'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-200'
-                            : lesson.status === 'Draft'
-                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 hover:bg-amber-200'
-                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                        }`}
-                        title="Click to toggle publish status"
-                      >
-                        {lesson.status}
-                      </button>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setPreviewingLesson(lesson)}
-                          className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 transition cursor-pointer"
-                          title="Preview Lesson"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(lesson)}
-                          className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-emerald-600 transition cursor-pointer"
-                          title="Edit Lesson"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setArchiveTarget(lesson)}
-                          className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 transition cursor-pointer"
-                          title="Archive Lesson"
-                        >
-                          <Archive className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* CREATE / EDIT MODAL */}
+      {/* CONSOLIDATED CREATE / EDIT MODAL */}
       {(isCreateOpen || editingLesson) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className={`w-full max-w-xl rounded-2xl border p-6 shadow-2xl my-8 ${cardClass}`}>
-            <div className="flex items-center justify-between border-b pb-4 dark:border-slate-800">
+          <div className={`w-full max-w-4xl rounded-2xl border p-6 shadow-2xl my-8 flex flex-col max-h-[90vh] ${cardClass}`}>
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b pb-4 dark:border-slate-800 shrink-0">
               <div className="flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-emerald-600" />
-                <h3 className="text-base font-black">
-                  {editingLesson ? `Edit Lesson: ${editingLesson.title}` : 'Create New Lesson'}
-                </h3>
+                <div className="rounded-lg bg-emerald-600/10 p-2 text-emerald-600">
+                  <BookOpen className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black">
+                    {editingLesson ? `Edit Lesson: ${editingLesson.title}` : 'Create New Lesson & Content Workflow'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Consolidated lesson, video tutorial, assessment quiz, and Practice IDE configuration.
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
@@ -584,156 +866,603 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                   setIsCreateOpen(false);
                   setEditingLesson(null);
                 }}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveLesson} className="mt-4 space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
-                    Lesson Title *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Encapsulation & Data Hiding"
-                    value={formData.title}
-                    onChange={e => setFormData({ ...formData, title: e.target.value })}
-                    className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
-                    Sequence #
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={formData.sequence}
-                    onChange={e => setFormData({ ...formData, sequence: Number(e.target.value) })}
-                    className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
-                    Duration
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 12:45"
-                    value={formData.duration}
-                    onChange={e => setFormData({ ...formData, duration: e.target.value })}
-                    className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
-                    Publication Status
-                  </label>
-                  <select
-                    value={formData.status}
-                    onChange={e => setFormData({ ...formData, status: e.target.value as any })}
-                    className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+            {/* Navigation Tabs Bar inside Modal */}
+            <div className="flex items-center gap-2 border-b py-3 dark:border-slate-800 shrink-0 overflow-x-auto">
+              {[
+                { id: 'lesson', label: '1. Lesson Details', icon: BookOpen },
+                { id: 'video', label: '2. Video Tutorial', icon: Video, active: Boolean(formData.videoUrl) },
+                {
+                  id: 'assessment',
+                  label: `3. Assessment (${formData.assessmentQuestions.length} Qs)`,
+                  icon: FileQuestion,
+                  active: formData.enableAssessment
+                },
+                {
+                  id: 'practice',
+                  label: '4. Practice IDE Coding',
+                  icon: Code2,
+                  active: formData.enablePractice
+                }
+              ].map(tab => {
+                const TabIcon = tab.icon;
+                const isSelected = activeModalTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveModalTab(tab.id as any)}
+                    className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-black transition cursor-pointer shrink-0 ${
+                      isSelected
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : isDark
+                        ? 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
                   >
-                    <option value="Published">Published (Active)</option>
-                    <option value="Draft">Draft (Hidden from students)</option>
-                    <option value="Archived">Archived</option>
-                  </select>
-                </div>
-              </div>
+                    <TabIcon className="h-3.5 w-3.5" />
+                    <span>{tab.label}</span>
+                    {tab.active && !isSelected && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
 
-              <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
-                  Lesson Video
-                </label>
-                <div className={`flex rounded-xl border p-1 ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-50'}`}>
-                  <div className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-center text-xs font-black text-white">
-                    <Link2 className="mr-1 inline h-3.5 w-3.5" /> Video Link
+            {/* Modal Body / Scrollable Form */}
+            <form onSubmit={handleSaveLesson} className="flex-1 overflow-y-auto py-4 space-y-5 pr-1">
+              {/* SECTION 1: LESSON DETAILS */}
+              {activeModalTab === 'lesson' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+                    <div className="sm:col-span-3">
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                        Lesson Title *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Encapsulation & Data Hiding in Java"
+                        value={formData.title}
+                        onChange={e => {
+                          const newTitle = e.target.value;
+                          setFormData(prev => ({
+                            ...prev,
+                            title: newTitle,
+                            assessmentTitle: prev.assessmentTitle || `${newTitle} Assessment`,
+                            practiceTitle: prev.practiceTitle || `${newTitle} Practice Challenge`
+                          }));
+                        }}
+                        className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                        Sequence Order #
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={formData.sequence}
+                        onChange={e => setFormData({ ...formData, sequence: Number(e.target.value) })}
+                        className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                        Course Module
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.module}
+                        onChange={e => setFormData({ ...formData, module: e.target.value })}
+                        className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                        Publication Status
+                      </label>
+                      <select
+                        value={formData.status}
+                        onChange={e => setFormData({ ...formData, status: e.target.value as any })}
+                        className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                      >
+                        <option value="Published">Published (Active & Visible)</option>
+                        <option value="Draft">Draft (Hidden from students)</option>
+                        <option value="Archived">Archived</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                      Pedagogical Description
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Explain the conceptual foundation and learning objectives of this lesson..."
+                      value={formData.description}
+                      onChange={e => setFormData({ ...formData, description: e.target.value })}
+                      className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                      Learning Objectives (one per line)
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Explain private access modifier&#10;Implement getter and setter methods&#10;Protect class invariants through validation"
+                      value={formData.learningObjectives}
+                      onChange={e => setFormData({ ...formData, learningObjectives: e.target.value })}
+                      className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                    />
                   </div>
                 </div>
-                <>
-                  <input
-                    type="url"
-                    placeholder="https://www.youtube.com/watch?v=... or a supported video URL"
-                    value={formData.videoUrl}
-                    onChange={e => setFormData({ ...formData, videoUrl: e.target.value })}
-                    className={`mt-2 w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
-                  />
-                </>
-              </div>
+              )}
 
-              <div className={`rounded-xl border p-3 ${isDark ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-slate-50'}`}>
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Linked learning content</p>
-                <div className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
-                  <span className="font-bold">Video: <b className="text-emerald-600">{linkedContent?.video?.status || (formData.videoUrl ? 'Linked' : 'Not linked')}</b></span>
-                  <span className="font-bold">Assessment: <b className="text-emerald-600">{linkedContent?.assessment?.title || 'Not linked'}</b></span>
-                  <span className="font-bold">Practice: <b className="text-emerald-600">{linkedContent?.practice?.title || 'Not configured'}</b></span>
+              {/* SECTION 2: VIDEO TUTORIAL */}
+              {activeModalTab === 'video' && (
+                <div className="space-y-4">
+                  <div className={`rounded-xl border p-4 ${isDark ? 'border-sky-900/50 bg-sky-950/20' : 'border-sky-100 bg-sky-50'}`}>
+                    <div className="flex items-start gap-2.5">
+                      <Video className="h-5 w-5 text-sky-600 mt-0.5 shrink-0" />
+                      <div>
+                        <h4 className="text-xs font-black text-sky-900 dark:text-sky-200">
+                          Pedagogical Progression Requirement
+                        </h4>
+                        <p className="mt-1 text-[11px] text-sky-800 dark:text-sky-300 leading-relaxed">
+                          Students must complete at least <b>95%</b> of this video before the lesson Assessment unlocks. Supported formats include YouTube links and direct MP4 URLs.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                      Video Stream URL
+                    </label>
+                    <div className="relative">
+                      <Link2 className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
+                      <input
+                        type="url"
+                        placeholder="https://www.youtube.com/watch?v=... or direct MP4 stream URL"
+                        value={formData.videoUrl}
+                        onChange={e => setFormData({ ...formData, videoUrl: e.target.value })}
+                        className={`w-full rounded-xl border pl-10 pr-4 py-2 text-xs font-bold outline-none ${inputClass}`}
+                      />
+                    </div>
+                  </div>
+
+                  {formData.videoUrl ? (
+                    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-black aspect-video flex items-center justify-center max-w-xl mx-auto">
+                      {formData.videoUrl.includes('youtube.com') || formData.videoUrl.includes('youtu.be') ? (
+                        <iframe
+                          src={
+                            formData.videoUrl.includes('embed')
+                              ? formData.videoUrl
+                              : formData.videoUrl.replace('watch?v=', 'embed/').split('&')[0]
+                          }
+                          title="Video Preview"
+                          className="w-full h-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <div className="text-center p-6 text-slate-400">
+                          <Play className="h-8 w-8 mx-auto mb-2 text-slate-500" />
+                          <p className="text-xs font-bold">Direct Video Link: {formData.videoUrl}</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-slate-400 text-xs font-bold">
+                      No video URL entered yet. You can paste a YouTube link or direct MP4 URL above.
+                    </div>
+                  )}
                 </div>
-                {linkedContent?.assessment?.id && (
-                  <div className="mt-3 flex items-center gap-2">
-                    <label className="text-[11px] font-black text-slate-500">Passing score</label>
-                    <input type="number" min={0} max={100} value={formData.assessmentPassingScore} onChange={e => setFormData({ ...formData, assessmentPassingScore: Number(e.target.value) })} className={`w-20 rounded-lg border px-2 py-1 text-xs font-bold ${inputClass}`} />
-                    <span className="text-[11px] font-bold text-slate-400">Existing assessment; no duplicate is created.</span>
+              )}
+
+              {/* SECTION 3: ASSESSMENT INTEGRATION */}
+              {activeModalTab === 'assessment' && (
+                <div className="space-y-4">
+                  {/* Enable assessment toggle & summary */}
+                  <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border p-4 ${isDark ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-slate-50'}`}>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="enableAssessment"
+                        checked={formData.enableAssessment}
+                        onChange={e => setFormData({ ...formData, enableAssessment: e.target.checked })}
+                        className="h-4 w-4 rounded accent-emerald-600 cursor-pointer"
+                      />
+                      <div>
+                        <label htmlFor="enableAssessment" className="text-xs font-black cursor-pointer">
+                          Enable Assessment for this Lesson
+                        </label>
+                        <p className="text-[11px] text-slate-400">
+                          Passing score threshold is 60%. Students must pass the assessment to unlock the Practice IDE.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setJsonMode(!jsonMode)}
+                        className="rounded-lg border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer"
+                      >
+                        <Code className="mr-1 inline h-3 w-3" />
+                        {jsonMode ? 'Visual Builder' : 'Raw JSON'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddQuestion}
+                        className="rounded-lg bg-emerald-600 px-3 py-1 text-[11px] font-black text-white hover:bg-emerald-700 transition cursor-pointer"
+                      >
+                        <Plus className="mr-1 inline h-3 w-3" />
+                        Add Question
+                      </button>
+                    </div>
                   </div>
-                )}
-                {linkedContent?.practice?.id && (
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <input value={formData.practiceTitle} onChange={e => setFormData({ ...formData, practiceTitle: e.target.value })} placeholder="Practice activity title" className={`rounded-lg border px-2 py-1.5 text-xs font-bold ${inputClass}`} />
-                    <input value={formData.practiceDescription} onChange={e => setFormData({ ...formData, practiceDescription: e.target.value })} placeholder="Practice activity description" className={`rounded-lg border px-2 py-1.5 text-xs font-bold ${inputClass}`} />
+
+                  {formData.enableAssessment && (
+                    <>
+                      {/* Assessment Parameters */}
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                            Assessment Title
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Encapsulation Quiz"
+                            value={formData.assessmentTitle}
+                            onChange={e => setFormData({ ...formData, assessmentTitle: e.target.value })}
+                            className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                            Passing Score (%)
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={formData.assessmentPassingScore}
+                            onChange={e => setFormData({ ...formData, assessmentPassingScore: Number(e.target.value) })}
+                            className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                            Max Attempts
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={formData.assessmentAttempts}
+                            onChange={e => setFormData({ ...formData, assessmentAttempts: Number(e.target.value) })}
+                            className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Raw JSON Mode */}
+                      {jsonMode ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-black uppercase tracking-wider text-slate-400">
+                              Assessment Questions (JSON Array)
+                            </label>
+                            <button
+                              type="button"
+                              onClick={handleApplyQuestionsJson}
+                              className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-black text-white hover:bg-emerald-700 cursor-pointer"
+                            >
+                              Apply JSON
+                            </button>
+                          </div>
+                          <textarea
+                            rows={10}
+                            value={rawQuestionsJson}
+                            onChange={e => setRawQuestionsJson(e.target.value)}
+                            className={`w-full rounded-xl border p-3 font-mono text-xs outline-none ${inputClass}`}
+                          />
+                        </div>
+                      ) : (
+                        /* Visual Question Builder */
+                        <div className="space-y-4">
+                          {formData.assessmentQuestions.map((q, qIndex) => (
+                            <div
+                              key={q.id || qIndex}
+                              className={`rounded-2xl border p-4 space-y-3 transition ${isDark ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-white'}`}
+                            >
+                              <div className="flex items-center justify-between border-b pb-2 dark:border-slate-800">
+                                <div className="flex items-center gap-2">
+                                  <span className="rounded-md bg-emerald-600/10 px-2 py-0.5 font-mono text-[11px] font-black text-emerald-600">
+                                    Q{qIndex + 1}
+                                  </span>
+                                  <span className="text-xs font-black">Question Prompt</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveQuestion(qIndex)}
+                                  className="text-slate-400 hover:text-rose-500 cursor-pointer p-1"
+                                  title="Delete Question"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+
+                              <input
+                                type="text"
+                                placeholder="Enter the assessment question..."
+                                value={q.question}
+                                onChange={e => handleUpdateQuestion(qIndex, { question: e.target.value })}
+                                className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                              />
+
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                                  Optional Code Snippet
+                                </label>
+                                <textarea
+                                  rows={2}
+                                  placeholder="// Optional Java snippet for student analysis..."
+                                  value={q.codeSnippet || ''}
+                                  onChange={e => handleUpdateQuestion(qIndex, { codeSnippet: e.target.value })}
+                                  className={`w-full rounded-xl border p-2 font-mono text-xs outline-none ${inputClass}`}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">
+                                  Answer Choices (Select radio button for the correct answer)
+                                </label>
+                                <div className="space-y-2">
+                                  {q.options.map((opt, optIndex) => (
+                                    <div key={opt.id || optIndex} className="flex items-center gap-2">
+                                      <input
+                                        type="radio"
+                                        name={`correct_${qIndex}`}
+                                        checked={q.correctOptionId === opt.id}
+                                        onChange={() => handleUpdateQuestion(qIndex, { correctOptionId: opt.id })}
+                                        className="h-4 w-4 accent-emerald-600 cursor-pointer"
+                                        title="Mark as correct answer"
+                                      />
+                                      <span className="font-mono text-xs font-bold text-slate-400 w-4">
+                                        {String.fromCharCode(65 + optIndex)}
+                                      </span>
+                                      <input
+                                        type="text"
+                                        placeholder={`Option ${String.fromCharCode(65 + optIndex)} text`}
+                                        value={opt.text}
+                                        onChange={e => {
+                                          const newOpts = [...q.options];
+                                          newOpts[optIndex] = { ...opt, text: e.target.value };
+                                          handleUpdateQuestion(qIndex, { options: newOpts });
+                                        }}
+                                        className={`flex-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold outline-none ${inputClass}`}
+                                      />
+                                      <input
+                                        type="text"
+                                        placeholder="Explanation / rationale"
+                                        value={opt.rationale || ''}
+                                        onChange={e => {
+                                          const newOpts = [...q.options];
+                                          newOpts[optIndex] = { ...opt, rationale: e.target.value };
+                                          handleUpdateQuestion(qIndex, { options: newOpts });
+                                        }}
+                                        className={`w-1/3 rounded-lg border px-2.5 py-1.5 text-xs outline-none ${inputClass}`}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* SECTION 4: PRACTICE IDE CONFIGURATION */}
+              {activeModalTab === 'practice' && (
+                <div className="space-y-4">
+                  {/* Enable Practice IDE toggle */}
+                  <div className={`flex items-center justify-between rounded-xl border p-4 ${isDark ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-slate-50'}`}>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="enablePractice"
+                        checked={formData.enablePractice}
+                        onChange={e => setFormData({ ...formData, enablePractice: e.target.checked })}
+                        className="h-4 w-4 rounded accent-emerald-600 cursor-pointer"
+                      />
+                      <div>
+                        <label htmlFor="enablePractice" className="text-xs font-black cursor-pointer">
+                          Enable Practice IDE Coding Challenge
+                        </label>
+                        <p className="text-[11px] text-slate-400">
+                          Students solve interactive Java programming challenges directly in the web IDE.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
 
-              <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
-                  Description
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Provide a clear description of the pedagogical purpose of this lesson..."
-                  value={formData.description}
-                  onChange={e => setFormData({ ...formData, description: e.target.value })}
-                  className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
-                />
-              </div>
+                  {formData.enablePractice && (
+                    <>
+                      <div className={`rounded-xl border p-3.5 ${isDark ? 'border-emerald-900/40 bg-emerald-950/20' : 'border-emerald-100 bg-emerald-50'}`}>
+                        <div className="flex items-start gap-2">
+                          <Code2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                          <p className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed font-bold">
+                            Pedagogical Progression Rule: The Practice IDE unlocks only after passing the assessment (score ≥ 60%).
+                          </p>
+                        </div>
+                      </div>
 
-              <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
-                  Learning Objectives (one per line)
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Understand private access modifier&#10;Implement getter and setter methods&#10;Protect class invariant"
-                  value={formData.learningObjectives}
-                  onChange={e => setFormData({ ...formData, learningObjectives: e.target.value })}
-                  className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
-                />
-              </div>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                            Challenge Activity Title *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Encapsulation & Banking Account Challenge"
+                            value={formData.practiceTitle}
+                            onChange={e => setFormData({ ...formData, practiceTitle: e.target.value })}
+                            className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                            Passing Score (%)
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={formData.practicePassingScore}
+                            onChange={e => setFormData({ ...formData, practicePassingScore: Number(e.target.value) })}
+                            className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                          />
+                        </div>
+                      </div>
 
-              <div className="flex items-center justify-end gap-2 border-t pt-4 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsCreateOpen(false);
-                    setEditingLesson(null);
-                  }}
-                  className="rounded-xl px-4 py-2 text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-black text-white hover:bg-emerald-700 shadow-sm transition cursor-pointer"
-                >
-                  {isSaving ? 'Saving…' : (editingLesson ? 'Save Lesson Content' : 'Create Lesson Content')}
-                </button>
+                      <div>
+                        <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                          Challenge Instructions & Requirements
+                        </label>
+                        <textarea
+                          rows={3}
+                          placeholder="Provide explicit instructions for students: specify class structure, method signatures, and expected console output..."
+                          value={formData.practiceDescription}
+                          onChange={e => setFormData({ ...formData, practiceDescription: e.target.value })}
+                          className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                          Java Starter Code Template
+                        </label>
+                        <textarea
+                          rows={7}
+                          value={formData.practiceStarterCode}
+                          onChange={e => setFormData({ ...formData, practiceStarterCode: e.target.value })}
+                          className={`w-full rounded-xl border p-3 font-mono text-xs outline-none bg-slate-950 text-emerald-400 border-slate-800`}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                            Expected Console Output (Sample Output)
+                          </label>
+                          <textarea
+                            rows={3}
+                            placeholder="Exact console text output expected upon running student solution..."
+                            value={formData.practiceSampleOutput}
+                            onChange={e => setFormData({ ...formData, practiceSampleOutput: e.target.value })}
+                            className={`w-full rounded-xl border p-2.5 font-mono text-xs outline-none ${inputClass}`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
+                            Sample Standard Input (Optional)
+                          </label>
+                          <textarea
+                            rows={3}
+                            placeholder="Optional stdin simulated inputs (if any)..."
+                            value={formData.practiceSampleInput}
+                            onChange={e => setFormData({ ...formData, practiceSampleInput: e.target.value })}
+                            className={`w-full rounded-xl border p-2.5 font-mono text-xs outline-none ${inputClass}`}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Bottom Action Buttons */}
+              <div className="flex items-center justify-between border-t pt-4 dark:border-slate-800 shrink-0">
+                <div className="flex items-center gap-2">
+                  {activeModalTab !== 'lesson' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeModalTab === 'practice') setActiveModalTab('assessment');
+                        else if (activeModalTab === 'assessment') setActiveModalTab('video');
+                        else if (activeModalTab === 'video') setActiveModalTab('lesson');
+                      }}
+                      className="rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      <ChevronLeft className="mr-1 inline h-3.5 w-3.5" />
+                      Back
+                    </button>
+                  )}
+                  {activeModalTab !== 'practice' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeModalTab === 'lesson') setActiveModalTab('video');
+                        else if (activeModalTab === 'video') setActiveModalTab('assessment');
+                        else if (activeModalTab === 'assessment') setActiveModalTab('practice');
+                      }}
+                      className="rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      Next Section
+                      <ChevronRight className="ml-1 inline h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreateOpen(false);
+                      setEditingLesson(null);
+                    }}
+                    className="rounded-xl px-4 py-2 text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-black text-white hover:bg-emerald-700 shadow-sm transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    {isSaving ? (
+                      'Saving All Content...'
+                    ) : editingLesson ? (
+                      <>
+                        <Check className="h-4 w-4" /> Save Lesson Content
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4" /> Create Lesson Content
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -743,7 +1472,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       {/* PREVIEW MODAL */}
       {previewingLesson && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className={`w-full max-w-2xl rounded-2xl border p-6 shadow-2xl my-8 ${cardClass}`}>
+          <div className={`w-full max-w-3xl rounded-2xl border p-6 shadow-2xl my-8 space-y-4 ${cardClass}`}>
             <div className="flex items-center justify-between border-b pb-4 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 font-mono text-xs font-black text-emerald-600">
@@ -754,63 +1483,89 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
               <button
                 type="button"
                 onClick={() => setPreviewingLesson(null)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="mt-4 space-y-4">
-              {previewingLesson.videoUrl ? (
-                <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-black aspect-video flex items-center justify-center">
-                  {previewingLesson.videoUrl.includes('youtube.com') || previewingLesson.videoUrl.includes('youtu.be') ? (
-                    <iframe
-                      src={
-                        previewingLesson.videoUrl.includes('embed')
-                          ? previewingLesson.videoUrl
-                          : previewingLesson.videoUrl.replace('watch?v=', 'embed/').split('&')[0]
-                      }
-                      title={previewingLesson.title}
-                      className="w-full h-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
-                  ) : (
-                    <div className="text-center p-6 text-slate-400">
-                      <Play className="h-8 w-8 mx-auto mb-2 text-slate-500" />
-                      <p className="text-xs font-bold">Direct Video Link: {previewingLesson.videoUrl}</p>
-                    </div>
-                  )}
+            {/* Video Player Preview */}
+            {previewingLesson.videoUrl ? (
+              <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-black aspect-video flex items-center justify-center">
+                {previewingLesson.videoUrl.includes('youtube.com') || previewingLesson.videoUrl.includes('youtu.be') ? (
+                  <iframe
+                    src={
+                      previewingLesson.videoUrl.includes('embed')
+                        ? previewingLesson.videoUrl
+                        : previewingLesson.videoUrl.replace('watch?v=', 'embed/').split('&')[0]
+                    }
+                    title={previewingLesson.title}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="text-center p-6 text-slate-400">
+                    <Play className="h-8 w-8 mx-auto mb-2 text-slate-500" />
+                    <p className="text-xs font-bold">Direct Video Link: {previewingLesson.videoUrl}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-800 p-6 text-center text-slate-400 text-xs font-bold">
+                No video associated with this lesson yet.
+              </div>
+            )}
+
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">Pedagogical Description</h4>
+              <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                {previewingLesson.description || 'No description provided.'}
+              </p>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">Learning Objectives</h4>
+              <ul className="mt-2 space-y-1">
+                {(previewingLesson.learningObjectives || []).map((obj, i) => (
+                  <li key={i} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>{obj}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Consolidated Workflow Summary Card */}
+            <div className={`rounded-xl border p-3.5 ${isDark ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-slate-50'}`}>
+              <h5 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2">
+                Consolidated Workflow Details
+              </h5>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 text-xs font-bold">
+                <div>
+                  <span className="text-slate-400">Video: </span>
+                  <span className={previewingLesson.videoUrl ? 'text-emerald-600' : 'text-slate-500'}>
+                    {previewingLesson.videoUrl ? 'Configured (≥95% required)' : 'None'}
+                  </span>
                 </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center text-slate-400 text-xs font-bold">
-                  No video associated with this lesson yet.
+                <div>
+                  <span className="text-slate-400">Assessment: </span>
+                  <span className={previewingLesson.content?.assessment ? 'text-indigo-600' : 'text-slate-500'}>
+                    {previewingLesson.content?.assessment?.title || 'Configured (Pass: 60%)'}
+                  </span>
                 </div>
-              )}
-
-              <div>
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">Description</h4>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-                  {previewingLesson.description || 'No description provided.'}
-                </p>
+                <div>
+                  <span className="text-slate-400">Practice IDE: </span>
+                  <span className={previewingLesson.content?.practice ? 'text-emerald-600' : 'text-slate-500'}>
+                    {previewingLesson.content?.practice?.title || 'Interactive Challenge'}
+                  </span>
+                </div>
               </div>
+            </div>
 
-              <div>
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">Learning Objectives</h4>
-                <ul className="mt-2 space-y-1">
-                  {(previewingLesson.learningObjectives || []).map((obj, i) => (
-                    <li key={i} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                      <span>{obj}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="flex items-center justify-between border-t pt-4 text-xs font-bold text-slate-400 dark:border-slate-800">
-                <span>Duration: {previewingLesson.duration}</span>
-                <span className="capitalize">Status: {previewingLesson.status}</span>
-              </div>
+            <div className="flex items-center justify-between border-t pt-4 text-xs font-bold text-slate-400 dark:border-slate-800">
+              <span>Module: {previewingLesson.module}</span>
+              <span className="capitalize">Status: {previewingLesson.status}</span>
             </div>
           </div>
         </div>

@@ -37,7 +37,6 @@ import { AdaptiveRecommendation, AssessmentSecurityEvent, AuthenticatedUser, Mon
 import { LeaderboardUser } from '../types';
 import Leaderboard from './Leaderboard.tsx';
 import LessonManagementTab from './teacher/LessonManagementTab';
-import VideoManagementTab from './teacher/VideoManagementTab';
 import ResourceManagementTab from './teacher/ResourceManagementTab';
 import PreTestManagementTab from './teacher/PreTestManagementTab';
 import LearningAnalyticsTab from './teacher/LearningAnalyticsTab';
@@ -64,7 +63,6 @@ interface TeacherPortalProps {
 type TeacherTab =
   | 'monitoring'
   | 'lessons'
-  | 'videos'
   | 'resources'
   | 'pretest'
   | 'analytics'
@@ -1084,7 +1082,6 @@ export default function TeacherPortal({
           {[
             ['monitoring', 'Live Monitoring', Activity],
             ['lessons', 'Lessons', BookOpen],
-            ['videos', 'Videos', PlayCircle],
             ['resources', 'Materials', FolderOpen],
             ['pretest', 'Pre-Test', ClipboardCheck],
             ['analytics', 'Analytics', BarChart3],
@@ -1708,12 +1705,9 @@ export default function TeacherPortal({
       {/* ========================================================================= */}
       {/* LESSON MANAGEMENT TAB (Panel Comment 1) */}
       {/* ========================================================================= */}
+      {/* LESSON MANAGEMENT TAB (Consolidated Workflow) */}
+      {/* ========================================================================= */}
       {activeTab === 'lessons' && <LessonManagementTab theme={theme} />}
-
-      {/* ========================================================================= */}
-      {/* VIDEO MANAGEMENT TAB (Panel Comment 1) */}
-      {/* ========================================================================= */}
-      {activeTab === 'videos' && <VideoManagementTab theme={theme} />}
 
       {/* ========================================================================= */}
       {/* LEARNING RESOURCE MANAGEMENT TAB (Panel Comment 1) */}

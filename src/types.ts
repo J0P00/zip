@@ -571,7 +571,7 @@ export interface ManagedLesson {
   module: string;
   courseId: string;
   sequence: number;
-  duration: string;
+  duration?: string;
   videoUrl: string;
   description: string;
   learningObjectives: string[];
@@ -580,8 +580,25 @@ export interface ManagedLesson {
   storageKey?: string;
   content?: {
     video?: { id: string; title: string; status: string; storageProvider?: string; storageKey?: string } | null;
-    assessment?: { id: string; title: string; passingScore: number; status: string } | null;
-    practice?: { id: string; title: string; description: string; status: string } | null;
+    assessment?: {
+      id: string;
+      title: string;
+      quizType?: string;
+      passingScore: number;
+      attempts?: number;
+      questions?: any[];
+      status: string;
+    } | null;
+    practice?: {
+      id: string;
+      title: string;
+      description: string;
+      starterCode?: string;
+      sampleInput?: string;
+      sampleOutput?: string;
+      passingScore?: number;
+      status: string;
+    } | null;
   } | null;
   metadata?: Record<string, any>;
   createdBy?: string;

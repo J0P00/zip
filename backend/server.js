@@ -713,14 +713,14 @@ const getLessonContent = async (lessonId) => {
             LIMIT 1
         `, [lessonId]),
         pool.query(`
-            SELECT id, title, passing_score, status
+            SELECT id, title, quiz_type, passing_score, attempts, questions, status
             FROM assessments
             WHERE lesson_id = $1
             ORDER BY updated_at DESC, created_at ASC
             LIMIT 1
         `, [lessonId]),
         pool.query(`
-            SELECT id, title, description, status
+            SELECT id, title, description, starter_code, sample_input, sample_output, passing_score, status
             FROM programming_challenges
             WHERE lesson_id = $1
             ORDER BY updated_at DESC, created_at ASC
@@ -740,13 +740,20 @@ const getLessonContent = async (lessonId) => {
         assessment: assessmentResult.rows[0] ? {
             id: assessmentResult.rows[0].id,
             title: assessmentResult.rows[0].title,
+            quizType: assessmentResult.rows[0].quiz_type || "Multiple Choice",
             passingScore: Number(assessmentResult.rows[0].passing_score || 60),
+            attempts: Number(assessmentResult.rows[0].attempts || 1),
+            questions: assessmentResult.rows[0].questions || [],
             status: assessmentResult.rows[0].status || "Published"
         } : null,
         practice: practiceResult.rows[0] ? {
             id: practiceResult.rows[0].id,
             title: practiceResult.rows[0].title,
             description: practiceResult.rows[0].description || "",
+            starterCode: practiceResult.rows[0].starter_code || "",
+            sampleInput: practiceResult.rows[0].sample_input || "",
+            sampleOutput: practiceResult.rows[0].sample_output || "",
+            passingScore: Number(practiceResult.rows[0].passing_score || 70),
             status: practiceResult.rows[0].status || "Published"
         } : null
     };
