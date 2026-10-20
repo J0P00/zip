@@ -578,6 +578,12 @@ export interface ManagedLesson {
   status: 'Draft' | 'Published' | 'Archived';
   storageProvider?: string;
   storageKey?: string;
+  citationText?: string;
+  citationUrl?: string;
+  citation_text?: string;
+  citation_url?: string;
+  sourceUrl?: string;
+  source_url?: string;
   content?: {
     video?: { id: string; title: string; status: string; storageProvider?: string; storageKey?: string } | null;
     assessment?: {

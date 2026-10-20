@@ -381,12 +381,12 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
 
   const assessment = OOP_ASSESSMENTS.find(item => item.lessonId === activeLesson.id);
   const activeQuiz = assessment ? quizDb[assessment.id] : undefined;
-  const citationText = activeLesson.citation_text || (
+  const citationText = activeLesson.citation_text || (activeLesson as any).citationText || (activeLesson as any).metadata?.citationText || (
     activeLesson.creator_name && activeLesson.source_url
       ? `${activeLesson.creator_name}. ${activeLesson.video_title || activeLesson.title}. ${activeLesson.publisher_name || 'Video source'}.${activeLesson.accessed_date ? ` Accessed ${activeLesson.accessed_date}.` : ''}`
       : ''
   );
-  const citationUrl = activeLesson.citation_url || activeLesson.source_url;
+  const citationUrl = activeLesson.citation_url || (activeLesson as any).citationUrl || (activeLesson as any).metadata?.citationUrl || activeLesson.source_url;
 
   return (
     <div className="space-y-4 overflow-x-hidden sm:space-y-6 animate-fade-in" id="oop-course-syllabus">

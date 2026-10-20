@@ -25,7 +25,8 @@ import {
   ChevronLeft,
   Code,
   ListOrdered,
-  HelpCircle
+  HelpCircle,
+  FileText
 } from 'lucide-react';
 import { ManagedLesson } from '../../types';
 import { assessmentApi, lessonApi, practiceApi, validateVideoUrl, videoApi } from '../../services/api';
@@ -100,6 +101,8 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     status: 'Published' as 'Draft' | 'Published' | 'Archived',
     description: '',
     learningObjectives: '',
+    citationText: '',
+    citationUrl: '',
 
     // 2. Video Integration
     videoUrl: '',
@@ -157,6 +160,8 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
             ? JSON.parse(l.learning_objectives || '[]')
             : [],
           status: l.status || 'Published',
+          citationText: l.citationText || l.citation_text || l.metadata?.citationText || l.metadata?.citation_text || '',
+          citationUrl: l.citationUrl || l.citation_url || l.sourceUrl || l.source_url || l.metadata?.citationUrl || l.metadata?.citation_url || '',
           storageProvider: l.storageProvider || l.storage_provider || '',
           storageKey: l.storageKey || l.storage_key || '',
           content: l.content || null,
@@ -177,7 +182,9 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
           videoUrl: l.videoUrl,
           description: l.description,
           learningObjectives: l.concepts || [],
-          status: 'Published'
+          status: 'Published',
+          citationText: l.citation_text || (l.creator_name ? `${l.creator_name}. ${l.video_title || l.title}. ${l.publisher_name || 'Oracle'}.` : ''),
+          citationUrl: l.citation_url || l.source_url || ''
         }));
         setLessons(fallback);
       }
@@ -192,7 +199,9 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
         videoUrl: l.videoUrl,
         description: l.description,
         learningObjectives: l.concepts || [],
-        status: 'Published'
+        status: 'Published',
+        citationText: l.citation_text || (l.creator_name ? `${l.creator_name}. ${l.video_title || l.title}. ${l.publisher_name || 'Oracle'}.` : ''),
+        citationUrl: l.citation_url || l.source_url || ''
       }));
       setLessons(fallback);
     } finally {
@@ -225,6 +234,8 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       status: 'Published',
       description: '',
       learningObjectives: '',
+      citationText: '',
+      citationUrl: '',
       videoUrl: '',
       enableAssessment: true,
       assessmentTitle: '',
@@ -269,6 +280,25 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
           })) || [createDefaultQuestion(1)];
 
     const staticPractice = PRACTICE_CHALLENGES.find(c => c.lessonId === lesson.id);
+    const staticLesson = OOP_COURSE_LESSONS.find(l => l.id === lesson.id);
+    const existingCitationText =
+      lesson.citationText ||
+      (lesson as any).citation_text ||
+      (lesson as any).metadata?.citationText ||
+      (lesson as any).metadata?.citation_text ||
+      staticLesson?.citation_text ||
+      (staticLesson?.creator_name ? `${staticLesson.creator_name}. ${staticLesson.video_title || staticLesson.title}. ${staticLesson.publisher_name || 'Oracle'}.` : '') ||
+      '';
+    const existingCitationUrl =
+      lesson.citationUrl ||
+      (lesson as any).citation_url ||
+      (lesson as any).sourceUrl ||
+      (lesson as any).source_url ||
+      (lesson as any).metadata?.citationUrl ||
+      (lesson as any).metadata?.citation_url ||
+      staticLesson?.citation_url ||
+      staticLesson?.source_url ||
+      '';
 
     setFormData({
       title: lesson.title,
@@ -277,6 +307,8 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       status: lesson.status,
       description: lesson.description || '',
       learningObjectives: Array.isArray(lesson.learningObjectives) ? lesson.learningObjectives.join('\n') : '',
+      citationText: existingCitationText,
+      citationUrl: existingCitationUrl,
       videoUrl: lesson.videoUrl || '',
       enableAssessment: true,
       assessmentTitle: existingAssessment?.title || staticAssessment?.title || `${lesson.title} Assessment`,
@@ -441,6 +473,13 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       learningObjectives: objectives,
       concepts: objectives,
       status: formData.status,
+      citationText: formData.citationText.trim(),
+      citationUrl: formData.citationUrl.trim(),
+      metadata: {
+        citationText: formData.citationText.trim(),
+        citationUrl: formData.citationUrl.trim(),
+        sourceUrl: formData.citationUrl.trim()
+      },
       storageProvider: '',
       storageKey: '',
       storageContentType: '',
@@ -1043,6 +1082,49 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                       className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
                     />
                   </div>
+
+                  {/* CITATION & ACADEMIC REFERENCES */}
+                  <div className={`rounded-xl border p-4 space-y-3 ${isDark ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-slate-50'}`}>
+                    <div className="flex items-start gap-2.5">
+                      <FileText className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                      <div>
+                        <h4 className="text-xs font-black">Pedagogical Citation & Academic References</h4>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Document textbook sources, Oracle Java documentation, or authoritative academic citations associated with this lesson.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                          Citation Text (APA / Academic format)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Classes (The Java Tutorials > Learning the Java Language > Classes and Objects). (n.d.). Oracle."
+                          value={formData.citationText}
+                          onChange={e => setFormData({ ...formData, citationText: e.target.value })}
+                          className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                          Citation Source URL
+                        </label>
+                        <div className="relative">
+                          <Link2 className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                          <input
+                            type="url"
+                            placeholder="https://docs.oracle.com/..."
+                            value={formData.citationUrl}
+                            onChange={e => setFormData({ ...formData, citationUrl: e.target.value })}
+                            className={`w-full rounded-xl border pl-8 pr-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1606,6 +1688,34 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                 </div>
               </div>
             </div>
+
+            {/* Citation Card in Preview */}
+            {(previewingLesson.citationText || previewingLesson.citation_text || previewingLesson.citationUrl || previewingLesson.citation_url) && (
+              <div className={`rounded-xl border p-4 ${isDark ? 'border-emerald-900/40 bg-emerald-950/20' : 'border-emerald-100 bg-emerald-50/60'}`}>
+                <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                      <FileText className="h-4 w-4 text-emerald-600" />
+                      Pedagogical Citation & Reference
+                    </h4>
+                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 font-semibold leading-relaxed">
+                      {previewingLesson.citationText || previewingLesson.citation_text || 'No citation text specified.'}
+                    </p>
+                  </div>
+                  {(previewingLesson.citationUrl || previewingLesson.citation_url) && (
+                    <a
+                      href={previewingLesson.citationUrl || previewingLesson.citation_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-black text-emerald-700 hover:bg-emerald-50 shrink-0 dark:border-emerald-800 dark:bg-slate-900 dark:text-emerald-300 transition"
+                    >
+                      <Link2 className="h-3.5 w-3.5" />
+                      Source Link
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between border-t pt-4 text-xs font-bold text-slate-400 dark:border-slate-800">
               <span>Module: {previewingLesson.module}</span>

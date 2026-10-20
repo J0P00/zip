@@ -698,6 +698,8 @@ const toClientLesson = (row) => ({
     learningObjectives: row.learning_objectives || [],
     status: row.status || "Draft",
     metadata: row.metadata || {},
+    citationText: row.metadata?.citationText || row.metadata?.citation_text || "",
+    citationUrl: row.metadata?.citationUrl || row.metadata?.citation_url || "",
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -3257,6 +3259,14 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
             ? storageMarker(storageKey)
             : cleanText(body.videoUrl || body.video_url || "", 2000);
 
+        const metadata = body.metadata && typeof body.metadata === "object" ? { ...body.metadata } : {};
+        if (body.citationText || body.citation_text) {
+            metadata.citationText = cleanText(body.citationText || body.citation_text || "", 1000);
+        }
+        if (body.citationUrl || body.citation_url) {
+            metadata.citationUrl = cleanText(body.citationUrl || body.citation_url || "", 2000);
+        }
+
         const result = await pool.query(`
             INSERT INTO lessons (id, title, module, sequence, duration, video_url, description, learning_objectives, status, metadata, storage_provider, storage_key, storage_content_type, storage_size)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14)
@@ -3271,7 +3281,7 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
             cleanText(body.description || "", 5000),
             JSON.stringify(objectives),
             cleanText(body.status || "Draft", 40),
-            JSON.stringify(body.metadata && typeof body.metadata === "object" ? body.metadata : {}),
+            JSON.stringify(metadata),
             storageProvider || null,
             storageKey || null,
             storageContentType || null,
@@ -3324,6 +3334,20 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
             sequence = seqCheck.value;
         }
 
+        let updatedMetadata = null;
+        if (body.metadata !== undefined || body.citationText !== undefined || body.citation_text !== undefined || body.citationUrl !== undefined || body.citation_url !== undefined) {
+            const currentRes = await pool.query("SELECT metadata FROM lessons WHERE id = $1", [lessonId]);
+            const existingMeta = currentRes.rows[0]?.metadata && typeof currentRes.rows[0].metadata === "object" ? currentRes.rows[0].metadata : {};
+            const inputMeta = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
+            updatedMetadata = { ...existingMeta, ...inputMeta };
+            if (body.citationText !== undefined || body.citation_text !== undefined) {
+                updatedMetadata.citationText = cleanText(body.citationText || body.citation_text || "", 1000);
+            }
+            if (body.citationUrl !== undefined || body.citation_url !== undefined) {
+                updatedMetadata.citationUrl = cleanText(body.citationUrl || body.citation_url || "", 2000);
+            }
+        }
+
         const result = await pool.query(`
             UPDATE lessons SET
               title = COALESCE($2, title),
@@ -3352,7 +3376,7 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
             body.description === undefined ? null : cleanText(body.description || "", 5000),
             objectives === undefined ? null : JSON.stringify(objectives),
             body.status === undefined ? null : cleanText(body.status || "Draft", 40),
-            body.metadata === undefined ? null : JSON.stringify(body.metadata && typeof body.metadata === "object" ? body.metadata : {}),
+            updatedMetadata === null ? null : JSON.stringify(updatedMetadata),
             storageProvider,
             storageKey,
             storageContentType,
