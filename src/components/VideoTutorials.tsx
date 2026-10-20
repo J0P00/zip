@@ -16,7 +16,7 @@ import {
 import { AuthenticatedUser, StudentSubView, VideoLesson } from '../types';
 import { OOP_ASSESSMENTS } from '../data/oopCourse';
 import { PRACTICE_CHALLENGES } from '../oopPracticeCatalog';
-import { practiceApi, progressApi } from '../services/api';
+import { getYouTubeVideoId, practiceApi, progressApi } from '../services/api';
 import type { StudentResultsData, StudentTopicResult } from '../services/interpretation';
 import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 
@@ -90,6 +90,8 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const [activeLessonId, setActiveLessonId] = useState(firstAvailable?.id || '');
   const activeLesson = lessons.find(lesson => lesson.id === activeLessonId) || firstAvailable;
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const youtubeContainerRef = useRef<HTMLDivElement | null>(null);
+  const youtubePlayerRef = useRef<any>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const previousLessonIdRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -100,6 +102,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [videoError, setVideoError] = useState(false);
+  const youtubeVideoId = activeLesson ? getYouTubeVideoId(activeLesson.videoUrl) : '';
   const lastProgressPersistRef = useRef(0);
   const watchDbRef = useRef<WatchDb>({});
   const pendingProgressRef = useRef<Record<string, { lessonId: string; position: number; duration: number; percentage: number; completed: boolean }>>({});
@@ -174,6 +177,70 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     videoRef.current.muted = isMuted;
     videoRef.current.playbackRate = playbackRate;
   }, [volume, isMuted, playbackRate, activeLesson?.id]);
+
+  useEffect(() => {
+    if (!youtubeVideoId || !youtubeContainerRef.current || !activeLesson) return;
+    let cancelled = false;
+    const createPlayer = () => {
+      if (cancelled || !youtubeContainerRef.current || !(window as any).YT?.Player) return;
+      youtubePlayerRef.current?.destroy?.();
+      youtubePlayerRef.current = new (window as any).YT.Player(youtubeContainerRef.current, {
+        videoId: youtubeVideoId,
+        playerVars: { playsinline: 1, rel: 0 },
+        events: {
+          onReady: (event: any) => {
+            const nextDuration = Number(event.target.getDuration() || 0);
+            setDuration(nextDuration);
+            const resumeAt = watchDb[activeLesson.id]?.lastPosition || 0;
+            if (resumeAt > 0) event.target.seekTo(resumeAt, true);
+          },
+          onStateChange: (event: any) => {
+            const playing = (window as any).YT.PlayerState.PLAYING;
+            const ended = (window as any).YT.PlayerState.ENDED;
+            setIsPlaying(event.data === playing);
+            if (event.data === ended) {
+              const total = Number(event.target.getDuration() || 0);
+              persistProgress(total, total, true);
+            }
+          },
+          onError: () => { setIsPlaying(false); setVideoError(true); }
+        }
+      });
+    };
+    if ((window as any).YT?.Player) createPlayer();
+    else {
+      const prior = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+      if (!prior) {
+        const script = document.createElement('script');
+        script.src = 'https://www.youtube.com/iframe_api';
+        document.body.appendChild(script);
+      }
+      const poll = window.setInterval(() => { if ((window as any).YT?.Player) { window.clearInterval(poll); createPlayer(); } }, 100);
+      window.setTimeout(() => window.clearInterval(poll), 10000);
+    }
+    return () => { cancelled = true; youtubePlayerRef.current?.destroy?.(); youtubePlayerRef.current = null; };
+  }, [youtubeVideoId, activeLesson?.id]);
+
+  useEffect(() => {
+    if (!youtubePlayerRef.current || !youtubeVideoId) return;
+    const timer = window.setInterval(() => {
+      const player = youtubePlayerRef.current;
+      if (!player?.getCurrentTime) return;
+      const position = Number(player.getCurrentTime() || 0);
+      const nextDuration = Number(player.getDuration() || duration || 0);
+      setCurrentTime(position);
+      setDuration(nextDuration);
+      setMaxWatchedTime(value => Math.max(value, position));
+      if (player.getPlayerState?.() === (window as any).YT?.PlayerState?.PLAYING) {
+        const now = Date.now();
+        if (now - lastProgressPersistRef.current >= 2000) {
+          lastProgressPersistRef.current = now;
+          persistProgress(position, nextDuration);
+        }
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [youtubeVideoId, duration, activeLesson?.id]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -287,7 +354,8 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const handleSeek = (event: React.ChangeEvent<HTMLInputElement>) => {
     const requestedTime = Number(event.target.value);
     const allowedTime = Math.min(requestedTime, maxWatchedTime + 5, duration || requestedTime);
-    if (videoRef.current) videoRef.current.currentTime = allowedTime;
+    if (youtubePlayerRef.current && youtubeVideoId) youtubePlayerRef.current.seekTo(allowedTime, true);
+    else if (videoRef.current) videoRef.current.currentTime = allowedTime;
     setCurrentTime(allowedTime);
   };
 
@@ -349,7 +417,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
         <section className="lg:col-span-8">
           <div ref={shellRef} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-950 shadow-sm sm:rounded-2xl">
             <div className="relative aspect-video bg-black">
-              <video
+              {youtubeVideoId ? <div ref={youtubeContainerRef} className="h-full w-full" aria-label="YouTube video player" /> : <video
                 key={activeLesson.id}
                 ref={videoRef}
                 src={activeLesson.videoUrl}
@@ -375,7 +443,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                   setIsPlaying(false);
                   if (videoRef.current) persistProgress(videoRef.current.duration, videoRef.current.duration, true);
                 }}
-              />
+              />}
               {videoError && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/75 p-6 text-center text-white">
                   <p className="text-sm font-bold">Video unavailable. Please try again.</p>
@@ -394,11 +462,16 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 />
                 <div className="mt-2 flex flex-col gap-2 text-white sm:mt-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
                   <div className="flex min-w-0 items-center gap-2">
-                    <button onClick={() => setIsPlaying(value => !value)} className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Play or pause">
+                    <button onClick={() => {
+                      if (youtubePlayerRef.current && youtubeVideoId) {
+                        if (isPlaying) youtubePlayerRef.current.pauseVideo(); else youtubePlayerRef.current.playVideo();
+                      } else setIsPlaying(value => !value);
+                    }} className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Play or pause">
                       {isPlaying ? <Pause className="h-4 w-4 fill-white" /> : <Play className="h-4 w-4 fill-white" />}
                     </button>
                     <button onClick={() => {
-                      if (videoRef.current) videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+                      if (youtubePlayerRef.current && youtubeVideoId) youtubePlayerRef.current.seekTo(Math.max(0, currentTime - 10), true);
+                      else if (videoRef.current) videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
                     }} className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Rewind 10 seconds">
                       <RotateCcw className="h-4 w-4" />
                     </button>

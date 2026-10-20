@@ -35,6 +35,32 @@ export const setAuthToken = (token: string) => {
   }
 };
 
+export const getYouTubeVideoId = (value: string) => {
+  try {
+    const url = new URL(value);
+    if (url.hostname === 'youtu.be') return url.pathname.slice(1).split('/')[0] || '';
+    if (url.hostname.endsWith('youtube.com')) {
+      if (url.pathname === '/watch') return url.searchParams.get('v') || '';
+      if (url.pathname.startsWith('/embed/')) return url.pathname.split('/')[2] || '';
+      if (url.pathname.startsWith('/shorts/')) return url.pathname.split('/')[2] || '';
+    }
+  } catch { /* invalid URLs are handled by validateVideoUrl */ }
+  return '';
+};
+
+export const validateVideoUrl = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return 'Video URL is required.';
+  if (trimmed.startsWith('/')) return null; // legacy authorized local playback URL
+  try {
+    const url = new URL(trimmed);
+    if (!['http:', 'https:'].includes(url.protocol)) return 'Use an http:// or https:// video URL.';
+    return null;
+  } catch {
+    return 'Enter a valid video URL.';
+  }
+};
+
 type RequestOptions = RequestInit & {
   token?: string;
 };
@@ -307,41 +333,6 @@ export const storageApi = {
       };
     }>('/api/videos/storage-status')
 };
-
-export const uploadLessonVideo = (
-  file: File,
-  lessonId: string,
-  onProgress: (progress: number) => void
-) => new Promise<{
-  provider: 'local';
-  key: string;
-  contentType: string;
-  fileSize: number;
-  storageReference: string;
-}>((resolve, reject) => {
-  const body = new FormData();
-  body.append('lessonId', lessonId);
-  body.append('video', file, file.name);
-  const request = new XMLHttpRequest();
-  request.open('POST', `${API_BASE_URL}/api/videos/upload`);
-  const token = getAuthToken();
-  if (token) request.setRequestHeader('Authorization', `Bearer ${token}`);
-  request.upload.onprogress = event => {
-    if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-  };
-  request.onerror = () => reject(new Error('Video upload could not be completed.'));
-  request.onabort = () => reject(new Error('Video upload was cancelled.'));
-  request.onload = () => {
-    let response: any = null;
-    try { response = JSON.parse(request.responseText); } catch { /* handled below */ }
-    if (request.status >= 200 && request.status < 300 && response?.data) {
-      resolve(response.data);
-      return;
-    }
-    reject(new Error(response?.message || `Video upload failed (HTTP ${request.status}).`));
-  };
-  request.send(body);
-});
 
 export const resourceApi = {
   list: (lessonId?: string) => {

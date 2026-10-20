@@ -189,6 +189,17 @@ const evaluateJavaSubmission = async (challenge, sourceCode) => {
 };
 
 const cleanText = (value, maxLength = 255) => String(value ?? "").trim().slice(0, maxLength);
+const isValidVideoUrl = value => {
+    const trimmed = cleanText(value, 2000);
+    if (!trimmed) return false;
+    if (trimmed.startsWith("/")) return true;
+    try {
+        const parsed = new URL(trimmed);
+        return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch {
+        return false;
+    }
+};
 
 const STORAGE_PROVIDER = "local";
 const configuredMaxVideoSize = Number(process.env.LOCAL_VIDEO_MAX_BYTES);
@@ -3445,10 +3456,17 @@ app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, 
         if (!title || !videoUrl || !lessonId) {
             return res.status(400).json({ success: false, message: "Title, video URL, and lesson association are required." });
         }
+        if (!isValidVideoUrl(videoUrl)) return res.status(400).json({ success: false, message: "Enter a valid http(s) video URL." });
         if (storageProvider && storageProvider !== STORAGE_PROVIDER) return res.status(400).json({ success: false, message: "Unsupported storage provider." });
         if (storageProvider === STORAGE_PROVIDER) {
             validateVideoUpload({ contentType: storageContentType, fileSize: storageSize });
             await assertStorageObject(storageKey, storageContentType, storageSize, req.authUser.id);
+        }
+        const submittedVideoUrl = body.videoUrl === undefined && body.video_url === undefined
+            ? null
+            : cleanText(body.videoUrl || body.video_url || "", 2000);
+        if (submittedVideoUrl !== null && !isValidVideoUrl(submittedVideoUrl)) {
+            return res.status(400).json({ success: false, message: "Enter a valid http(s) video URL." });
         }
 
         const id = cleanText(body.id || `vid_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, 120);
@@ -3511,6 +3529,12 @@ app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, re
             validateVideoUpload({ contentType: storageContentType, fileSize: storageSize });
             await assertStorageObject(storageKey, storageContentType, storageSize, req.authUser.id);
         }
+        const submittedVideoUrl = body.videoUrl === undefined && body.video_url === undefined
+            ? null
+            : cleanText(body.videoUrl || body.video_url || "", 2000);
+        if (submittedVideoUrl !== null && !isValidVideoUrl(submittedVideoUrl)) {
+            return res.status(400).json({ success: false, message: "Enter a valid http(s) video URL." });
+        }
         const result = await pool.query(`
             UPDATE lesson_videos SET
               lesson_id = COALESCE($2, lesson_id),
@@ -3522,10 +3546,10 @@ app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, re
               status = COALESCE($8, status),
               cloudinary_public_id = COALESCE($9, cloudinary_public_id),
               cloudinary_resource_type = COALESCE($10, cloudinary_resource_type),
-              storage_provider = COALESCE($11, storage_provider),
-              storage_key = COALESCE($12, storage_key),
-              storage_content_type = COALESCE($13, storage_content_type),
-              storage_size = COALESCE($14, storage_size),
+              storage_provider = CASE WHEN $11 = '' THEN NULL ELSE COALESCE($11, storage_provider) END,
+              storage_key = CASE WHEN $12 = '' THEN NULL ELSE COALESCE($12, storage_key) END,
+              storage_content_type = CASE WHEN $13 = '' THEN NULL ELSE COALESCE($13, storage_content_type) END,
+              storage_size = CASE WHEN $14 IS NULL THEN NULL ELSE COALESCE($14, storage_size) END,
               updated_at = NOW()
             WHERE id = $1
             RETURNING *
@@ -3547,6 +3571,12 @@ app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, re
         ]);
 
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Video not found." });
+        if (submittedVideoUrl !== null) {
+            await pool.query(
+                "UPDATE lessons SET video_url = $2, storage_provider = NULL, storage_key = NULL, storage_content_type = NULL, storage_size = NULL, updated_at = NOW() WHERE id = $1",
+                [result.rows[0].lesson_id, submittedVideoUrl]
+            );
+        }
         res.json({ success: true, data: toClientVideo(result.rows[0]) });
     } catch (error) {
         next(error);

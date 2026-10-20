@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlayCircle,
   Plus,
@@ -18,7 +18,7 @@ import {
   Video
 } from 'lucide-react';
 import { ManagedVideo, ManagedLesson } from '../../types';
-import { API_BASE_URL, getAuthToken, videoApi, lessonApi } from '../../services/api';
+import { API_BASE_URL, validateVideoUrl, videoApi, lessonApi } from '../../services/api';
 import { OOP_COURSE_LESSONS } from '../../data/oopCourse';
 
 interface VideoManagementTabProps {
@@ -35,13 +35,6 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
   const [statusFilter, setStatusFilter] = useState<'All' | 'Published' | 'Draft' | 'Archived'>('All');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [videoSource, setVideoSource] = useState<'link' | 'upload'>('link');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedDuration, setSelectedDuration] = useState(0);
-  const [previewUrl, setPreviewUrl] = useState('');
-  const [isDraggingFile, setIsDraggingFile] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -57,15 +50,6 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
     description: '',
     status: 'Published' as 'Draft' | 'Published' | 'Archived'
   });
-
-  const MAX_VIDEO_SIZE = 25 * 1024 * 1024;
-  const SUPPORTED_VIDEO_TYPES = ['video/mp4'];
-
-  useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
 
   const cardClass = isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900';
   const inputClass = isDark
@@ -150,8 +134,6 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
       description: '',
       status: 'Published'
     });
-    setVideoSource('link');
-    clearSelectedFile();
     setIsCreateOpen(true);
   };
 
@@ -164,68 +146,6 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
       description: v.description,
       status: v.status
     });
-    setVideoSource('link');
-    clearSelectedFile();
-  };
-
-  const clearSelectedFile = () => {
-    setSelectedFile(null);
-    setSelectedDuration(0);
-    setPreviewUrl('');
-    setUploadProgress(0);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const formatDuration = (seconds: number) => {
-    if (!Number.isFinite(seconds) || seconds <= 0) return '';
-    const total = Math.round(seconds);
-    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-  };
-
-  const handleFileChange = (file: File | undefined) => {
-    if (!file) return;
-    const extension = file.name.split('.').pop()?.toLowerCase();
-    const supported = SUPPORTED_VIDEO_TYPES.includes(file.type) && extension === 'mp4';
-    if (!supported) {
-      setFeedback({ type: 'error', message: 'Unsupported video format. Upload an MP4 file with an .mp4 extension.' });
-      clearSelectedFile();
-      return;
-    }
-    if (file.size > MAX_VIDEO_SIZE) {
-      setFeedback({ type: 'error', message: 'Video files must be 25 MB or smaller.' });
-      clearSelectedFile();
-      return;
-    }
-    setFeedback(null);
-    setSelectedFile(file);
-    setPreviewUrl(URL.createObjectURL(file));
-  };
-
-  const uploadToStorage = async (file: File) => {
-    const body = new FormData();
-    body.append('lessonId', formData.lessonId);
-    body.append('video', file, file.name);
-    return new Promise<any>((resolve, reject) => {
-      const request = new XMLHttpRequest();
-      request.open('POST', `${API_BASE_URL}/api/videos/upload`);
-      const token = getAuthToken();
-      if (token) request.setRequestHeader('Authorization', `Bearer ${token}`);
-      request.upload.onprogress = event => {
-        if (event.lengthComputable) setUploadProgress(Math.round((event.loaded / event.total) * 100));
-      };
-      request.onerror = () => reject(new Error('Video upload could not be completed.'));
-      request.onabort = () => reject(new Error('Video upload was cancelled.'));
-      request.onload = () => {
-        if (request.status >= 200 && request.status < 300) {
-          try { resolve(JSON.parse(request.responseText)); } catch { reject(new Error('The backend returned an invalid upload response.')); }
-        } else {
-          let message = `Video upload failed (HTTP ${request.status}).`;
-          try { message = JSON.parse(request.responseText)?.message || message; } catch { /* use fallback */ }
-          reject(new Error(message));
-        }
-      };
-      request.send(body);
-    });
   };
 
   const handleSaveVideo = async (e: React.FormEvent) => {
@@ -237,32 +157,18 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
     }
 
     setIsSaving(true);
-    setUploadProgress(0);
     try {
       let videoUrl = formData.videoUrl.trim();
-      let duration = '';
-      let storageProvider = '';
-      let storageKey = '';
-      let storageContentType = '';
-      let storageSize: number | null = null;
-      if (videoSource === 'upload') {
-        if (!selectedFile) throw new Error('Choose a video file before saving.');
-        const uploaded = await uploadToStorage(selectedFile);
-        videoUrl = uploaded.data.storageReference;
-        storageProvider = uploaded.data.provider;
-        storageKey = uploaded.data.key;
-        storageContentType = uploaded.data.contentType;
-        storageSize = uploaded.data.fileSize;
-        duration = formatDuration(Number(selectedDuration || 0));
-      } else if (!videoUrl) {
-        throw new Error('Video URL is required.');
-      }
+      const urlError = validateVideoUrl(videoUrl);
+      if (urlError) throw new Error(urlError);
 
       const payload = {
         ...formData,
         videoUrl,
-        duration,
-        ...(storageProvider ? { storageProvider, storageKey, storageContentType, storageSize } : {})
+        storageProvider: '',
+        storageKey: '',
+        storageContentType: '',
+        storageSize: null
       };
       if (editingVideo) {
         await videoApi.update(editingVideo.id, payload);
@@ -273,7 +179,6 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
         setFeedback({ type: 'success', message: `Video "${formData.title}" added successfully.` });
         setIsCreateOpen(false);
       }
-      clearSelectedFile();
       loadData();
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Failed to save video.' });
@@ -497,7 +402,6 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
                 onClick={() => {
                   setIsCreateOpen(false);
                   setEditingVideo(null);
-                  clearSelectedFile();
                 }}
                 className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
@@ -542,39 +446,24 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
                 <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
                   Video Source *
                 </label>
-                <div className={`flex rounded-xl border p-1 ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-50'}`}>
-                  <button
-                    type="button"
-                    onClick={() => setVideoSource('link')}
-                    className={`flex-1 rounded-lg px-3 py-2 text-xs font-black transition ${videoSource === 'link' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}
-                  >
-                    Video Link
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVideoSource('upload')}
-                    className={`flex-1 rounded-lg px-3 py-2 text-xs font-black transition ${videoSource === 'upload' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}
-                  >
-                    Upload from Device
-                  </button>
-                </div>
+                <div className={`rounded-xl border px-3 py-2 text-xs font-black ${isDark ? 'border-slate-800 bg-slate-950 text-indigo-300' : 'border-slate-200 bg-slate-50 text-indigo-700'}`}>Video Link</div>
               </div>
 
-              {videoSource === 'link' ? (
-                <div>
+              <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
                     Video URL *
                   </label>
                   <input
-                    type="text"
+                    type="url"
                     required
-                    placeholder="https://www.youtube.com/watch?v=... or /videos/lesson1.mp4"
+                    placeholder="https://www.youtube.com/watch?v=... or a supported video URL"
                     value={formData.videoUrl}
                     onChange={e => setFormData({ ...formData, videoUrl: e.target.value })}
                     className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
                   />
                 </div>
-              ) : (
+              {/* Local file upload UI intentionally removed; URL links are the only active source.
+              {false && (
                 <div>
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">
                     Video File *
@@ -633,7 +522,7 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
                     </div>
                   )}
                 </div>
-              )}
+              )} */}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
@@ -671,7 +560,6 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
                   onClick={() => {
                     setIsCreateOpen(false);
                     setEditingVideo(null);
-                    clearSelectedFile();
                   }}
                   className="rounded-xl px-4 py-2 text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
@@ -682,7 +570,7 @@ export default function VideoManagementTab({ theme = 'light' }: VideoManagementT
                   disabled={isSaving}
                   className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-black text-white hover:bg-indigo-700 shadow-sm transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isSaving ? (videoSource === 'upload' ? 'Uploading…' : 'Saving…') : (editingVideo ? 'Save Changes' : 'Add Video')}
+                  {isSaving ? 'Saving…' : (editingVideo ? 'Save Changes' : 'Add Video')}
                 </button>
               </div>
             </form>

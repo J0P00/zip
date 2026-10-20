@@ -11,11 +11,11 @@ This project is a React/TypeScript learning hub with an Express/PostgreSQL backe
 - `src/services/interpretation.ts` and `src/services/recommendationEngine.ts` contain the rule-based learning engines.
 - `backend/server.js` is the active Express API and PostgreSQL integration; `backend/oop_course_schema.sql` defines the database schema.
 
-### Temporary local video uploads
+### URL-based video tutorials
 
-Teacher video uploads are sent as `multipart/form-data` to the Render backend and stored under `backend/uploads/videos` by default. Only MP4 files up to 25 MB are accepted. The maximum can be changed on the backend with `LOCAL_VIDEO_MAX_BYTES`; the storage directory can be changed with `LOCAL_VIDEO_DIR`.
+New lesson and video records use validated `http(s)` video URLs. YouTube URLs are rendered through the YouTube player API so progress is recorded from real playback events; native HTML5 video URLs retain the existing event-based progress tracking. Providers that do not expose supported playback events are shown as links and are not marked complete automatically.
 
-This is demonstration storage only. Render's default filesystem is ephemeral, so uploaded videos may disappear after restarts, redeployments, or instance replacement. No AWS S3, Cloudinary, or Supabase credentials are required for this flow.
+The database still retains legacy local-storage columns and the authorized playback route so historical records are not invalidated. The teacher workflow no longer presents or calls the local-file upload flow. New uploads are not persistent storage and no AWS S3, Cloudinary, or Supabase credentials are required for URL-based tutorials.
 
 Student monitoring uses the selected student's canonical `id`, falling back to `userId` and then email. The backend resolves that value to `users.id` before querying progress and assessment data.
 
