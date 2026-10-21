@@ -14,6 +14,7 @@ const { promisify } = require("util");
 const jwt = require("jsonwebtoken");
 const pool = require("./db");
 const { OOP_PARSED_QUESTIONS, ALL_OOP_QUESTIONS, TOPIC_NAMES, generatePreTestSessionQuestions } = require("./questionBank");
+const { buildOopTopicNameMap, computeOopTopicPerformance } = require("./oopTopicPerformance");
 const { ACTIVE_OOP_PRACTICE_CHALLENGES, ACTIVE_OOP_PRACTICE_IDS } = require("./oopPracticeCatalog");
 const {
     SWING_PASSING_SCORE,
@@ -5119,23 +5120,10 @@ app.get("/api/teacher/analytics", requireAuth, requireRole(["teacher"]), async (
             distributionBuckets[key].percentage = Math.round((distributionBuckets[key].count / ratedStudentsCount) * 100);
         }
 
-        // Topic performance across all 12 OOP topics
-        const topicPerformance = Object.keys(TOPIC_NAMES).map(topicId => {
-            const attempts = quizOnlyLessons.filter(q => q.lesson_id === topicId);
-            const count = attempts.length;
-            const avgScore = count > 0 ? Math.round(attempts.reduce((a, b) => a + Number(b.percentage || 0), 0) / count) : 0;
-            const passCount = attempts.filter(q => q.passed || Number(q.percentage || 0) >= ASSESSMENT_PASSING_SCORE).length;
-            const passRate = count > 0 ? Math.round((passCount / count) * 100) : 0;
-            const status = avgScore >= 75 ? "Strong" : avgScore >= 60 ? "Average" : "Struggling";
-            return {
-                topicId,
-                topicName: TOPIC_NAMES[topicId],
-                attemptCount: count,
-                averageScore: avgScore,
-                passRate,
-                status
-            };
-        });
+        // Topic performance across the 12 canonical OOP lessons, keyed by stable lesson ID
+        // (quiz_attempts.lesson_id) and labeled with the lesson titles shown in Teacher Lesson Management.
+        const oopTopicNames = buildOopTopicNameMap(lessonsQuery.rows);
+        const topicPerformance = computeOopTopicPerformance(quizOnlyLessons, lessonsQuery.rows);
 
         // Pre-test vs Post-test comparison per student
         const prePostComparison = allStudents.map(s => {
@@ -5171,7 +5159,7 @@ app.get("/api/teacher/analytics", requireAuth, requireRole(["teacher"]), async (
             // Check criterion 1: Repeated quiz failures (>= 2 failed attempts or failing latest attempt)
             const failedAttempts = studentQuizzes.filter(q => !q.passed && Number(q.percentage || 0) < 60);
             if (failedAttempts.length >= 2) {
-                const failedLessons = [...new Set(failedAttempts.map(q => TOPIC_NAMES[q.lesson_id] || q.lesson_id))];
+                const failedLessons = [...new Set(failedAttempts.map(q => oopTopicNames[q.lesson_id] || TOPIC_NAMES[q.lesson_id] || q.lesson_id))];
                 reasons.push(`Repeated assessment difficulty in: ${failedLessons.join(", ")}`);
                 recommendation = `Provide targeted 1-on-1 pedagogical review for ${failedLessons[0] || 'core OOP'}.`;
             }
@@ -5329,7 +5317,7 @@ app.get("/api/teacher/analytics/student/:studentId", requireAuth, requireRole(["
                 recentQuizAttempts: quizzes.rows.slice(0, 10).map(q => ({
                     id: q.id,
                     lessonId: q.lesson_id,
-                    topicName: TOPIC_NAMES[q.lesson_id] || q.lesson_id,
+                    topicName: buildOopTopicNameMap(lessons.rows)[q.lesson_id] || TOPIC_NAMES[q.lesson_id] || q.lesson_id,
                     score: Number(q.score),
                     total: Number(q.total),
                     percentage: Number(q.percentage),

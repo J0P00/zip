@@ -41,7 +41,7 @@ export default function LearningAnalyticsTab({ theme = 'light' }: LearningAnalyt
   const selectedStudentIdRef = useRef<string | null>(null);
 
   // Filter for topic matrix
-  const [topicFilter, setTopicFilter] = useState<'All' | 'Strong' | 'Average' | 'Struggling'>('All');
+  const [topicFilter, setTopicFilter] = useState<'All' | 'Strong' | 'Average' | 'Struggling' | 'Not Assessed'>('All');
 
   const cardClass = isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900';
 
@@ -89,8 +89,12 @@ export default function LearningAnalyticsTab({ theme = 'light' }: LearningAnalyt
 
   const filteredTopics = useMemo(() => {
     if (!analytics?.topicPerformance) return [];
-    if (topicFilter === 'All') return analytics.topicPerformance;
-    return analytics.topicPerformance.filter(t => t.status === topicFilter);
+    // Defensive de-duplication by stable lesson ID (one row per OOP lesson).
+    const uniqueTopics = analytics.topicPerformance.filter(
+      (topic, index, all) => all.findIndex(other => other.topicId === topic.topicId) === index
+    );
+    if (topicFilter === 'All') return uniqueTopics;
+    return uniqueTopics.filter(t => t.status === topicFilter);
   }, [analytics, topicFilter]);
 
   if (isLoading && !analytics) {
@@ -351,6 +355,7 @@ export default function LearningAnalyticsTab({ theme = 'light' }: LearningAnalyt
               <option value="Strong">Strong (&ge;75%)</option>
               <option value="Average">Average (60-74%)</option>
               <option value="Struggling">Struggling (&lt;60%)</option>
+              <option value="Not Assessed">Not Assessed (no attempts)</option>
             </select>
           </div>
         </div>
@@ -367,35 +372,48 @@ export default function LearningAnalyticsTab({ theme = 'light' }: LearningAnalyt
               </tr>
             </thead>
             <tbody className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-slate-100'}`}>
-              {filteredTopics.map(topic => (
+              {filteredTopics.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-10 text-center text-slate-400 font-bold">
+                    No OOP topics match this mastery level.
+                  </td>
+                </tr>
+              )}
+              {filteredTopics.map((topic, index) => {
+                const notAssessed = topic.status === 'Not Assessed' || topic.attemptCount === 0;
+                return (
                 <tr key={topic.topicId} className={`transition ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50/70'}`}>
                   <td className="px-4 py-3 font-black text-slate-900 dark:text-white">
+                    <span className="mr-2 font-mono text-[10px] text-slate-400">#{topic.sequence ?? index + 1}</span>
                     {topic.topicName}
                   </td>
                   <td className="px-4 py-3 text-center font-mono font-bold text-slate-500">
                     {topic.attemptCount}
                   </td>
                   <td className="px-4 py-3 text-center font-mono font-black">
-                    {topic.averageScore}%
+                    {notAssessed || topic.averageScore === null ? <span className="text-slate-400">No data</span> : `${topic.averageScore}%`}
                   </td>
                   <td className="px-4 py-3 text-center font-mono font-bold">
-                    {topic.passRate}%
+                    {notAssessed || topic.passRate === null ? <span className="text-slate-400">No data</span> : `${topic.passRate}%`}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase ${
-                        topic.status === 'Strong'
+                        notAssessed
+                          ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                          : topic.status === 'Strong'
                           ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
                           : topic.status === 'Average'
                           ? 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300'
                           : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
                       }`}
                     >
-                      {topic.status}
+                      {notAssessed ? 'Not Assessed' : topic.status}
                     </span>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

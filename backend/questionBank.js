@@ -3286,17 +3286,17 @@ const OOP_PARSED_QUESTIONS = {
 };
 
 const TOPIC_NAMES = {
-  oop_lesson_1: "Object & Classes",
+  oop_lesson_1: "Classes & Objects",
   oop_lesson_2: "Constructors",
   oop_lesson_3: "Object Methods",
-  oop_lesson_4: "Inheritance",
-  oop_lesson_5: "Method Overriding",
-  oop_lesson_6: "Abstract Class",
-  oop_lesson_7: "Interface",
-  oop_lesson_8: "Abstraction",
-  oop_lesson_9: "Abstraction (Interfaces)",
-  oop_lesson_10: "Array of Objects",
-  oop_lesson_11: "Enum",
+  oop_lesson_4: "Encapsulation",
+  oop_lesson_5: "Constructor Overloading",
+  oop_lesson_6: "Inheritance",
+  oop_lesson_7: "Polymorphism",
+  oop_lesson_8: "Abstract Classes",
+  oop_lesson_9: "Interfaces / Abstraction",
+  oop_lesson_10: "Interfaces",
+  oop_lesson_11: "Array of Objects",
   oop_lesson_12: "Enum"
 };
 

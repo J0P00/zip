@@ -701,11 +701,13 @@ export interface TeacherCourseAnalytics {
   scoreDistribution: Record<string, { label: string; count: number; percentage: number }>;
   topicPerformance: Array<{
     topicId: string;
+    lessonId?: string;
+    sequence?: number;
     topicName: string;
     attemptCount: number;
-    averageScore: number;
-    passRate: number;
-    status: 'Strong' | 'Average' | 'Struggling';
+    averageScore: number | null;
+    passRate: number | null;
+    status: 'Strong' | 'Average' | 'Struggling' | 'Not Assessed';
   }>;
   prePostComparison: Array<{
     studentId: string;
