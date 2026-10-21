@@ -20,6 +20,7 @@ import {
 import { LearningResource, ManagedLesson } from '../../types';
 import { resourceApi, lessonApi } from '../../services/api';
 import { OOP_COURSE_LESSONS } from '../../data/oopCourse';
+import { JAVA_SWING_LESSONS, JAVA_SWING_VIDEOS } from '../../data/javaSwingCourse';
 
 interface ResourceManagementTabProps {
   theme?: 'light' | 'dark';
@@ -60,6 +61,35 @@ export default function ResourceManagementTab({ theme = 'light' }: ResourceManag
     setIsLoading(true);
     try {
       // 1. Lessons
+      const fallbackLessons: ManagedLesson[] = [
+        ...OOP_COURSE_LESSONS.map((l, i) => ({
+          id: l.id,
+          title: l.title,
+          module: 'Object-Oriented Programming (Java)',
+          courseId: 'oop_course_java',
+          sequence: l.sequence || i + 1,
+          duration: l.duration || '10:00',
+          videoUrl: l.videoUrl,
+          description: l.description,
+          learningObjectives: l.concepts || [],
+          status: 'Published' as const
+        })),
+        ...JAVA_SWING_LESSONS.map((l, i) => {
+          const swingVid = JAVA_SWING_VIDEOS.find(v => v.lessonId === l.id);
+          return {
+            id: l.id,
+            title: l.title,
+            module: 'Java Swing',
+            courseId: 'java_swing',
+            sequence: 12 + (l.sequence || i + 1),
+            duration: swingVid?.duration || '15:00',
+            videoUrl: swingVid?.embedUrl || '',
+            description: l.introduction || l.summary || '',
+            learningObjectives: l.objectives || [],
+            status: 'Published' as const
+          };
+        })
+      ];
       const lessonRes = await lessonApi.list();
       let lessonList: ManagedLesson[] = [];
       if (lessonRes.data && Array.isArray(lessonRes.data) && lessonRes.data.length > 0) {
@@ -75,19 +105,14 @@ export default function ResourceManagementTab({ theme = 'light' }: ResourceManag
           learningObjectives: [],
           status: l.status || 'Published'
         }));
+        const existingIds = new Set(lessonList.map(item => item.id));
+        for (const baseLesson of fallbackLessons) {
+          if (!existingIds.has(baseLesson.id)) {
+            lessonList.push(baseLesson);
+          }
+        }
       } else {
-        lessonList = OOP_COURSE_LESSONS.map((l, i) => ({
-          id: l.id,
-          title: l.title,
-          module: 'Object-Oriented Programming (Java)',
-          courseId: 'oop_course_java',
-          sequence: l.sequence || i + 1,
-          duration: l.duration || '10:00',
-          videoUrl: l.videoUrl,
-          description: l.description,
-          learningObjectives: l.concepts || [],
-          status: 'Published'
-        }));
+        lessonList = fallbackLessons;
       }
       setLessons(lessonList);
 

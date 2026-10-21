@@ -465,7 +465,16 @@ export default function App() {
           loadFallbackLessons();
           return;
         }
-        const normalizedLessons = backendLessons.map((lesson: any) => {
+        const oopBackendLessons = backendLessons.filter((lesson: any) => {
+          const id = String(lesson?.id || '').toLowerCase();
+          const courseId = String(lesson?.courseId || lesson?.course_id || '').toLowerCase();
+          return !id.startsWith('swing_lesson_') && courseId !== 'java_swing';
+        });
+        if (oopBackendLessons.length === 0) {
+          loadFallbackLessons();
+          return;
+        }
+        const normalizedLessons = oopBackendLessons.map((lesson: any) => {
           const fallback = OOP_COURSE_LESSONS.find(item => item.id === lesson.id);
           const rawBackendVideoUrl = lesson.videoUrl || lesson.video_url || '';
           const backendVideoUrl = lesson.storageProvider === 'local' && rawBackendVideoUrl.startsWith('/api/')

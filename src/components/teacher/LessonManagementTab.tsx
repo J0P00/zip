@@ -32,6 +32,14 @@ import { ManagedLesson } from '../../types';
 import { assessmentApi, lessonApi, practiceApi, validateVideoUrl, videoApi } from '../../services/api';
 import { OOP_COURSE_LESSONS, OOP_ASSESSMENTS } from '../../data/oopCourse';
 import { PRACTICE_CHALLENGES } from '../../data/practiceChallenges';
+import {
+  JAVA_SWING_LESSONS,
+  JAVA_SWING_VIDEOS,
+  JAVA_SWING_ASSESSMENTS,
+  JAVA_SWING_EXERCISES,
+  SWING_PASSING_PERCENTAGE
+} from '../../data/javaSwingCourse';
+import { ASSESSMENT_PASSING_SCORE } from '../../config/assessment';
 
 interface LessonManagementTabProps {
   theme?: 'light' | 'dark';
@@ -47,6 +55,9 @@ export interface AssessmentQuestionDraft {
     rationale?: string;
   }[];
   correctOptionId: string;
+  correctAnswer?: string;
+  explanation?: string;
+  difficulty?: string;
 }
 
 const DEFAULT_STARTER_CODE = `public class Main {
@@ -69,6 +80,173 @@ const createDefaultQuestion = (index = 1): AssessmentQuestionDraft => ({
   ],
   correctOptionId: 'opt_a'
 });
+
+const isSwingLessonItem = (lesson: { id?: string; courseId?: string; module?: string }): boolean => {
+  const id = String(lesson.id || '').toLowerCase();
+  const courseId = String(lesson.courseId || '').toLowerCase();
+  const mod = String(lesson.module || '').toLowerCase();
+  return id.startsWith('swing_lesson_') || courseId === 'java_swing' || mod.includes('swing');
+};
+
+const sortManagedLessons = (items: ManagedLesson[]): ManagedLesson[] => {
+  return [...items].sort((a, b) => {
+    const aSwing = isSwingLessonItem(a);
+    const bSwing = isSwingLessonItem(b);
+    if (aSwing !== bSwing) return aSwing ? 1 : -1;
+    if (a.sequence !== b.sequence) return a.sequence - b.sequence;
+    return String(a.id).localeCompare(String(b.id));
+  });
+};
+
+const normalizeQuestionDraft = (q: any, index: number): AssessmentQuestionDraft => {
+  const rawOptions = Array.isArray(q?.options) ? q.options : Array.isArray(q?.choices) ? q.choices : [];
+  const normalizedOptions = rawOptions.map((opt: any, optIdx: number) => {
+    const optId = `opt_${String.fromCharCode(97 + optIdx)}`;
+    if (typeof opt === 'string') {
+      return {
+        id: optId,
+        text: opt,
+        rationale: opt === q?.correctAnswer ? (q?.explanation || '') : ''
+      };
+    }
+    return {
+      id: opt?.id || optId,
+      text: opt?.text ?? String(opt ?? ''),
+      rationale: opt?.rationale || ''
+    };
+  });
+
+  const safeOptions = normalizedOptions.length > 0 ? normalizedOptions : createDefaultQuestion(index + 1).options;
+  let correctOptionId = q?.correctOptionId || '';
+  if (!correctOptionId && q?.correctAnswer) {
+    const matched = safeOptions.find((o: any) => o.text === q.correctAnswer);
+    if (matched) correctOptionId = matched.id;
+  }
+  if (!correctOptionId || !safeOptions.some((o: any) => o.id === correctOptionId)) {
+    correctOptionId = safeOptions[0]?.id || 'opt_a';
+  }
+  const correctOption = safeOptions.find((o: any) => o.id === correctOptionId);
+
+  return {
+    id: q?.id || `q_${Date.now()}_${index + 1}`,
+    question: q?.question || q?.prompt || '',
+    codeSnippet: q?.codeSnippet || '',
+    options: safeOptions,
+    correctOptionId,
+    correctAnswer: correctOption?.text || q?.correctAnswer || '',
+    explanation: q?.explanation || correctOption?.rationale || '',
+    difficulty: q?.difficulty || 'Easy'
+  };
+};
+
+const buildBaselineLessons = (): ManagedLesson[] => {
+  const oopLessons: ManagedLesson[] = OOP_COURSE_LESSONS.map((l, i) => {
+    const assessment = OOP_ASSESSMENTS.find(a => a.lessonId === l.id);
+    const practice = PRACTICE_CHALLENGES.find(c => c.lessonId === l.id);
+    return {
+      id: l.id,
+      title: l.title,
+      module: 'Object-Oriented Programming (Java)',
+      courseId: 'oop_course_java',
+      sequence: l.sequence || i + 1,
+      videoUrl: l.videoUrl,
+      description: l.description,
+      learningObjectives: l.concepts || [],
+      status: 'Published',
+      citationText: l.citation_text || (l.creator_name ? `${l.creator_name}. ${l.video_title || l.title}. ${l.publisher_name || 'Oracle'}.` : ''),
+      citationUrl: l.citation_url || l.source_url || '',
+      content: {
+        video: {
+          id: `vid_${l.id}`,
+          title: `${l.title} Video Lecture`,
+          videoUrl: l.videoUrl,
+          duration: l.duration,
+          status: 'Published'
+        },
+        assessment: assessment
+          ? {
+              id: assessment.id,
+              title: assessment.title,
+              quizType: 'Multiple Choice',
+              passingScore: ASSESSMENT_PASSING_SCORE,
+              attempts: 3,
+              questionsCount: assessment.questions.length,
+              questions: assessment.questions,
+              status: 'Published'
+            }
+          : null,
+        practice: practice
+          ? {
+              id: practice.id,
+              title: practice.title,
+              description: practice.description,
+              starterCode: practice.starterCode,
+              sampleInput: practice.sampleInput || '',
+              sampleOutput: practice.sampleOutput || '',
+              passingScore: practice.passingScore || 70,
+              status: 'Published'
+            }
+          : null
+      }
+    };
+  });
+
+  const swingLessons: ManagedLesson[] = JAVA_SWING_LESSONS.map((l, i) => {
+    const video = JAVA_SWING_VIDEOS.find(v => v.lessonId === l.id);
+    const assessment = JAVA_SWING_ASSESSMENTS.find(a => a.lessonId === l.id);
+    const exercise = JAVA_SWING_EXERCISES.find(e => e.lessonId === l.id);
+    return {
+      id: l.id,
+      title: l.title,
+      module: 'Java Swing',
+      courseId: 'java_swing',
+      sequence: 12 + (l.sequence || i + 1),
+      videoUrl: video?.embedUrl || '',
+      description: l.introduction || l.summary || '',
+      learningObjectives: l.objectives || l.topics || [],
+      status: 'Published',
+      citationText: 'Oracle. (n.d.). Trail: Creating a GUI With Swing (The Java Tutorials). Oracle Documentation.',
+      citationUrl: 'https://docs.oracle.com/javase/tutorial/uiswing/',
+      content: {
+        video: video
+          ? {
+              id: video.id,
+              title: video.title,
+              videoUrl: video.embedUrl,
+              duration: video.duration,
+              status: 'Published'
+            }
+          : null,
+        assessment: assessment
+          ? {
+              id: assessment.id,
+              title: assessment.title,
+              quizType: 'Multiple Choice',
+              passingScore: SWING_PASSING_PERCENTAGE,
+              attempts: 3,
+              questionsCount: assessment.questions.length,
+              questions: assessment.questions.map((q, idx) => normalizeQuestionDraft(q, idx)),
+              status: 'Published'
+            }
+          : null,
+        practice: exercise
+          ? {
+              id: exercise.id,
+              title: exercise.title,
+              description: exercise.description,
+              starterCode: exercise.starterCode,
+              sampleInput: exercise.sampleInput || 'No stdin required',
+              sampleOutput: exercise.sampleOutput || '',
+              passingScore: SWING_PASSING_PERCENTAGE,
+              status: 'Published'
+            }
+          : null
+      }
+    };
+  });
+
+  return sortManagedLessons([...oopLessons, ...swingLessons]);
+};
 
 export default function LessonManagementTab({ theme = 'light' }: LessonManagementTabProps) {
   const isDark = theme === 'dark';
@@ -111,8 +289,8 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     enableAssessment: true,
     assessmentTitle: '',
     assessmentQuizType: 'Multiple Choice',
-    assessmentPassingScore: 60,
-    assessmentAttempts: 1,
+    assessmentPassingScore: ASSESSMENT_PASSING_SCORE,
+    assessmentAttempts: 3,
     assessmentStatus: 'Published' as 'Draft' | 'Published',
     assessmentQuestions: [] as AssessmentQuestionDraft[],
 
@@ -134,76 +312,62 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500 focus:border-emerald-500'
     : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-emerald-500';
 
-  // Load lessons from backend with fallback
+  // Load lessons from backend with fallback, ensuring all 17 lessons (12 OOP + 5 Swing) are present and ordered
   const fetchLessons = async () => {
     setIsLoading(true);
+    const baseline = buildBaselineLessons();
     try {
       const res = await lessonApi.list();
       if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-        const mapped: ManagedLesson[] = res.data.map((l: any) => ({
-          id: l.id,
-          title: l.title || '',
-          module: l.module || 'Object-Oriented Programming (Java)',
-          courseId: l.course_id || l.courseId || 'oop_course_java',
-          sequence: Number(l.sequence || 1),
-          videoUrl: l.video_url || l.videoUrl || '',
-          description: l.description || '',
-          learningObjectives: Array.isArray(l.learningObjectives)
-            ? l.learningObjectives
-            : Array.isArray(l.learning_objectives)
-            ? l.learning_objectives
-            : Array.isArray(l.concepts)
-            ? l.concepts
-            : typeof l.learningObjectives === 'string'
-            ? JSON.parse(l.learningObjectives || '[]')
-            : typeof l.learning_objectives === 'string'
-            ? JSON.parse(l.learning_objectives || '[]')
-            : [],
-          status: l.status || 'Published',
-          citationText: l.citationText || l.citation_text || l.metadata?.citationText || l.metadata?.citation_text || '',
-          citationUrl: l.citationUrl || l.citation_url || l.sourceUrl || l.source_url || l.metadata?.citationUrl || l.metadata?.citation_url || '',
-          storageProvider: l.storageProvider || l.storage_provider || '',
-          storageKey: l.storageKey || l.storage_key || '',
-          content: l.content || null,
-          createdBy: l.created_by || l.createdBy,
-          createdAt: l.created_at || l.createdAt,
-          updatedAt: l.updated_at || l.updatedAt
-        }));
-        mapped.sort((a, b) => a.sequence - b.sequence);
-        setLessons(mapped);
+        const mapped: ManagedLesson[] = res.data.map((l: any) => {
+          const swingVid = JAVA_SWING_VIDEOS.find(v => v.lessonId === l.id);
+          const isSwing = isSwingLessonItem({ id: l.id, courseId: l.course_id || l.courseId, module: l.module });
+          const rawSeq = Number(l.sequence || 1);
+          const effectiveSeq = isSwing && rawSeq <= 5 ? 12 + rawSeq : rawSeq;
+          return {
+            id: l.id,
+            title: l.title || '',
+            module: l.module || (isSwing ? 'Java Swing' : 'Object-Oriented Programming (Java)'),
+            courseId: l.course_id || l.courseId || (isSwing ? 'java_swing' : 'oop_course_java'),
+            sequence: effectiveSeq,
+            videoUrl: l.video_url || l.videoUrl || l.content?.video?.videoUrl || swingVid?.embedUrl || '',
+            description: l.description || '',
+            learningObjectives: Array.isArray(l.learningObjectives)
+              ? l.learningObjectives
+              : Array.isArray(l.learning_objectives)
+              ? l.learning_objectives
+              : Array.isArray(l.concepts)
+              ? l.concepts
+              : typeof l.learningObjectives === 'string'
+              ? JSON.parse(l.learningObjectives || '[]')
+              : typeof l.learning_objectives === 'string'
+              ? JSON.parse(l.learning_objectives || '[]')
+              : [],
+            status: l.status || 'Published',
+            citationText: l.citationText || l.citation_text || l.metadata?.citationText || l.metadata?.citation_text || '',
+            citationUrl: l.citationUrl || l.citation_url || l.sourceUrl || l.source_url || l.metadata?.citationUrl || l.metadata?.citation_url || '',
+            storageProvider: l.storageProvider || l.storage_provider || '',
+            storageKey: l.storageKey || l.storage_key || '',
+            content: l.content || null,
+            createdBy: l.created_by || l.createdBy,
+            createdAt: l.created_at || l.createdAt,
+            updatedAt: l.updated_at || l.updatedAt
+          };
+        });
+
+        const existingIds = new Set(mapped.map(item => item.id));
+        for (const baseLesson of baseline) {
+          if (!existingIds.has(baseLesson.id)) {
+            mapped.push(baseLesson);
+          }
+        }
+
+        setLessons(sortManagedLessons(mapped));
       } else {
-        // Fallback to static OOP lessons
-        const fallback: ManagedLesson[] = OOP_COURSE_LESSONS.map((l, i) => ({
-          id: l.id,
-          title: l.title,
-          module: 'Object-Oriented Programming (Java)',
-          courseId: 'oop_course_java',
-          sequence: l.sequence || i + 1,
-          videoUrl: l.videoUrl,
-          description: l.description,
-          learningObjectives: l.concepts || [],
-          status: 'Published',
-          citationText: l.citation_text || (l.creator_name ? `${l.creator_name}. ${l.video_title || l.title}. ${l.publisher_name || 'Oracle'}.` : ''),
-          citationUrl: l.citation_url || l.source_url || ''
-        }));
-        setLessons(fallback);
+        setLessons(baseline);
       }
     } catch {
-      // Offline fallback
-      const fallback: ManagedLesson[] = OOP_COURSE_LESSONS.map((l, i) => ({
-        id: l.id,
-        title: l.title,
-        module: 'Object-Oriented Programming (Java)',
-        courseId: 'oop_course_java',
-        sequence: l.sequence || i + 1,
-        videoUrl: l.videoUrl,
-        description: l.description,
-        learningObjectives: l.concepts || [],
-        status: 'Published',
-        citationText: l.citation_text || (l.creator_name ? `${l.creator_name}. ${l.video_title || l.title}. ${l.publisher_name || 'Oracle'}.` : ''),
-        citationUrl: l.citation_url || l.source_url || ''
-      }));
-      setLessons(fallback);
+      setLessons(baseline);
     } finally {
       setIsLoading(false);
     }
@@ -240,8 +404,8 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       enableAssessment: true,
       assessmentTitle: '',
       assessmentQuizType: 'Multiple Choice',
-      assessmentPassingScore: 60,
-      assessmentAttempts: 1,
+      assessmentPassingScore: ASSESSMENT_PASSING_SCORE,
+      assessmentAttempts: 3,
       assessmentStatus: 'Published',
       assessmentQuestions: [initialQuestion],
       enablePractice: true,
@@ -266,29 +430,50 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     const existingAssessment = content.assessment;
     const existingPractice = content.practice;
 
-    // Baseline from static data if not present in DB
-    const staticAssessment = OOP_ASSESSMENTS.find(a => a.lessonId === lesson.id);
-    const initialQuestions: AssessmentQuestionDraft[] =
+    // Baseline from static OOP or Java Swing catalogs if not present in DB
+    const staticOopAssessment = OOP_ASSESSMENTS.find(a => a.lessonId === lesson.id);
+    const staticSwingAssessment = JAVA_SWING_ASSESSMENTS.find(a => a.lessonId === lesson.id);
+    const staticAssessment: any = staticOopAssessment || staticSwingAssessment;
+
+    const rawQuestions =
       Array.isArray(existingAssessment?.questions) && existingAssessment.questions.length > 0
         ? existingAssessment.questions
-        : staticAssessment?.questions?.map((q: any) => ({
-            id: q.id,
-            question: q.question,
-            codeSnippet: q.codeSnippet || '',
-            options: q.options || [],
-            correctOptionId: q.correctOptionId || q.options?.[0]?.id || 'opt_a'
-          })) || [createDefaultQuestion(1)];
+        : Array.isArray(staticAssessment?.questions) && staticAssessment.questions.length > 0
+        ? staticAssessment.questions
+        : [];
 
-    const staticPractice = PRACTICE_CHALLENGES.find(c => c.lessonId === lesson.id);
-    const staticLesson = OOP_COURSE_LESSONS.find(l => l.id === lesson.id);
+    const initialQuestions: AssessmentQuestionDraft[] =
+      rawQuestions.length > 0
+        ? rawQuestions.map((q: any, idx: number) => normalizeQuestionDraft(q, idx))
+        : [createDefaultQuestion(1)];
+
+    const staticOopPractice = PRACTICE_CHALLENGES.find(c => c.lessonId === lesson.id);
+    const staticSwingExercise = JAVA_SWING_EXERCISES.find(e => e.lessonId === lesson.id);
+    const staticPractice: any = staticOopPractice || (staticSwingExercise
+      ? {
+          id: staticSwingExercise.id,
+          lessonId: staticSwingExercise.lessonId,
+          title: staticSwingExercise.title,
+          description: staticSwingExercise.description,
+          starterCode: staticSwingExercise.starterCode,
+          sampleInput: staticSwingExercise.sampleInput || 'No stdin required',
+          sampleOutput: staticSwingExercise.sampleOutput || '',
+          passingScore: SWING_PASSING_PERCENTAGE
+        }
+      : null);
+
+    const staticOopLesson = OOP_COURSE_LESSONS.find(l => l.id === lesson.id);
+    const staticSwingVideo = JAVA_SWING_VIDEOS.find(v => v.lessonId === lesson.id);
+    const isSwing = isSwingLessonItem(lesson);
+
     const existingCitationText =
       lesson.citationText ||
       (lesson as any).citation_text ||
       (lesson as any).metadata?.citationText ||
       (lesson as any).metadata?.citation_text ||
-      staticLesson?.citation_text ||
-      (staticLesson?.creator_name ? `${staticLesson.creator_name}. ${staticLesson.video_title || staticLesson.title}. ${staticLesson.publisher_name || 'Oracle'}.` : '') ||
-      '';
+      staticOopLesson?.citation_text ||
+      (staticOopLesson?.creator_name ? `${staticOopLesson.creator_name}. ${staticOopLesson.video_title || staticOopLesson.title}. ${staticOopLesson.publisher_name || 'Oracle'}.` : '') ||
+      (isSwing ? 'Oracle. (n.d.). Trail: Creating a GUI With Swing (The Java Tutorials). Oracle Documentation.' : '');
     const existingCitationUrl =
       lesson.citationUrl ||
       (lesson as any).citation_url ||
@@ -296,25 +481,25 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       (lesson as any).source_url ||
       (lesson as any).metadata?.citationUrl ||
       (lesson as any).metadata?.citation_url ||
-      staticLesson?.citation_url ||
-      staticLesson?.source_url ||
-      '';
+      staticOopLesson?.citation_url ||
+      staticOopLesson?.source_url ||
+      (isSwing ? 'https://docs.oracle.com/javase/tutorial/uiswing/' : '');
 
     setFormData({
       title: lesson.title,
-      module: lesson.module,
+      module: lesson.module || (isSwing ? 'Java Swing' : 'Object-Oriented Programming (Java)'),
       sequence: lesson.sequence,
       status: lesson.status,
       description: lesson.description || '',
       learningObjectives: Array.isArray(lesson.learningObjectives) ? lesson.learningObjectives.join('\n') : '',
       citationText: existingCitationText,
       citationUrl: existingCitationUrl,
-      videoUrl: lesson.videoUrl || '',
+      videoUrl: lesson.videoUrl || content.video?.videoUrl || staticSwingVideo?.embedUrl || staticOopLesson?.videoUrl || '',
       enableAssessment: true,
       assessmentTitle: existingAssessment?.title || staticAssessment?.title || `${lesson.title} Assessment`,
       assessmentQuizType: existingAssessment?.quizType || 'Multiple Choice',
-      assessmentPassingScore: Number(existingAssessment?.passingScore ?? staticAssessment?.passingPercentage ?? 60),
-      assessmentAttempts: Number(existingAssessment?.attempts ?? 1),
+      assessmentPassingScore: Number(existingAssessment?.passingScore ?? staticAssessment?.passingPercentage ?? ASSESSMENT_PASSING_SCORE),
+      assessmentAttempts: Number(existingAssessment?.attempts ?? 3),
       assessmentStatus: (existingAssessment?.status as any) || 'Published',
       assessmentQuestions: initialQuestions,
       enablePractice: true,
@@ -323,13 +508,17 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       practiceStarterCode: existingPractice?.starterCode || staticPractice?.starterCode || DEFAULT_STARTER_CODE,
       practiceSampleInput: existingPractice?.sampleInput || staticPractice?.sampleInput || '',
       practiceSampleOutput: existingPractice?.sampleOutput || staticPractice?.sampleOutput || 'Expected Program Output',
-      practicePassingScore: Number(existingPractice?.passingScore ?? staticPractice?.passingScore ?? 70),
+      practicePassingScore: Number(existingPractice?.passingScore ?? staticPractice?.passingScore ?? (isSwing ? SWING_PASSING_PERCENTAGE : 70)),
       practiceStatus: (existingPractice?.status as any) || 'Published'
     });
 
     setRawQuestionsJson(JSON.stringify(initialQuestions, null, 2));
     setJsonMode(false);
-    setLinkedContent(content);
+    setLinkedContent({
+      ...content,
+      assessment: existingAssessment || (staticAssessment ? { id: staticAssessment.id } : null),
+      practice: existingPractice || (staticPractice ? { id: staticPractice.id } : null)
+    });
     setActiveModalTab('lesson');
   };
 
@@ -488,12 +677,13 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
 
     try {
       let savedId = lessonId;
+      const isSwing = isSwingLessonItem({ id: lessonId, courseId: editingLesson?.courseId, module: formData.module });
       if (editingLesson) {
         const res = await lessonApi.update(editingLesson.id, lessonPayload);
         savedId = res.data?.id || editingLesson.id;
         setFeedback({ type: 'success', message: `Lesson "${formData.title}" updated successfully with consolidated content.` });
       } else {
-        const res = await lessonApi.create({ courseId: 'oop_course_java', ...lessonPayload });
+        const res = await lessonApi.create({ courseId: isSwing ? 'java_swing' : 'oop_course_java', ...lessonPayload });
         savedId = res.data?.id || lessonId;
         setFeedback({ type: 'success', message: `Lesson "${formData.title}" created successfully with linked content.` });
       }
@@ -506,13 +696,21 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       // Persist Assessment
       if (formData.enableAssessment && savedId && savedId !== '0' && savedId !== 'NaN') {
         const assessmentTitle = formData.assessmentTitle.trim() || `${formData.title.trim()} Assessment`;
+        const serializedQuestions = formData.assessmentQuestions.map(q => {
+          const correctOpt = q.options.find(o => o.id === q.correctOptionId);
+          return {
+            ...q,
+            correctAnswer: correctOpt?.text || q.correctAnswer || '',
+            explanation: correctOpt?.rationale || q.explanation || ''
+          };
+        });
         const assessmentPayload = {
           lessonId: savedId,
           title: assessmentTitle,
           quizType: formData.assessmentQuizType,
           passingScore: Number(formData.assessmentPassingScore),
           attempts: Number(formData.assessmentAttempts),
-          questions: formData.assessmentQuestions,
+          questions: serializedQuestions,
           status: formData.assessmentStatus
         };
 
@@ -531,7 +729,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
         const practiceTitle = formData.practiceTitle.trim() || `${formData.title.trim()} Practice Exercise`;
         const practicePayload = {
           lessonId: savedId,
-          topicId: 'oop',
+          topicId: isSwing ? 'java_swing' : 'oop',
           title: practiceTitle,
           description: formData.practiceDescription.trim(),
           starterCode: formData.practiceStarterCode,
@@ -735,9 +933,21 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                 </tr>
               ) : (
                 filteredLessons.map((lesson, idx) => {
-                  const hasVideo = Boolean(lesson.videoUrl || lesson.content?.video?.id);
-                  const hasAssessment = Boolean(lesson.content?.assessment?.id || OOP_ASSESSMENTS.some(a => a.lessonId === lesson.id));
-                  const hasPractice = Boolean(lesson.content?.practice?.id || PRACTICE_CHALLENGES.some(c => c.lessonId === lesson.id));
+                  const hasVideo = Boolean(
+                    lesson.videoUrl ||
+                    lesson.content?.video?.id ||
+                    JAVA_SWING_VIDEOS.some(v => v.lessonId === lesson.id)
+                  );
+                  const hasAssessment = Boolean(
+                    lesson.content?.assessment?.id ||
+                    OOP_ASSESSMENTS.some(a => a.lessonId === lesson.id) ||
+                    JAVA_SWING_ASSESSMENTS.some(a => a.lessonId === lesson.id)
+                  );
+                  const hasPractice = Boolean(
+                    lesson.content?.practice?.id ||
+                    PRACTICE_CHALLENGES.some(c => c.lessonId === lesson.id) ||
+                    JAVA_SWING_EXERCISES.some(e => e.lessonId === lesson.id)
+                  );
 
                   return (
                     <tr key={lesson.id} className={`transition ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50/70'}`}>
@@ -811,7 +1021,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                             title={hasAssessment ? 'Assessment configured' : 'No assessment'}
                           >
                             <FileQuestion className="h-2.5 w-2.5" />
-                            Quiz ({lesson.content?.assessment?.passingScore || 60}%)
+                            Quiz ({lesson.content?.assessment?.passingScore || ASSESSMENT_PASSING_SCORE}%)
                           </span>
 
                           {/* Practice IDE Badge */}
@@ -1176,10 +1386,12 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                           allowFullScreen
                         />
                       ) : (
-                        <div className="text-center p-6 text-slate-400">
-                          <Play className="h-8 w-8 mx-auto mb-2 text-slate-500" />
-                          <p className="text-xs font-bold">Direct Video Link: {formData.videoUrl}</p>
-                        </div>
+                        <video
+                          src={formData.videoUrl}
+                          controls
+                          preload="metadata"
+                          className="w-full h-full object-contain"
+                        />
                       )}
                     </div>
                   ) : (
@@ -1208,7 +1420,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                           Enable Assessment for this Lesson
                         </label>
                         <p className="text-[11px] text-slate-400">
-                          Passing score threshold is 60%. Students must pass the assessment to unlock the Practice IDE.
+                          Passing score threshold is {ASSESSMENT_PASSING_SCORE}%. Students must pass the assessment to unlock the Practice IDE.
                         </p>
                       </div>
                     </div>
@@ -1428,7 +1640,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                         <div className="flex items-start gap-2">
                           <Code2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
                           <p className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed font-bold">
-                            Pedagogical Progression Rule: The Practice IDE unlocks only after passing the assessment (score ≥ 60%).
+                            Pedagogical Progression Rule: The Practice IDE unlocks only after passing the assessment (score ≥ {ASSESSMENT_PASSING_SCORE}%).
                           </p>
                         </div>
                       </div>
@@ -1631,10 +1843,12 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                     allowFullScreen
                   />
                 ) : (
-                  <div className="text-center p-6 text-slate-400">
-                    <Play className="h-8 w-8 mx-auto mb-2 text-slate-500" />
-                    <p className="text-xs font-bold">Direct Video Link: {previewingLesson.videoUrl}</p>
-                  </div>
+                  <video
+                    src={previewingLesson.videoUrl}
+                    controls
+                    preload="metadata"
+                    className="w-full h-full object-contain"
+                  />
                 )}
               </div>
             ) : (
@@ -1676,14 +1890,20 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                 </div>
                 <div>
                   <span className="text-slate-400">Assessment: </span>
-                  <span className={previewingLesson.content?.assessment ? 'text-indigo-600' : 'text-slate-500'}>
-                    {previewingLesson.content?.assessment?.title || 'Configured (Pass: 60%)'}
+                  <span className={previewingLesson.content?.assessment || OOP_ASSESSMENTS.some(a => a.lessonId === previewingLesson.id) || JAVA_SWING_ASSESSMENTS.some(a => a.lessonId === previewingLesson.id) ? 'text-indigo-600' : 'text-slate-500'}>
+                    {previewingLesson.content?.assessment?.title ||
+                      JAVA_SWING_ASSESSMENTS.find(a => a.lessonId === previewingLesson.id)?.title ||
+                      OOP_ASSESSMENTS.find(a => a.lessonId === previewingLesson.id)?.title ||
+                      `Configured (Pass: ${ASSESSMENT_PASSING_SCORE}%)`}
                   </span>
                 </div>
                 <div>
                   <span className="text-slate-400">Practice IDE: </span>
-                  <span className={previewingLesson.content?.practice ? 'text-emerald-600' : 'text-slate-500'}>
-                    {previewingLesson.content?.practice?.title || 'Interactive Challenge'}
+                  <span className={previewingLesson.content?.practice || PRACTICE_CHALLENGES.some(c => c.lessonId === previewingLesson.id) || JAVA_SWING_EXERCISES.some(e => e.lessonId === previewingLesson.id) ? 'text-emerald-600' : 'text-slate-500'}>
+                    {previewingLesson.content?.practice?.title ||
+                      JAVA_SWING_EXERCISES.find(e => e.lessonId === previewingLesson.id)?.title ||
+                      PRACTICE_CHALLENGES.find(c => c.lessonId === previewingLesson.id)?.title ||
+                      'Interactive Challenge'}
                   </span>
                 </div>
               </div>

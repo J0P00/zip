@@ -227,7 +227,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
   const videoCompleted = Boolean(localProgress?.videoCompleted || topicDetails?.videoCompleted) && videoPercentage >= 95;
   const assessmentPassed = Boolean(quizDb[activeAssessment.id]?.passed || topicDetails?.quizPassed);
   const quizLockedReason = lessonLockReason || (!videoCompleted ? 'Watch at least 95% of this Java Swing video before starting the assessment.' : '');
-  const practiceLockedReason = quizLockedReason || (!assessmentPassed ? 'Pass this lesson quiz with 60% or higher to unlock programming practice.' : '');
+  const practiceLockedReason = quizLockedReason || (!assessmentPassed ? `Pass this lesson quiz with ${SWING_PASSING_PERCENTAGE}% or higher to unlock programming practice.` : '');
   const passedRun = Boolean(lastResult && lastResult.score >= activeExercise.passingScore && lastResult.compileStatus === 'success');
 
   const selectLesson = (lesson: SwingLesson, nextTab: SwingTab = 'lessons') => {
@@ -407,7 +407,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
       onSubmitCompleted({ id: 'dummy_quiz' } as any);
       setLatestAttempt(persistedAttempt);
       setQuizMode("result");
-      setNotice(persistedAttempt.passed ? "Quiz passed. Programming practice is now unlocked." : "Quiz saved. You can retake until you reach 60%.");
+      setNotice(persistedAttempt.passed ? "Quiz passed. Programming practice is now unlocked." : `Quiz saved. You can retake until you reach ${SWING_PASSING_PERCENTAGE}%.`);
       window.setTimeout(() => setNotice(""), 3600);
     } catch (err: any) {
       setNotice(err?.message || "Unable to save this quiz attempt.");

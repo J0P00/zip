@@ -15,6 +15,14 @@ const jwt = require("jsonwebtoken");
 const pool = require("./db");
 const { OOP_PARSED_QUESTIONS, ALL_OOP_QUESTIONS, TOPIC_NAMES, generatePreTestSessionQuestions } = require("./questionBank");
 const { ACTIVE_OOP_PRACTICE_CHALLENGES, ACTIVE_OOP_PRACTICE_IDS } = require("./oopPracticeCatalog");
+const {
+    SWING_PASSING_SCORE,
+    JAVA_SWING_LESSONS,
+    JAVA_SWING_VIDEOS,
+    JAVA_SWING_ASSESSMENTS,
+    JAVA_SWING_EXERCISES,
+    SWING_QUESTIONS_BY_LESSON
+} = require("./javaSwingCatalog");
 const { validateBasicJavaStructure } = require("./basicJavaValidator");
 const { getJavaToolchainDiagnostics } = require("./javaToolchain");
 const { normalizeAssessmentPercentage, isPassingAssessment } = require("./assessmentValidation");
@@ -683,27 +691,34 @@ const createOrUpdateNotification = async (client, payload) => {
     return toClientNotification(result.rows[0]);
 };
 
-const toClientLesson = (row) => ({
-    id: row.id,
-    title: row.title,
-    module: row.module || "",
-    courseId: row.course_id || "oop_fundamentals",
-    sequence: Number(row.sequence || 0),
-    duration: row.duration || "",
-    videoUrl: row.video_url || "",
-    storageProvider: row.storage_provider || "",
-    storageKey: row.storage_key || "",
-    storageContentType: row.storage_content_type || "",
-    description: row.description || "",
-    learningObjectives: row.learning_objectives || [],
-    status: row.status || "Draft",
-    metadata: row.metadata || {},
-    citationText: row.metadata?.citationText || row.metadata?.citation_text || "",
-    citationUrl: row.metadata?.citationUrl || row.metadata?.citation_url || "",
-    createdBy: row.created_by,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-});
+const isSwingLessonId = (lessonId = "") => /^swing_lesson_\d+$/i.test(String(lessonId).trim()) || String(lessonId).trim().toLowerCase().startsWith("swing_");
+const OOP_LESSON_FILTER_SQL = "(id NOT LIKE 'swing_%' AND COALESCE(course_id, 'oop_fundamentals') <> 'java_swing' AND LOWER(COALESCE(module, '')) NOT LIKE '%swing%')";
+const OOP_LESSON_ALIAS_FILTER_SQL = (alias = "l") => `(${alias}.id NOT LIKE 'swing_%' AND COALESCE(${alias}.course_id, 'oop_fundamentals') <> 'java_swing' AND LOWER(COALESCE(${alias}.module, '')) NOT LIKE '%swing%')`;
+
+const toClientLesson = (row) => {
+    const isSwing = isSwingLessonId(row.id) || row.course_id === "java_swing" || String(row.module || "").toLowerCase().includes("swing");
+    return {
+        id: row.id,
+        title: row.title,
+        module: row.module || (isSwing ? "Java Swing" : ""),
+        courseId: row.course_id || (isSwing ? "java_swing" : "oop_fundamentals"),
+        sequence: Number(row.sequence || 0),
+        duration: row.duration || "",
+        videoUrl: row.video_url || "",
+        storageProvider: row.storage_provider || "",
+        storageKey: row.storage_key || "",
+        storageContentType: row.storage_content_type || "",
+        description: row.description || "",
+        learningObjectives: row.learning_objectives || [],
+        status: row.status || "Draft",
+        metadata: row.metadata || {},
+        citationText: row.metadata?.citationText || row.metadata?.citation_text || "",
+        citationUrl: row.metadata?.citationUrl || row.metadata?.citation_url || "",
+        createdBy: row.created_by,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    };
+};
 
 const getLessonContent = async (lessonId) => {
     const [videoResult, assessmentResult, practiceResult] = await Promise.all([
@@ -729,34 +744,173 @@ const getLessonContent = async (lessonId) => {
             LIMIT 1
         `, [lessonId])
     ]);
+
+    let videoRow = videoResult.rows[0] || null;
+    let assessmentRow = assessmentResult.rows[0] || null;
+    let practiceRow = practiceResult.rows[0] || null;
+
+    if (isSwingLessonId(lessonId)) {
+        if (!videoRow) {
+            try {
+                const swingVidRes = await pool.query(
+                    "SELECT id, title, embed_url AS video_url, duration FROM swing_videos WHERE lesson_id = $1 LIMIT 1",
+                    [lessonId]
+                );
+                if (swingVidRes.rowCount) {
+                    videoRow = { ...swingVidRes.rows[0], status: "Published" };
+                }
+            } catch {}
+            if (!videoRow) {
+                const fallbackVid = JAVA_SWING_VIDEOS.find(v => v.lessonId === lessonId);
+                if (fallbackVid) {
+                    videoRow = {
+                        id: fallbackVid.id,
+                        title: fallbackVid.title,
+                        video_url: fallbackVid.embedUrl,
+                        duration: fallbackVid.duration,
+                        status: "Published"
+                    };
+                }
+            }
+        }
+        if (!assessmentRow) {
+            const fallbackAssessment = JAVA_SWING_ASSESSMENTS.find(a => a.lessonId === lessonId);
+            try {
+                const swingQuizRes = await pool.query(
+                    "SELECT id, title, passing_percentage FROM swing_quizzes WHERE lesson_id = $1 LIMIT 1",
+                    [lessonId]
+                );
+                if (swingQuizRes.rowCount) {
+                    const qRes = await pool.query(
+                        "SELECT id, prompt, choices, correct_answer, explanation FROM swing_questions WHERE quiz_id = $1 ORDER BY id ASC",
+                        [swingQuizRes.rows[0].id]
+                    );
+                    assessmentRow = {
+                        id: swingQuizRes.rows[0].id,
+                        title: swingQuizRes.rows[0].title,
+                        quiz_type: "Multiple Choice",
+                        passing_score: Number(swingQuizRes.rows[0].passing_percentage || SWING_PASSING_SCORE),
+                        attempts: MAX_ASSESSMENT_ATTEMPTS,
+                        questions: qRes.rowCount ? qRes.rows.map(q => ({
+                            id: q.id,
+                            lessonId,
+                            question: q.prompt,
+                            options: q.choices || [],
+                            correctAnswer: q.correct_answer,
+                            explanation: q.explanation || "",
+                            difficulty: "Easy"
+                        })) : (fallbackAssessment?.questions || []),
+                        status: "Published"
+                    };
+                }
+            } catch {}
+            if (!assessmentRow && fallbackAssessment) {
+                assessmentRow = {
+                    id: fallbackAssessment.id,
+                    title: fallbackAssessment.title,
+                    quiz_type: fallbackAssessment.quizType || "Multiple Choice",
+                    passing_score: fallbackAssessment.passingScore || SWING_PASSING_SCORE,
+                    attempts: fallbackAssessment.attempts || MAX_ASSESSMENT_ATTEMPTS,
+                    questions: fallbackAssessment.questions || [],
+                    status: "Published"
+                };
+            }
+        }
+        if (!practiceRow) {
+            const fallbackExercise = JAVA_SWING_EXERCISES.find(e => e.lessonId === lessonId);
+            try {
+                const swingExRes = await pool.query(
+                    "SELECT id, title, instructions, starter_code FROM swing_programming_exercises WHERE lesson_id = $1 LIMIT 1",
+                    [lessonId]
+                );
+                if (swingExRes.rowCount) {
+                    practiceRow = {
+                        id: swingExRes.rows[0].id,
+                        title: swingExRes.rows[0].title,
+                        description: swingExRes.rows[0].instructions || fallbackExercise?.description || "",
+                        starter_code: swingExRes.rows[0].starter_code || fallbackExercise?.starterCode || "",
+                        sample_input: fallbackExercise?.sampleInput || "No stdin required",
+                        sample_output: fallbackExercise?.sampleOutput || "",
+                        passing_score: Number(fallbackExercise?.passingScore || SWING_PASSING_SCORE),
+                        status: "Published"
+                    };
+                }
+            } catch {}
+            if (!practiceRow && fallbackExercise) {
+                practiceRow = {
+                    id: fallbackExercise.id,
+                    title: fallbackExercise.title,
+                    description: fallbackExercise.description,
+                    starter_code: fallbackExercise.starterCode,
+                    sample_input: fallbackExercise.sampleInput,
+                    sample_output: fallbackExercise.sampleOutput,
+                    passing_score: fallbackExercise.passingScore || SWING_PASSING_SCORE,
+                    status: "Published"
+                };
+            }
+        }
+    } else {
+        if (!assessmentRow && OOP_PARSED_QUESTIONS[lessonId]) {
+            const seqMatch = String(lessonId).match(/oop_lesson_(\d+)/);
+            const seqNum = seqMatch ? seqMatch[1] : "1";
+            const topicName = TOPIC_NAMES[lessonId] || lessonId;
+            assessmentRow = {
+                id: `oop_assessment_${seqNum}`,
+                title: `${topicName} Assessment`,
+                quiz_type: "Multiple Choice",
+                passing_score: ASSESSMENT_PASSING_SCORE,
+                attempts: MAX_ASSESSMENT_ATTEMPTS,
+                questions: OOP_PARSED_QUESTIONS[lessonId],
+                status: "Published"
+            };
+        }
+        if (!practiceRow) {
+            const fallbackPractice = PRACTICE_CHALLENGES.find(c => c.lessonId === lessonId);
+            if (fallbackPractice) {
+                practiceRow = {
+                    id: fallbackPractice.id,
+                    title: fallbackPractice.title,
+                    description: fallbackPractice.description,
+                    starter_code: fallbackPractice.starterCode,
+                    sample_input: fallbackPractice.sampleInput || "",
+                    sample_output: fallbackPractice.sampleOutput || "",
+                    passing_score: fallbackPractice.passingScore || 70,
+                    status: "Published"
+                };
+            }
+        }
+    }
+
     return {
-        video: videoResult.rows[0] ? {
-            id: videoResult.rows[0].id,
-            title: videoResult.rows[0].title,
-            status: videoResult.rows[0].status,
-            storageProvider: videoResult.rows[0].storage_provider || "",
-            storageKey: videoResult.rows[0].storage_key || "",
-            contentType: videoResult.rows[0].storage_content_type || "",
-            size: videoResult.rows[0].storage_size === null || videoResult.rows[0].storage_size === undefined ? null : Number(videoResult.rows[0].storage_size)
+        video: videoRow ? {
+            id: videoRow.id,
+            title: videoRow.title,
+            videoUrl: videoRow.video_url || "",
+            duration: videoRow.duration || "",
+            status: videoRow.status || "Published",
+            storageProvider: videoRow.storage_provider || "",
+            storageKey: videoRow.storage_key || "",
+            contentType: videoRow.storage_content_type || "",
+            size: videoRow.storage_size === null || videoRow.storage_size === undefined ? null : Number(videoRow.storage_size)
         } : null,
-        assessment: assessmentResult.rows[0] ? {
-            id: assessmentResult.rows[0].id,
-            title: assessmentResult.rows[0].title,
-            quizType: assessmentResult.rows[0].quiz_type || "Multiple Choice",
-            passingScore: Number(assessmentResult.rows[0].passing_score || 60),
-            attempts: Number(assessmentResult.rows[0].attempts || 1),
-            questions: assessmentResult.rows[0].questions || [],
-            status: assessmentResult.rows[0].status || "Published"
+        assessment: assessmentRow ? {
+            id: assessmentRow.id,
+            title: assessmentRow.title,
+            quizType: assessmentRow.quiz_type || "Multiple Choice",
+            passingScore: Number(assessmentRow.passing_score || ASSESSMENT_PASSING_SCORE),
+            attempts: Number(assessmentRow.attempts || MAX_ASSESSMENT_ATTEMPTS),
+            questions: assessmentRow.questions || [],
+            status: assessmentRow.status || "Published"
         } : null,
-        practice: practiceResult.rows[0] ? {
-            id: practiceResult.rows[0].id,
-            title: practiceResult.rows[0].title,
-            description: practiceResult.rows[0].description || "",
-            starterCode: practiceResult.rows[0].starter_code || "",
-            sampleInput: practiceResult.rows[0].sample_input || "",
-            sampleOutput: practiceResult.rows[0].sample_output || "",
-            passingScore: Number(practiceResult.rows[0].passing_score || 70),
-            status: practiceResult.rows[0].status || "Published"
+        practice: practiceRow ? {
+            id: practiceRow.id,
+            title: practiceRow.title,
+            description: practiceRow.description || "",
+            starterCode: practiceRow.starter_code || "",
+            sampleInput: practiceRow.sample_input || "",
+            sampleOutput: practiceRow.sample_output || "",
+            passingScore: Number(practiceRow.passing_score || 70),
+            status: practiceRow.status || "Published"
         } : null
     };
 };
@@ -872,7 +1026,8 @@ const normalizeChallengeTestCase = (testCase) => ({
 });
 
 const toClientPracticeChallenge = (row) => {
-    const canonical = PRACTICE_CHALLENGES.find(challenge => challenge.id === row.id);
+    const canonical = PRACTICE_CHALLENGES.find(challenge => challenge.id === row.id)
+        || JAVA_SWING_EXERCISES.find(challenge => challenge.id === row.id);
     return {
         // Database rows contain data only; executable OOP checks remain in the
         // trusted server-side challenge catalogue.
@@ -1574,7 +1729,7 @@ const initializeDatabase = async () => {
     }
 };
 
-const seedLessons = async () => {
+const seedLessons = async (db = pool) => {
     const lessons = [
         [
             "oop_lesson_1",
@@ -1585,7 +1740,8 @@ const seedLessons = async () => {
             "/videos/lesson1.mp4",
             "Introduces Java classes as blueprints and objects as instances with fields, methods, state, and behavior.",
             JSON.stringify(["Class blueprint", "Object instance", "Fields and methods", "new keyword", "State and behavior"]),
-            "Published"
+            "Published",
+            "oop_fundamentals"
         ],
         [
             "oop_lesson_2",
@@ -1596,7 +1752,8 @@ const seedLessons = async () => {
             "/videos/lesson2.mp4",
             "Explains Java constructors, object initialization, constructor names, parameters, and default constructor behavior.",
             JSON.stringify(["Constructor purpose", "Same name as class", "No return type", "Parameterized constructor", "Default constructor"]),
-            "Published"
+            "Published",
+            "oop_fundamentals"
         ],
         [
             "oop_lesson_3",
@@ -1607,7 +1764,8 @@ const seedLessons = async () => {
             "/videos/lesson3.mp4",
             "Covers object methods as class-defined behaviors, calling methods through objects, parameters, returns, and field access.",
             JSON.stringify(["Object behavior", "Method call", "Parameters", "Return values", "Instance field access"]),
-            "Published"
+            "Published",
+            "oop_fundamentals"
         ],
         [
             "oop_lesson_4",
@@ -1618,7 +1776,8 @@ const seedLessons = async () => {
             "/OOP%20Lesson/Topic4-Inheritance.mp4",
             "Explains data hiding with private fields and controlled access through getter and setter methods.",
             JSON.stringify(["Data hiding", "private fields", "getters", "setters", "validation"]),
-            "Published"
+            "Published",
+            "oop_fundamentals"
         ],
         [
             "oop_lesson_5",
@@ -1629,7 +1788,8 @@ const seedLessons = async () => {
             "/OOP%20Lesson/Topic5-MethodOveriding.mp4",
             "Shows how one class can define multiple constructors with different parameter lists for flexible object creation.",
             JSON.stringify(["Constructor overload", "Different parameters", "this()", "Initialization paths", "Compile-time selection"]),
-            "Published"
+            "Published",
+            "oop_fundamentals"
         ],
         [
             "oop_lesson_6",
@@ -1640,7 +1800,8 @@ const seedLessons = async () => {
             "/videos/lesson6.mp4",
             "Introduces inheritance in Java, showing how child classes reuse and extend parent class fields and methods.",
             JSON.stringify(["Parent class", "Child class", "extends keyword", "is-a relationship", "Code reuse"]),
-            "Published"
+            "Published",
+            "oop_fundamentals"
         ],
         [
             "oop_lesson_7",
@@ -1651,7 +1812,8 @@ const seedLessons = async () => {
             "/videos/lesson7.mp4",
             "Covers polymorphism through overloaded methods, overridden behavior, parent references, and dynamic method dispatch.",
             JSON.stringify(["Many forms", "Method overloading", "Method overriding", "Parent reference", "Runtime dispatch"]),
-            "Published"
+            "Published",
+            "oop_fundamentals"
         ],
         [
             "oop_lesson_8",
@@ -1662,7 +1824,8 @@ const seedLessons = async () => {
             "/OOP%20Lesson/Topic8%20abstraction%20.mp4?v=compressed-20260726",
             "Explains abstract classes as shared base definitions that can declare required behavior and provide reusable concrete methods.",
             JSON.stringify(["abstract class", "Abstract method", "Concrete method", "Shared base class", "Subclass responsibility"]),
-            "Published"
+            "Published",
+            "oop_fundamentals"
         ],
         [
             "oop_lesson_9",
@@ -1673,7 +1836,8 @@ const seedLessons = async () => {
             "/OOP%20Lesson/topic9-INTERFACE.mp4?v=compressed-20260726-2124",
             "Introduces interfaces and abstraction as ways to expose essential behavior while hiding implementation details.",
             JSON.stringify(["interface keyword", "implements keyword", "Behavior contract", "Implementation hiding", "Default methods"]),
-            "Published"
+            "Published",
+            "oop_fundamentals"
         ],
         [
             "oop_lesson_10",
@@ -1684,7 +1848,8 @@ const seedLessons = async () => {
             "/videos/lesson10.mp4",
             "Shows how arrays can store object references, how each element must be initialized, and how loops process object collections.",
             JSON.stringify(["Object reference array", "Element initialization", "Null elements", "Array traversal", "Object state per element"]),
-            "Published"
+            "Published",
+            "oop_fundamentals"
         ],
         [
             "oop_lesson_11",
@@ -1695,7 +1860,8 @@ const seedLessons = async () => {
             "/JAVA%20OOP%20Video%20Lesson/Lesson%2011%20Array%20Of%20Object.mp4",
             "Shows how arrays can store object references, how each element must be initialized, and how loops process object collections.",
             JSON.stringify(["Object reference array", "Element initialization", "Null elements", "Array traversal", "Object state per element"]),
-            "Published"
+            "Published",
+            "oop_fundamentals"
         ],
         [
             "oop_lesson_12",
@@ -1706,52 +1872,211 @@ const seedLessons = async () => {
             "/JAVA%20OOP%20Video%20Lesson/Lesson%2012%20Enum.mp4",
             "Explains Java enums as type-safe named constants that can also contain fields, constructors, and methods.",
             JSON.stringify(["enum keyword", "Named constants", "Type safety", "switch with enum", "Enum fields and methods"]),
-            "Published"
-        ]
+            "Published",
+            "oop_fundamentals"
+        ],
+        ...JAVA_SWING_LESSONS.map((swingLesson) => {
+            const swingVideo = JAVA_SWING_VIDEOS.find(v => v.lessonId === swingLesson.id);
+            return [
+                swingLesson.id,
+                swingLesson.title,
+                "Java Swing",
+                12 + Number(swingLesson.sequence),
+                swingVideo?.duration || "15:00",
+                swingVideo?.embedUrl || "",
+                swingLesson.introduction || swingLesson.summary || "",
+                JSON.stringify(swingLesson.objectives || []),
+                "Published",
+                "java_swing"
+            ];
+        })
     ];
 
     for (const lesson of lessons) {
-        await pool.query(`
-            INSERT INTO lessons (id, title, module, sequence, duration, video_url, description, learning_objectives, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
+        await db.query(`
+            INSERT INTO lessons (id, title, module, sequence, duration, video_url, description, learning_objectives, status, course_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)
             ON CONFLICT (id) DO UPDATE SET
-              title = EXCLUDED.title,
-              module = EXCLUDED.module,
-              sequence = EXCLUDED.sequence,
-              duration = EXCLUDED.duration,
-              video_url = EXCLUDED.video_url,
-              description = EXCLUDED.description,
-              learning_objectives = EXCLUDED.learning_objectives,
-              status = EXCLUDED.status,
+              title = COALESCE(NULLIF(lessons.title, ''), EXCLUDED.title),
+              module = COALESCE(NULLIF(lessons.module, ''), EXCLUDED.module),
+              sequence = CASE
+                WHEN lessons.id LIKE 'swing_%' AND lessons.sequence <= 12 THEN EXCLUDED.sequence
+                WHEN lessons.sequence <= 0 THEN EXCLUDED.sequence
+                ELSE lessons.sequence
+              END,
+              duration = COALESCE(NULLIF(lessons.duration, ''), EXCLUDED.duration),
+              video_url = COALESCE(NULLIF(lessons.video_url, ''), EXCLUDED.video_url),
+              description = COALESCE(NULLIF(lessons.description, ''), EXCLUDED.description),
+              learning_objectives = CASE
+                WHEN lessons.learning_objectives IS NULL OR lessons.learning_objectives = '[]'::jsonb THEN EXCLUDED.learning_objectives
+                ELSE lessons.learning_objectives
+              END,
+              status = COALESCE(NULLIF(lessons.status, ''), EXCLUDED.status),
+              course_id = EXCLUDED.course_id,
               updated_at = NOW()
         `, lesson);
     }
 
     try {
-        const existingVideos = await pool.query("SELECT COUNT(*)::int AS count FROM lesson_videos");
-        if (Number(existingVideos.rows[0]?.count || 0) === 0) {
-            for (const lesson of lessons) {
-                const [id, title, _mod, _seq, duration, videoUrl, description] = lesson;
-                await pool.query(`
-                    INSERT INTO lesson_videos (id, lesson_id, title, video_url, duration, description, sequence, status)
-                    VALUES ($1, $2, $3, $4, $5, $6, 1, 'Published')
+        // Seed Java Swing dedicated tables idempotently without duplicating records
+        for (const swingLesson of JAVA_SWING_LESSONS) {
+            await db.query(`
+                INSERT INTO swing_lessons (
+                  id, sequence, title, topics, objectives, content, code_example
+                )
+                VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7)
+                ON CONFLICT (id) DO UPDATE SET
+                  sequence = EXCLUDED.sequence,
+                  title = COALESCE(NULLIF(swing_lessons.title, ''), EXCLUDED.title),
+                  topics = EXCLUDED.topics,
+                  objectives = EXCLUDED.objectives,
+                  content = EXCLUDED.content,
+                  code_example = EXCLUDED.code_example,
+                  updated_at = NOW()
+            `, [
+                swingLesson.id,
+                swingLesson.sequence,
+                swingLesson.title,
+                JSON.stringify(swingLesson.topics || []),
+                JSON.stringify(swingLesson.objectives || []),
+                JSON.stringify(swingLesson.content || []),
+                swingLesson.codeExample || ""
+            ]);
+        }
+
+        for (const swingVid of JAVA_SWING_VIDEOS) {
+            await db.query(`
+                INSERT INTO swing_videos (id, lesson_id, title, duration, description, embed_url)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (id) DO UPDATE SET
+                  embed_url = COALESCE(NULLIF(swing_videos.embed_url, ''), EXCLUDED.embed_url),
+                  duration = COALESCE(NULLIF(swing_videos.duration, ''), EXCLUDED.duration)
+            `, [swingVid.id, swingVid.lessonId, swingVid.title, swingVid.duration, swingVid.description, swingVid.embedUrl]);
+        }
+
+        for (const swingAssessment of JAVA_SWING_ASSESSMENTS) {
+            const questionList = swingAssessment.questions || [];
+            await db.query(`
+                INSERT INTO swing_quizzes (id, lesson_id, title, passing_percentage, question_count)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (id) DO UPDATE SET
+                  passing_percentage = EXCLUDED.passing_percentage,
+                  question_count = EXCLUDED.question_count
+            `, [swingAssessment.id, swingAssessment.lessonId, swingAssessment.title, SWING_PASSING_SCORE, questionList.length || 20]);
+
+            for (const q of questionList) {
+                await db.query(`
+                    INSERT INTO swing_questions (id, quiz_id, prompt, choices, correct_answer, explanation)
+                    VALUES ($1, $2, $3, $4::jsonb, $5, $6)
                     ON CONFLICT (id) DO NOTHING
-                `, [`vid_${id}`, id, `${title} Video Lecture`, videoUrl, duration, description]);
+                `, [q.id, swingAssessment.id, q.question, JSON.stringify(q.options || []), q.correctAnswer, q.explanation || ""]);
             }
         }
 
-        const existingResources = await pool.query("SELECT COUNT(*)::int AS count FROM learning_resources");
+        for (const swingEx of JAVA_SWING_EXERCISES) {
+            await db.query(`
+                INSERT INTO swing_programming_exercises (
+                  id, lesson_id, title, difficulty, instructions, starter_code, test_cases
+                )
+                VALUES ($1, $2, $3, 'Beginner', $4, $5, $6::jsonb)
+                ON CONFLICT (id) DO NOTHING
+            `, [
+                swingEx.id,
+                swingEx.lessonId,
+                swingEx.title,
+                swingEx.description,
+                swingEx.starterCode || "",
+                JSON.stringify(swingEx.testCases || [])
+            ]);
+
+            await db.query(`
+                INSERT INTO programming_challenges (
+                  id, topic_id, lesson_id, title, description, learning_objectives,
+                  requirements, starter_code, sample_input, sample_output, passing_score, status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11, 'Published')
+                ON CONFLICT (id) DO NOTHING
+            `, [
+                swingEx.id,
+                swingEx.topicId,
+                swingEx.lessonId,
+                swingEx.title,
+                swingEx.description,
+                JSON.stringify(swingEx.learningObjectives || []),
+                JSON.stringify(swingEx.requirements || []),
+                swingEx.starterCode || "",
+                swingEx.sampleInput || "No stdin required",
+                swingEx.sampleOutput || "",
+                swingEx.passingScore || SWING_PASSING_SCORE
+            ]);
+
+            for (const tc of swingEx.testCases || []) {
+                const tcId = `${swingEx.id}_${tc.id}`;
+                await db.query(`
+                    INSERT INTO challenge_test_cases (id, challenge_id, input, expected_output, is_hidden, matcher)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (id) DO NOTHING
+                `, [tcId, swingEx.id, tc.input || "", tc.expectedOutput || "", Boolean(tc.isHidden), tc.matcher || ""]);
+            }
+        }
+
+        // Seed lesson_videos per lesson if not already present (reuses existing records, never duplicates)
+        for (const lesson of lessons) {
+            const [id, title, _mod, _seq, duration, videoUrl, description] = lesson;
+            const swingVid = JAVA_SWING_VIDEOS.find(v => v.lessonId === id);
+            const videoId = swingVid ? swingVid.id : `vid_${id}`;
+            const videoTitle = swingVid ? swingVid.title : `${title} Video Lecture`;
+            const videoDesc = swingVid ? swingVid.description : description;
+            await db.query(`
+                INSERT INTO lesson_videos (id, lesson_id, title, video_url, duration, description, sequence, status)
+                SELECT $1, $2, $3, $4, $5, $6, 1, 'Published'
+                WHERE NOT EXISTS (SELECT 1 FROM lesson_videos WHERE lesson_id = $2)
+                ON CONFLICT (id) DO NOTHING
+            `, [videoId, id, videoTitle, videoUrl, duration, videoDesc]);
+        }
+
+        // Seed assessments for all 17 lessons (12 OOP + 5 Swing) if not already present
+        for (let i = 1; i <= 12; i++) {
+            const lessonId = `oop_lesson_${i}`;
+            const assessmentId = `oop_assessment_${i}`;
+            const topicTitle = TOPIC_NAMES[lessonId] || `Lesson ${i}`;
+            const questions = OOP_PARSED_QUESTIONS[lessonId] || [];
+            await db.query(`
+                INSERT INTO assessments (id, lesson_id, title, quiz_type, passing_score, attempts, questions, status)
+                SELECT $1, $2, $3, 'Multiple Choice', $4, $5, $6::jsonb, 'Published'
+                WHERE NOT EXISTS (SELECT 1 FROM assessments WHERE lesson_id = $2)
+                ON CONFLICT (id) DO NOTHING
+            `, [assessmentId, lessonId, `${topicTitle} Assessment`, ASSESSMENT_PASSING_SCORE, MAX_ASSESSMENT_ATTEMPTS, JSON.stringify(questions)]);
+        }
+
+        for (const swingAssessment of JAVA_SWING_ASSESSMENTS) {
+            await db.query(`
+                INSERT INTO assessments (id, lesson_id, title, quiz_type, passing_score, attempts, questions, status)
+                SELECT $1, $2, $3, 'Multiple Choice', $4, $5, $6::jsonb, 'Published'
+                WHERE NOT EXISTS (SELECT 1 FROM assessments WHERE lesson_id = $2)
+                ON CONFLICT (id) DO NOTHING
+            `, [
+                swingAssessment.id,
+                swingAssessment.lessonId,
+                swingAssessment.title,
+                SWING_PASSING_SCORE,
+                MAX_ASSESSMENT_ATTEMPTS,
+                JSON.stringify(swingAssessment.questions || [])
+            ]);
+        }
+
+        const existingResources = await db.query("SELECT COUNT(*)::int AS count FROM learning_resources");
         if (Number(existingResources.rows[0]?.count || 0) === 0) {
             const initialResources = [
                 ['res_citation_1', 'oop_lesson_1', 'Java OOP Core Citations & Study Reference', 'reference', '/Citations/Citations%20of%2011%20topics%20in%20Java%20OOP.txt', '2 KB', 'Verified citations and topic syllabus for 11 Java OOP topics.'],
-                ['res_swing_1', 'oop_lesson_1', 'Java Swing Handout: JFrame Components', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%201%20JFrame.pdf', '152 KB', 'Comprehensive study handout on JFrame basics and GUI structure.'],
-                ['res_swing_2', 'oop_lesson_4', 'Java Swing Handout: JLabel & JTextField Encapsulation', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%202%20JLabel,JTextField&JTextArea_Assessment_.pdf', '139 KB', 'Component encapsulation and text input handling.'],
-                ['res_swing_3', 'oop_lesson_6', 'Java Swing Handout: JButton & ActionListener', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%203%20JButton%20&%20ActionListener.pdf', '59 KB', 'Event handling and listener implementation patterns.'],
-                ['res_swing_4', 'oop_lesson_8', 'Java Swing Handout: JPanel & Layout Managers', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%204%20JPanel%20&%20Layout%20Managers.pdf', '57 KB', 'Container hierarchy and layout managers.'],
-                ['res_swing_5', 'oop_lesson_10', 'Java Swing Handout: JOptionPane Dialogs', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%205%20JOptionPane.pdf', '56 KB', 'Standard modal dialog patterns in Java Swing.']
+                ['res_swing_1', 'swing_lesson_1', 'Java Swing Handout: JFrame Components', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%201%20JFrame.pdf', '152 KB', 'Comprehensive study handout on JFrame basics and GUI structure.'],
+                ['res_swing_2', 'swing_lesson_2', 'Java Swing Handout: JLabel & JTextField Encapsulation', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%202%20JLabel,JTextField&JTextArea_Assessment_.pdf', '139 KB', 'Component encapsulation and text input handling.'],
+                ['res_swing_3', 'swing_lesson_3', 'Java Swing Handout: JButton & ActionListener', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%203%20JButton%20&%20ActionListener.pdf', '59 KB', 'Event handling and listener implementation patterns.'],
+                ['res_swing_4', 'swing_lesson_4', 'Java Swing Handout: JPanel & Layout Managers', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%204%20JPanel%20&%20Layout%20Managers.pdf', '57 KB', 'Container hierarchy and layout managers.'],
+                ['res_swing_5', 'swing_lesson_5', 'Java Swing Handout: JOptionPane Dialogs', 'pdf', '/Java%20Swing/Assessment-Quiz/Topic%205%20JOptionPane.pdf', '56 KB', 'Standard modal dialog patterns in Java Swing.']
             ];
             for (const [id, lessonId, title, rType, url, size, desc] of initialResources) {
-                await pool.query(`
+                await db.query(`
                     INSERT INTO learning_resources (id, lesson_id, title, resource_type, file_url, file_size, description, status)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, 'Published')
                     ON CONFLICT (id) DO NOTHING
@@ -1761,6 +2086,8 @@ const seedLessons = async () => {
     } catch (e) {
         console.warn("Non-fatal video/resource seeding error:", e.message);
     }
+
+    if (db !== pool) return;
 
     // Create monitoring_requests table
     await executeInitQuery("Create monitoring_requests table", `
@@ -2061,8 +2388,8 @@ const getStudentPoints = async (studentId) => {
 
 const getStudentProgressSummary = async (studentId) => {
     try {
-        // 1. Get all published lessons
-        const lessonsRes = await pool.query("SELECT * FROM lessons ORDER BY sequence, title");
+        // 1. Get all published OOP lessons
+        const lessonsRes = await pool.query(`SELECT * FROM lessons WHERE status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL} ORDER BY sequence, title`);
         const lessons = lessonsRes.rows;
 
         // 2. Get user info
@@ -2360,18 +2687,52 @@ const checkAndAwardBadges = async (studentId) => {
 };
 
 const getLessonEvidence = async (studentId, lessonId) => {
-    let isSwing = false;
-    let lessonResult = await pool.query(
-        "SELECT id, sequence, module FROM lessons WHERE id = $1 AND status <> 'Archived'",
-        [lessonId]
-    );
-    if (!lessonResult.rowCount) {
+    let isSwing = isSwingLessonId(lessonId);
+    let lessonResult;
+    if (isSwing) {
         lessonResult = await pool.query(
-            "SELECT id, sequence, 'Java Swing' AS module FROM swing_lessons WHERE id = $1",
+            `SELECT sl.id, sl.sequence, COALESCE(l.module, 'Java Swing') AS module, COALESCE(l.status, 'Published') AS status
+             FROM swing_lessons sl
+             LEFT JOIN lessons l ON l.id = sl.id
+             WHERE sl.id = $1 AND COALESCE(l.status, 'Published') <> 'Archived'`,
             [lessonId]
         );
-        if (!lessonResult.rowCount) return null;
-        isSwing = true;
+        if (!lessonResult.rowCount) {
+            const fallbackSwing = JAVA_SWING_LESSONS.find(item => item.id === lessonId);
+            const lessonRowResult = await pool.query(
+                "SELECT id, sequence, module, status FROM lessons WHERE id = $1",
+                [lessonId]
+            );
+            if (lessonRowResult.rowCount && lessonRowResult.rows[0].status === "Archived") {
+                return null;
+            }
+            if (lessonRowResult.rowCount || fallbackSwing) {
+                const rawSeq = Number(lessonRowResult.rows[0]?.sequence || fallbackSwing?.sequence || 1);
+                lessonResult = {
+                    rowCount: 1,
+                    rows: [{
+                        id: lessonId,
+                        sequence: fallbackSwing ? fallbackSwing.sequence : (rawSeq > 12 ? rawSeq - 12 : rawSeq),
+                        module: "Java Swing"
+                    }]
+                };
+            } else {
+                return null;
+            }
+        }
+    } else {
+        lessonResult = await pool.query(
+            "SELECT id, sequence, module FROM lessons WHERE id = $1 AND status <> 'Archived'",
+            [lessonId]
+        );
+        if (!lessonResult.rowCount) {
+            lessonResult = await pool.query(
+                "SELECT id, sequence, 'Java Swing' AS module FROM swing_lessons WHERE id = $1",
+                [lessonId]
+            );
+            if (!lessonResult.rowCount) return null;
+            isSwing = true;
+        }
     }
     const lesson = lessonResult.rows[0];
 
@@ -2480,6 +2841,7 @@ const getOOPCompletionStatus = async (studentId) => {
         SELECT id
         FROM lessons
         WHERE status <> 'Archived'
+          AND ${OOP_LESSON_FILTER_SQL}
         ORDER BY sequence, id
     `);
     const evidence = await Promise.all(
@@ -2517,14 +2879,14 @@ const getLessonAccessState = async (studentId, lessonId) => {
     if (!current.isSwing) {
         if (current.sequence <= 1) return withLessonAccess(true);
         const previousResult = await pool.query(
-            `SELECT id FROM lessons WHERE sequence = $1 AND status <> 'Archived' LIMIT 1`,
+            `SELECT id FROM lessons WHERE sequence = $1 AND status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL} LIMIT 1`,
             [current.sequence - 1]
         );
         if (previousResult.rowCount) previousLessonId = previousResult.rows[0].id;
     } else {
         if (current.sequence <= 1) {
             const previousResult = await pool.query(
-                `SELECT id FROM lessons WHERE sequence = 12 AND status <> 'Archived' LIMIT 1`
+                `SELECT id FROM lessons WHERE sequence = 12 AND status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL} LIMIT 1`
             );
             if (previousResult.rowCount) previousLessonId = previousResult.rows[0].id;
         } else {
@@ -2532,7 +2894,12 @@ const getLessonAccessState = async (studentId, lessonId) => {
                 `SELECT id FROM swing_lessons WHERE sequence = $1 LIMIT 1`,
                 [current.sequence - 1]
             );
-            if (previousResult.rowCount) previousLessonId = previousResult.rows[0].id;
+            if (previousResult.rowCount) {
+                previousLessonId = previousResult.rows[0].id;
+            } else {
+                const fallbackPrev = JAVA_SWING_LESSONS.find(item => item.sequence === current.sequence - 1);
+                if (fallbackPrev) previousLessonId = fallbackPrev.id;
+            }
         }
     }
 
@@ -2586,8 +2953,21 @@ const resolveAssessmentQuestions = (assessmentId, lessonId = "") => {
     if (lessonId && OOP_PARSED_QUESTIONS[lessonId]) {
         return OOP_PARSED_QUESTIONS[lessonId];
     }
+    if (lessonId && SWING_QUESTIONS_BY_LESSON[lessonId]) {
+        return SWING_QUESTIONS_BY_LESSON[lessonId];
+    }
     if (assessmentId && OOP_PARSED_QUESTIONS[assessmentId]) {
         return OOP_PARSED_QUESTIONS[assessmentId];
+    }
+    const swingMatch = String(assessmentId).match(/swing_assessment_(\d+)/);
+    if (swingMatch) {
+        const key = `swing_lesson_${swingMatch[1]}`;
+        if (SWING_QUESTIONS_BY_LESSON[key]) return SWING_QUESTIONS_BY_LESSON[key];
+    }
+    const swingLessonMatch = String(lessonId).match(/swing_lesson_(\d+)/);
+    if (swingLessonMatch) {
+        const key = `swing_lesson_${swingLessonMatch[1]}`;
+        if (SWING_QUESTIONS_BY_LESSON[key]) return SWING_QUESTIONS_BY_LESSON[key];
     }
     const match = String(assessmentId).match(/oop_assessment_(\d+)/);
     if (match) {
@@ -3003,6 +3383,7 @@ app.get("/api/rankings", requireAuth, requireRole(["teacher", "student"]), async
                 SELECT COUNT(*)::int AS total_lessons
                 FROM lessons
                 WHERE status <> 'Archived'
+                  AND ${OOP_LESSON_FILTER_SQL}
             ),
             best_quizzes AS (
                 SELECT DISTINCT ON (student_user_id, assessment_id)
@@ -3204,10 +3585,79 @@ app.get("/api/admin/overview", requireAuth, requireRole(["admin"]), async (_req,
 });
 */
 
+const buildDefaultSwingLessonRow = (swingLesson, swingVideo) => ({
+    id: swingLesson.id,
+    title: swingLesson.title,
+    module: "Java Swing",
+    course_id: "java_swing",
+    sequence: 12 + Number(swingLesson.sequence),
+    duration: swingVideo?.duration || "15:00",
+    video_url: swingVideo?.embedUrl || "",
+    description: swingLesson.introduction || swingLesson.summary || "",
+    learning_objectives: swingLesson.objectives || [],
+    status: "Published",
+    metadata: {}
+});
+
+const fetchOrderedLessonRows = async () => {
+    const result = await pool.query(`
+        SELECT * FROM lessons
+        ORDER BY
+          CASE
+            WHEN id LIKE 'swing_%' OR COALESCE(course_id, '') = 'java_swing' OR LOWER(COALESCE(module, '')) LIKE '%swing%' THEN 1
+            ELSE 0
+          END ASC,
+          sequence ASC,
+          title ASC
+    `);
+    const existingIds = new Set(result.rows.map(row => row.id));
+    const missingSwing = JAVA_SWING_LESSONS.filter(item => !existingIds.has(item.id));
+    if (missingSwing.length > 0) {
+        let dbSwingRows = [];
+        let dbSwingVideos = [];
+        try {
+            const [slRes, svRes] = await Promise.all([
+                pool.query("SELECT * FROM swing_lessons ORDER BY sequence ASC"),
+                pool.query("SELECT * FROM swing_videos")
+            ]);
+            dbSwingRows = slRes.rows || [];
+            dbSwingVideos = svRes.rows || [];
+        } catch {}
+
+        for (const swingLesson of missingSwing) {
+            const dbSl = dbSwingRows.find(r => r.id === swingLesson.id);
+            const dbSv = dbSwingVideos.find(r => r.lesson_id === swingLesson.id);
+            const fallbackVideo = JAVA_SWING_VIDEOS.find(v => v.lessonId === swingLesson.id);
+            result.rows.push({
+                id: swingLesson.id,
+                title: dbSl?.title || swingLesson.title,
+                module: "Java Swing",
+                course_id: "java_swing",
+                sequence: 12 + Number(dbSl?.sequence || swingLesson.sequence),
+                duration: dbSv?.duration || fallbackVideo?.duration || "15:00",
+                video_url: dbSv?.embed_url || fallbackVideo?.embedUrl || "",
+                description: dbSl?.introduction || swingLesson.introduction || swingLesson.summary || "",
+                learning_objectives: dbSl?.objectives || swingLesson.objectives || [],
+                status: "Published",
+                metadata: {}
+            });
+        }
+    }
+    result.rows.sort((a, b) => {
+        const aSwing = isSwingLessonId(a.id) || a.course_id === "java_swing" || String(a.module || "").toLowerCase().includes("swing") ? 1 : 0;
+        const bSwing = isSwingLessonId(b.id) || b.course_id === "java_swing" || String(b.module || "").toLowerCase().includes("swing") ? 1 : 0;
+        if (aSwing !== bSwing) return aSwing - bSwing;
+        const seqDiff = Number(a.sequence || 0) - Number(b.sequence || 0);
+        if (seqDiff !== 0) return seqDiff;
+        return String(a.title || "").localeCompare(String(b.title || ""));
+    });
+    return result.rows;
+};
+
 app.get("/api/lessons", optionalAuth, async (req, res, next) => {
     try {
-        const result = await pool.query("SELECT * FROM lessons ORDER BY sequence, title");
-        res.json({ success: true, data: await Promise.all(result.rows.map(row => toClientLessonForRequest(row, req))) });
+        const rows = await fetchOrderedLessonRows();
+        res.json({ success: true, data: await Promise.all(rows.map(row => toClientLessonForRequest(row, req))) });
     } catch (error) {
         next(error);
     }
@@ -3334,6 +3784,28 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
             sequence = seqCheck.value;
         }
 
+        const swingCatalogMatch = JAVA_SWING_LESSONS.find(item => item.id === lessonId);
+        if (swingCatalogMatch) {
+            const swingVideoMatch = JAVA_SWING_VIDEOS.find(v => v.lessonId === lessonId);
+            const defaultRow = buildDefaultSwingLessonRow(swingCatalogMatch, swingVideoMatch);
+            await pool.query(`
+                INSERT INTO lessons (id, title, module, course_id, sequence, duration, video_url, description, learning_objectives, status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
+                ON CONFLICT (id) DO NOTHING
+            `, [
+                defaultRow.id,
+                defaultRow.title,
+                defaultRow.module,
+                defaultRow.course_id,
+                defaultRow.sequence,
+                defaultRow.duration,
+                defaultRow.video_url,
+                defaultRow.description,
+                JSON.stringify(defaultRow.learning_objectives),
+                defaultRow.status
+            ]);
+        }
+
         let updatedMetadata = null;
         if (body.metadata !== undefined || body.citationText !== undefined || body.citation_text !== undefined || body.citationUrl !== undefined || body.citation_url !== undefined) {
             const currentRes = await pool.query("SELECT metadata FROM lessons WHERE id = $1", [lessonId]);
@@ -3385,7 +3857,33 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
             hasStorageSizeUpdate
         ]);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Lecture not found." });
-        res.json({ success: true, data: toClientLesson(result.rows[0]) });
+        const updatedRow = result.rows[0];
+        if (isSwingLessonId(lessonId)) {
+            try {
+                await pool.query(`
+                    UPDATE swing_lessons SET
+                      title = COALESCE($2, title),
+                      objectives = COALESCE($3::jsonb, objectives),
+                      updated_at = NOW()
+                    WHERE id = $1
+                `, [
+                    lessonId,
+                    updatedRow.title || null,
+                    updatedRow.learning_objectives ? JSON.stringify(updatedRow.learning_objectives) : null
+                ]);
+                if (updatedRow.video_url) {
+                    await pool.query(`
+                        UPDATE swing_videos SET
+                          embed_url = $2,
+                          duration = COALESCE(NULLIF($3, ''), duration)
+                        WHERE lesson_id = $1
+                    `, [lessonId, updatedRow.video_url, updatedRow.duration || ""]);
+                }
+            } catch (swingSyncErr) {
+                console.warn("Non-fatal Swing table sync warning:", swingSyncErr.message);
+            }
+        }
+        res.json({ success: true, data: toClientLesson(updatedRow) });
     } catch (error) {
         next(error);
     }
@@ -3488,7 +3986,7 @@ app.put("/api/assessments/:id", requireAuth, requireRole(["teacher"]), async (re
             attempts = attemptsCheck.value;
         }
 
-        const result = await pool.query(`
+        let result = await pool.query(`
             UPDATE assessments SET
               lesson_id = COALESCE($2, lesson_id),
               title = COALESCE($3, title),
@@ -3510,7 +4008,43 @@ app.put("/api/assessments/:id", requireAuth, requireRole(["teacher"]), async (re
             body.questions === undefined ? null : JSON.stringify(Array.isArray(body.questions) ? body.questions : []),
             body.status === undefined ? null : cleanText(body.status || "Draft", 40)
         ]);
+        if (!result.rowCount && lessonId) {
+            result = await pool.query(`
+                INSERT INTO assessments (id, lesson_id, title, quiz_type, passing_score, attempts, questions, status, created_by)
+                VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+                ON CONFLICT (id) DO UPDATE SET
+                  lesson_id = EXCLUDED.lesson_id,
+                  title = EXCLUDED.title,
+                  quiz_type = EXCLUDED.quiz_type,
+                  passing_score = EXCLUDED.passing_score,
+                  attempts = EXCLUDED.attempts,
+                  questions = EXCLUDED.questions,
+                  status = EXCLUDED.status,
+                  updated_at = NOW()
+                RETURNING *
+            `, [
+                assessmentId,
+                lessonId,
+                cleanText(body.title || "Lesson Assessment", 255),
+                cleanText(body.quizType || "Multiple Choice", 80),
+                passingScore ?? ASSESSMENT_PASSING_SCORE,
+                attempts ?? MAX_ASSESSMENT_ATTEMPTS,
+                JSON.stringify(Array.isArray(body.questions) ? body.questions : []),
+                cleanText(body.status || "Published", 40),
+                req.authUser.id
+            ]);
+        }
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Quiz not found." });
+        if (isSwingLessonId(result.rows[0].lesson_id)) {
+            try {
+                await pool.query(`
+                    UPDATE swing_quizzes SET
+                      title = COALESCE($2, title),
+                      passing_percentage = COALESCE($3, passing_percentage)
+                    WHERE lesson_id = $1
+                `, [result.rows[0].lesson_id, result.rows[0].title, result.rows[0].passing_score]);
+            } catch {}
+        }
         res.json({ success: true, data: toClientAssessment(result.rows[0]) });
     } catch (error) {
         next(error);
@@ -3760,6 +4294,17 @@ app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, 
             WHERE id = $1
         `, [lessonId, videoUrl, duration, storageProvider, storageKey || null, storageContentType || null, STORAGE_PROVIDER, storageSize]);
 
+        if (isSwingLessonId(lessonId)) {
+            await client.query(`
+                UPDATE swing_videos
+                SET title = COALESCE(NULLIF($2, ''), title),
+                    embed_url = COALESCE(NULLIF($3, ''), embed_url),
+                    duration = COALESCE(NULLIF($4, ''), duration),
+                    description = COALESCE(NULLIF($5, ''), description)
+                WHERE lesson_id = $1
+            `, [lessonId, title, videoUrl, duration, description]);
+        }
+
         await client.query("COMMIT");
         committed = true;
         res.status(201).json({ success: true, data: toClientVideo(result.rows[0]) });
@@ -3869,6 +4414,18 @@ app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, re
                 "UPDATE lessons SET video_url = $2, storage_provider = NULL, storage_key = NULL, storage_content_type = NULL, storage_size = NULL, updated_at = NOW() WHERE id = $1",
                 [result.rows[0].lesson_id, submittedVideoUrl]
             );
+        }
+        if (isSwingLessonId(result.rows[0].lesson_id)) {
+            try {
+                await pool.query(`
+                    UPDATE swing_videos
+                    SET title = COALESCE($2, title),
+                        embed_url = COALESCE($3, embed_url),
+                        duration = COALESCE($4, duration),
+                        description = COALESCE($5, description)
+                    WHERE lesson_id = $1
+                `, [result.rows[0].lesson_id, result.rows[0].title, result.rows[0].video_url, result.rows[0].duration, result.rows[0].description]);
+            } catch {}
         }
         res.json({ success: true, data: toClientVideo(result.rows[0]) });
     } catch (error) {
@@ -4474,7 +5031,7 @@ app.get("/api/teacher/analytics", requireAuth, requireRole(["teacher"]), async (
 
         // 2. Published lessons
         const lessonsQuery = await pool.query(`
-            SELECT id, title, sequence, module FROM lessons WHERE status <> 'Archived' ORDER BY sequence ASC
+            SELECT id, title, sequence, module FROM lessons WHERE status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL} ORDER BY sequence ASC
         `);
         const totalLessons = lessonsQuery.rows.length || 12;
 
@@ -4709,7 +5266,7 @@ app.get("/api/teacher/analytics/student/:studentId", requireAuth, requireRole(["
             pool.query("SELECT * FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = 'oop_pre_test' ORDER BY attempt_number DESC LIMIT 1", [studentId]),
             pool.query("SELECT * FROM quiz_attempts WHERE student_user_id = $1 AND assessment_id = 'oop_post_test' ORDER BY attempt_number DESC LIMIT 1", [studentId]),
             pool.query("SELECT video_id, completion_percentage, completed, updated_at FROM student_progress WHERE student_user_id = $1", [studentId]),
-            pool.query("SELECT id, title, sequence, module FROM lessons WHERE status <> 'Archived' ORDER BY sequence ASC")
+            pool.query(`SELECT id, title, sequence, module FROM lessons WHERE status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL} ORDER BY sequence ASC`)
         ]);
 
         const preScore = preTest.rows[0] ? Number(preTest.rows[0].percentage) : null;
@@ -5288,8 +5845,8 @@ app.get("/api/assessments/sessions/:sessionId/events", requireAuth, requireRole(
 
 app.get("/lessons", async (_req, res, next) => {
     try {
-        const result = await pool.query("SELECT * FROM lessons ORDER BY sequence, title");
-        res.json(result.rows);
+        const rows = await fetchOrderedLessonRows();
+        res.json(rows);
     } catch (error) {
         next(error);
     }
@@ -5384,6 +5941,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                   ORDER BY ps.submitted_at DESC LIMIT 1
                 ) ps ON TRUE
                 WHERE l.status <> 'Archived'
+                  AND ${OOP_LESSON_ALIAS_FILTER_SQL("l")}
             `, [dbStudentId]),
             pool.query(`
                 SELECT COUNT(*)::int AS total_videos,
@@ -5455,6 +6013,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                     LIMIT 1
                                 ) ps ON TRUE
                                 WHERE l.status <> 'Archived'
+                                  AND ${OOP_LESSON_ALIAS_FILTER_SQL("l")}
                                 ORDER BY l.sequence, l.title
                         `, [dbStudentId])
                         , pool.query(`
@@ -6105,6 +6664,10 @@ app.patch("/api/recommendations/:id/complete", requireAuth, async (req, res, nex
 
 app.get("/api/practice-challenges", requireAuth, async (req, res, next) => {
     try {
+        const includeSwing = req.authUser?.role === "teacher" || req.query?.includeSwing === "true";
+        const allowedIds = includeSwing
+            ? [...ACTIVE_OOP_PRACTICE_IDS, ...JAVA_SWING_EXERCISES.map(ex => ex.id)]
+            : ACTIVE_OOP_PRACTICE_IDS;
         const result = await pool.query(`
             SELECT c.*, COALESCE(json_agg(t.*) FILTER (WHERE t.id IS NOT NULL), '[]') AS test_cases
             FROM programming_challenges c
@@ -6112,7 +6675,7 @@ app.get("/api/practice-challenges", requireAuth, async (req, res, next) => {
             WHERE c.id = ANY($1::text[])
             GROUP BY c.id
             ORDER BY c.id
-        `, [ACTIVE_OOP_PRACTICE_IDS]);
+        `, [allowedIds]);
         const challenges = result.rows.map(toClientPracticeChallenge);
 
         // For student role, NEVER expose hidden test cases or matchers to frontend
@@ -6153,7 +6716,9 @@ app.post("/api/practice-challenges/:id/run", requireAuth, async (req, res, next)
 
         let challenge = result.rows[0] ? toClientPracticeChallenge(result.rows[0]) : null;
         if (!challenge) {
-            challenge = PRACTICE_CHALLENGES.find(c => c.id === challengeId) || null;
+            challenge = PRACTICE_CHALLENGES.find(c => c.id === challengeId)
+                || JAVA_SWING_EXERCISES.find(c => c.id === challengeId)
+                || null;
         }
 
         if (!challenge) {
@@ -6276,7 +6841,7 @@ app.put("/api/practice-challenges/:id", requireAuth, requireRole(["teacher"]), a
     try {
         const body = req.body || {};
         await client.query("BEGIN");
-        const result = await client.query(`
+        let result = await client.query(`
             UPDATE programming_challenges SET
               topic_id = COALESCE($2, topic_id),
               lesson_id = COALESCE($3, lesson_id),
@@ -6306,9 +6871,62 @@ app.put("/api/practice-challenges/:id", requireAuth, requireRole(["teacher"]), a
             body.passingScore === undefined && body.passing_score === undefined ? null : clampNumber(body.passingScore ?? body.passing_score, 0, 100),
             body.status === undefined ? null : cleanText(body.status || "Draft", 40)
         ]);
+        const resolvedLessonId = cleanText(body.lessonId || body.lesson_id || "", 120);
+        if (!result.rowCount && resolvedLessonId) {
+            result = await client.query(`
+                INSERT INTO programming_challenges (
+                  id, topic_id, lesson_id, title, description, learning_objectives,
+                  requirements, starter_code, sample_input, sample_output, passing_score, status, created_by
+                )
+                VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12, $13)
+                ON CONFLICT (id) DO UPDATE SET
+                  topic_id = EXCLUDED.topic_id,
+                  lesson_id = EXCLUDED.lesson_id,
+                  title = EXCLUDED.title,
+                  description = EXCLUDED.description,
+                  learning_objectives = EXCLUDED.learning_objectives,
+                  requirements = EXCLUDED.requirements,
+                  starter_code = EXCLUDED.starter_code,
+                  sample_input = EXCLUDED.sample_input,
+                  sample_output = EXCLUDED.sample_output,
+                  passing_score = EXCLUDED.passing_score,
+                  status = EXCLUDED.status,
+                  updated_at = NOW()
+                RETURNING *
+            `, [
+                req.params.id,
+                cleanText(body.topicId || body.topic_id || (isSwingLessonId(resolvedLessonId) ? "java_swing" : "oop"), 120),
+                resolvedLessonId,
+                cleanText(body.title || "Practice Activity", 255),
+                cleanText(body.description || body.instructions || "", 5000),
+                JSON.stringify(Array.isArray(body.learningObjectives) ? body.learningObjectives : []),
+                JSON.stringify(Array.isArray(body.requirements) ? body.requirements : []),
+                String(body.starterCode || body.starter_code || "").slice(0, 50000),
+                String(body.sampleInput || body.sample_input || "").slice(0, 10000),
+                String(body.sampleOutput || body.expectedOutput || body.sample_output || "").slice(0, 10000),
+                clampNumber(body.passingScore ?? body.passing_score ?? 70, 0, 100),
+                cleanText(body.status || "Published", 40),
+                req.authUser.id
+            ]);
+        }
         if (!result.rowCount) {
             await client.query("ROLLBACK");
             return res.status(404).json({ success: false, message: "Practice activity not found." });
+        }
+        if (isSwingLessonId(result.rows[0].lesson_id)) {
+            await client.query(`
+                UPDATE swing_programming_exercises SET
+                  title = COALESCE($2, title),
+                  instructions = COALESCE($3, instructions),
+                  starter_code = COALESCE($4, starter_code),
+                  updated_at = NOW()
+                WHERE lesson_id = $1
+            `, [
+                result.rows[0].lesson_id,
+                result.rows[0].title,
+                result.rows[0].description,
+                result.rows[0].starter_code
+            ]);
         }
         if (Array.isArray(body.testCases)) {
             await client.query("DELETE FROM challenge_test_cases WHERE challenge_id = $1", [req.params.id]);
@@ -6443,6 +7061,7 @@ app.get("/api/teacher/monitoring", requireAuth, requireRole(["teacher"]), async 
                     SELECT COUNT(*)::int AS total_lessons
                     FROM lessons
                     WHERE status <> 'Archived'
+                      AND ${OOP_LESSON_FILTER_SQL}
                 ),
                 lesson_evidence AS (
                     SELECT
@@ -6492,6 +7111,7 @@ app.get("/api/teacher/monitoring", requireAuth, requireRole(["teacher"]), async 
                     ) practice ON TRUE
                     WHERE u.role = 'student'
                       AND l.status <> 'Archived'
+                      AND ${OOP_LESSON_ALIAS_FILTER_SQL("l")}
                 ),
                 student_metrics AS (
                     SELECT
@@ -7084,6 +7704,7 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
              WHERE sequence = (
                SELECT sequence + 1 FROM lessons WHERE id = $1
              ) AND status <> 'Archived'
+               AND ${OOP_LESSON_FILTER_SQL}
              LIMIT 1`,
             [prerequisite.rows[0].lesson_id]
         );
@@ -7377,7 +7998,17 @@ initializeDatabase()
     });
 }
 
-module.exports = { app, initializeDatabase, seedPracticeChallenges };
+module.exports = {
+    app,
+    initializeDatabase,
+    seedLessons,
+    seedPracticeChallenges,
+    fetchOrderedLessonRows,
+    getLessonContent,
+    getLessonEvidence,
+    getOOPCompletionStatus,
+    getLessonAccessState
+};
 
 
 
