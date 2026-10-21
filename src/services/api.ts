@@ -8,6 +8,7 @@ import {
   LearningResource,
   PreTestConfig,
   PreTestAttempt,
+  PreTestInsights,
   TeacherCourseAnalytics,
   StudentDeepDiveAnalytics
 } from '../types';
@@ -427,7 +428,11 @@ export const preTestApi = {
     return apiRequest<{ success: boolean; total: number; data: PreTestAttempt[] }>(`/api/pre-test/attempts${query}`);
   },
   getMyAttempts: () =>
-    apiRequest<{ success: boolean; data: PreTestAttempt[] }>('/api/pre-test/my-attempts')
+    apiRequest<{ success: boolean; data: PreTestAttempt[] }>('/api/pre-test/my-attempts'),
+  getMyInsights: (attemptNumber?: number) => {
+    const query = attemptNumber ? `?attempt=${encodeURIComponent(attemptNumber)}` : '';
+    return apiRequest<{ success: boolean; hasCompletedPreTest: boolean; data: PreTestInsights | null }>(`/api/pre-test/my-insights${query}`);
+  }
 };
 
 export const analyticsApi = {

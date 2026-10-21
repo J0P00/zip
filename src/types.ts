@@ -683,6 +683,77 @@ export interface PreTestAttempt {
   scoreImprovement?: number | null;
 }
 
+export interface PreTestTopicPerformance {
+  topicId: string;
+  lessonId: string;
+  sequence: number;
+  topicName: string;
+  keyConcepts?: string[];
+  pedagogicalAdvice?: string;
+  totalQuestions: number;
+  correctAnswers: number;
+  incorrectAnswers: number;
+  accuracyPercentage: number | null;
+  status: 'Strong' | 'Developing' | 'Needs Improvement' | 'Not Assessed';
+  isPreliminary: boolean;
+  incorrectQuestions?: Array<{
+    id: string;
+    question: string;
+    selectedAnswer: string;
+    correctAnswer: string;
+    explanation: string;
+  }>;
+}
+
+export interface PreTestRecommendation {
+  topicId: string;
+  topicName: string;
+  lessonId: string;
+  lessonSequence: number;
+  priority: 'High' | 'Medium';
+  status: string;
+  accuracyPercentage: number | null;
+  missedQuestionCount: number;
+  actionText: string;
+  concepts: string[];
+  sampleMissedConcepts?: string[];
+}
+
+export interface PreTestInsights {
+  attemptNumber: number;
+  totalAttempts?: number;
+  score: number;
+  total: number;
+  totalAnswered: number;
+  correctCount: number;
+  incorrectCount: number;
+  percentage: number;
+  passed: boolean;
+  passingScore: number;
+  diagnosticStatus: string;
+  diagnosticNote: string;
+  submissionDate: string;
+  timeSpentSeconds?: number | null;
+  formattedTimeSpent?: string | null;
+  topicPerformance: PreTestTopicPerformance[];
+  strengths: PreTestTopicPerformance[];
+  weaknesses: PreTestTopicPerformance[];
+  developing: PreTestTopicPerformance[];
+  notAssessed: PreTestTopicPerformance[];
+  prioritizedTopicsForReview?: PreTestTopicPerformance[];
+  recommendations: PreTestRecommendation[];
+  attemptsSummary?: Array<{
+    attemptNumber: number;
+    score: number;
+    total: number;
+    percentage: number;
+    passed: boolean;
+    dateCompleted: string;
+    isLatest?: boolean;
+  }>;
+  review?: any[];
+}
+
 export interface TeacherCourseAnalytics {
   courseOverview: {
     totalEnrolled: number;

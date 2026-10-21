@@ -15,6 +15,7 @@ const jwt = require("jsonwebtoken");
 const pool = require("./db");
 const { OOP_PARSED_QUESTIONS, ALL_OOP_QUESTIONS, TOPIC_NAMES, generatePreTestSessionQuestions } = require("./questionBank");
 const { buildOopTopicNameMap, computeOopTopicPerformance } = require("./oopTopicPerformance");
+const { computePreTestInsights } = require("./preTestAnalytics");
 const { ACTIVE_OOP_PRACTICE_CHALLENGES, ACTIVE_OOP_PRACTICE_IDS } = require("./oopPracticeCatalog");
 const {
     SWING_PASSING_SCORE,
@@ -2145,6 +2146,7 @@ const seedLessons = async (db = pool) => {
         CREATE INDEX IF NOT EXISTS idx_assessment_sessions_student ON assessment_sessions(student_user_id, started_at DESC);
         CREATE INDEX IF NOT EXISTS idx_assessment_sessions_token ON assessment_sessions(session_token);
         CREATE INDEX IF NOT EXISTS idx_assessment_sessions_active ON assessment_sessions(student_user_id, assessment_id, status);
+        ALTER TABLE assessment_sessions ADD COLUMN IF NOT EXISTS insights JSONB DEFAULT NULL;
     `);
 
     // Create assessment_security_events table
@@ -4865,13 +4867,32 @@ app.post("/api/pre-test/submit", requireAuth, async (req, res, next) => {
         const correctAnswers = score;
         const incorrectAnswers = total - score;
 
+        const durationSeconds = req.body?.timeSpentSeconds !== undefined
+            ? Number(req.body.timeSpentSeconds)
+            : (session.started_at ? Math.max(0, Math.floor((Date.now() - new Date(session.started_at).getTime()) / 1000)) : null);
+
+        const insights = computePreTestInsights({
+            questions,
+            answers,
+            score,
+            total,
+            percentage,
+            passed,
+            attemptNumber: session.attempt_number || 1,
+            dateCompleted: new Date().toISOString(),
+            startedAt: session.started_at,
+            completedAt: new Date().toISOString(),
+            timeSpentSeconds: durationSeconds,
+            passingScore
+        });
+
         // Atomically claim the session only if it belongs to authenticated student, is active, and is unexpired
         const claimResult = await pool.query(`
             UPDATE assessment_sessions
-            SET status = 'completed', completed_at = NOW(), score = $1, total = $2, percentage = $3, passed = $4, answers = $5::jsonb, updated_at = NOW()
-            WHERE id = $6 AND student_user_id = $7 AND assessment_id = 'oop_pre_test' AND status = 'active' AND expires_at > NOW()
+            SET status = 'completed', completed_at = NOW(), score = $1, total = $2, percentage = $3, passed = $4, answers = $5::jsonb, insights = $6::jsonb, updated_at = NOW()
+            WHERE id = $7 AND student_user_id = $8 AND assessment_id = 'oop_pre_test' AND status = 'active' AND expires_at > NOW()
             RETURNING *
-        `, [score, total, percentage, passed, JSON.stringify(answers), session.id, req.authUser.id]);
+        `, [score, total, percentage, passed, JSON.stringify(answers), JSON.stringify(insights), session.id, req.authUser.id]);
 
         if (!claimResult.rowCount) {
             return res.status(409).json({ success: false, message: "This pre-test session could not be completed (already submitted or expired)." });
@@ -4909,7 +4930,8 @@ app.post("/api/pre-test/submit", requireAuth, async (req, res, next) => {
                 passingScore,
                 attemptNumber: session.attempt_number || 1,
                 dateCompleted: new Date().toISOString(),
-                review
+                review,
+                insights
             }
         });
     } catch (error) {
@@ -5008,6 +5030,116 @@ app.get("/api/pre-test/my-attempts", requireAuth, async (req, res, next) => {
                 attemptNumber: Number(r.attempt_number),
                 dateCompleted: r.date_completed
             }))
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/pre-test/my-insights", requireAuth, async (req, res, next) => {
+    try {
+        if (req.authUser.role !== "student") {
+            return res.status(403).json({ success: false, message: "Only students can view their pre-test insights." });
+        }
+
+        const requestedAttempt = req.query.attempt ? Number(req.query.attempt) : null;
+
+        // Query student's completed pre-test sessions
+        const sessionsResult = await pool.query(`
+            SELECT s.*, q.date_completed
+            FROM assessment_sessions s
+            LEFT JOIN quiz_attempts q ON q.student_user_id = s.student_user_id AND q.assessment_id = 'oop_pre_test' AND q.attempt_number = s.attempt_number
+            WHERE s.student_user_id = $1 AND s.assessment_id = 'oop_pre_test' AND s.status = 'completed'
+            ORDER BY s.attempt_number DESC, s.completed_at DESC
+        `, [req.authUser.id]);
+
+        let sessions = sessionsResult.rows;
+
+        // If no completed assessment_sessions found, check quiz_attempts (for backward compatibility)
+        if (sessions.length === 0) {
+            const fallbackAttempts = await pool.query(`
+                SELECT * FROM quiz_attempts
+                WHERE student_user_id = $1 AND assessment_id = 'oop_pre_test'
+                ORDER BY attempt_number DESC, date_completed DESC
+            `, [req.authUser.id]);
+
+            if (fallbackAttempts.rowCount === 0) {
+                return res.json({
+                    success: true,
+                    hasCompletedPreTest: false,
+                    data: null
+                });
+            }
+
+            sessions = fallbackAttempts.rows.map(q => ({
+                id: q.id,
+                student_user_id: q.student_user_id,
+                attempt_number: q.attempt_number,
+                score: q.score,
+                total: q.total,
+                percentage: q.percentage,
+                passed: q.passed,
+                answers: q.answers || {},
+                question_order: [],
+                date_completed: q.date_completed,
+                completed_at: q.date_completed,
+                started_at: q.date_completed,
+                insights: null
+            }));
+        }
+
+        const attemptsSummary = sessions.map((s, idx) => ({
+            attemptNumber: Number(s.attempt_number || idx + 1),
+            score: Number(s.score),
+            total: Number(s.total || 20),
+            percentage: Number(s.percentage),
+            passed: Boolean(s.passed),
+            dateCompleted: s.date_completed || s.completed_at,
+            isLatest: idx === 0
+        }));
+
+        let targetSession = sessions[0];
+        if (requestedAttempt) {
+            const found = sessions.find(s => Number(s.attempt_number) === requestedAttempt);
+            if (found) targetSession = found;
+        }
+
+        const cfgResult = await pool.query("SELECT passing_score FROM pre_tests WHERE id = 'oop_pre_test' LIMIT 1");
+        const passingScore = cfgResult.rows[0]?.passing_score ? Number(cfgResult.rows[0].passing_score) : PRE_TEST_PASSING_SCORE;
+
+        let insights = targetSession.insights;
+        if (!insights || typeof insights !== 'object' || !insights.topicPerformance) {
+            const questions = Array.isArray(targetSession.question_order) && targetSession.question_order.length > 0
+                ? targetSession.question_order
+                : [];
+
+            insights = computePreTestInsights({
+                questions,
+                answers: targetSession.answers || {},
+                score: targetSession.score,
+                total: targetSession.total,
+                percentage: targetSession.percentage,
+                passed: targetSession.passed,
+                attemptNumber: targetSession.attempt_number,
+                dateCompleted: targetSession.date_completed || targetSession.completed_at,
+                startedAt: targetSession.started_at,
+                completedAt: targetSession.completed_at,
+                passingScore
+            });
+
+            if (targetSession.id) {
+                pool.query("UPDATE assessment_sessions SET insights = $1::jsonb WHERE id = $2", [JSON.stringify(insights), targetSession.id]).catch(() => {});
+            }
+        }
+
+        res.json({
+            success: true,
+            hasCompletedPreTest: true,
+            data: {
+                ...insights,
+                attemptsSummary,
+                totalAttempts: sessions.length
+            }
         });
     } catch (error) {
         next(error);
@@ -5724,7 +5856,25 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
             storage: "oop",
             fallbackAttemptNumber: session.attempt_number,
             maxAttempts: submitMaxAttempts,
-            beforeInsert: client => client.query("UPDATE assessment_sessions SET status = 'completed', completed_at = NOW(), score = $1, total = $2, percentage = $3, passed = $4, answers = $5::jsonb, updated_at = NOW() WHERE id = $6", [score, total, percentage, passed, JSON.stringify(answers), session.id]),
+            beforeInsert: client => {
+                let sessionInsights = null;
+                if (session.assessment_id === "oop_pre_test") {
+                    sessionInsights = computePreTestInsights({
+                        questions,
+                        answers,
+                        score,
+                        total,
+                        percentage,
+                        passed,
+                        attemptNumber: session.attempt_number || 1,
+                        dateCompleted: new Date().toISOString(),
+                        startedAt: session.started_at,
+                        completedAt: new Date().toISOString(),
+                        passingScore: submitPassingScore
+                    });
+                }
+                return client.query("UPDATE assessment_sessions SET status = 'completed', completed_at = NOW(), score = $1, total = $2, percentage = $3, passed = $4, answers = $5::jsonb, insights = $6::jsonb, updated_at = NOW() WHERE id = $7", [score, total, percentage, passed, JSON.stringify(answers), sessionInsights ? JSON.stringify(sessionInsights) : null, session.id]);
+            },
             insertQuery: "INSERT INTO quiz_attempts (student_user_id, assessment_id, lesson_id, score, total, percentage, correct_answers, incorrect_answers, passed, attempt_number, answers, date_completed) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, NOW()) RETURNING *",
             buildParams: attemptNumber => [req.authUser.id, session.assessment_id, session.lesson_id, score, total, percentage, correctAnswers, incorrectAnswers, passed, attemptNumber, JSON.stringify(answers)]
         });

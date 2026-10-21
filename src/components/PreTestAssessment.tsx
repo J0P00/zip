@@ -69,6 +69,7 @@ export default function PreTestAssessment({
     passed: boolean;
     totalQuestions: number;
     correctCount: number;
+    insights?: any;
     review: Array<{
       id: string;
       topic: string;
@@ -192,6 +193,7 @@ export default function PreTestAssessment({
           passed: data.passed,
           totalQuestions: data.total || 20,
           correctCount: data.score,
+          insights: data.insights || null,
           review: (data.review || []).map((r: any) => ({
             id: r.id,
             topic: r.topicName || r.topic || 'OOP Concept',
@@ -700,6 +702,127 @@ export default function PreTestAssessment({
             </button>
           </div>
         </div>
+
+        {/* Diagnostic Topic Performance & Insights */}
+        {resultData.insights && (
+          <div className={`rounded-3xl border p-6 sm:p-8 shadow-sm space-y-6 ${cardClass}`}>
+            <div>
+              <span className="font-mono text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400">
+                Diagnostic Analysis
+              </span>
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-1">
+                Your Topic Strengths & Personalized Recommendations
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Based on your submitted answers, here is your foundational skill breakdown across the Java OOP curriculum.
+              </p>
+            </div>
+
+            {/* Strengths & Weaknesses 2-Column Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Strengths */}
+              <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/30 dark:bg-emerald-950/20 p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Award className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <h3 className="text-xs font-black text-emerald-950 dark:text-emerald-200">
+                      Demonstrated Strengths (≥80%)
+                    </h3>
+                  </div>
+                  <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-black text-white">
+                    {resultData.insights.strengths?.length || 0} Topics
+                  </span>
+                </div>
+                {(!resultData.insights.strengths || resultData.insights.strengths.length === 0) ? (
+                  <p className="text-[11px] text-emerald-800/80 dark:text-emerald-400">
+                    No topics reached 80% on this diagnostic attempt. You'll build these concepts in the course!
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {resultData.insights.strengths.map((topic: any) => (
+                      <div key={topic.topicId} className="flex items-center justify-between text-xs bg-white dark:bg-slate-900 border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl px-3 py-2">
+                        <span className="font-bold text-slate-800 dark:text-slate-200">#{topic.sequence} {topic.topicName}</span>
+                        <span className="font-mono font-black text-emerald-600 dark:text-emerald-400">{topic.accuracyPercentage}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Areas to Improve */}
+              <div className="rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/30 dark:bg-rose-950/20 p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    <h3 className="text-xs font-black text-rose-950 dark:text-rose-200">
+                      Prioritized for Review (&lt;60%)
+                    </h3>
+                  </div>
+                  <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[9px] font-black text-white">
+                    {resultData.insights.weaknesses?.length || 0} Topics
+                  </span>
+                </div>
+                {(!resultData.insights.weaknesses || resultData.insights.weaknesses.length === 0) ? (
+                  <p className="text-[11px] text-emerald-800 dark:text-emerald-400">
+                    🎉 Excellent! No topics scored below 60%.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {resultData.insights.weaknesses.map((topic: any) => (
+                      <div key={topic.topicId} className="flex items-center justify-between text-xs bg-white dark:bg-slate-900 border border-rose-200/80 dark:border-rose-800/60 rounded-xl px-3 py-2">
+                        <span className="font-bold text-slate-800 dark:text-slate-200">#{topic.sequence} {topic.topicName}</span>
+                        <span className="font-mono font-bold text-rose-600 dark:text-rose-400">{topic.incorrectAnswers} missed ({topic.accuracyPercentage}%)</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Personalized Recommendations */}
+            {resultData.insights.recommendations && resultData.insights.recommendations.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider font-mono">
+                  Targeted Learning Recommendations
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {resultData.insights.recommendations.slice(0, 4).map((rec: any) => (
+                    <div key={rec.topicId} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/50 p-4 flex flex-col justify-between gap-3">
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-[10px] font-black text-slate-400">
+                            Lesson {rec.lessonSequence}: {rec.topicName}
+                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
+                            rec.priority === 'High' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300' : 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300'
+                          }`}>
+                            {rec.priority} Priority
+                          </span>
+                        </div>
+                        <p className="mt-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          {rec.actionText}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
+                        <span className="text-[10px] font-mono text-rose-600 dark:text-rose-400 font-bold">
+                          {rec.missedQuestionCount} missed
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onNavigateTo ? onNavigateTo('videos') : onFinish && onFinish()}
+                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700 transition cursor-pointer"
+                        >
+                          <span>Go to Lesson</span>
+                          <ArrowRight className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Detailed Question Review List */}
         <div className={`rounded-3xl border p-6 sm:p-8 shadow-sm ${cardClass}`}>
