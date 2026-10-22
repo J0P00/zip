@@ -91,18 +91,22 @@ const isSwingLessonItem = (lesson: { id?: string; courseId?: string; module?: st
 };
 
 const sortManagedLessons = (items: ManagedLesson[]): ManagedLesson[] => {
+  if (!Array.isArray(items)) return [];
   return [...items].sort((a, b) => {
+    if (!a && !b) return 0;
+    if (!a) return 1;
+    if (!b) return -1;
     const aSwing = isSwingLessonItem(a);
     const bSwing = isSwingLessonItem(b);
     if (aSwing !== bSwing) return aSwing ? 1 : -1;
-    if (a.sequence !== b.sequence) return a.sequence - b.sequence;
-    return String(a.id).localeCompare(String(b.id));
+    if ((a.sequence || 0) !== (b.sequence || 0)) return (a.sequence || 0) - (b.sequence || 0);
+    return String(a.id || '').localeCompare(String(b.id || ''));
   });
 };
 
 const normalizeQuestionDraft = (q: any, index: number): AssessmentQuestionDraft => {
   const rawOptions = Array.isArray(q?.options) ? q.options : Array.isArray(q?.choices) ? q.choices : [];
-  const normalizedOptions = rawOptions.map((opt: any, optIdx: number) => {
+  const normalizedOptions = (rawOptions || []).map((opt: any, optIdx: number) => {
     const optId = `opt_${String.fromCharCode(97 + optIdx)}`;
     if (typeof opt === 'string') {
       return {
@@ -142,9 +146,10 @@ const normalizeQuestionDraft = (q: any, index: number): AssessmentQuestionDraft 
 };
 
 const buildBaselineLessons = (): ManagedLesson[] => {
-  const oopLessons: ManagedLesson[] = OOP_COURSE_LESSONS.map((l, i) => {
+  const oopLessons: ManagedLesson[] = (OOP_COURSE_LESSONS || []).map((l, i) => {
     const assessment = OOP_ASSESSMENTS.find(a => a.lessonId === l.id);
     const practice = PRACTICE_CHALLENGES.find(c => c.lessonId === l.id);
+    const assessmentQuestions = Array.isArray(assessment?.questions) ? assessment.questions : [];
     return {
       id: l.id,
       title: l.title,
@@ -154,10 +159,13 @@ const buildBaselineLessons = (): ManagedLesson[] => {
       sequence: l.sequence || i + 1,
       videoUrl: l.videoUrl,
       description: l.description,
-      learningObjectives: l.concepts || [],
+      learningObjectives: Array.isArray(l.concepts) ? l.concepts : [],
       status: 'Published',
       citationText: l.citation_text || (l.creator_name ? `${l.creator_name}. ${l.video_title || l.title}. ${l.publisher_name || 'Oracle'}.` : ''),
       citationUrl: l.citation_url || l.source_url || '',
+      topics: [],
+      assessments: assessment ? [assessment] : [],
+      practice_challenges: practice ? [practice] : [],
       content: {
         video: {
           id: `vid_${l.id}`,
@@ -173,8 +181,8 @@ const buildBaselineLessons = (): ManagedLesson[] => {
               quizType: 'Multiple Choice',
               passingScore: ASSESSMENT_PASSING_SCORE,
               attempts: 3,
-              questionsCount: assessment.questions.length,
-              questions: assessment.questions,
+              questionsCount: assessmentQuestions.length,
+              questions: assessmentQuestions,
               status: 'Published'
             }
           : null,
@@ -194,10 +202,11 @@ const buildBaselineLessons = (): ManagedLesson[] => {
     };
   });
 
-  const swingLessons: ManagedLesson[] = JAVA_SWING_LESSONS.map((l, i) => {
+  const swingLessons: ManagedLesson[] = (JAVA_SWING_LESSONS || []).map((l, i) => {
     const video = JAVA_SWING_VIDEOS.find(v => v.lessonId === l.id);
     const assessment = JAVA_SWING_ASSESSMENTS.find(a => a.lessonId === l.id);
     const exercise = JAVA_SWING_EXERCISES.find(e => e.lessonId === l.id);
+    const assessmentQuestions = Array.isArray(assessment?.questions) ? assessment.questions : [];
     return {
       id: l.id,
       title: l.title,
@@ -207,10 +216,13 @@ const buildBaselineLessons = (): ManagedLesson[] => {
       sequence: 12 + (l.sequence || i + 1),
       videoUrl: video?.embedUrl || '',
       description: l.introduction || l.summary || '',
-      learningObjectives: l.objectives || l.topics || [],
+      learningObjectives: Array.isArray(l.objectives) ? l.objectives : (Array.isArray(l.topics) ? l.topics : []),
       status: 'Published',
       citationText: 'Oracle. (n.d.). Trail: Creating a GUI With Swing (The Java Tutorials). Oracle Documentation.',
       citationUrl: 'https://docs.oracle.com/javase/tutorial/uiswing/',
+      topics: [],
+      assessments: assessment ? [assessment] : [],
+      practice_challenges: exercise ? [exercise] : [],
       content: {
         video: video
           ? {
@@ -228,8 +240,8 @@ const buildBaselineLessons = (): ManagedLesson[] => {
               quizType: 'Multiple Choice',
               passingScore: SWING_PASSING_PERCENTAGE,
               attempts: 3,
-              questionsCount: assessment.questions.length,
-              questions: assessment.questions.map((q, idx) => normalizeQuestionDraft(q, idx)),
+              questionsCount: assessmentQuestions.length,
+              questions: (assessmentQuestions || []).map((q, idx) => normalizeQuestionDraft(q, idx)),
               status: 'Published'
             }
           : null,
@@ -320,19 +332,61 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500 focus:border-emerald-500'
     : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-emerald-500';
 
-  // Load lessons from backend with fallback, ensuring all 17 lessons (12 OOP + 5 Swing) are present and ordered
+  // Load lessons from backend with fallback, ensuring all lessons are present, safe, and ordered
   const fetchLessons = async () => {
     setIsLoading(true);
     const baseline = buildBaselineLessons();
     try {
       const res = await lessonApi.list();
-      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-        const mapped: ManagedLesson[] = res.data.map((l: any) => {
+      const rawList = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      if (rawList.length > 0) {
+        const mapped: ManagedLesson[] = rawList.map((l: any) => {
           const swingVid = JAVA_SWING_VIDEOS.find(v => v.lessonId === l.id);
           const isSwing = isSwingLessonItem({ id: l.id, courseId: l.course_id || l.courseId, module: l.module, track: l.track || l.metadata?.track });
           const track = (l.track || l.metadata?.track || (isSwing ? 'swing' : 'oop')) as 'oop' | 'swing';
           const rawSeq = Number(l.sequence || 1);
           const effectiveSeq = isSwing && rawSeq <= 5 ? 12 + rawSeq : rawSeq;
+
+          let parsedObjectives: string[] = [];
+          if (Array.isArray(l.learningObjectives)) {
+            parsedObjectives = l.learningObjectives;
+          } else if (Array.isArray(l.learning_objectives)) {
+            parsedObjectives = l.learning_objectives;
+          } else if (Array.isArray(l.concepts)) {
+            parsedObjectives = l.concepts;
+          } else if (typeof l.learningObjectives === 'string') {
+            try {
+              const p = JSON.parse(l.learningObjectives);
+              parsedObjectives = Array.isArray(p) ? p : [l.learningObjectives];
+            } catch {
+              parsedObjectives = l.learningObjectives.split(',').map((s: string) => s.trim()).filter(Boolean);
+            }
+          } else if (typeof l.learning_objectives === 'string') {
+            try {
+              const p = JSON.parse(l.learning_objectives);
+              parsedObjectives = Array.isArray(p) ? p : [l.learning_objectives];
+            } catch {
+              parsedObjectives = l.learning_objectives.split(',').map((s: string) => s.trim()).filter(Boolean);
+            }
+          }
+
+          const content = l.content || {};
+          const existingAssessment = content.assessment;
+          const assessmentQuestions = Array.isArray(existingAssessment?.questions)
+            ? existingAssessment.questions
+            : (typeof existingAssessment?.questions === 'string'
+              ? (function() { try { const p = JSON.parse(existingAssessment.questions); return Array.isArray(p) ? p : []; } catch { return []; } })()
+              : []);
+
+          const safeContent = {
+            video: content.video || null,
+            assessment: existingAssessment ? {
+              ...existingAssessment,
+              questions: assessmentQuestions
+            } : null,
+            practice: content.practice || null
+          };
+
           return {
             id: l.id,
             title: l.title || '',
@@ -340,39 +394,33 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
             module: l.module || (isSwing ? 'Java Swing' : 'Object-Oriented Programming (Java)'),
             courseId: l.course_id || l.courseId || (isSwing ? 'java_swing' : 'oop_course_java'),
             sequence: effectiveSeq,
-            videoUrl: l.video_url || l.videoUrl || l.content?.video?.videoUrl || swingVid?.embedUrl || '',
+            videoUrl: l.video_url || l.videoUrl || safeContent.video?.videoUrl || swingVid?.embedUrl || '',
             description: l.description || '',
-            learningObjectives: Array.isArray(l.learningObjectives)
-              ? l.learningObjectives
-              : Array.isArray(l.learning_objectives)
-              ? l.learning_objectives
-              : Array.isArray(l.concepts)
-              ? l.concepts
-              : typeof l.learningObjectives === 'string'
-              ? JSON.parse(l.learningObjectives || '[]')
-              : typeof l.learning_objectives === 'string'
-              ? JSON.parse(l.learning_objectives || '[]')
-              : [],
+            learningObjectives: parsedObjectives,
             status: l.status || 'Published',
             citationText: l.citationText || l.citation_text || l.metadata?.citationText || l.metadata?.citation_text || '',
             citationUrl: l.citationUrl || l.citation_url || l.sourceUrl || l.source_url || l.metadata?.citationUrl || l.metadata?.citation_url || '',
             storageProvider: l.storageProvider || l.storage_provider || '',
             storageKey: l.storageKey || l.storage_key || '',
-            content: l.content || null,
+            content: safeContent,
+            topics: Array.isArray(l.topics) ? l.topics : [],
+            assessments: Array.isArray(l.assessments) ? l.assessments : (safeContent.assessment ? [safeContent.assessment] : []),
+            practice_challenges: Array.isArray(l.practice_challenges) ? l.practice_challenges : (safeContent.practice ? [safeContent.practice] : []),
             createdBy: l.created_by || l.createdBy,
             createdAt: l.created_at || l.createdAt,
             updatedAt: l.updated_at || l.updatedAt
           };
         });
 
-        const existingIds = new Set(mapped.map(item => item.id));
+        const existingIds = new Set((mapped || []).map(item => item.id));
         for (const baseLesson of baseline) {
           if (!existingIds.has(baseLesson.id)) {
             mapped.push(baseLesson);
           }
         }
 
-        setLessons(sortManagedLessons(mapped));
+        const sorted = sortManagedLessons(mapped);
+        setLessons(Array.isArray(sorted) ? sorted : baseline);
       } else {
         setLessons(baseline);
       }
@@ -387,17 +435,19 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     fetchLessons();
   }, []);
 
-  const oopLessonsCount = useMemo(() => lessons.filter(l => !isSwingLessonItem(l)).length, [lessons]);
-  const swingLessonsCount = useMemo(() => lessons.filter(l => isSwingLessonItem(l)).length, [lessons]);
+  const oopLessonsCount = useMemo(() => (lessons || []).filter(l => !isSwingLessonItem(l)).length, [lessons]);
+  const swingLessonsCount = useMemo(() => (lessons || []).filter(l => isSwingLessonItem(l)).length, [lessons]);
 
   const filteredLessons = useMemo(() => {
+    if (!Array.isArray(lessons)) return [];
     return lessons.filter(l => {
+      if (!l) return false;
       const inTrack = activeTrack === 'swing' ? isSwingLessonItem(l) : !isSwingLessonItem(l);
       if (!inTrack) return false;
       const matchSearch =
-        l.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        l.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        l.module.toLowerCase().includes(searchTerm.toLowerCase());
+        String(l.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(l.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(l.module || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchStatus = statusFilter === 'All' ? true : l.status === statusFilter;
       return matchSearch && matchStatus;
     });
@@ -405,9 +455,9 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
 
   const handleOpenCreate = () => {
     const isSwingTrack = activeTrack === 'swing';
-    const trackLessons = lessons.filter(l => (isSwingTrack ? isSwingLessonItem(l) : !isSwingLessonItem(l)));
+    const trackLessons = (lessons || []).filter(l => (isSwingTrack ? isSwingLessonItem(l) : !isSwingLessonItem(l)));
     const nextSeq = trackLessons.length > 0
-      ? Math.max(...trackLessons.map(l => (isSwingTrack && l.sequence > 12 ? l.sequence - 12 : l.sequence))) + 1
+      ? Math.max(...(trackLessons || []).map(l => (isSwingTrack && l.sequence > 12 ? l.sequence - 12 : l.sequence))) + 1
       : 1;
     const initialQuestion = createDefaultQuestion(1);
     setFormData({
@@ -708,11 +758,11 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       const isSwing = isSwingTrack || isSwingLessonItem({ id: lessonId, courseId: editingLesson?.courseId, module: formData.module, track: formData.track });
       if (editingLesson) {
         const res = await lessonApi.update(editingLesson.id, lessonPayload);
-        savedId = res.data?.id || editingLesson.id;
+        savedId = res?.data?.id || editingLesson.id;
         setFeedback({ type: 'success', message: `Lesson "${formData.title}" updated successfully with consolidated content.` });
       } else {
         const res = await lessonApi.create({ courseId: isSwing ? 'java_swing' : 'oop_course_java', ...lessonPayload });
-        savedId = res.data?.id || lessonId;
+        savedId = res?.data?.id || lessonId;
         setFeedback({ type: 'success', message: `Lesson "${formData.title}" created successfully with linked content.` });
       }
 
@@ -724,10 +774,11 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       // Persist Assessment
       if (formData.enableAssessment && savedId && savedId !== '0' && savedId !== 'NaN') {
         const assessmentTitle = formData.assessmentTitle.trim() || `${formData.title.trim()} Assessment`;
-        const serializedQuestions = formData.assessmentQuestions.map(q => {
-          const correctOpt = q.options.find(o => o.id === q.correctOptionId);
+        const serializedQuestions = (formData.assessmentQuestions || []).map(q => {
+          const correctOpt = (q.options || []).find(o => o.id === q.correctOptionId);
           return {
             ...q,
+            options: (q.options || []).map(opt => ({ ...opt })),
             correctAnswer: correctOpt?.text || q.correctAnswer || '',
             explanation: correctOpt?.rationale || q.explanation || ''
           };
@@ -779,7 +830,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
 
       setIsCreateOpen(false);
       setEditingLesson(null);
-      fetchLessons();
+      await fetchLessons();
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Failed to save lesson and consolidated content.' });
     } finally {
@@ -1008,14 +1059,14 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                     Loading lesson directory...
                   </td>
                 </tr>
-              ) : filteredLessons.length === 0 ? (
+              ) : (filteredLessons || []).length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400 font-bold">
                     No lessons found matching your filters.
                   </td>
                 </tr>
               ) : (
-                filteredLessons.map((lesson, idx) => {
+                (filteredLessons || []).map((lesson, idx) => {
                   const hasVideo = Boolean(
                     lesson.videoUrl ||
                     lesson.content?.video?.id ||
@@ -1128,7 +1179,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                       {/* Learning Objectives */}
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1 max-w-xs">
-                          {(lesson.learningObjectives || []).slice(0, 2).map((obj, i) => (
+                          {(lesson?.learningObjectives || []).slice(0, 2).map((obj, i) => (
                             <span
                               key={i}
                               className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
@@ -1138,9 +1189,9 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                               {obj}
                             </span>
                           ))}
-                          {(lesson.learningObjectives || []).length > 2 && (
+                          {(lesson?.learningObjectives || []).length > 2 && (
                             <span className="text-[10px] text-slate-400 font-bold self-center">
-                              +{lesson.learningObjectives.length - 2} more
+                              +{(lesson?.learningObjectives || []).length - 2} more
                             </span>
                           )}
                         </div>
@@ -1674,7 +1725,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                       ) : (
                         /* Visual Question Builder */
                         <div className="space-y-4">
-                          {formData.assessmentQuestions.map((q, qIndex) => (
+                          {(formData.assessmentQuestions || []).map((q, qIndex) => (
                             <div
                               key={q.id || qIndex}
                               className={`rounded-2xl border p-4 space-y-3 transition ${isDark ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-white'}`}
@@ -1722,7 +1773,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                                   Answer Choices (Select radio button for the correct answer)
                                 </label>
                                 <div className="space-y-2">
-                                  {q.options.map((opt, optIndex) => (
+                                  {(q.options || []).map((opt, optIndex) => (
                                     <div key={opt.id || optIndex} className="flex items-center gap-2">
                                       <input
                                         type="radio"

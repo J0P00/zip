@@ -462,7 +462,7 @@ export default function App() {
 
   useEffect(() => {
     const applyLessons = (lessons: VideoLesson[]) => {
-      const lessonsWithCitations = lessons.map(applyOopLessonCitation);
+      const lessonsWithCitations = (lessons || []).map(applyOopLessonCitation);
       setVideoLessons(lessonsWithCitations);
     };
 
@@ -779,7 +779,7 @@ export default function App() {
 
     fetchPromise
       .then(response => {
-        if (!cancelled) setPendingSubmissions(response.data.map(practiceSubmissionRowToPending));
+        if (!cancelled) setPendingSubmissions((response?.data || []).map(practiceSubmissionRowToPending));
       })
       .catch(error => {
         if (!cancelled) console.warn('Unable to load Practice IDE submissions from backend:', error);
@@ -1167,9 +1167,10 @@ export default function App() {
   const handleGradeSubmission = async (submissionId: string, gradeScore: number, feedbackNotes: string, remedialRequired = false) => {
     const response = await practiceApi.gradeSubmission(submissionId, { grade: gradeScore, feedback: feedbackNotes, remedialRequired });
     const refreshed = await practiceApi.listSubmissions();
-    const updated = refreshed.data.map(practiceSubmissionRowToPending).find(submission => submission.id === submissionId);
+    const refreshedData = Array.isArray(refreshed?.data) ? refreshed.data : [];
+    const updated = refreshedData.map(practiceSubmissionRowToPending).find(submission => submission.id === submissionId);
     if (!updated) throw new Error('Grade was saved, but the updated submission could not be reloaded.');
-    setPendingSubmissions(refreshed.data.map(practiceSubmissionRowToPending));
+    setPendingSubmissions(refreshedData.map(practiceSubmissionRowToPending));
 
     // If grading the current student's submission, sync the incentive immediately.
     const targetSub = pendingSubmissions.find(s => s.id === submissionId);

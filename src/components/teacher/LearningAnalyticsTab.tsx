@@ -284,7 +284,7 @@ export default function LearningAnalyticsTab({ theme = 'light' }: LearningAnalyt
                 All enrolled students are progressing on track without active risk triggers.
               </div>
             ) : (
-              analytics.studentsRequiringSupport.map(s => (
+              (analytics?.studentsRequiringSupport || []).map(s => (
                 <div
                   key={s.studentId}
                   className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/30 dark:bg-amber-950/20 p-3.5 space-y-2"
@@ -313,7 +313,7 @@ export default function LearningAnalyticsTab({ theme = 'light' }: LearningAnalyt
                       Trigger Reasons:
                     </span>
                     <ul className="list-disc pl-4 text-[11px] text-slate-600 dark:text-slate-300 space-y-0.5">
-                      {s.reasons.map((r, idx) => (
+                      {(s?.reasons || []).map((r, idx) => (
                         <li key={idx}>{r}</li>
                       ))}
                     </ul>
@@ -451,7 +451,7 @@ export default function LearningAnalyticsTab({ theme = 'light' }: LearningAnalyt
                   </td>
                 </tr>
               ) : (
-                analytics.prePostComparison.map(comp => (
+                (analytics?.prePostComparison || []).map(comp => (
                   <tr key={comp.studentId} className={`transition ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50/70'}`}>
                     <td className="px-4 py-3 font-black text-slate-900 dark:text-white">
                       {comp.name}
@@ -582,7 +582,7 @@ export default function LearningAnalyticsTab({ theme = 'light' }: LearningAnalyt
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {studentDeepDive.topics.map(t => (
+                        {(studentDeepDive?.topics || []).map(t => (
                           <tr key={t.lessonId}>
                             <td className="px-3 py-2 font-bold">{t.title}</td>
                             <td className="px-3 py-2 text-center font-mono">
@@ -619,7 +619,7 @@ export default function LearningAnalyticsTab({ theme = 'light' }: LearningAnalyt
                       Recent Assessment Submissions
                     </h4>
                     <div className="space-y-1.5">
-                      {studentDeepDive.recentQuizAttempts.map(att => (
+                      {(studentDeepDive?.recentQuizAttempts || []).map(att => (
                         <div
                           key={att.id}
                           className="flex items-center justify-between rounded-lg border border-slate-200 dark:border-slate-800 p-2.5 text-xs bg-slate-50/50 dark:bg-slate-950/50"

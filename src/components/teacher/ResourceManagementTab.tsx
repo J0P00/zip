@@ -303,7 +303,7 @@ export default function ResourceManagementTab({ theme = 'light' }: ResourceManag
               className={`w-full rounded-xl border px-3 py-2.5 text-xs font-bold transition outline-none ${inputClass}`}
             >
               <option value="All">All Lessons</option>
-              {lessons.map(l => (
+              {(lessons || []).map(l => (
                 <option key={l.id} value={l.id}>
                   Lesson {l.sequence}: {l.title}
                 </option>
@@ -356,7 +356,7 @@ export default function ResourceManagementTab({ theme = 'light' }: ResourceManag
                   </td>
                 </tr>
               ) : (
-                filteredResources.map(res => (
+                (filteredResources || []).map(res => (
                   <tr key={res.id} className={`transition ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50/70'}`}>
                     {/* Type Badge */}
                     <td className="px-4 py-3">
@@ -477,7 +477,7 @@ export default function ResourceManagementTab({ theme = 'light' }: ResourceManag
                   onChange={e => setFormData({ ...formData, lessonId: e.target.value })}
                   className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
                 >
-                  {lessons.map(l => (
+                  {(lessons || []).map(l => (
                     <option key={l.id} value={l.id}>
                       Lesson {l.sequence}: {l.title}
                     </option>

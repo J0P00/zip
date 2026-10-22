@@ -757,13 +757,38 @@ const resolveLessonVideoUrl = (row) => {
 };
 
 const toClientLesson = (row) => {
+    if (!row) return null;
     const isSwing = isSwingLessonId(row.id) || row.course_id === "java_swing" || String(row.module || "").toLowerCase().includes("swing") || row.track === "swing" || row.metadata?.track === "swing";
     const track = row.track || row.metadata?.track || (isSwing ? "swing" : "oop");
+
+    let learningObjectives = [];
+    if (Array.isArray(row.learning_objectives)) {
+        learningObjectives = row.learning_objectives;
+    } else if (Array.isArray(row.learningObjectives)) {
+        learningObjectives = row.learningObjectives;
+    } else if (Array.isArray(row.concepts)) {
+        learningObjectives = row.concepts;
+    } else if (typeof row.learning_objectives === "string") {
+        try {
+            const parsed = JSON.parse(row.learning_objectives);
+            learningObjectives = Array.isArray(parsed) ? parsed : [row.learning_objectives];
+        } catch {
+            learningObjectives = row.learning_objectives.split(",").map(s => s.trim()).filter(Boolean);
+        }
+    } else if (typeof row.learningObjectives === "string") {
+        try {
+            const parsed = JSON.parse(row.learningObjectives);
+            learningObjectives = Array.isArray(parsed) ? parsed : [row.learningObjectives];
+        } catch {
+            learningObjectives = row.learningObjectives.split(",").map(s => s.trim()).filter(Boolean);
+        }
+    }
+
     return {
         id: row.id,
-        title: row.title,
+        title: row.title || "",
         track,
-        module: row.module || (isSwing ? "Java Swing" : ""),
+        module: row.module || (isSwing ? "Java Swing" : "Object-Oriented Programming (Java)"),
         courseId: row.course_id || (isSwing ? "java_swing" : "oop_fundamentals"),
         sequence: Number(row.sequence || 0),
         duration: row.duration || "",
@@ -772,7 +797,17 @@ const toClientLesson = (row) => {
         storageKey: row.storage_key || "",
         storageContentType: row.storage_content_type || "",
         description: row.description || "",
-        learningObjectives: row.learning_objectives || [],
+        learningObjectives,
+        learning_objectives: learningObjectives,
+        topics: [],
+        assessments: [],
+        practice_challenges: [],
+        questions: [],
+        content: {
+            video: null,
+            assessment: null,
+            practice: null
+        },
         status: row.status || "Draft",
         metadata: row.metadata || {},
         citationText: row.metadata?.citationText || row.metadata?.citation_text || "",
@@ -962,7 +997,11 @@ const getLessonContent = async (lessonId) => {
             quizType: assessmentRow.quiz_type || "Multiple Choice",
             passingScore: Number(assessmentRow.passing_score || ASSESSMENT_PASSING_SCORE),
             attempts: Number(assessmentRow.attempts || MAX_ASSESSMENT_ATTEMPTS),
-            questions: assessmentRow.questions || [],
+            questions: Array.isArray(assessmentRow.questions)
+                ? assessmentRow.questions
+                : (typeof assessmentRow.questions === "string"
+                    ? (function() { try { const p = JSON.parse(assessmentRow.questions); return Array.isArray(p) ? p : []; } catch { return []; } })()
+                    : []),
             status: assessmentRow.status || "Published"
         } : null,
         practice: practiceRow ? {
@@ -1001,7 +1040,15 @@ const toClientVideo = (row) => ({
 
 const toClientLessonForRequest = async (row, req) => {
     const lesson = toClientLesson(row);
-    lesson.content = await getLessonContent(row.id);
+    if (!lesson) return null;
+    const content = await getLessonContent(row.id);
+    lesson.content = content || { video: null, assessment: null, practice: null };
+    if (content?.assessment) {
+        lesson.assessments = [content.assessment];
+    }
+    if (content?.practice) {
+        lesson.practice_challenges = [content.practice];
+    }
     if (row.storage_provider === STORAGE_PROVIDER && row.storage_key) {
         lesson.videoUrl = "";
         let canPlay = Boolean(req.authUser && ["student", "teacher"].includes(req.authUser.role));
@@ -1067,18 +1114,31 @@ const toClientPreTest = (row) => ({
     updatedAt: row.updated_at
 });
 
-const toClientAssessment = (row) => ({
-    id: row.id,
-    lessonId: row.lesson_id,
-    title: row.title,
-    quizType: row.quiz_type,
-    passingScore: Number(row.passing_score || 0),
-    attempts: Number(row.attempts || 0),
-    questions: row.questions || [],
-    status: row.status || "Draft",
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-});
+const toClientAssessment = (row) => {
+    let questions = [];
+    if (Array.isArray(row.questions)) {
+        questions = row.questions;
+    } else if (typeof row.questions === "string") {
+        try {
+            const parsed = JSON.parse(row.questions);
+            questions = Array.isArray(parsed) ? parsed : [];
+        } catch {
+            questions = [];
+        }
+    }
+    return {
+        id: row.id,
+        lessonId: row.lesson_id,
+        title: row.title || "",
+        quizType: row.quiz_type || "Multiple Choice",
+        passingScore: Number(row.passing_score || 0),
+        attempts: Number(row.attempts || 0),
+        questions,
+        status: row.status || "Draft",
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    };
+};
 
 const normalizeChallengeTestCase = (testCase) => ({
     id: testCase.id,

@@ -333,7 +333,7 @@ export default function PreTestManagementTab({ theme = 'light' }: PreTestManagem
                   </td>
                 </tr>
               ) : (
-                filteredAttempts.map(att => (
+                (filteredAttempts || []).map(att => (
                   <tr key={att.id} className={`transition ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50/70'}`}>
                     <td className="px-4 py-3 font-black text-slate-900 dark:text-white">
                       {att.studentName || 'Student'}
@@ -454,7 +454,7 @@ export default function PreTestManagementTab({ theme = 'light' }: PreTestManagem
                   No questions match your query.
                 </div>
               ) : (
-                filteredQuestions.map((q, idx) => (
+                (filteredQuestions || []).map((q, idx) => (
                   <div
                     key={q.id || idx}
                     className="rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-2.5 bg-slate-50/50 dark:bg-slate-950/50"
@@ -479,7 +479,7 @@ export default function PreTestManagementTab({ theme = 'light' }: PreTestManagem
                     )}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-                      {q.options.map((opt: string, i: number) => {
+                      {(q?.options || []).map((opt: string, i: number) => {
                         const isCorrect = opt === q.correctAnswer;
                         return (
                           <div
