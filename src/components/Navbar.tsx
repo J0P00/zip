@@ -25,7 +25,12 @@ import {
   Search,
   SlidersHorizontal,
   ClipboardList,
-  MonitorCog
+  MonitorCog,
+  Compass,
+  Code2,
+  BarChart3,
+  ClipboardCheck,
+  UserRound
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AuthenticatedUser, NotificationItem, Persona } from '../types';
@@ -35,6 +40,7 @@ interface NavbarProps {
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   onNavigate: (view: string) => void;
+  currentView?: string;
   onUpdateProfile: (updates: Partial<AuthenticatedUser>) => void;
   onLogoutTrigger: () => void;
   notifications: NotificationItem[];
@@ -47,6 +53,7 @@ export default function Navbar({
   theme, 
   setTheme, 
   onNavigate, 
+  currentView = 'dashboard',
   onUpdateProfile, 
   onLogoutTrigger,
   notifications,
@@ -492,26 +499,70 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Center: Global Search */}
-          <label className={`hidden lg:flex h-10 w-full max-w-xl items-center gap-2 rounded-xl border px-3 transition ${isDark ? 'border-slate-800 bg-slate-900/70 text-slate-200 focus-within:border-emerald-500/50' : 'border-slate-200 bg-slate-50 text-slate-800 focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-100'}`}>
-            <Search className="h-4 w-4 shrink-0 text-slate-400" />
-            <input
-              value={globalSearch}
-              onChange={event => setGlobalSearch(event.target.value)}
-              placeholder="Search users, courses, assessments"
-              className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
-              aria-label="Global search users, courses, assessments"
-            />
-            {globalSearch && (
-              <button
-                type="button"
-                onClick={() => setGlobalSearch('')}
-                className="rounded-md px-2 py-1 text-[10px] font-extrabold text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-              >
-                Clear
-              </button>
-            )}
-          </label>
+          {/* Center: Student Navigation Links */}
+          {user.role === 'student' && (
+            <nav className="hidden lg:flex items-center gap-1" id="navbar-student-nav" aria-label="Student Navigation">
+              {[
+                { id: 'dashboard', label: 'Dashboard', icon: Compass },
+                { id: 'lessons', label: 'Lessons', icon: BookOpen, badge: '17' },
+                { id: 'pretest', label: 'Pre-Test', icon: ClipboardCheck },
+                { id: 'diagnostic-results', label: 'Diagnostic Results', icon: BarChart3 },
+                { id: 'ide', label: 'Practice IDE', icon: Code2 },
+                { id: 'profile', label: 'Profile', icon: UserRound }
+              ].map((item) => {
+                const Icon = item.icon;
+                const isActive = currentView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    id={`nav-link-${item.id}`}
+                    onClick={() => onNavigate(item.id)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                      isActive
+                        ? isDark
+                          ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30 shadow-xs'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs'
+                        : isDark
+                        ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span>{item.label}</span>
+                    {item.badge && (
+                      <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${isActive ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          )}
+
+          {/* Center: Global Search (Teacher mode) */}
+          {user.role === 'teacher' && (
+            <label className={`hidden lg:flex h-10 w-full max-w-xl items-center gap-2 rounded-xl border px-3 transition ${isDark ? 'border-slate-800 bg-slate-900/70 text-slate-200 focus-within:border-emerald-500/50' : 'border-slate-200 bg-slate-50 text-slate-800 focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-100'}`}>
+              <Search className="h-4 w-4 shrink-0 text-slate-400" />
+              <input
+                value={globalSearch}
+                onChange={event => setGlobalSearch(event.target.value)}
+                placeholder="Search users, courses, assessments"
+                className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
+                aria-label="Global search users, courses, assessments"
+              />
+              {globalSearch && (
+                <button
+                  type="button"
+                  onClick={() => setGlobalSearch('')}
+                  className="rounded-md px-2 py-1 text-[10px] font-extrabold text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                >
+                  Clear
+                </button>
+              )}
+            </label>
+          )}
 
           {/* Right: Notifications Bell & Profile Section */}
           <div className="flex items-center gap-4">

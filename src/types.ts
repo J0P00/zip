@@ -39,7 +39,17 @@ export interface AuthenticatedUser {
   termsVersion?: string;
 }
 
-export type StudentSubView = 'dashboard' | 'ide' | 'videos' | 'assessments' | 'swing' | 'leaderboard' | 'profile';
+export type StudentSubView = 
+  | 'dashboard' 
+  | 'lessons' 
+  | 'pretest' 
+  | 'diagnostic-results' 
+  | 'ide' 
+  | 'profile' 
+  | 'videos' 
+  | 'assessments' 
+  | 'swing' 
+  | 'leaderboard';
 export type TeacherSubView = 'dashboard' | 'students' | 'submission-review' | 'analytics' | 'profile';
 export interface TermsPolicyVersion {
   id: string;

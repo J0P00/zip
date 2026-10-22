@@ -418,6 +418,7 @@ export const preTestApi = {
         attemptNumber: number;
         dateCompleted: string;
         review: any[];
+        insights?: PreTestInsights;
       };
     }>('/api/pre-test/submit', {
       method: 'POST',

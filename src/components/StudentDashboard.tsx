@@ -20,18 +20,18 @@ import {
   Check,
   LockKeyhole,
   Circle,
-  ClipboardCheck
-  ,Activity
-  ,BarChart3
-  ,Target
-  ,History
+  ClipboardCheck,
+  ArrowRight,
+  Activity,
+  BarChart3,
+  Target,
+  History
 } from 'lucide-react';
 import { AuthenticatedUser, MonitoringRequest, StudentSubView, NotificationItem } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
 import { getCurrentPracticeChallenge, PRACTICE_CHALLENGES } from '../oopPracticeCatalog';
 import type { StudentResultsData } from '../services/interpretation';
 import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
-import PreTestInsightsCard from './student/PreTestInsightsCard';
 
 type DashboardAssessment = {
   id: string;
@@ -483,13 +483,78 @@ export default function StudentDashboard({
           </div>
         </div>
 
-        {/* Java OOP Diagnostic Pre-Test Results & Learning Insights */}
-        <div className="lg:col-span-12">
-          <PreTestInsightsCard
-            theme={theme}
-            onNavigateTo={onNavigateTo}
-            onLaunchPreTest={() => onNavigateTo('assessments')}
-          />
+        {/* Quick Access to Lessons and Pre-Test */}
+        <div className="lg:col-span-12 grid grid-cols-1 md:grid-cols-2 gap-4" id="student-quick-access-section">
+          {/* Quick Access to Lessons */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col justify-between gap-4">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700 border border-emerald-200/60 font-mono">
+                  Curriculum Sequence
+                </span>
+                <span className="text-xs font-mono font-bold text-slate-400">
+                  {curriculumCompletedLessons}/{curriculumLessonCount} Done
+                </span>
+              </div>
+              <h3 className="mt-2 text-base font-black text-slate-900">
+                17 Java OOP & Swing Lessons
+              </h3>
+              <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+                Continue your learning pathway across 12 Java Object-Oriented Programming concepts and 5 Java Swing GUI topics with video lectures, quiz checks, and interactive sandbox IDE exercises.
+              </p>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <span className="text-xs font-mono font-black text-emerald-700">
+                {curriculumProgress}% completed
+              </span>
+              <button
+                type="button"
+                onClick={() => onNavigateTo('lessons')}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 transition cursor-pointer shadow-xs"
+              >
+                <span>Continue Lessons</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Access to Pre-Test Assessment & Dedicated Diagnostic Results */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col justify-between gap-4">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-sky-700 border border-sky-200/60 font-mono">
+                  Diagnostic Assessment
+                </span>
+                <span className="text-xs font-mono font-bold text-slate-400">
+                  20 Questions · 10 Mins
+                </span>
+              </div>
+              <h3 className="mt-2 text-base font-black text-slate-900">
+                Pre-Test Assessment & Results
+              </h3>
+              <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+                Evaluate your starting baseline knowledge or inspect your separate Diagnostic Results report to review topic-level skill breakdowns, strengths, and personalized recommendations.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => onNavigateTo('pretest')}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                <ClipboardCheck className="h-3.5 w-3.5 text-slate-500" />
+                <span>Pre-Test Assessment</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigateTo('diagnostic-results')}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 transition cursor-pointer shadow-xs"
+              >
+                <span>View Diagnostic Results</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Authoritative student progress and improvement guidance */}

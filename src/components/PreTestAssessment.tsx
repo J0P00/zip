@@ -63,6 +63,7 @@ export default function PreTestAssessment({
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // Results
+  const [pastAttempts, setPastAttempts] = useState<any[]>([]);
   const [resultData, setResultData] = useState<{
     score: number;
     percentage: number;
@@ -112,6 +113,11 @@ export default function PreTestAssessment({
       }
     };
     checkActive();
+    preTestApi.getMyAttempts().then(res => {
+      if (isMounted && res && res.success && Array.isArray(res.data)) {
+        setPastAttempts(res.data);
+      }
+    }).catch(() => {});
     return () => {
       isMounted = false;
     };
@@ -240,11 +246,36 @@ export default function PreTestAssessment({
           </div>
 
           <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-            Java OOP Diagnostic Pre-Test
+            Pre-Test Assessment
           </h1>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-            Welcome to the OOP Pedagogical Hub Pre-Test! This diagnostic assessment evaluates your baseline knowledge across 12 fundamental Object-Oriented Programming concepts in Java before starting the course.
+            Welcome to the Pre-Test Assessment! This diagnostic assessment evaluates your baseline prior knowledge across 12 fundamental Object-Oriented Programming concepts in Java before starting the course.
           </p>
+
+          {/* Past Attempt Notice if student already completed one */}
+          {pastAttempts.length > 0 && (
+            <div className="mt-5 rounded-2xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-xs font-black text-emerald-950 dark:text-emerald-200 block">
+                    Diagnostic Baseline Previously Recorded
+                  </strong>
+                  <span className="text-[11px] text-emerald-800 dark:text-emerald-300">
+                    Latest Attempt #{pastAttempts[0].attemptNumber}: {pastAttempts[0].score}/{pastAttempts[0].total} ({pastAttempts[0].percentage}%). You can retake the pre-test to measure improvement or view your full diagnostic report.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateTo ? onNavigateTo('diagnostic-results') : null}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 px-3.5 py-2 text-xs font-black text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition cursor-pointer shrink-0 shadow-xs"
+              >
+                <span>View Diagnostic Results</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Key Guidelines */}
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -688,10 +719,18 @@ export default function PreTestAssessment({
           <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
             <button
               type="button"
-              onClick={() => onNavigateTo ? onNavigateTo('videos') : onFinish && onFinish()}
-              className="rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-black text-white hover:bg-emerald-700 shadow-sm transition cursor-pointer"
+              onClick={() => onNavigateTo ? onNavigateTo('diagnostic-results') : onFinish && onFinish()}
+              className="rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-black text-white hover:bg-emerald-700 shadow-md transition cursor-pointer flex items-center gap-1.5"
             >
-              Proceed to Lesson 1 Videos
+              <span>View Diagnostic Results</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigateTo ? onNavigateTo('lessons') : onFinish && onFinish()}
+              className="rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/40 px-5 py-2.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 transition cursor-pointer"
+            >
+              Proceed to Lessons
             </button>
             <button
               type="button"

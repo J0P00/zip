@@ -78,6 +78,9 @@ import TeacherPortal from './components/TeacherPortal';
 import AuthPage from './components/AuthPage';
 import ProfilePage from './components/ProfilePage';
 import Navbar from './components/Navbar';
+import PreTestAssessment from './components/PreTestAssessment';
+import DiagnosticResultsPage from './components/DiagnosticResultsPage';
+import LessonsPage from './components/LessonsPage';
 import { API_BASE_URL, appApi, authApi, getAuthToken, monitoringApi, notificationApi, practiceApi, progressApi, recommendationApi, setAuthToken, userApi } from './services/api';
 import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
 import { getCanonicalStudentId, recommendationBelongsToStudent } from './services/identity';
@@ -232,7 +235,18 @@ const SESSION_VIEW_KEY = 'oophub_workspace_view';
 const LEADERBOARD_KEY = 'oophub_leaderboard_users';
 // Admin is intentionally not an available application persona.
 const PERSONAS: Persona[] = ['public', 'student', 'teacher'];
-const STUDENT_TABS: StudentSubView[] = ['dashboard', 'ide', 'videos', 'assessments', 'swing', 'leaderboard', 'profile'];
+const STUDENT_TABS: StudentSubView[] = [
+  'dashboard',
+  'lessons',
+  'pretest',
+  'diagnostic-results',
+  'ide',
+  'profile',
+  'videos',
+  'assessments',
+  'swing',
+  'leaderboard'
+];
 const TEACHER_TABS: TeacherSubView[] = ['dashboard', 'students', 'submission-review', 'profile'];
 
 const isPersona = (value: unknown): value is Persona =>
@@ -1278,6 +1292,7 @@ export default function App() {
             user={displayUser}
             theme={theme}
             setTheme={setTheme}
+            currentView={persona === 'student' ? studentTab : teacherTab}
             onNavigate={(view) => {
               if (persona === 'student') setStudentTab(view as StudentSubView);
               else if (persona === 'teacher') setTeacherTab(view as TeacherSubView);
@@ -1332,11 +1347,11 @@ export default function App() {
               {/* STUDENT TAB LINKS */}
               {persona === 'student' && [
                 { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
+                { id: 'lessons', label: 'Lessons', icon: <BookOpen className="w-4 h-4" />, badge: '17' },
+                { id: 'pretest', label: 'Pre-Test', icon: <ClipboardCheck className="w-4 h-4" /> },
+                { id: 'diagnostic-results', label: 'Diagnostic Results', icon: <BarChart3 className="w-4 h-4" /> },
                 { id: 'ide', label: 'Practice IDE', icon: <Code2 className="w-4 h-4" /> },
-                { id: 'videos', label: 'Video Tutorial', icon: <BookOpen className="w-4 h-4" /> },
-                { id: 'assessments', label: 'Assessment/Quiz', icon: <TrendingUp className="w-4 h-4" /> },
-                { id: 'swing', label: 'Java Swing', icon: <PanelTop className="w-4 h-4" /> },
-                { id: 'leaderboard', label: 'Rankings', icon: <Award className="w-4 h-4" /> },
+                { id: 'profile', label: 'Profile', icon: <UserRound className="w-4 h-4" /> },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -1346,10 +1361,17 @@ export default function App() {
                     setIsMobileMenuOpen(false);
                   }}
                   title={isSidebarCollapsed ? tab.label : undefined}
-                  className={`w-full py-2.5 px-3.5 rounded-xl font-bold text-xs text-left cursor-pointer transition-all flex items-center gap-2.5 ${isSidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${studentTab === tab.id ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400'}`}
+                  className={`w-full py-2.5 px-3.5 rounded-xl font-bold text-xs text-left cursor-pointer transition-all flex items-center justify-between gap-2.5 ${isSidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${studentTab === tab.id ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400'}`}
                 >
-                  {tab.icon}
-                  <span className={isSidebarCollapsed ? 'md:hidden' : ''}>{tab.label}</span>
+                  <div className="flex items-center gap-2.5">
+                    {tab.icon}
+                    <span className={isSidebarCollapsed ? 'md:hidden' : ''}>{tab.label}</span>
+                  </div>
+                  {tab.badge && (
+                    <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${isSidebarCollapsed ? 'md:hidden' : ''} ${studentTab === tab.id ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                      {tab.badge}
+                    </span>
+                  )}
                 </button>
               ))}
 
@@ -1446,6 +1468,39 @@ export default function App() {
               />
             )}
 
+            {persona === 'student' && (studentTab === 'lessons' || studentTab === 'videos' || studentTab === 'swing') && (
+              <LessonsPage
+                currentUser={displayUser}
+                lessons={videoLessons}
+                onNavigateTo={handleDirectNavigation}
+                onUpdateVideoProgress={handleUpdateVideoProgress}
+                studentResults={studentResults}
+                onSubmitCompleted={handleStudentSubmitCode}
+                onUnlocked={() => addNotification('Java Swing Unlocked', 'Java Swing Programming is now available after completing OOP.', 'unlock')}
+                initialTab={studentTab === 'swing' ? 'swing' : 'oop'}
+                theme={theme}
+              />
+            )}
+
+            {persona === 'student' && studentTab === 'pretest' && (
+              <PreTestAssessment
+                key={`pretest-${displayUser.id || displayUser.userId || displayUser.email}`}
+                currentUser={displayUser}
+                onNavigateTo={handleDirectNavigation}
+                onFinish={() => handleDirectNavigation('diagnostic-results')}
+                theme={theme}
+              />
+            )}
+
+            {persona === 'student' && studentTab === 'diagnostic-results' && (
+              <DiagnosticResultsPage
+                key={`diagnostics-${displayUser.id || displayUser.userId || displayUser.email}`}
+                currentUser={displayUser}
+                onNavigateTo={handleDirectNavigation}
+                theme={theme}
+              />
+            )}
+
             {persona === 'student' && studentTab === 'ide' && (
               <PracticeIDE 
                 key={`practice-${displayUser.id || displayUser.userId || displayUser.email}`}
@@ -1453,17 +1508,6 @@ export default function App() {
                 onSubmitCompleted={handleStudentSubmitCode}
                 theme={theme}
                 activeRecommendation={null}
-              />
-            )}
-
-            {persona === 'student' && studentTab === 'videos' && (
-              <VideoTutorials 
-                key={`videos-${displayUser.id || displayUser.userId || displayUser.email}`}
-                currentUser={displayUser}
-                lessons={videoLessons} 
-                onNavigateTo={handleDirectNavigation}
-                onUpdateVideoProgress={handleUpdateVideoProgress}
-                studentResults={studentResults}
               />
             )}
 
@@ -1475,17 +1519,6 @@ export default function App() {
                 onCorrectAnswerAdded={handleCorrectAnswerAdded}
                 lessons={videoLessons}
                 activeRecommendation={activeRecommendation}
-              />
-            )}
-
-            {persona === 'student' && studentTab === 'swing' && (
-              <JavaSwingModule
-                currentUser={displayUser}
-                oopUnlocked={Boolean(studentResults?.swingUnlocked)}
-                studentResults={studentResults}
-                onSubmitCompleted={handleStudentSubmitCode}
-                onUnlocked={() => addNotification('Java Swing Unlocked', 'Java Swing Programming is now available after completing OOP.', 'unlock')}
-                theme={theme}
               />
             )}
 
@@ -1535,12 +1568,12 @@ export default function App() {
             : 'bg-white/95 border-slate-200 shadow-slate-200/50 text-slate-500'
         }`}>
           {[
-            { id: 'dashboard', label: 'Overview', icon: <Compass className="w-4 h-4" /> },
-            { id: 'ide', label: 'Sandbox', icon: <Code2 className="w-4 h-4" /> },
-            { id: 'videos', label: 'Syllabus', icon: <BookOpen className="w-4 h-4" /> },
-            { id: 'assessments', label: 'Quiz', icon: <TrendingUp className="w-4 h-4" /> },
-            { id: 'swing', label: 'Swing', icon: <PanelTop className="w-4 h-4" /> },
-            { id: 'leaderboard', label: 'Rankings', icon: <Award className="w-4 h-4" /> },
+            { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
+            { id: 'lessons', label: 'Lessons', icon: <BookOpen className="w-4 h-4" /> },
+            { id: 'pretest', label: 'Pre-Test', icon: <ClipboardCheck className="w-4 h-4" /> },
+            { id: 'diagnostic-results', label: 'Diagnostic', icon: <BarChart3 className="w-4 h-4" /> },
+            { id: 'ide', label: 'IDE', icon: <Code2 className="w-4 h-4" /> },
+            { id: 'profile', label: 'Profile', icon: <UserRound className="w-4 h-4" /> },
           ].map(item => (
             <button
               key={item.id}
