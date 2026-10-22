@@ -34,7 +34,8 @@ const isPracticeCompleted = (options = {}) => {
 
 const calculateTotalCourseProgress = (completedLessons, totalLessons = 17) => {
     const completed = Math.max(0, Number(completedLessons) || 0);
-    const total = Math.max(1, Number(totalLessons) || 17);
+    const parsedTotal = totalLessons !== undefined && totalLessons !== null ? Number(totalLessons) : 17;
+    const total = Math.max(1, isNaN(parsedTotal) ? 17 : parsedTotal);
     return Math.round((completed / total) * 10000) / 100;
 };
 

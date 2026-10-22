@@ -52,23 +52,20 @@ export default function LessonsPage({
   const [activeModule, setActiveModule] = useState<'oop' | 'swing'>(initialTab);
 
   // Stats calculation
-  const totalLessonsCount = 17;
-  const oopCount = 12;
-  const swingCount = 5;
+  const oopCount = studentResults?.oopTopics?.length || 12;
+  const swingCount = studentResults?.swingTopics?.length || 5;
+  const totalLessonsCount = studentResults?.totalLessons || (oopCount + swingCount);
 
   const oopCompletedCount = (studentResults?.oopTopics || []).filter(t => t.lessonCompleted).length;
   const swingUnlocked = Boolean(studentResults?.swingUnlocked ?? (oopCompletedCount >= oopCount));
-  const swingCompletedCount = Math.min(
-    swingCount,
-    (studentResults?.swingTopics || []).filter(t => t.lessonCompleted).length
-  );
+  const swingCompletedCount = (studentResults?.swingTopics || []).filter(t => t.lessonCompleted).length;
 
   const totalCompleted = studentResults?.completedLessons ?? (oopCompletedCount + swingCompletedCount);
   const overallCurriculumPct = studentResults?.overallProgress ?? Math.round((totalCompleted / totalLessonsCount) * 100);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto py-6 px-4" id="lessons-hub-container">
-      {/* 17-Lesson Curriculum Header Banner */}
+      {/* Dynamic Curriculum Header Banner */}
       <div className={`rounded-3xl border p-6 sm:p-7 shadow-xs ${cardClass}`}>
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="max-w-2xl space-y-2">
@@ -78,7 +75,7 @@ export default function LessonsPage({
                 Comprehensive Curriculum
               </span>
               <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 font-mono text-xs font-bold text-slate-500">
-                All 17 Lessons
+                All {totalLessonsCount} Lessons
               </span>
             </div>
 
@@ -86,7 +83,7 @@ export default function LessonsPage({
               Curriculum Lessons
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-              Master the full 17-lesson sequence: 12 fundamental Java Object-Oriented Programming topics followed by 5 interactive Java Swing GUI modules.
+              Master the full {totalLessonsCount}-lesson sequence: {oopCount} fundamental Java Object-Oriented Programming topics followed by {swingCount} interactive Java Swing GUI modules.
             </p>
           </div>
 
@@ -105,8 +102,8 @@ export default function LessonsPage({
               />
             </div>
             <div className="mt-2.5 flex items-center justify-between text-[11px] font-mono text-slate-400">
-              <span>Java OOP: {oopCompletedCount}/12</span>
-              <span>Java Swing: {swingCompletedCount}/5</span>
+              <span>Java OOP: {oopCompletedCount}/{oopCount}</span>
+              <span>Java Swing: {swingCompletedCount}/{swingCount}</span>
             </div>
           </div>
         </div>
@@ -131,7 +128,7 @@ export default function LessonsPage({
                   : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
               }`}
             >
-              12 Topics ({oopCompletedCount}/12)
+              {oopCount} Topics ({oopCompletedCount}/{oopCount})
             </span>
           </button>
 
@@ -153,7 +150,7 @@ export default function LessonsPage({
                   : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
               }`}
             >
-              5 Topics {swingUnlocked ? `(${swingCompletedCount}/5)` : '• Locked'}
+              {swingCount} Topics {swingUnlocked ? `(${swingCompletedCount}/${swingCount})` : '• Locked'}
             </span>
             {!swingUnlocked && (
               <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0 ml-1" />

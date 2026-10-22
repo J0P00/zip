@@ -1243,7 +1243,9 @@ export default function App() {
       )
     : getTeacherScopedLeaderboard(leaderboardUsers, displayUser, monitoringRequests);
 
-  const TOTAL_COURSE_LESSONS = 17;
+  const TOTAL_COURSE_LESSONS = studentResults?.totalLessons || (
+    ((studentResults?.oopTopics?.length || 0) + (studentResults?.swingTopics?.length || 0)) || 17
+  );
   const effectiveCompletedLessonsCount = studentResults?.completedLessons ?? completedLessonsCount;
   const learningProgress = studentResults?.overallProgress ?? Math.min(100, Math.round((effectiveCompletedLessonsCount / TOTAL_COURSE_LESSONS) * 100));
   const profileMetrics = displayUser.role === 'teacher'
@@ -1406,7 +1408,7 @@ export default function App() {
               {/* STUDENT TAB LINKS */}
               {persona === 'student' && [
                 { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
-                { id: 'lessons', label: 'Lessons', icon: <BookOpen className="w-4 h-4" />, badge: '17' },
+                { id: 'lessons', label: 'Lessons', icon: <BookOpen className="w-4 h-4" />, badge: String(TOTAL_COURSE_LESSONS) },
                 { id: 'pretest', label: 'Pre-Test', icon: <ClipboardCheck className="w-4 h-4" /> },
                 { id: 'assessments', label: 'Assessments', icon: <CheckCircle2 className="w-4 h-4" /> },
                 { id: 'ide', label: 'Practice IDE', icon: <Code2 className="w-4 h-4" /> },

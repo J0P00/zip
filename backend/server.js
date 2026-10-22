@@ -29,7 +29,7 @@ const { validateBasicJavaStructure } = require("./basicJavaValidator");
 const { getJavaToolchainDiagnostics } = require("./javaToolchain");
 const { normalizeAssessmentPercentage, isPassingAssessment } = require("./assessmentValidation");
 const { assessmentMatchesLesson } = require("./assessmentEligibility");
-const { calculateLessonProgress, calculateCourseProgress, isPracticeCompleted } = require("./progressCalculation");
+const { calculateLessonProgress, calculateCourseProgress, calculateTotalCourseProgress, isPracticeCompleted } = require("./progressCalculation");
 const execFileAsync = promisify(execFile);
 
 const app = express();
@@ -2881,7 +2881,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
         }
     } else {
         lessonResult = await pool.query(
-            "SELECT id, sequence, module FROM lessons WHERE id = $1 AND status <> 'Archived'",
+            "SELECT id, sequence, module, track FROM lessons WHERE id = $1 AND status <> 'Archived'",
             [lessonId]
         );
         if (!lessonResult.rowCount) {
@@ -2890,6 +2890,8 @@ const getLessonEvidence = async (studentId, lessonId) => {
                 [lessonId]
             );
             if (!lessonResult.rowCount) return null;
+            isSwing = true;
+        } else if (lessonResult.rows[0].track === 'swing' || String(lessonResult.rows[0].module || '').toLowerCase().includes('swing')) {
             isSwing = true;
         }
     }
@@ -3107,11 +3109,11 @@ const getOOPCompletionStatus = async (studentId) => {
     const evidence = await Promise.all(
         lessonsResult.rows.map(lesson => getLessonEvidence(studentId, lesson.id))
     );
-    const totalCount = evidence.length || 12;
+    const totalCount = evidence.length;
     const completedCount = evidence.filter(item => item?.completed === true).length;
-    const lessonsComplete = completedCount === totalCount && totalCount > 0;
-    const assessmentsComplete = evidence.length > 0 && evidence.every(item => item?.assessmentPassed === true);
-    const practiceComplete = evidence.length > 0 && evidence.every(item => item?.practiceCompleted === true);
+    const lessonsComplete = totalCount > 0 && completedCount === totalCount;
+    const assessmentsComplete = totalCount > 0 && evidence.every(item => item?.assessmentPassed === true);
+    const practiceComplete = totalCount > 0 && evidence.every(item => item?.practiceCompleted === true);
     return {
         lessonsComplete,
         assessmentsComplete,
@@ -3132,11 +3134,12 @@ const getSwingCompletionStatus = async (studentId) => {
     const evidence = await Promise.all(
         fallbackList.map(lesson => getLessonEvidence(studentId, lesson.id))
     );
+    const totalCount = evidence.length;
     const completedCount = evidence.filter(item => item?.completed === true).length;
     return {
-        totalLessons: evidence.length || 5,
+        totalLessons: totalCount,
         completedLessons: completedCount,
-        swingComplete: evidence.length === 5 && completedCount === 5
+        swingComplete: totalCount > 0 && completedCount === totalCount
     };
 };
 
@@ -3179,19 +3182,19 @@ const getLessonAccessState = async (studentId, lessonId) => {
     if (!current.isSwing) {
         if (current.sequence <= 1) return withLessonAccess(true);
         const previousResult = await pool.query(
-            `SELECT id FROM lessons WHERE sequence = $1 AND status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL} LIMIT 1`,
-            [current.sequence - 1]
+            `SELECT id FROM lessons WHERE sequence < $1 AND status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL} ORDER BY sequence DESC, id DESC LIMIT 1`,
+            [current.sequence]
         );
         if (previousResult.rowCount) {
             previousLessonId = previousResult.rows[0].id;
         } else {
-            previousLessonId = `oop_lesson_${current.sequence - 1}`;
+            return withLessonAccess(true);
         }
     } else {
-        // Swing lessons require all 12 OOP lessons to be completed before Swing unlocks
+        // Swing lessons require all OOP lessons to be completed before Swing unlocks
         const oopStatus = await getOOPCompletionStatus(studentId);
         if (!oopStatus.oopComplete) {
-            return withLessonAccess(false, "Complete all 12 Java OOP lessons before unlocking Java Swing.");
+            return withLessonAccess(false, `Complete all ${oopStatus.totalLessons || 'Java OOP'} lessons before unlocking Java Swing.`);
         }
 
         if (current.sequence <= 1) {
@@ -3199,14 +3202,20 @@ const getLessonAccessState = async (studentId, lessonId) => {
         }
 
         const previousResult = await pool.query(
-            `SELECT id FROM swing_lessons WHERE sequence = $1 LIMIT 1`,
-            [current.sequence - 1]
+            `SELECT id FROM swing_lessons WHERE sequence < $1 ORDER BY sequence DESC, id DESC LIMIT 1`,
+            [current.sequence]
         );
         if (previousResult.rowCount) {
             previousLessonId = previousResult.rows[0].id;
         } else {
-            const fallbackPrev = JAVA_SWING_LESSONS.find(item => item.sequence === current.sequence - 1);
-            previousLessonId = fallbackPrev ? fallbackPrev.id : `swing_lesson_${current.sequence - 1}`;
+            const fallbackPrev = JAVA_SWING_LESSONS
+                .filter(item => item.sequence < current.sequence)
+                .sort((a, b) => b.sequence - a.sequence)[0];
+            if (fallbackPrev) {
+                previousLessonId = fallbackPrev.id;
+            } else {
+                return withLessonAccess(true);
+            }
         }
     }
 
@@ -4069,6 +4078,21 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
             storageSize,
             track
         ]);
+        if (track === "swing") {
+            try {
+                await pool.query(`
+                    INSERT INTO swing_lessons (id, sequence, title, introduction, status)
+                    VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT (id) DO UPDATE SET
+                      sequence = EXCLUDED.sequence,
+                      title = EXCLUDED.title,
+                      introduction = EXCLUDED.introduction,
+                      status = EXCLUDED.status
+                `, [id, sequence, title, cleanText(body.description || "", 5000), cleanText(body.status || "Draft", 40)]);
+            } catch (swingSyncErr) {
+                console.warn("Non-fatal swing_lessons insert sync warning:", swingSyncErr.message);
+            }
+        }
         res.status(201).json({ success: true, data: toClientLesson(result.rows[0]) });
     } catch (error) {
         next(error);
@@ -7008,11 +7032,11 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         }));
 
         failureStage = "final_response_assembly";
-        const totalCourseLessons = 17;
+        const totalCourseLessons = Math.max(1, (oopTopicRows.length + swingTopicRows.length));
         const completedOopLessons = oopTopicRows.filter(topic => topic.lessonCompleted).length;
         const completedSwingLessons = swingTopicRows.filter(topic => topic.lessonCompleted).length;
         const completedLessons = completedOopLessons + completedSwingLessons;
-        const overallProgress = Math.round((completedLessons / totalCourseLessons) * 10000) / 100;
+        const overallProgress = calculateTotalCourseProgress(completedLessons, totalCourseLessons);
 
         const learningScore = Math.round((overallProgress * 0.40) + (Number(row.average_quiz_score || 0) * 0.30) + (Number(row.average_practice_score || 0) * 0.30));
         const learningClassification = classifyLearningState({
@@ -7435,9 +7459,10 @@ app.post("/api/swing/submissions", requireAuth, async (req, res, next) => {
         const lessonAccess = await getLessonAccessState(req.authUser.id, topicId);
         const nextLessonResult = await pool.query(
             `SELECT id FROM swing_lessons
-             WHERE sequence = (
-               SELECT sequence + 1 FROM swing_lessons WHERE id = $1
+             WHERE sequence > (
+               SELECT sequence FROM swing_lessons WHERE id = $1
              )
+             ORDER BY sequence ASC, id ASC
              LIMIT 1`,
             [topicId]
         );
@@ -8736,27 +8761,40 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
 
         let nextLessonId = null;
         try {
-            const nextLessonResult = await pool.query(
-                `SELECT id FROM lessons
-                 WHERE sequence = (
-                   SELECT sequence + 1 FROM lessons WHERE id = $1
-                 ) AND status <> 'Archived'
-                   AND ${OOP_LESSON_FILTER_SQL}
-                 LIMIT 1`,
-                [challengeData.lesson_id]
-            );
-            nextLessonId = nextLessonResult.rowCount ? nextLessonResult.rows[0].id : null;
-            if (!nextLessonId && challengeData.lesson_id === "oop_lesson_12") {
-                const oopStatus = await getOOPCompletionStatus(studentUuid);
-                if (oopStatus.oopComplete) {
-                    nextLessonId = "swing_lesson_1";
+            if (!isSwing) {
+                const nextLessonResult = await pool.query(
+                    `SELECT id FROM lessons
+                     WHERE sequence > (
+                       SELECT sequence FROM lessons WHERE id = $1
+                     ) AND status <> 'Archived'
+                       AND ${OOP_LESSON_FILTER_SQL}
+                     ORDER BY sequence ASC, id ASC
+                     LIMIT 1`,
+                    [challengeData.lesson_id]
+                );
+                if (nextLessonResult.rowCount) {
+                    nextLessonId = nextLessonResult.rows[0].id;
+                } else {
+                    const oopStatus = await getOOPCompletionStatus(studentUuid);
+                    if (oopStatus.oopComplete) {
+                        const firstSwing = await pool.query(
+                            `SELECT id FROM swing_lessons ORDER BY sequence ASC, id ASC LIMIT 1`
+                        );
+                        if (firstSwing.rowCount) {
+                            nextLessonId = firstSwing.rows[0].id;
+                        } else if (JAVA_SWING_LESSONS.length > 0) {
+                            nextLessonId = JAVA_SWING_LESSONS[0].id;
+                        }
+                    }
                 }
-            } else if (!nextLessonId && isSwing) {
+            } else {
                 const nextSwing = await pool.query(
                     `SELECT id FROM swing_lessons
-                     WHERE sequence = (
-                       SELECT sequence + 1 FROM swing_lessons WHERE id = $1
-                     ) LIMIT 1`,
+                     WHERE sequence > (
+                       SELECT sequence FROM swing_lessons WHERE id = $1
+                     )
+                     ORDER BY sequence ASC, id ASC
+                     LIMIT 1`,
                     [challengeData.lesson_id]
                 );
                 if (nextSwing.rowCount) nextLessonId = nextSwing.rows[0].id;

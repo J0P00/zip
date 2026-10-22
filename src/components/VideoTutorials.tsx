@@ -50,6 +50,9 @@ const formatTime = (seconds: number) => {
 
 type SubmissionDb = Record<string, { score?: number; compileStatus?: string }>;
 
+const isSwingLessonId = (id: string = '') =>
+  /^swing_lesson_\d+$/i.test(String(id).trim()) || String(id).trim().toLowerCase().startsWith('swing_');
+
 const getTopic = (results: StudentResultsData | null | undefined, lessonId: string) =>
   results?.oopTopics?.find(topic => topic.id === lessonId) ||
   results?.swingTopics?.find(topic => topic.id === lessonId);
@@ -57,8 +60,33 @@ const getTopic = (results: StudentResultsData | null | undefined, lessonId: stri
 const lessonCompletedFromTopic = (topic?: StudentTopicResult) => Boolean(topic?.lessonCompleted);
 
 const getPrerequisiteMessage = (lesson: VideoLesson, allLessons: VideoLesson[], studentResults?: StudentResultsData | null) => {
-  if (lesson.sequence === 1) return '';
-  const previous = allLessons.find(item => item.sequence === lesson.sequence - 1);
+  const currentTopic = getTopic(studentResults, lesson.id);
+  if (currentTopic?.accessReason) return currentTopic.accessReason;
+
+  const isSwing = isSwingLessonId(lesson.id) || lesson.module === 'Java Swing' || (lesson as any).track === 'swing';
+  const trackLessons = allLessons
+    .filter(item => {
+      const itemIsSwing = isSwingLessonId(item.id) || item.module === 'Java Swing' || (item as any).track === 'swing';
+      return isSwing ? itemIsSwing : !itemIsSwing;
+    })
+    .sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0));
+
+  const currentIndex = trackLessons.findIndex(item => item.id === lesson.id);
+  if (currentIndex <= 0) {
+    if (isSwing) {
+      const oopLessons = allLessons.filter(item => !isSwingLessonId(item.id) && item.module !== 'Java Swing' && (item as any).track !== 'swing');
+      const allOopDone = oopLessons.length > 0 && oopLessons.every(oopItem => {
+        const t = getTopic(studentResults, oopItem.id);
+        return Boolean(t?.lessonCompleted || oopItem.status === 'completed');
+      });
+      if (!allOopDone) {
+        return `Complete all ${oopLessons.length || 'Java OOP'} lessons before unlocking Java Swing.`;
+      }
+    }
+    return '';
+  }
+
+  const previous = trackLessons[currentIndex - 1];
   if (!previous) return 'Complete the previous lesson requirements first.';
   const previousTopic = getTopic(studentResults, previous.id);
   const previousCompleted = Boolean(previousTopic?.lessonCompleted || previous.status === 'completed');
@@ -83,9 +111,10 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     const quizPassed = Boolean(topic?.quizPassed);
     const practiceDone = Boolean(topic?.practiceCompleted || (submission && submission.compileStatus === 'success'));
     const completed = Boolean(topic?.lessonCompleted || (videoDone && quizPassed && practiceDone));
+    const isSwing = isSwingLessonId(lesson.id) || lesson.module === 'Java Swing' || (lesson as any).track === 'swing';
     const access = topic
       ? (topic.lessonUnlocked ? 'active' : 'locked')
-      : (lesson.sequence === 1 ? 'active' : 'locked');
+      : (lesson.sequence === 1 && !isSwing ? 'active' : 'locked');
     return {
       ...lesson,
       status: completed ? 'completed' as const : access as VideoLesson['status'],

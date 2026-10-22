@@ -270,7 +270,9 @@ export default function StudentDashboard({
   const assessmentProgress = Math.round((passedAssessmentCount / Math.max(1, lessonCount)) * 100);
   const practiceProgress = Math.round((completedPracticeCount / Math.max(1, lessonCount)) * 100);
   const videoProgress = studentResults?.videoPercentage ?? 0;
-  const curriculumLessonCount = 17;
+  const curriculumLessonCount = studentResults?.totalLessons || (
+    ((studentResults?.oopTopics?.length || 0) + (studentResults?.swingTopics?.length || 0)) || 17
+  );
   const curriculumCompletedLessons = studentResults
     ? studentResults.completedLessons
     : effectiveCompletedLessons + swingProgress.completedLessons;
@@ -501,7 +503,7 @@ export default function StudentDashboard({
                 </span>
               </div>
               <h3 className="mt-2 text-base font-black text-slate-900">
-                17 Java OOP & Swing Lessons
+                {curriculumLessonCount} Java OOP & Swing Lessons
               </h3>
               <p className="mt-1 text-xs text-slate-500 leading-relaxed">
                 Continue your learning pathway across 12 Java Object-Oriented Programming concepts and 5 Java Swing GUI topics with video lectures, quiz checks, and interactive sandbox IDE exercises.
