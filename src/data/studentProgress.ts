@@ -171,10 +171,10 @@ const recompute = (snapshot: StudentOopProgress): StudentOopProgress => {
   const passedQuizzes = lessons.filter(lesson => lesson.quizPassed).length;
   const passedPractices = lessons.filter(lesson => lesson.practicePassed).length;
   const completedLessons = lessons.filter(lesson => lesson.lessonProgress >= 100).length;
-  const videoProgress = Math.round((completedVideos / lessonCount) * 100);
-  const quizScore = Math.round((passedQuizzes / lessonCount) * 100);
-  const practiceScore = Math.round((passedPractices / lessonCount) * 100);
-  const overallProgress = Math.round(lessons.reduce((sum, lesson) => sum + lesson.lessonProgress, 0) / lessonCount);
+  const videoProgress = Math.min(100, Math.max(0, Math.round((completedVideos / lessonCount) * 100)));
+  const quizScore = Math.min(100, Math.max(0, Math.round((passedQuizzes / lessonCount) * 100)));
+  const practiceScore = Math.min(100, Math.max(0, Math.round((passedPractices / lessonCount) * 100)));
+  const overallProgress = Math.min(100, Math.max(0, Math.round(lessons.reduce((sum, lesson) => sum + lesson.lessonProgress, 0) / lessonCount)));
   const latestActivityAt = lessons
     .flatMap(lesson => [lesson.videoCompletedAt, lesson.quizCompletedAt, lesson.practiceSubmittedAt])
     .filter(Boolean)

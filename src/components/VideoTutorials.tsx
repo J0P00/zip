@@ -163,7 +163,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
 
   const completedLessons = studentResults?.completedLessons ?? lessons.filter(lesson => lesson.status === 'completed').length;
   const passedAssessments = OOP_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
-  const courseProgress = studentResults?.overallProgress ?? (lessons.length ? Math.round((completedLessons / lessons.length) * 100) : 0);
+  const courseProgress = Math.min(100, Math.max(0, studentResults?.overallProgress ?? (lessons.length ? Math.round((completedLessons / lessons.length) * 100) : 0)));
 
   useEffect(() => {
     if (!activeLesson && lessons[0]) setActiveLessonId(lessons[0].id);

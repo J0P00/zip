@@ -127,9 +127,9 @@ export default function StudentDashboard({
   const effectiveCompletedLessons = studentResults?.completedLessons ?? completedLessonsCount;
   const hasProgress = Boolean(studentResults?.hasActivity) || streak > 0 || points > 0 || effectiveCompletedLessons > 0;
   const lessonCount = OOP_COURSE_LESSONS.length;
-  const moduleProgress = studentResults
+  const moduleProgress = Math.min(100, Math.max(0, studentResults
     ? studentResults.overallProgress
-    : Math.min(100, Math.round((effectiveCompletedLessons / lessonCount) * 100));
+    : Math.round((effectiveCompletedLessons / lessonCount) * 100)));
   const isDark = theme === 'dark';
   const [requestActionId, setRequestActionId] = React.useState<string | null>(null);
   const [requestActionError, setRequestActionError] = React.useState<string | null>(null);
@@ -171,7 +171,7 @@ export default function StudentDashboard({
   const performanceClass = studentResults?.learningState ?? 'BEGINNER';
   const swingTopicState = studentResults?.swingTopics || [];
   const journeyTopics = studentResults?.oopTopics || [];
-  const journeyProgress = studentResults?.overallProgress ?? 0;
+  const journeyProgress = Math.min(100, Math.max(0, studentResults?.overallProgress ?? 0));
   const journeyCompletedCount = journeyTopics.filter(topic => topic.lessonCompleted).length;
   const journeyCurrentTopic = journeyTopics.find(topic => !topic.lessonCompleted) || null;
   const journeyCurrentIndex = journeyCurrentTopic ? journeyTopics.findIndex(topic => topic.id === journeyCurrentTopic.id) : -1;
@@ -276,9 +276,9 @@ export default function StudentDashboard({
   const curriculumCompletedLessons = studentResults
     ? studentResults.completedLessons
     : effectiveCompletedLessons + swingProgress.completedLessons;
-  const curriculumProgress = studentResults
+  const curriculumProgress = Math.min(100, Math.max(0, studentResults
     ? studentResults.overallProgress
-    : Math.round((curriculumCompletedLessons / curriculumLessonCount) * 100);
+    : Math.round((curriculumCompletedLessons / curriculumLessonCount) * 100)));
   const [analyticsRange, setAnalyticsRange] = React.useState<'7' | '30' | 'all'>('all');
   const analyticsSince = analyticsRange === 'all' ? 0 : Date.now() - Number(analyticsRange) * 24 * 60 * 60 * 1000;
   const assessmentHistory = (dashboardResults?.assessmentHistory || []).filter(item => !analyticsSince || new Date(item.dateCompleted).getTime() >= analyticsSince);
@@ -799,7 +799,7 @@ export default function StudentDashboard({
               </div>
               <div className="mt-3 space-y-3">
                 {masteryRows.map(({ lesson, topic, mastery }) => {
-                  const lessonProgress = Math.round(((Math.min(100, (topic?.videoPercentage || 0) / 95 * 100) / 100) + (topic?.quizPassed ? 1 : 0) + (topic?.practiceCompleted ? 1 : 0)) / 3 * 100);
+                  const lessonProgress = Math.min(100, Math.max(0, Math.round(((Math.min(100, (topic?.videoPercentage || 0) / 95 * 100) / 100) + (topic?.quizPassed ? 1 : 0) + (topic?.practiceCompleted ? 1 : 0)) / 3 * 100)));
                   return (
                     <div key={lesson.id}>
                       <div className="flex items-center justify-between gap-3 text-[10px] font-bold">

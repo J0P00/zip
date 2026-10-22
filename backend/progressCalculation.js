@@ -36,13 +36,14 @@ const calculateTotalCourseProgress = (completedLessons, totalLessons = 17) => {
     const completed = Math.max(0, Number(completedLessons) || 0);
     const parsedTotal = totalLessons !== undefined && totalLessons !== null ? Number(totalLessons) : 17;
     const total = Math.max(1, isNaN(parsedTotal) ? 17 : parsedTotal);
-    return Math.round((completed / total) * 10000) / 100;
+    return Math.min(100, Math.max(0, Math.round((completed / total) * 10000) / 100));
 };
 
 const calculateCourseProgress = (lessonProgresses) => {
     const lessons = Array.isArray(lessonProgresses) ? lessonProgresses : [];
     if (!lessons.length) return 0;
-    return Math.round((lessons.reduce((sum, progress) => sum + clampPercent(progress), 0) / lessons.length) * 100) / 100;
+    const avg = lessons.reduce((sum, progress) => sum + clampPercent(progress), 0) / lessons.length;
+    return Math.min(100, Math.max(0, Math.round(avg * 100) / 100));
 };
 
 module.exports = { calculateLessonProgress, calculateCourseProgress, calculateTotalCourseProgress, isPracticeCompleted };

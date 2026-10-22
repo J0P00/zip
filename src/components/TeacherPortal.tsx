@@ -312,11 +312,11 @@ const teacherScopedCode = (email: string) => {
 };
 
 const mapBackendStudent = (user: AuthenticatedUser, results: StudentResultsData): LiveStudent => {
-  const overallProgress = Number(results.overallProgress || 0);
-  const videoCompletion = Number(results.videoPercentage || 0);
-  const quizScore = Number(results.averageQuizScore || 0);
-  const practiceScore = Number(results.averagePracticeScore || 0);
-  const performanceIndex = Number(results.learningScore || 0);
+  const overallProgress = Math.min(100, Math.max(0, Math.round(Number(results.overallProgress || 0))));
+  const videoCompletion = Math.min(100, Math.max(0, Math.round(Number(results.videoPercentage || 0))));
+  const quizScore = Math.min(100, Math.max(0, Math.round(Number(results.averageQuizScore || 0))));
+  const practiceScore = Math.min(100, Math.max(0, Math.round(Number(results.averagePracticeScore || 0))));
+  const performanceIndex = Math.min(100, Math.max(0, Math.round(Number(results.learningScore || 0))));
   const learningStatus: LearningStatus =
     performanceIndex >= 100 ? 'Mastered' : performanceIndex >= 70 ? 'Completed' : performanceIndex > 0 ? 'In Progress' : 'At Risk';
 
@@ -509,9 +509,9 @@ export default function TeacherPortal({
             lessonSequence: row.activity_lesson_sequence === null ? null : Number(row.activity_lesson_sequence),
             timestamp: row.activity_timestamp
           } : null;
-          const progress = Number(row.progress || 0);
-          const quizScore = Number(row.quiz_average || 0);
-          const practiceScore = Number(row.programming_score || 0);
+          const progress = Math.min(100, Math.max(0, Math.round(Number(row.progress || 0))));
+          const quizScore = Math.min(100, Math.max(0, Math.round(Number(row.quiz_average || 0))));
+          const practiceScore = Math.min(100, Math.max(0, Math.round(Number(row.programming_score || 0))));
           const lastActivity = formatMonitoringActivity(activity);
           return {
             id: row.id,
@@ -527,11 +527,11 @@ export default function TeacherPortal({
             overallProgress: progress,
             moduleProgress: progress,
             topicProgress: progress,
-            videoCompletion: Number(row.video_progress || 0),
+            videoCompletion: Math.min(100, Math.max(0, Math.round(Number(row.video_progress || 0)))),
             quizScore,
             practiceScore,
             challengesCompleted: practiceScore > 0 ? 1 : 0,
-            performanceIndex: Number(row.learning_score || 0),
+            performanceIndex: Math.min(100, Math.max(0, Math.round(Number(row.learning_score || 0)))),
             learningStatus: progress >= 100 ? 'Mastered' : progress > 0 ? 'In Progress' : 'At Risk',
             lastActivity,
             moduleCompletion: progress,
@@ -697,10 +697,10 @@ export default function TeacherPortal({
       user.name.replace(/\s+\(You\)$/i, '').toLowerCase() === request.studentName.toLowerCase()
     );
     if (progressUser) {
-      const overallProgress = progressUser.progress ?? progressUser.points ?? 0;
-      const videoCompletion = progressUser.videoProgress ?? 0;
-      const quizScore = progressUser.quizScore ?? 0;
-      const practiceScore = progressUser.practiceScore ?? 0;
+      const overallProgress = Math.min(100, Math.max(0, Math.round(Number(progressUser.progress ?? progressUser.points ?? 0))));
+      const videoCompletion = Math.min(100, Math.max(0, Math.round(Number(progressUser.videoProgress ?? 0))));
+      const quizScore = Math.min(100, Math.max(0, Math.round(Number(progressUser.quizScore ?? 0))));
+      const practiceScore = Math.min(100, Math.max(0, Math.round(Number(progressUser.practiceScore ?? 0))));
       const performanceIndex = overallProgress;
       const learningStatus: LearningStatus =
         overallProgress >= 100 ? 'Mastered' : overallProgress >= 70 ? 'Completed' : overallProgress > 0 ? 'In Progress' : 'At Risk';
@@ -1282,17 +1282,20 @@ export default function TeacherPortal({
                       ['Practice IDE Score', activeViewingStudent.practiceScore],
                       ['Performance Index', activeViewingStudent.performanceIndex],
                       ['Topic Completion', activeViewingStudent.topicCompletion]
-                    ].map(([label, value]) => (
-                      <div key={label as string} className={`rounded-xl border p-3 ${mutedPanel}`}>
-                        <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-400">
-                          <span>{label as string}</span>
-                          <span>{value}%</span>
+                    ].map(([label, value]) => {
+                      const displayVal = Math.min(100, Math.max(0, Math.round(Number(value) || 0)));
+                      return (
+                        <div key={label as string} className={`rounded-xl border p-3 ${mutedPanel}`}>
+                          <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-400">
+                            <span>{label as string}</span>
+                            <span>{displayVal}%</span>
+                          </div>
+                          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80 dark:bg-slate-800">
+                            <div className="h-full rounded-full bg-emerald-600" style={{ width: `${displayVal}%` }} />
+                          </div>
                         </div>
-                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80 dark:bg-slate-800">
-                          <div className="h-full rounded-full bg-emerald-600" style={{ width: `${value}%` }} />
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Interpretation of Results Panel */}
@@ -1628,9 +1631,9 @@ export default function TeacherPortal({
                             <td className="px-3 py-3">
                               <div className="flex items-center gap-2">
                                 <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                                  <div className="h-full rounded-full bg-emerald-600" style={{ width: `${student.overallProgress}%` }} />
+                                  <div className="h-full rounded-full bg-emerald-600" style={{ width: `${Math.min(100, Math.max(0, student.overallProgress))}%` }} />
                                 </div>
-                                <span className="font-mono font-bold">{student.overallProgress}%</span>
+                                <span className="font-mono font-bold">{Math.min(100, Math.max(0, student.overallProgress))}%</span>
                               </div>
                             </td>
                             <td className="px-3 py-3 font-mono font-bold">{student.quizScore}%</td>
@@ -1669,9 +1672,9 @@ export default function TeacherPortal({
                             <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black ${monitoringStatusClass(status, isDark)}`}>{status}</span>
                           </div>
                           <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">
-                            <span><b className="block text-slate-400">Overall</b><strong>{student.overallProgress}%</strong></span>
-                            <span><b className="block text-slate-400">Quiz</b><strong>{student.quizScore}%</strong></span>
-                            <span><b className="block text-slate-400">Practice</b><strong>{student.practiceScore}%</strong></span>
+                            <span><b className="block text-slate-400">Overall</b><strong>{Math.min(100, Math.max(0, student.overallProgress))}%</strong></span>
+                            <span><b className="block text-slate-400">Quiz</b><strong>{Math.min(100, Math.max(0, student.quizScore))}%</strong></span>
+                            <span><b className="block text-slate-400">Practice</b><strong>{Math.min(100, Math.max(0, student.practiceScore))}%</strong></span>
                           </div>
                           <div className="mt-3 flex items-center justify-between gap-2">
                             <span className="truncate text-[10px] text-slate-500">{student.section}</span>

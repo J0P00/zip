@@ -61,7 +61,7 @@ export default function LessonsPage({
   const swingCompletedCount = (studentResults?.swingTopics || []).filter(t => t.lessonCompleted).length;
 
   const totalCompleted = studentResults?.completedLessons ?? (oopCompletedCount + swingCompletedCount);
-  const overallCurriculumPct = studentResults?.overallProgress ?? Math.round((totalCompleted / totalLessonsCount) * 100);
+  const overallCurriculumPct = Math.min(100, Math.max(0, studentResults?.overallProgress ?? Math.round((totalCompleted / totalLessonsCount) * 100)));
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto py-6 px-4" id="lessons-hub-container">
