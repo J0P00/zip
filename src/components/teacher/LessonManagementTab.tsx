@@ -81,7 +81,9 @@ const createDefaultQuestion = (index = 1): AssessmentQuestionDraft => ({
   correctOptionId: 'opt_a'
 });
 
-const isSwingLessonItem = (lesson: { id?: string; courseId?: string; module?: string }): boolean => {
+const isSwingLessonItem = (lesson: { id?: string; courseId?: string; module?: string; track?: string }): boolean => {
+  if (lesson.track === 'swing') return true;
+  if (lesson.track === 'oop') return false;
   const id = String(lesson.id || '').toLowerCase();
   const courseId = String(lesson.courseId || '').toLowerCase();
   const mod = String(lesson.module || '').toLowerCase();
@@ -146,6 +148,7 @@ const buildBaselineLessons = (): ManagedLesson[] => {
     return {
       id: l.id,
       title: l.title,
+      track: 'oop',
       module: 'Object-Oriented Programming (Java)',
       courseId: 'oop_course_java',
       sequence: l.sequence || i + 1,
@@ -198,6 +201,7 @@ const buildBaselineLessons = (): ManagedLesson[] => {
     return {
       id: l.id,
       title: l.title,
+      track: 'swing',
       module: 'Java Swing',
       courseId: 'java_swing',
       sequence: 12 + (l.sequence || i + 1),
@@ -250,6 +254,7 @@ const buildBaselineLessons = (): ManagedLesson[] => {
 
 export default function LessonManagementTab({ theme = 'light' }: LessonManagementTabProps) {
   const isDark = theme === 'dark';
+  const [activeTrack, setActiveTrack] = useState<'oop' | 'swing'>('oop');
   const [lessons, setLessons] = useState<ManagedLesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -272,6 +277,9 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
 
   // Form state
   const [formData, setFormData] = useState({
+    // Track identifier
+    track: 'oop' as 'oop' | 'swing',
+
     // 1. Basic Lesson Details
     title: '',
     module: 'Object-Oriented Programming (Java)',
@@ -321,12 +329,14 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       if (res.data && Array.isArray(res.data) && res.data.length > 0) {
         const mapped: ManagedLesson[] = res.data.map((l: any) => {
           const swingVid = JAVA_SWING_VIDEOS.find(v => v.lessonId === l.id);
-          const isSwing = isSwingLessonItem({ id: l.id, courseId: l.course_id || l.courseId, module: l.module });
+          const isSwing = isSwingLessonItem({ id: l.id, courseId: l.course_id || l.courseId, module: l.module, track: l.track || l.metadata?.track });
+          const track = (l.track || l.metadata?.track || (isSwing ? 'swing' : 'oop')) as 'oop' | 'swing';
           const rawSeq = Number(l.sequence || 1);
           const effectiveSeq = isSwing && rawSeq <= 5 ? 12 + rawSeq : rawSeq;
           return {
             id: l.id,
             title: l.title || '',
+            track,
             module: l.module || (isSwing ? 'Java Swing' : 'Object-Oriented Programming (Java)'),
             courseId: l.course_id || l.courseId || (isSwing ? 'java_swing' : 'oop_course_java'),
             sequence: effectiveSeq,
@@ -377,8 +387,13 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     fetchLessons();
   }, []);
 
+  const oopLessonsCount = useMemo(() => lessons.filter(l => !isSwingLessonItem(l)).length, [lessons]);
+  const swingLessonsCount = useMemo(() => lessons.filter(l => isSwingLessonItem(l)).length, [lessons]);
+
   const filteredLessons = useMemo(() => {
     return lessons.filter(l => {
+      const inTrack = activeTrack === 'swing' ? isSwingLessonItem(l) : !isSwingLessonItem(l);
+      if (!inTrack) return false;
       const matchSearch =
         l.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         l.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -386,14 +401,19 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       const matchStatus = statusFilter === 'All' ? true : l.status === statusFilter;
       return matchSearch && matchStatus;
     });
-  }, [lessons, searchTerm, statusFilter]);
+  }, [lessons, activeTrack, searchTerm, statusFilter]);
 
   const handleOpenCreate = () => {
-    const nextSeq = lessons.length > 0 ? Math.max(...lessons.map(l => l.sequence)) + 1 : 1;
+    const isSwingTrack = activeTrack === 'swing';
+    const trackLessons = lessons.filter(l => (isSwingTrack ? isSwingLessonItem(l) : !isSwingLessonItem(l)));
+    const nextSeq = trackLessons.length > 0
+      ? Math.max(...trackLessons.map(l => (isSwingTrack && l.sequence > 12 ? l.sequence - 12 : l.sequence))) + 1
+      : 1;
     const initialQuestion = createDefaultQuestion(1);
     setFormData({
+      track: activeTrack,
       title: '',
-      module: 'Object-Oriented Programming (Java)',
+      module: isSwingTrack ? 'Java Swing' : 'Object-Oriented Programming (Java)',
       sequence: nextSeq,
       status: 'Published',
       description: '',
@@ -404,7 +424,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       enableAssessment: true,
       assessmentTitle: '',
       assessmentQuizType: 'Multiple Choice',
-      assessmentPassingScore: ASSESSMENT_PASSING_SCORE,
+      assessmentPassingScore: isSwingTrack ? SWING_PASSING_PERCENTAGE : ASSESSMENT_PASSING_SCORE,
       assessmentAttempts: 3,
       assessmentStatus: 'Published',
       assessmentQuestions: [initialQuestion],
@@ -414,7 +434,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       practiceStarterCode: DEFAULT_STARTER_CODE,
       practiceSampleInput: '',
       practiceSampleOutput: 'Hello, World!',
-      practicePassingScore: 70,
+      practicePassingScore: isSwingTrack ? SWING_PASSING_PERCENTAGE : 70,
       practiceStatus: 'Published'
     });
     setRawQuestionsJson(JSON.stringify([initialQuestion], null, 2));
@@ -485,10 +505,14 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       staticOopLesson?.source_url ||
       (isSwing ? 'https://docs.oracle.com/javase/tutorial/uiswing/' : '');
 
+    const track = (lesson.track || (isSwing ? 'swing' : 'oop')) as 'oop' | 'swing';
+    const displaySeq = isSwing && lesson.sequence > 12 ? lesson.sequence - 12 : lesson.sequence;
+
     setFormData({
+      track,
       title: lesson.title,
       module: lesson.module || (isSwing ? 'Java Swing' : 'Object-Oriented Programming (Java)'),
-      sequence: lesson.sequence,
+      sequence: displaySeq,
       status: lesson.status,
       description: lesson.description || '',
       learningObjectives: Array.isArray(lesson.learningObjectives) ? lesson.learningObjectives.join('\n') : '',
@@ -651,12 +675,15 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       .filter(Boolean);
 
     setIsSaving(true);
-    const lessonId = editingLesson?.id || `oop_lesson_${Date.now()}`;
+    const isSwingTrack = formData.track === 'swing';
+    const effectiveSeq = isSwingTrack && seq <= 5 ? 12 + seq : seq;
+    const lessonId = editingLesson?.id || (isSwingTrack ? `swing_lesson_${Date.now()}` : `oop_lesson_${Date.now()}`);
     const lessonPayload = {
       id: lessonId,
+      track: formData.track,
       title: formData.title.trim(),
       module: formData.module.trim(),
-      sequence: seq,
+      sequence: effectiveSeq,
       videoUrl: formData.videoUrl.trim(),
       description: formData.description.trim(),
       learningObjectives: objectives,
@@ -665,6 +692,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       citationText: formData.citationText.trim(),
       citationUrl: formData.citationUrl.trim(),
       metadata: {
+        track: formData.track,
         citationText: formData.citationText.trim(),
         citationUrl: formData.citationUrl.trim(),
         sourceUrl: formData.citationUrl.trim()
@@ -677,7 +705,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
 
     try {
       let savedId = lessonId;
-      const isSwing = isSwingLessonItem({ id: lessonId, courseId: editingLesson?.courseId, module: formData.module });
+      const isSwing = isSwingTrack || isSwingLessonItem({ id: lessonId, courseId: editingLesson?.courseId, module: formData.module, track: formData.track });
       if (editingLesson) {
         const res = await lessonApi.update(editingLesson.id, lessonPayload);
         savedId = res.data?.id || editingLesson.id;
@@ -839,7 +867,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                 Consolidated Curriculum Hub
               </span>
               <span className="text-xs text-slate-400 font-bold">
-                {lessons.length} Total Lessons ({lessons.filter(l => l.status === 'Published').length} Published)
+                {activeTrack === 'oop' ? `${oopLessonsCount} OOP Lessons` : `${swingLessonsCount} Swing Lessons`} ({filteredLessons.filter(l => l.status === 'Published').length} Published in Track)
               </span>
             </div>
             <h2 className="mt-2 text-xl font-black">Lesson & Content Management</h2>
@@ -854,6 +882,61 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
           >
             <Plus className="h-4 w-4" />
             Create New Lesson
+          </button>
+        </div>
+
+        {/* Track Separation Tabs */}
+        <div className="mt-5 flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+          <button
+            type="button"
+            onClick={() => setActiveTrack('oop')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black transition cursor-pointer ${
+              activeTrack === 'oop'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : isDark
+                ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+            }`}
+          >
+            <BookOpen className="h-4 w-4" />
+            <span>Java OOP Curriculum</span>
+            <span
+              className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-black ${
+                activeTrack === 'oop'
+                  ? 'bg-emerald-700/80 text-white'
+                  : isDark
+                  ? 'bg-slate-700 text-slate-300'
+                  : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {oopLessonsCount} Lessons
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTrack('swing')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black transition cursor-pointer ${
+              activeTrack === 'swing'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : isDark
+                ? 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+            }`}
+          >
+            <Layers className="h-4 w-4" />
+            <span>Java Swing Curriculum</span>
+            <span
+              className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-black ${
+                activeTrack === 'swing'
+                  ? 'bg-emerald-700/80 text-white'
+                  : isDark
+                  ? 'bg-slate-700 text-slate-300'
+                  : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {swingLessonsCount} Lessons
+            </span>
           </button>
         </div>
 
@@ -949,13 +1032,16 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                     JAVA_SWING_EXERCISES.some(e => e.lessonId === lesson.id)
                   );
 
+                  const isSwing = isSwingLessonItem(lesson);
+                  const displaySeq = isSwing && lesson.sequence > 12 ? lesson.sequence - 12 : lesson.sequence;
+
                   return (
                     <tr key={lesson.id} className={`transition ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50/70'}`}>
                       {/* Sequence with Move Up/Down */}
                       <td className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <span className="font-mono text-xs font-black text-emerald-600 dark:text-emerald-400">
-                            #{lesson.sequence}
+                            #{displaySeq}
                           </span>
                           <div className="flex flex-col">
                             <button
@@ -1203,6 +1289,80 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
               {/* SECTION 1: LESSON DETAILS */}
               {activeModalTab === 'lesson' && (
                 <div className="space-y-4">
+                  {/* Curriculum Track Selector */}
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                      Curriculum Track *
+                    </label>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label
+                        className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition ${
+                          formData.track === 'oop'
+                            ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black'
+                            : isDark
+                            ? 'border-slate-800 bg-slate-950/40 text-slate-400 hover:border-slate-700'
+                            : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="curriculumTrack"
+                          value="oop"
+                          checked={formData.track === 'oop'}
+                          onChange={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              track: 'oop',
+                              module: prev.module === 'Java Swing' ? 'Object-Oriented Programming (Java)' : prev.module,
+                              assessmentPassingScore: ASSESSMENT_PASSING_SCORE,
+                              practicePassingScore: 70
+                            }));
+                          }}
+                          className="mt-0.5 h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div>
+                          <div className="text-xs font-black">Java OOP Curriculum</div>
+                          <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                            Core OOP concepts, classes, inheritance, polymorphism, and encapsulation.
+                          </div>
+                        </div>
+                      </label>
+
+                      <label
+                        className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition ${
+                          formData.track === 'swing'
+                            ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black'
+                            : isDark
+                            ? 'border-slate-800 bg-slate-950/40 text-slate-400 hover:border-slate-700'
+                            : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="curriculumTrack"
+                          value="swing"
+                          checked={formData.track === 'swing'}
+                          onChange={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              track: 'swing',
+                              module: prev.module === 'Object-Oriented Programming (Java)' ? 'Java Swing' : prev.module,
+                              assessmentPassingScore: SWING_PASSING_PERCENTAGE,
+                              practicePassingScore: SWING_PASSING_PERCENTAGE
+                            }));
+                          }}
+                          className="mt-0.5 h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div>
+                          <div className="text-xs font-black">Java Swing Curriculum</div>
+                          <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                            Desktop GUI, event handling, components, layout managers, and custom dialogs.
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
                     <div className="sm:col-span-3">
                       <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1">

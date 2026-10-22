@@ -578,6 +578,7 @@ export interface AssessmentSubmitResult {
 export interface ManagedLesson {
   id: string;
   title: string;
+  track?: 'oop' | 'swing';
   module: string;
   courseId: string;
   sequence: number;

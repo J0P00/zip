@@ -727,8 +727,8 @@ const createOrUpdateNotification = async (client, payload) => {
 };
 
 const isSwingLessonId = (lessonId = "") => /^swing_lesson_\d+$/i.test(String(lessonId).trim()) || String(lessonId).trim().toLowerCase().startsWith("swing_");
-const OOP_LESSON_FILTER_SQL = "(id NOT LIKE 'swing_%' AND COALESCE(course_id, 'oop_fundamentals') <> 'java_swing' AND LOWER(COALESCE(module, '')) NOT LIKE '%swing%')";
-const OOP_LESSON_ALIAS_FILTER_SQL = (alias = "l") => `(${alias}.id NOT LIKE 'swing_%' AND COALESCE(${alias}.course_id, 'oop_fundamentals') <> 'java_swing' AND LOWER(COALESCE(${alias}.module, '')) NOT LIKE '%swing%')`;
+const OOP_LESSON_FILTER_SQL = "(id NOT LIKE 'swing_%' AND COALESCE(course_id, 'oop_fundamentals') <> 'java_swing' AND LOWER(COALESCE(module, '')) NOT LIKE '%swing%' AND COALESCE(track, 'oop') <> 'swing')";
+const OOP_LESSON_ALIAS_FILTER_SQL = (alias = "l") => `(${alias}.id NOT LIKE 'swing_%' AND COALESCE(${alias}.course_id, 'oop_fundamentals') <> 'java_swing' AND LOWER(COALESCE(${alias}.module, '')) NOT LIKE '%swing%' AND COALESCE(${alias}.track, 'oop') <> 'swing')`;
 
 const OOP_CLOUDINARY_VIDEOS = {
     oop_lesson_1: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200171/Lesson_1Classes_Objects.mp4",
@@ -757,10 +757,12 @@ const resolveLessonVideoUrl = (row) => {
 };
 
 const toClientLesson = (row) => {
-    const isSwing = isSwingLessonId(row.id) || row.course_id === "java_swing" || String(row.module || "").toLowerCase().includes("swing");
+    const isSwing = isSwingLessonId(row.id) || row.course_id === "java_swing" || String(row.module || "").toLowerCase().includes("swing") || row.track === "swing" || row.metadata?.track === "swing";
+    const track = row.track || row.metadata?.track || (isSwing ? "swing" : "oop");
     return {
         id: row.id,
         title: row.title,
+        track,
         module: row.module || (isSwing ? "Java Swing" : ""),
         courseId: row.course_id || (isSwing ? "java_swing" : "oop_fundamentals"),
         sequence: Number(row.sequence || 0),
@@ -1362,6 +1364,8 @@ const initializeDatabase = async () => {
         );
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS learning_objectives JSONB NOT NULL DEFAULT '[]'::jsonb;
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Draft';
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS track TEXT DEFAULT 'oop';
+        UPDATE lessons SET track = 'swing' WHERE module = 'Java Swing' OR id LIKE 'swing_%' OR metadata->>'track' = 'swing';
         CREATE TABLE IF NOT EXISTS assessments (
           id TEXT PRIMARY KEY,
           lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
@@ -3900,6 +3904,7 @@ app.get("/api/admin/overview", requireAuth, requireRole(["admin"]), async (_req,
 const buildDefaultSwingLessonRow = (swingLesson, swingVideo) => ({
     id: swingLesson.id,
     title: swingLesson.title,
+    track: "swing",
     module: "Java Swing",
     course_id: "java_swing",
     sequence: 12 + Number(swingLesson.sequence),
@@ -3908,7 +3913,7 @@ const buildDefaultSwingLessonRow = (swingLesson, swingVideo) => ({
     description: swingLesson.introduction || swingLesson.summary || "",
     learning_objectives: swingLesson.objectives || [],
     status: "Published",
-    metadata: {}
+    metadata: { track: "swing" }
 });
 
 const fetchOrderedLessonRows = async () => {
@@ -3943,6 +3948,7 @@ const fetchOrderedLessonRows = async () => {
             result.rows.push({
                 id: swingLesson.id,
                 title: dbSl?.title || swingLesson.title,
+                track: "swing",
                 module: "Java Swing",
                 course_id: "java_swing",
                 sequence: 12 + Number(dbSl?.sequence || swingLesson.sequence),
@@ -3951,7 +3957,7 @@ const fetchOrderedLessonRows = async () => {
                 description: dbSl?.introduction || swingLesson.introduction || swingLesson.summary || "",
                 learning_objectives: dbSl?.objectives || swingLesson.objectives || [],
                 status: "Published",
-                metadata: {}
+                metadata: { track: "swing" }
             });
         }
     }
@@ -4021,7 +4027,20 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
             ? storageMarker(storageKey)
             : cleanText(body.videoUrl || body.video_url || "", 2000);
 
+        let track = "oop";
+        if (body.track !== undefined && body.track !== null) {
+            const rawTrack = String(body.track).toLowerCase().trim();
+            if (rawTrack !== "oop" && rawTrack !== "swing" && rawTrack !== "java_swing") {
+                logDiagnosticError("POST /api/lessons", "track", body.track, "Track must be 'oop' or 'swing'");
+                return res.status(400).json({ success: false, message: "Invalid track. Track must be 'oop' or 'swing'." });
+            }
+            track = (rawTrack === "swing" || rawTrack === "java_swing") ? "swing" : "oop";
+        } else if (body.courseId === "java_swing" || String(body.module || "").toLowerCase().includes("swing") || String(id).startsWith("swing_")) {
+            track = "swing";
+        }
+
         const metadata = body.metadata && typeof body.metadata === "object" ? { ...body.metadata } : {};
+        metadata.track = track;
         if (body.citationText || body.citation_text) {
             metadata.citationText = cleanText(body.citationText || body.citation_text || "", 1000);
         }
@@ -4030,8 +4049,8 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
         }
 
         const result = await pool.query(`
-            INSERT INTO lessons (id, title, module, sequence, duration, video_url, description, learning_objectives, status, metadata, storage_provider, storage_key, storage_content_type, storage_size)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14)
+            INSERT INTO lessons (id, title, module, sequence, duration, video_url, description, learning_objectives, status, metadata, storage_provider, storage_key, storage_content_type, storage_size, track)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14, $15)
             RETURNING *
         `, [
             id,
@@ -4047,7 +4066,8 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
             storageProvider || null,
             storageKey || null,
             storageContentType || null,
-            storageSize
+            storageSize,
+            track
         ]);
         res.status(201).json({ success: true, data: toClientLesson(result.rows[0]) });
     } catch (error) {
@@ -4132,6 +4152,17 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
             }
         }
 
+        let track = null;
+        if (body.track !== undefined && body.track !== null) {
+            const rawTrack = String(body.track).toLowerCase().trim();
+            if (rawTrack !== "oop" && rawTrack !== "swing" && rawTrack !== "java_swing") {
+                logDiagnosticError("PUT /api/lessons/:id", "track", body.track, "Track must be 'oop' or 'swing'");
+                return res.status(400).json({ success: false, message: "Invalid track. Track must be 'oop' or 'swing'." });
+            }
+            track = (rawTrack === "swing" || rawTrack === "java_swing") ? "swing" : "oop";
+            if (updatedMetadata) updatedMetadata.track = track;
+        }
+
         const result = await pool.query(`
             UPDATE lessons SET
               title = COALESCE($2, title),
@@ -4147,6 +4178,7 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
               storage_key = CASE WHEN $11 = '' THEN NULL ELSE COALESCE($12, storage_key) END,
               storage_content_type = CASE WHEN $11 = '' THEN NULL ELSE COALESCE($13, storage_content_type) END,
               storage_size = CASE WHEN $11 = '' THEN NULL WHEN $16 THEN $15 ELSE storage_size END,
+              track = COALESCE($17, track),
               updated_at = NOW()
             WHERE id = $1
             RETURNING *
@@ -4166,7 +4198,8 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
             storageContentType,
             storageProvider === STORAGE_PROVIDER && storageKey ? storageMarker(storageKey) : null,
             storageSize,
-            hasStorageSizeUpdate
+            hasStorageSizeUpdate,
+            track
         ]);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Lecture not found." });
         const updatedRow = result.rows[0];
