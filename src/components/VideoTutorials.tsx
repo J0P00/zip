@@ -449,12 +449,10 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
       onUpdateVideoProgress(next.lessonId, next.percentage);
     } catch (error) {
       console.warn('Unable to sync video progress with backend:', error);
-      // Retain in pending queue to retry automatically
+      // Remove failed item so it does not loop infinitely
+      delete pendingProgressRef.current[next.lessonId];
     } finally {
       progressSaveInFlightRef.current = false;
-      if (Object.keys(pendingProgressRef.current).length > 0) {
-        void flushPendingProgress();
-      }
     }
   };
 

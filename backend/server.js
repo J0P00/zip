@@ -3065,7 +3065,18 @@ const getLessonEvidence = async (studentId, lessonId) => {
                 OR ps.challenge_id = 'oop_practice_' || $6
                 OR ps.challenge_id = $4
                 OR ps.challenge_id = REPLACE($4, 'oop_lesson_', '')
+                OR ($6 = '1' AND (ps.challenge_id = 'classes-objects' OR ps.challenge_id = 'classes_and_objects'))
+                OR ($6 = '2' AND ps.challenge_id = 'constructors')
                 OR ($6 = '3' AND (ps.challenge_id = 'object-methods' OR ps.challenge_id = 'practice_3' OR pc.topic_id = 'object-methods'))
+                OR ($6 = '4' AND ps.challenge_id = 'encapsulation')
+                OR ($6 = '5' AND (ps.challenge_id = 'constructor-overloading' OR ps.challenge_id = 'constructor_overloading'))
+                OR ($6 = '6' AND ps.challenge_id = 'inheritance')
+                OR ($6 = '7' AND ps.challenge_id = 'polymorphism')
+                OR ($6 = '8' AND (ps.challenge_id = 'abstract-classes' OR ps.challenge_id = 'abstract_classes'))
+                OR ($6 = '9' AND (ps.challenge_id = 'interface-and-abstract' OR ps.challenge_id = 'interface_and_abstract'))
+                OR ($6 = '10' AND ps.challenge_id = 'interfaces')
+                OR ($6 = '11' AND (ps.challenge_id = 'array-of-objects' OR ps.challenge_id = 'array_of_objects'))
+                OR ($6 = '12' AND (ps.challenge_id = 'enums' OR ps.challenge_id = 'enum'))
                 OR ps.challenge_id = pc.topic_id
                 OR ps.challenge_id IN (SELECT id FROM programming_challenges WHERE lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', ''))
                 OR ps.challenge_id IN (SELECT topic_id FROM programming_challenges WHERE lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', ''))
@@ -3110,7 +3121,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
             SELECT practice_completed, practice_submitted, completed
             FROM lesson_progress
             WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)}
-              AND lesson_id = $4
+              AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', '') OR lesson_id = 'oop_lesson_' || $4)
         `, [studentUuid, studentUserId, studentEmail, lessonId]);
         lpRow = lessonProgressResult.rows[0];
 
@@ -8856,23 +8867,24 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             JSON.stringify(evalResult.testResults)
         ]);
 
+        const practiceSuccess = evalResult.compileStatus === 'success' || Number(evalResult.score || 0) >= 70;
         if (isSwing) {
             await pool.query(`
                 INSERT INTO swing_progress (student_id, lesson_id, exercise_completed)
-                VALUES ($1, $2, TRUE)
+                VALUES ($1, $2, $3)
                 ON CONFLICT (student_id, lesson_id) DO UPDATE SET
-                  exercise_completed = TRUE,
+                  exercise_completed = swing_progress.exercise_completed OR EXCLUDED.exercise_completed,
                   updated_at = NOW()
-            `, [studentUuid, lessonId]);
+            `, [studentUuid, lessonId, practiceSuccess]);
         } else {
             await pool.query(`
                 INSERT INTO lesson_progress (student_id, lesson_id, practice_completed, practice_submitted, updated_at)
-                VALUES ($1, $2, TRUE, TRUE, NOW())
+                VALUES ($1, $2, $3, TRUE, NOW())
                 ON CONFLICT (student_id, lesson_id) DO UPDATE SET
-                  practice_completed = TRUE,
+                  practice_completed = lesson_progress.practice_completed OR EXCLUDED.practice_completed,
                   practice_submitted = TRUE,
                   updated_at = NOW()
-            `, [studentUuid, lessonId]);
+            `, [studentUuid, lessonId, practiceSuccess]);
         }
 
         await logActivity(
