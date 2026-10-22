@@ -317,7 +317,7 @@ export const JAVA_SWING_VIDEOS: SwingVideo[] = [
     id: 'swing_video_1',
     lessonId: 'swing_lesson_1',
     title: 'Topic 1 JFrame Video Lesson',
-    duration: '15:00',
+    duration: '05:54',
     description: 'Learn how to create and configure a simple window using JFrame.',
     embedUrl: lessonVideos.javaSwing.swing_lesson_1.secureUrl
   },
@@ -325,7 +325,7 @@ export const JAVA_SWING_VIDEOS: SwingVideo[] = [
     id: 'swing_video_2',
     lessonId: 'swing_lesson_2',
     title: 'Topic 2 JLabel, JTextField, & JTextArea Video Lesson',
-    duration: '15:00',
+    duration: '24:33',
     description: 'Learn how to add static labels, single-line text fields, and multi-line text areas.',
     embedUrl: lessonVideos.javaSwing.swing_lesson_2.secureUrl
   },
@@ -333,7 +333,7 @@ export const JAVA_SWING_VIDEOS: SwingVideo[] = [
     id: 'swing_video_3',
     lessonId: 'swing_lesson_3',
     title: 'Topic 3 JButton & ActionListener Video Lesson',
-    duration: '15:00',
+    duration: '06:07',
     description: 'Learn how to create buttons and handle click events with ActionListeners.',
     embedUrl: lessonVideos.javaSwing.swing_lesson_3.secureUrl
   },
@@ -341,7 +341,7 @@ export const JAVA_SWING_VIDEOS: SwingVideo[] = [
     id: 'swing_video_4',
     lessonId: 'swing_lesson_4',
     title: 'Topic 4 JPanel & Layout Managers Video Lesson',
-    duration: '15:00',
+    duration: '07:08',
     description: 'Learn how to arrange controls using FlowLayout, BorderLayout, and GridLayout.',
     embedUrl: lessonVideos.javaSwing.swing_lesson_4.secureUrl
   },
@@ -349,7 +349,7 @@ export const JAVA_SWING_VIDEOS: SwingVideo[] = [
     id: 'swing_video_5',
     lessonId: 'swing_lesson_5',
     title: 'Topic 5 JOptionPane Video Lesson',
-    duration: '15:00',
+    duration: '04:39',
     description: 'Learn how to display dialog popups, collect input, and handle confirmation boxes.',
     embedUrl: lessonVideos.javaSwing.swing_lesson_5.secureUrl
   }

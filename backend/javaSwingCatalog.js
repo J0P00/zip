@@ -281,7 +281,7 @@ const JAVA_SWING_VIDEOS = [
     "id": "swing_video_1",
     "lessonId": "swing_lesson_1",
     "title": "Topic 1 JFrame Video Lesson",
-    "duration": "15:00",
+    "duration": "05:54",
     "description": "Learn how to create and configure a simple window using JFrame.",
     "embedUrl": "https://res.cloudinary.com/jaudkms2/video/upload/v1791200208/Topic_1_JFRAME.mp4"
   },
@@ -289,7 +289,7 @@ const JAVA_SWING_VIDEOS = [
     "id": "swing_video_2",
     "lessonId": "swing_lesson_2",
     "title": "Topic 2 JLabel, JTextField, & JTextArea Video Lesson",
-    "duration": "15:00",
+    "duration": "24:33",
     "description": "Learn how to add static labels, single-line text fields, and multi-line text areas.",
     "embedUrl": "https://res.cloudinary.com/jaudkms2/video/upload/v1791200212/Topic_2_Jlabel_JTextField_JtextArea.mp4"
   },
@@ -297,7 +297,7 @@ const JAVA_SWING_VIDEOS = [
     "id": "swing_video_3",
     "lessonId": "swing_lesson_3",
     "title": "Topic 3 JButton & ActionListener Video Lesson",
-    "duration": "15:00",
+    "duration": "06:07",
     "description": "Learn how to create buttons and handle click events with ActionListeners.",
     "embedUrl": "https://res.cloudinary.com/jaudkms2/video/upload/v1791200207/Topic_3_JButton_ActionListener.mp4"
   },
@@ -305,7 +305,7 @@ const JAVA_SWING_VIDEOS = [
     "id": "swing_video_4",
     "lessonId": "swing_lesson_4",
     "title": "Topic 4 JPanel & Layout Managers Video Lesson",
-    "duration": "15:00",
+    "duration": "07:08",
     "description": "Learn how to arrange controls using FlowLayout, BorderLayout, and GridLayout.",
     "embedUrl": "https://res.cloudinary.com/jaudkms2/video/upload/v1791200209/Topic_4_JPanel_LayoutManagers.mp4"
   },
@@ -313,7 +313,7 @@ const JAVA_SWING_VIDEOS = [
     "id": "swing_video_5",
     "lessonId": "swing_lesson_5",
     "title": "Topic 5 JOptionPane Video Lesson",
-    "duration": "15:00",
+    "duration": "04:39",
     "description": "Learn how to display dialog popups, collect input, and handle confirmation boxes.",
     "embedUrl": "https://res.cloudinary.com/jaudkms2/video/upload/v1791200214/Topic_5_JOptionPane.mp4"
   }

@@ -97,6 +97,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const previousLessonIdRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
+  const [loadedDurations, setLoadedDurations] = useState<Record<string, string>>({});
   const [currentTime, setCurrentTime] = useState(activeLesson ? watchDb[activeLesson.id]?.lastPosition || 0 : 0);
   const [maxWatchedTime, setMaxWatchedTime] = useState(activeLesson ? watchDb[activeLesson.id]?.lastPosition || 0 : 0);
   const [volume, setVolume] = useState(0.9);
@@ -192,6 +193,10 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
           onReady: (event: any) => {
             const nextDuration = Number(event.target.getDuration() || 0);
             setDuration(nextDuration);
+            if (nextDuration > 0 && activeLesson) {
+              const formatted = formatTime(nextDuration);
+              setLoadedDurations(prev => (prev[activeLesson.id] === formatted ? prev : { ...prev, [activeLesson.id]: formatted }));
+            }
             const resumeAt = watchDb[activeLesson.id]?.lastPosition || 0;
             if (resumeAt > 0) event.target.seekTo(resumeAt, true);
           },
@@ -332,7 +337,12 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
     if (!video || !activeLesson) return;
-    setDuration(Number.isFinite(video.duration) ? video.duration : 0);
+    const dur = Number.isFinite(video.duration) ? video.duration : 0;
+    setDuration(dur);
+    if (dur > 0) {
+      const formatted = formatTime(dur);
+      setLoadedDurations(prev => (prev[activeLesson.id] === formatted ? prev : { ...prev, [activeLesson.id]: formatted }));
+    }
     const resumeAt = watchDb[activeLesson.id]?.lastPosition || 0;
     if (resumeAt > 0 && resumeAt < video.duration) {
       video.currentTime = resumeAt;
@@ -363,6 +373,36 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const handleFullscreen = () => {
     void shellRef.current?.requestFullscreen?.().catch(() => undefined);
   };
+
+  useEffect(() => {
+    const probes: HTMLVideoElement[] = [];
+    lessons.forEach(l => {
+      if (!l.videoUrl || l.videoUrl.startsWith('/videos/') || l.videoUrl.startsWith('/OOP%20Lesson/')) return;
+      if (loadedDurations[l.id]) return;
+
+      try {
+        const probe = document.createElement('video');
+        probe.preload = 'metadata';
+        probe.src = l.videoUrl;
+        probe.onloadedmetadata = () => {
+          if (Number.isFinite(probe.duration) && probe.duration > 0) {
+            const formatted = formatTime(probe.duration);
+            setLoadedDurations(prev => (prev[l.id] === formatted ? prev : { ...prev, [l.id]: formatted }));
+          }
+        };
+        probes.push(probe);
+      } catch {
+        // Fall back to configured duration string
+      }
+    });
+
+    return () => {
+      probes.forEach(probe => {
+        probe.onloadedmetadata = null;
+        probe.src = '';
+      });
+    };
+  }, [lessons]);
 
   const selectLesson = (lesson: VideoLesson) => {
     if (lesson.status === 'locked') return;
@@ -600,7 +640,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                       </div>
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
-                      <span>{lesson.duration}</span>
+                      <span>{loadedDurations[lesson.id] || lesson.duration}</span>
                       <span>{isLocked ? lockReason : `${progress}% watched`}</span>
                     </div>
                     <div className="mt-2 h-1.5 rounded-full bg-slate-100">

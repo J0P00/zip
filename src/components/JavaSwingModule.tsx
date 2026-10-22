@@ -71,6 +71,13 @@ const userKeyFor = (user: AuthenticatedUser) => user.id || user.userId || user.e
 const getLessonCompleted = (lessonId: string, progressDb: SwingProgressDb) =>
   Boolean(progressDb[lessonId]?.contentCompleted && progressDb[lessonId]?.videoCompleted);
 
+const formatSwingTime = (seconds: number) => {
+  if (!Number.isFinite(seconds)) return '00:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
 export default function JavaSwingModule({ currentUser, oopUnlocked, studentResults, onSubmitCompleted, onUnlocked, theme }: JavaSwingModuleProps) {
   const isDark = theme === 'dark';
   const [isUnlocked, setIsUnlocked] = useState(oopUnlocked);
@@ -93,6 +100,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [videoAttempt, setVideoAttempt] = useState(0);
+  const [loadedSwingDurations, setLoadedSwingDurations] = useState<Record<string, string>>({});
   const swingVideoRef = useRef<HTMLVideoElement | null>(null);
   const swingVideoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const swingVideoSaveInFlightRef = useRef(false);
@@ -725,7 +733,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
                       </div>
                       <div className="flex shrink-0 items-center gap-2"><span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${reason ? 'bg-slate-100 text-slate-500' : completed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{statusLabel}</span>{reason ? <Lock className="h-4 w-4 text-slate-400" /> : completed ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Play className="h-4 w-4 text-slate-500" />}</div>
                     </div>
-                    <div className="mt-3 flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500"><span>{JAVA_SWING_VIDEOS.find(video => video.lessonId === lesson.id)?.duration}</span><span>{reason ? 'Unavailable' : completed ? '100% watched' : 'Not started'}</span></div>
+                    <div className="mt-3 flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500"><span>{loadedSwingDurations[lesson.id] || JAVA_SWING_VIDEOS.find(video => video.lessonId === lesson.id)?.duration}</span><span>{reason ? 'Unavailable' : completed ? '100% watched' : 'Not started'}</span></div>
                     <div className="mt-2 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: completed ? '100%' : '0%' }} /></div>
                   </button>
                 );
