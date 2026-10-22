@@ -1,4 +1,4 @@
-import { AuthenticatedUser, LeaderboardUser, PracticeSubmission } from '../types';
+import { AuthenticatedUser, LeaderboardUser, PracticeSubmission, VideoLesson } from '../types';
 import { OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from './oopCourse';
 import { PRACTICE_CHALLENGES } from './practiceChallenges';
 
@@ -356,3 +356,24 @@ export const progressToLeaderboardUser = (progress: StudentOopProgress, rank = 1
   trend: progress.overallProgress > 0 ? 'up' : 'stable',
   realtimeOopProgress: progress.realtime
 });
+
+/**
+ * Evaluates whether a lesson's sequential requirements are met to unlock the next queue item.
+ * Evaluates unlocking using strict boolean coercion, specifically checking:
+ * Boolean(previousLesson.video_completed) === true,
+ * Boolean(previousLesson.assessment_passed) === true,
+ * and Boolean(previousLesson.practice_submitted) === true.
+ */
+export const isLessonQueueItemUnlocked = (
+  currentIndex: number,
+  lessons: VideoLesson[]
+): boolean => {
+  if (currentIndex === 0) return true;
+  const previousLesson = lessons[currentIndex - 1];
+  if (!previousLesson) return false;
+  return (
+    Boolean(previousLesson.video_completed) === true &&
+    Boolean(previousLesson.assessment_passed) === true &&
+    Boolean(previousLesson.practice_submitted) === true
+  );
+};

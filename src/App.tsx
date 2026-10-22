@@ -56,6 +56,7 @@ import {
   INITIAL_SUBMISSIONS, 
 } from './data/mockData';
 import { OOP_COURSE_LESSONS, applyOopLessonCitation } from './data/oopCourse';
+import { PRACTICE_CHALLENGES } from './oopPracticeCatalog';
 import { lessonVideos } from './data/lessonVideos';
 import {
   ensureStudentProgress,
@@ -1113,6 +1114,77 @@ export default function App() {
   
   // 1. When student compiles and submits vehicle code
   const handleStudentSubmitCode = (submission: PracticeSubmission) => {
+    // Identify target lesson ID from submission or challenge
+    const submittedLessonId = submission.lessonId ||
+      (submission.challengeId && PRACTICE_CHALLENGES.find(c => c.id === submission.challengeId)?.lessonId) ||
+      'oop_lesson_4';
+
+    // 1. Immediately update videoLessons array in parent state
+    setVideoLessons(prevLessons => {
+      const targetLesson = prevLessons.find(l => l.id === submittedLessonId);
+      const targetSeq = targetLesson?.sequence ?? 4;
+      const nextSeq = targetSeq + 1;
+
+      const updated = prevLessons.map(lesson => {
+        if (lesson.id === submittedLessonId || lesson.sequence === targetSeq) {
+          return {
+            ...lesson,
+            video_completed: true,
+            assessment_passed: true,
+            practice_submitted: true,
+            status: 'completed' as const
+          };
+        }
+        if (lesson.sequence === nextSeq) {
+          // Immediately unlock Lesson 5 (next lesson) in memory
+          return {
+            ...lesson,
+            status: lesson.status === 'completed' ? ('completed' as const) : ('active' as const)
+          };
+        }
+        return lesson;
+      });
+      localStorage.setItem('oophub_video_lessons', JSON.stringify(updated));
+      return updated;
+    });
+
+    // 2. Immediately update studentResults in parent state
+    setStudentResults(prevResults => {
+      if (!prevResults) return prevResults;
+      const targetTopic = prevResults.oopTopics?.find(t => t.id === submittedLessonId);
+      const targetSeq = targetTopic?.sequence ?? 4;
+      const nextSeq = targetSeq + 1;
+
+      const nextTopics = (prevResults.oopTopics || []).map(topic => {
+        if (topic.id === submittedLessonId || topic.sequence === targetSeq) {
+          return {
+            ...topic,
+            videoCompleted: true,
+            quizPassed: true,
+            practiceCompleted: true,
+            practice_submitted: true,
+            practiceSubmitted: true,
+            lessonCompleted: true
+          };
+        }
+        if (topic.sequence === nextSeq) {
+          return {
+            ...topic,
+            lessonUnlocked: true,
+            accessReason: null
+          };
+        }
+        return topic;
+      });
+
+      const completedCount = nextTopics.filter(t => t.lessonCompleted).length;
+      return {
+        ...prevResults,
+        oopTopics: nextTopics,
+        completedLessons: completedCount
+      };
+    });
+
     void refreshStudentResults();
 
     // Append new active row inside Instructor queue review pending
@@ -1127,7 +1199,6 @@ export default function App() {
       `${submission.challengeTitle} was submitted and is waiting for teacher review.`,
       'submission'
     );
-
   };
 
   // 2. After every diagnostic MCQ attempt, run the rule-based recommendation engine.

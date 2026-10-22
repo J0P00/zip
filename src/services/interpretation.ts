@@ -55,6 +55,8 @@ export interface StudentTopicResult {
   quizPassed: boolean | null;
   practiceScore: number | null;
   practiceCompleted?: boolean;
+  practice_submitted?: boolean;
+  practiceSubmitted?: boolean;
   lessonUnlocked?: boolean;
   assessmentUnlocked?: boolean;
   practiceUnlocked?: boolean;

@@ -1613,12 +1613,14 @@ const initializeDatabase = async () => {
           video_completed BOOLEAN NOT NULL DEFAULT FALSE,
           quiz_passed BOOLEAN NOT NULL DEFAULT FALSE,
           practice_completed BOOLEAN NOT NULL DEFAULT FALSE,
+          practice_submitted BOOLEAN NOT NULL DEFAULT FALSE,
           completed BOOLEAN NOT NULL DEFAULT FALSE,
           completed_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           UNIQUE(student_id, lesson_id)
         );
+        ALTER TABLE lesson_progress ADD COLUMN IF NOT EXISTS practice_submitted BOOLEAN DEFAULT FALSE;
 
         CREATE TABLE IF NOT EXISTS video_progress (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -3100,7 +3102,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
 
         // Also check authoritative lesson_progress as backup evidence if submission was verified
         const lessonProgressResult = await pool.query(`
-            SELECT practice_completed, completed
+            SELECT practice_completed, practice_submitted, completed
             FROM lesson_progress
             WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)}
               AND lesson_id = $4
@@ -3146,6 +3148,8 @@ const getLessonEvidence = async (studentId, lessonId) => {
         assessmentPassed,
         practiceRequired,
         practiceCompleted,
+        practiceSubmitted: Boolean(practiceSubmissionId || practiceCompleted || lpRow?.practice_submitted || lpRow?.practice_completed),
+        practice_submitted: Boolean(practiceSubmissionId || practiceCompleted || lpRow?.practice_submitted || lpRow?.practice_completed),
         practiceSubmissionId,
         practiceChallengeId,
         practiceCompileStatus,
@@ -3416,12 +3420,13 @@ const verifyLessonCompletion = async (studentId, lessonId) => {
 
         if (isUuid) {
             await pool.query(`
-                INSERT INTO lesson_progress (student_id, lesson_id, video_completed, quiz_passed, practice_completed, completed, completed_at)
-                VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 THEN NOW() ELSE NULL END)
+                INSERT INTO lesson_progress (student_id, lesson_id, video_completed, quiz_passed, practice_completed, practice_submitted, completed, completed_at)
+                VALUES ($1, $2, $3, $4, $5, $5, $6, CASE WHEN $6 THEN NOW() ELSE NULL END)
                 ON CONFLICT (student_id, lesson_id) DO UPDATE SET
                   video_completed = EXCLUDED.video_completed,
                   quiz_passed = EXCLUDED.quiz_passed,
                   practice_completed = EXCLUDED.practice_completed,
+                  practice_submitted = EXCLUDED.practice_submitted OR lesson_progress.practice_submitted,
                   completed = EXCLUDED.completed,
                   completed_at = CASE WHEN EXCLUDED.completed THEN NOW() ELSE lesson_progress.completed_at END,
                   updated_at = NOW()
@@ -7073,6 +7078,8 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 quizPassed: topic.quiz_passed === null ? null : Boolean(topic.quiz_passed),
                 practiceScore: topic.practice_score === null ? null : Number(topic.practice_score),
                 practiceCompleted: Boolean(evidence?.practiceCompleted),
+                practiceSubmitted: Boolean(evidence?.practiceSubmitted || evidence?.practiceCompleted || topic.practice_score !== null),
+                practice_submitted: Boolean(evidence?.practice_submitted || evidence?.practiceCompleted || topic.practice_score !== null),
                 lessonUnlocked: Boolean(accessState.canAccess),
                 assessmentUnlocked: Boolean(accessState.canAccess && evidence?.assessmentUnlocked),
                 practiceUnlocked: Boolean(accessState.canAccess && evidence?.practiceUnlocked),
@@ -8793,6 +8800,15 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
                   exercise_completed = TRUE,
                   updated_at = NOW()
             `, [studentUuid, lessonId]);
+        } else {
+            await pool.query(`
+                INSERT INTO lesson_progress (student_id, lesson_id, practice_completed, practice_submitted, updated_at)
+                VALUES ($1, $2, TRUE, TRUE, NOW())
+                ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+                  practice_completed = TRUE,
+                  practice_submitted = TRUE,
+                  updated_at = NOW()
+            `, [studentUuid, lessonId]);
         }
 
         await logActivity(
@@ -8911,7 +8927,9 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             data: {
                 ...result.rows[0],
                 submissionId: result.rows[0].id,
+                lessonId: challengeData.lesson_id,
                 practiceSubmitted: true,
+                practice_submitted: true,
                 passed: Boolean(updatedLessonAccess.current?.practiceCompleted),
                 practiceCompleted: Boolean(updatedLessonAccess.current?.practiceCompleted),
                 lessonCompleted: Boolean(updatedLessonAccess.current?.completed),

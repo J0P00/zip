@@ -121,6 +121,9 @@ export interface VideoLesson {
   inProgressStudents?: string[];
   notStartedStudents?: string[];
   progressPercent?: number;
+  video_completed?: boolean;
+  assessment_passed?: boolean;
+  practice_submitted?: boolean;
   
   // Legacy provider and metadata extensions
   cloudinaryPublicID?: string;
@@ -445,6 +448,11 @@ export interface PracticeSubmission {
   score: number;
   passed?: boolean;
   practiceCompleted?: boolean;
+  practice_submitted?: boolean;
+  practiceSubmitted?: boolean;
+  lessonId?: string;
+  lessonCompleted?: boolean;
+  nextLessonUnlocked?: boolean;
   canRetry?: boolean;
   editorLocked?: boolean;
   submittedAt: string;

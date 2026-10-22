@@ -155,6 +155,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
     challengeTitle: row.challenge_title || activeChallenge.title,
     topicId: row.topic_id || activeChallenge.topicId,
     topicTitle: row.lesson_id || row.topic_id || activeChallenge.topicId,
+    lessonId: row.lessonId || row.lesson_id || activeChallenge.lessonId,
     sourceCode: row.source_code || '',
     compileStatus: row.compile_status,
     programOutput: row.program_output || '',
@@ -162,7 +163,11 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
     runtime: Number(row.runtime || 0),
     score: Number(row.score || 0),
     passed: row.passed === undefined ? undefined : Boolean(row.passed),
-    practiceCompleted: row.practice_completed === undefined ? undefined : Boolean(row.practice_completed),
+    practiceCompleted: row.practice_completed === undefined ? (row.practiceCompleted ?? true) : Boolean(row.practice_completed),
+    practice_submitted: true,
+    practiceSubmitted: true,
+    lessonCompleted: Boolean(row.lessonCompleted),
+    nextLessonUnlocked: Boolean(row.nextLessonUnlocked),
     canRetry: row.can_retry === undefined ? undefined : Boolean(row.can_retry),
     editorLocked: row.editor_locked === undefined ? undefined : Boolean(row.editor_locked),
     submittedAt: row.submitted_at,
@@ -320,7 +325,12 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
         challengeId: activeChallenge.id,
         sourceCode
       });
-      const savedSubmission = mapBackendSubmission(response.data);
+      const savedSubmission = mapBackendSubmission({
+        ...response.data,
+        lesson_id: activeChallenge.lessonId || (response.data && response.data.lessonId),
+        practice_submitted: true,
+        practiceSubmitted: true
+      });
       const next = { ...submissionDb, [submissionKey]: savedSubmission };
       setSubmissionDb(next);
       const currentLessonAccess = response.data?.lessonAccess;

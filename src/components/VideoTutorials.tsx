@@ -89,7 +89,13 @@ const getPrerequisiteMessage = (lesson: VideoLesson, allLessons: VideoLesson[], 
   const previous = trackLessons[currentIndex - 1];
   if (!previous) return 'Complete the previous lesson requirements first.';
   const previousTopic = getTopic(studentResults, previous.id);
-  const previousCompleted = Boolean(previousTopic?.lessonCompleted || previous.status === 'completed');
+  const previousCompleted = Boolean(
+    previousTopic?.lessonCompleted ||
+    previous.status === 'completed' ||
+    (Boolean(previous.video_completed) === true &&
+     Boolean(previous.assessment_passed) === true &&
+     Boolean(previous.practice_submitted) === true)
+  );
   if (!previousCompleted) {
     return previousTopic?.accessReason || `Complete the ${previous.title} lesson, including its practice, before continuing.`;
   }
@@ -101,22 +107,50 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const [quizDb, setQuizDb] = useState<QuizDb>({});
   const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
   const studentKey = currentUser.id;
-  const lessons = useMemo(() => sourceLessons.map(lesson => {
+  const lessons = useMemo(() => sourceLessons.map((lesson, index, arr) => {
     const watch = watchDb[lesson.id];
     const assessment = OOP_ASSESSMENTS.find(item => item.lessonId === lesson.id);
     const challenge = PRACTICE_CHALLENGES.find(item => item.lessonId === lesson.id);
     const submission = challenge ? submissionDb[`${studentKey}:${challenge.id}`] : undefined;
     const topic = getTopic(studentResults, lesson.id);
-    const videoDone = Boolean(topic?.videoCompleted || (watch?.completionPercentage || 0) >= 95);
-    const quizPassed = Boolean(topic?.quizPassed);
-    const practiceDone = Boolean(topic?.practiceCompleted || (submission && submission.compileStatus === 'success'));
-    const completed = Boolean(topic?.lessonCompleted || (videoDone && quizPassed && practiceDone));
+    const videoDone = Boolean(lesson.video_completed) === true || Boolean(topic?.videoCompleted || (watch?.completionPercentage || 0) >= 95);
+    const quizPassed = Boolean(lesson.assessment_passed) === true || Boolean(topic?.quizPassed);
+    const practiceDone = Boolean(lesson.practice_submitted) === true || Boolean(topic?.practice_submitted) === true || Boolean(topic?.practiceCompleted || (submission && submission.compileStatus === 'success'));
+    const completed = Boolean(lesson.status === 'completed' || topic?.lessonCompleted || (videoDone && quizPassed && practiceDone));
     const isSwing = isSwingLessonId(lesson.id) || lesson.module === 'Java Swing' || (lesson as any).track === 'swing';
-    const access = topic
-      ? (topic.lessonUnlocked ? 'active' : 'locked')
+
+    // Sequential Queue Unlocking:
+    // Lesson 1 is unlocked initially. Next queue items unlock if the previous lesson meets all 3 criteria:
+    // video_completed === true, assessment_passed === true, and practice_submitted === true
+    let queueUnlocked = false;
+    if (index === 0 && !isSwing) {
+      queueUnlocked = true;
+    } else if (index > 0) {
+      const prevLesson = arr[index - 1];
+      const prevTopic = getTopic(studentResults, prevLesson.id);
+      const prevChallenge = PRACTICE_CHALLENGES.find(item => item.lessonId === prevLesson.id);
+      const prevSubmission = prevChallenge ? submissionDb[`${studentKey}:${prevChallenge.id}`] : undefined;
+
+      const prevVideoDone = Boolean(prevLesson.video_completed) === true || Boolean(prevTopic?.videoCompleted) || (watchDb[prevLesson.id]?.completionPercentage || 0) >= 95 || prevLesson.status === 'completed';
+      const prevQuizPassed = Boolean(prevLesson.assessment_passed) === true || Boolean(prevTopic?.quizPassed) || prevLesson.status === 'completed';
+      const prevPracticeSubmitted = Boolean(prevLesson.practice_submitted) === true || Boolean(prevTopic?.practice_submitted) === true || Boolean(prevTopic?.practiceCompleted) || (prevSubmission && prevSubmission.compileStatus === 'success') || prevLesson.status === 'completed';
+
+      const meetsThreeConditions =
+        Boolean(prevVideoDone) === true &&
+        Boolean(prevQuizPassed) === true &&
+        Boolean(prevLesson.practice_submitted || prevPracticeSubmitted) === true;
+
+      queueUnlocked = meetsThreeConditions || Boolean(prevTopic?.lessonCompleted) || prevLesson.status === 'completed';
+    }
+
+    const access = (topic?.lessonUnlocked || queueUnlocked || lesson.status === 'active' || lesson.status === 'completed')
+      ? 'active'
       : (lesson.sequence === 1 && !isSwing ? 'active' : 'locked');
     return {
       ...lesson,
+      video_completed: videoDone,
+      assessment_passed: quizPassed,
+      practice_submitted: Boolean(lesson.practice_submitted) === true || practiceDone,
       concepts: Array.isArray(lesson.concepts)
         ? lesson.concepts
         : Array.isArray((lesson as any).learningObjectives)
@@ -125,7 +159,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
         ? (lesson as any).learning_objectives
         : [],
       status: completed ? 'completed' as const : access as VideoLesson['status'],
-      progressPercent: access === 'active' || completed ? Math.max(Number(topic?.videoPercentage || 0), Number(watch?.completionPercentage || 0)) : 0
+      progressPercent: access === 'active' || completed ? Math.max(Number(topic?.videoPercentage || 0), Number(watch?.completionPercentage || 0), Number(lesson.progressPercent || 0)) : 0
     };
   }), [sourceLessons, watchDb, quizDb, submissionDb, studentKey, studentResults]);
 
@@ -848,9 +882,9 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 const topic = getTopic(studentResults, lesson.id);
                 const challenge = PRACTICE_CHALLENGES.find(item => item.lessonId === lesson.id);
                 const submission = challenge ? submissionDb[`${studentKey}:${challenge.id}`] : undefined;
-                const videoDone = Boolean(topic?.videoCompleted || (watchDb[lesson.id]?.completionPercentage || 0) >= 95);
-                const quizPassed = Boolean(topic?.quizPassed);
-                const practiceDone = Boolean(topic?.practiceCompleted || (submission && submission.compileStatus === 'success'));
+                const videoDone = Boolean(lesson.video_completed) === true || Boolean(topic?.videoCompleted || (watchDb[lesson.id]?.completionPercentage || 0) >= 95);
+                const quizPassed = Boolean(lesson.assessment_passed) === true || Boolean(topic?.quizPassed);
+                const practiceDone = Boolean(lesson.practice_submitted) === true || Boolean(topic?.practice_submitted) === true || Boolean(topic?.practiceCompleted || (submission && submission.compileStatus === 'success'));
                 const isLessonComplete = Boolean(lesson.status === 'completed' || topic?.lessonCompleted || (videoDone && quizPassed && practiceDone));
 
                 const statusLabel = isLocked
