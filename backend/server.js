@@ -6361,6 +6361,8 @@ app.get("/api/lesson-access/:lessonId", requireAuth, requireRole(["student"]), a
 });
 
 app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", "student"]), async (req, res, next) => {
+    const requestId = `res_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    let failureStage = "identity_lookup";
     try {
         const studentId = req.params.studentId;
         const identity = await pool.query(`
@@ -6372,17 +6374,18 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             LIMIT 1
         `, [studentId]);
 
-        if (!identity.rowCount) return res.status(404).json({ success: false, message: "Student not found." });
+        if (!identity.rowCount) {
+            console.warn(`[StudentResults:${requestId}] Stage: ${failureStage} - Student not found for identifier: ${studentId}`);
+            return res.status(404).json({ success: false, message: "Student not found." });
+        }
         const targetUser = identity.rows[0];
 
         if (targetUser.role !== "student") {
+            console.warn(`[StudentResults:${requestId}] Stage: ${failureStage} - Target user is not a student (role=${targetUser.role})`);
             return res.status(404).json({ success: false, message: "Student not found." });
         }
 
-        if (req.authUser.role === "student" && req.authUser.id !== targetUser.id && req.authUser.userId !== targetUser.user_id) {
-            return res.status(403).json({ success: false, message: "Students can only view their own results." });
-        }
-
+        failureStage = "authorization_check";
         const authId = String(req.authUser.id || "");
         const authUserId = String(req.authUser.userId || req.authUser.user_id || "");
         const authEmail = String(req.authUser.email || "").toLowerCase();
@@ -6391,15 +6394,16 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         const targetMail = String(targetUser.email || "").toLowerCase();
 
         const isSelf = 
-            (authId && authId === targetId) ||
+            (authId && (authId === targetId || authId === targetUId)) ||
             (authUserId && (authUserId === targetUId || authUserId === targetId)) ||
-            (authEmail && authEmail === targetMail) ||
-            (authId && authId === targetUId);
+            (authEmail && authEmail === targetMail);
 
         if (req.authUser.role === "student" && !isSelf) {
+            console.warn(`[StudentResults:${requestId}] Stage: ${failureStage} - Access denied for student. authId=${authId}, targetId=${targetId}`);
             return res.status(403).json({ success: false, message: "Students can only view their own results." });
         }
 
+        failureStage = "oop_completion_check";
         const dbStudentId = targetUser.id;
         const targetUserId = targetUser.user_id || String(dbStudentId);
         const targetEmail = targetUser.email || "";
@@ -6408,9 +6412,10 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         try {
             oopCompletion = await getOOPCompletionStatus(dbStudentId);
         } catch (oopErr) {
-            console.warn("Failed to get OOP completion status:", oopErr.message);
+            console.warn(`[StudentResults:${requestId}] Warning in ${failureStage}:`, oopErr.message);
         }
 
+        failureStage = "database_aggregations";
         const [course, videos, quizzes, practice, swing, oopTopics, swingTopics] = await Promise.all([
             pool.query(`
                 SELECT COUNT(*)::int AS total_lessons,
@@ -6575,6 +6580,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                 ORDER BY sl.sequence, sl.title
                         `, [dbStudentId, targetUserId, targetEmail])
         ]);
+        failureStage = "history_timeline_queries";
         const [assessmentHistoryResult, activityTimelineResult] = await Promise.all([
             pool.query(`
                 SELECT qa.id, qa.lesson_id, qa.assessment_id, qa.percentage, qa.passed,
@@ -6613,6 +6619,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         const totalVideos = Number(row.total_videos || totalLessons);
         const submittedPracticeActivities = Number(row.submitted_practice_activities || 0);
         const totalPracticeActivities = Number(row.total_practice_activities || 0);
+        failureStage = "oop_topics_evidence_mapping";
         const oopTopicRows = await Promise.all(oopTopics.rows.map(async topic => {
             let accessState = { canAccess: false, reason: null, current: null };
             try {
@@ -6647,6 +6654,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         }));
 
         const oopComplete = oopCompletion.oopComplete;
+        failureStage = "swing_topics_evidence_mapping";
         const swingTopicRows = await Promise.all(swingTopics.rows.map(async topic => {
             let accessState = { canAccess: false, reason: null, current: null };
             try {
@@ -6680,6 +6688,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             };
         }));
 
+        failureStage = "final_response_assembly";
         const totalCourseLessons = 17;
         const completedOopLessons = oopTopicRows.filter(topic => topic.lessonCompleted).length;
         const completedSwingLessons = swingTopicRows.filter(topic => topic.lessonCompleted).length;
@@ -6755,7 +6764,12 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             }
         });
     } catch (error) {
-        console.error("GET /api/student-results/:studentId error:", error);
+        console.error(`[StudentResults:${requestId}] FAILED at stage "${failureStage}":`, {
+            pgCode: error.code || null,
+            message: error.message || "Unknown error",
+            detail: error.detail || null,
+            where: error.where || null
+        });
         next(error);
     }
 });

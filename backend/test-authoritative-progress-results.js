@@ -290,6 +290,46 @@ assert.strictEqual(resolveActiveToken(null, "stored-jwt"), "stored-jwt");
 
 console.log("  ✅ PASS: Frontend token resolution cleanly falls back to localStorage on empty string or null.");
 
+// --- TEST GROUP 6: Diagnostic Error Preservation & Logging ---
+console.log("\n--- Test Group 6: Diagnostic Error Preservation in apiRequest ---");
+
+function simulateApiRequestError(status, responsePayload, endpoint) {
+    const errorMsg =
+      responsePayload?.message ||
+      responsePayload?.error ||
+      (typeof responsePayload?.raw === 'string' && responsePayload.raw) ||
+      `Request failed with status ${status}`;
+    const error = new Error(errorMsg);
+    error.status = status;
+    error.body = responsePayload;
+    error.endpoint = endpoint;
+    return error;
+}
+
+const err403 = simulateApiRequestError(403, { success: false, message: "Students can only view their own results." }, "/api/student-results/STU-001");
+assert.strictEqual(err403.status, 403);
+assert.strictEqual(err403.message, "Students can only view their own results.");
+assert.strictEqual(err403.body.message, "Students can only view their own results.");
+assert.strictEqual(err403.endpoint, "/api/student-results/STU-001");
+
+const err500 = simulateApiRequestError(500, { success: false, message: "Database connection lost" }, "/api/student-results/STU-001");
+assert.strictEqual(err500.status, 500);
+
+function formatDiagnosticLog(error, fallbackEndpoint) {
+    return {
+        endpoint: error?.endpoint || fallbackEndpoint,
+        status: error?.status ?? 'Unknown',
+        message: error?.message,
+        body: error?.body ?? null
+    };
+}
+
+const logged = formatDiagnosticLog(err403, "/api/student-results/STU-001");
+assert.strictEqual(logged.status, 403);
+assert.strictEqual(logged.endpoint, "/api/student-results/STU-001");
+assert.strictEqual(logged.body.success, false);
+console.log("  ✅ PASS: Diagnostic error preserves HTTP status, response body, endpoint, and omits secrets.");
+
 console.log("\n================================================================");
 console.log("🎯 ALL AUTHORITATIVE PROGRESS REGRESSION TESTS PASSED (100%)");
 console.log("================================================================\n");

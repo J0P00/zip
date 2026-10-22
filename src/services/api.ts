@@ -62,6 +62,13 @@ export const validateVideoUrl = (value: string) => {
   }
 };
 
+export type ApiError = Error & {
+  code?: string;
+  status?: number;
+  body?: any;
+  endpoint?: string;
+};
+
 type RequestOptions = RequestInit & {
   token?: string;
 };
@@ -77,20 +84,26 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
     headers
   });
 
+  let rawText = '';
   let payload: any = null;
   try {
-    payload = await response.json();
+    rawText = await response.text();
+    payload = rawText ? JSON.parse(rawText) : null;
   } catch {
-    payload = null;
+    payload = rawText ? { raw: rawText.slice(0, 500) } : null;
   }
 
   if (!response.ok) {
-    const error = new Error(payload?.message || payload?.error || `Request failed with status ${response.status}`) as Error & {
-      code?: string;
-      status?: number;
-    };
+    const errorMsg =
+      payload?.message ||
+      payload?.error ||
+      (typeof payload?.raw === 'string' && payload.raw) ||
+      `Request failed with status ${response.status}`;
+    const error = new Error(errorMsg) as ApiError;
     error.code = payload?.code;
     error.status = response.status;
+    error.body = payload;
+    error.endpoint = path;
     throw error;
   }
 

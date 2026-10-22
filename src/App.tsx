@@ -667,8 +667,13 @@ export default function App() {
       setStudentResults(response.data);
       setCompletedLessonsCount(response.data.completedLessons);
       setPoints(response.data.overallProgress);
-    } catch (error) {
-      console.warn('Unable to refresh current student progress:', error);
+    } catch (error: any) {
+      console.warn('Unable to refresh current student progress:', {
+        endpoint: error?.endpoint || `/api/student-results/${encodeURIComponent(getCanonicalStudentId(user))}`,
+        status: error?.status ?? (error?.name === 'TypeError' ? 'Network/CORS Error' : 'Unknown'),
+        message: error?.message,
+        body: error?.body ?? null
+      });
       setStudentResultsError('Unable to load authoritative progress from the backend.');
     } finally {
       setStudentResultsLoading(false);
@@ -1064,9 +1069,14 @@ export default function App() {
         setCompletedLessonsCount(response.data.completedLessons);
         setPoints(response.data.overallProgress);
       })
-      .catch(error => {
+      .catch((error: any) => {
         if (!cancelled) {
-          console.warn('Unable to load current student dashboard progress:', error);
+          console.warn('Unable to load current student dashboard progress:', {
+            endpoint: error?.endpoint || `/api/student-results/${encodeURIComponent(studentId)}`,
+            status: error?.status ?? (error?.name === 'TypeError' ? 'Network/CORS Error' : 'Unknown'),
+            message: error?.message,
+            body: error?.body ?? null
+          });
           setStudentResultsError('Unable to load authoritative progress from the backend.');
         }
       })
