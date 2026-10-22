@@ -45,8 +45,8 @@ type WatchDb = Record<string, WatchRecord>;
 type QuizDb = Record<string, QuizAttempt>;
 type SubmissionDb = Record<string, { score?: number; compileStatus?: string }>;
 
-const getAssessmentLockedReason = (lessonId: string, evidenceDb: Record<string, LessonEvidence>, evidenceLoaded: boolean) => {
-  const lesson = OOP_COURSE_LESSONS.find(item => item.id === lessonId);
+const getAssessmentLockedReason = (lessonId: string, effectiveLessons: VideoLesson[], evidenceDb: Record<string, LessonEvidence>, evidenceLoaded: boolean) => {
+  const lesson = (effectiveLessons || []).find(item => item.id === lessonId);
   if (!lesson) return 'Lesson unavailable';
 
   const evidence = evidenceDb[lessonId];
@@ -55,12 +55,46 @@ const getAssessmentLockedReason = (lessonId: string, evidenceDb: Record<string, 
   return evidence.assessmentUnlocked ? '' : 'Watch at least 95% of this lesson video first.';
 };
 
-export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavigateTo, activeRecommendation }: AssessmentsProps) {
+export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavigateTo, lessons = [], activeRecommendation }: AssessmentsProps) {
   const [watchDb, setWatchDb] = useState<WatchDb>({});
   const [evidenceDb, setEvidenceDb] = useState<Record<string, LessonEvidence>>({});
   const [evidenceLoaded, setEvidenceLoaded] = useState(false);
   const [quizDb, setQuizDb] = useState<QuizDb>({});
   const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
+
+  const effectiveLessons = useMemo(() => {
+    return Array.isArray(lessons) && lessons.length > 0 ? lessons : OOP_COURSE_LESSONS;
+  }, [lessons]);
+
+  const assessmentList = useMemo(() => {
+    return (effectiveLessons || []).map(lesson => {
+      const dynamicAssessment =
+        (Array.isArray(lesson.assessments) && lesson.assessments[0]) ||
+        (lesson as any).content?.assessment ||
+        null;
+      const staticAssessment = OOP_ASSESSMENTS.find(item => item.lessonId === lesson.id);
+
+      const id = dynamicAssessment?.id || staticAssessment?.id || `assessment_${lesson.id}`;
+      const title = dynamicAssessment?.title || staticAssessment?.title || `${lesson.title} Assessment`;
+      const passingPercentage = Number(dynamicAssessment?.passingScore ?? staticAssessment?.passingPercentage ?? ASSESSMENT_PASSING_SCORE);
+      const attempts = Number(dynamicAssessment?.attempts || MAX_ASSESSMENT_ATTEMPTS);
+      const questions = dynamicAssessment?.questions || staticAssessment?.questions || [];
+      const hasContent = Boolean(Array.isArray(questions) && questions.length > 0) || Boolean(staticAssessment);
+
+      return {
+        id,
+        lessonId: lesson.id,
+        title,
+        passingPercentage,
+        passingScore: passingPercentage,
+        attempts,
+        questions,
+        status: dynamicAssessment?.status || (hasContent ? 'Published' : 'Draft'),
+        hasContent,
+        lesson
+      };
+    });
+  }, [effectiveLessons]);
 
   const [activeAssessmentId, setActiveAssessmentId] = useState<string | null>(null);
   const [sessionData, setSessionData] = useState<AssessmentSessionData | null>(null);
@@ -83,8 +117,8 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [remainingTime, setRemainingTime] = useState(1200);
 
-  const activeAssessment = OOP_ASSESSMENTS.find(item => item.id === activeAssessmentId) || null;
-  const activeLesson = activeAssessment ? OOP_COURSE_LESSONS.find(item => item.id === activeAssessment.lessonId) : null;
+  const activeAssessment = assessmentList.find(item => item.id === activeAssessmentId) || null;
+  const activeLesson = activeAssessment ? (effectiveLessons.find(item => item.id === activeAssessment.lessonId) || null) : null;
   const currentQuestion = questions[currentIndex];
 
   const answersRef = useRef(answers);
@@ -103,7 +137,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
       progressApi.getVideoProgress(user, token),
       progressApi.getQuizAttempts(user, token),
       practiceApi.listMine(token),
-      ...OOP_COURSE_LESSONS.map(lesson => lessonApi.getAccess(lesson.id, token))
+      ...effectiveLessons.map(lesson => lessonApi.getAccess(lesson.id, token))
     ])
       .then(([videoResponse, response, submissions, ...accessResponses]) => {
         if (!isMounted) return;
@@ -175,13 +209,13 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
     return () => {
       isMounted = false;
     };
-  }, [currentUser.id, currentUser.token]);
+  }, [currentUser.id, currentUser.token, effectiveLessons]);
 
   // Check for active uncompleted session on mount
   useEffect(() => {
     let isMounted = true;
-    if (OOP_ASSESSMENTS.length > 0 && view === 'dashboard') {
-      const firstAvailable = OOP_ASSESSMENTS.find(a => !getAssessmentLockedReason(a.lessonId, evidenceDb, evidenceLoaded));
+    if (assessmentList.length > 0 && view === 'dashboard') {
+      const firstAvailable = assessmentList.find(a => a.hasContent && !getAssessmentLockedReason(a.lessonId, effectiveLessons, evidenceDb, evidenceLoaded));
       if (firstAvailable) {
         assessmentApi.getActiveSession(firstAvailable.id).then(res => {
           if (!isMounted || !res.data) return;
@@ -197,7 +231,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
       }
     }
     return () => { isMounted = false; };
-  }, [evidenceDb, evidenceLoaded, quizDb, submissionDb, view]);
+  }, [assessmentList, effectiveLessons, evidenceDb, evidenceLoaded, quizDb, submissionDb, view]);
 
   // Server-authoritative timer countdown
   useEffect(() => {
@@ -314,20 +348,21 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
   };
 
   const courseStats = useMemo(() => {
-    const completedLessons = OOP_COURSE_LESSONS.filter(lesson => evidenceDb[lesson.id]?.completed).length;
-    const passedAssessments = OOP_ASSESSMENTS.filter(assessment => quizDb[assessment.id]?.passed).length;
+    const completedLessons = effectiveLessons.filter(lesson => evidenceDb[lesson.id]?.completed).length;
+    const passedAssessments = assessmentList.filter(assessment => quizDb[assessment.id]?.passed).length;
+    const totalCount = effectiveLessons.length || 1;
     return {
       completedLessons,
-      lockedLessons: OOP_COURSE_LESSONS.length - completedLessons,
+      lockedLessons: Math.max(0, totalCount - completedLessons),
       passedAssessments,
-      overall: Math.round(((completedLessons + passedAssessments) / (OOP_COURSE_LESSONS.length * 2)) * 100)
+      overall: Math.round(((completedLessons + passedAssessments) / (totalCount * 2)) * 100)
     };
-  }, [watchDb, quizDb]);
+  }, [effectiveLessons, assessmentList, evidenceDb, quizDb]);
 
   const startAssessment = async (assessmentId: string) => {
-    const assessment = OOP_ASSESSMENTS.find(item => item.id === assessmentId);
-    if (!assessment) return;
-    const reason = getAssessmentLockedReason(assessment.lessonId, evidenceDb, evidenceLoaded);
+    const assessment = assessmentList.find(item => item.id === assessmentId);
+    if (!assessment || !assessment.hasContent) return;
+    const reason = getAssessmentLockedReason(assessment.lessonId, effectiveLessons, evidenceDb, evidenceLoaded);
     if (reason) return;
     const attemptsUsed = quizDb[assessmentId]?.attemptCount ?? quizDb[assessmentId]?.attemptNumber ?? 0;
     if (attemptsUsed >= MAX_ASSESSMENT_ATTEMPTS) {
@@ -497,9 +532,9 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
           <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
             {[
               ['Progress', `${courseStats.overall}%`],
-              ['Completed', `${courseStats.completedLessons}/${OOP_COURSE_LESSONS.length}`],
+              ['Completed', `${courseStats.completedLessons}/${effectiveLessons.length}`],
               ['Locked', `${courseStats.lockedLessons}`],
-              ['Passed', `${courseStats.passedAssessments}/${OOP_ASSESSMENTS.length}`]
+              ['Passed', `${courseStats.passedAssessments}/${assessmentList.length}`]
             ].map(([label, value]) => (
               <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950">
                 <span className="block text-[10px] font-black uppercase text-slate-400">{label}</span>
@@ -554,13 +589,38 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
       )}
 
       <div className="grid gap-5 lg:grid-cols-4">
-        {OOP_ASSESSMENTS.map(assessment => {
-          const lesson = OOP_COURSE_LESSONS.find(item => item.id === assessment.lessonId);
-          const reason = getAssessmentLockedReason(assessment.lessonId, evidenceDb, evidenceLoaded);
+        {assessmentList.map(assessment => {
+          const lesson = assessment.lesson || effectiveLessons.find(item => item.id === assessment.lessonId);
+          const reason = getAssessmentLockedReason(assessment.lessonId, effectiveLessons, evidenceDb, evidenceLoaded);
           const attempt = quizDb[assessment.id];
           const passed = attempt?.passed;
           const attemptsUsed = attempt?.attemptCount ?? attempt?.attemptNumber ?? 0;
           const isExhausted = !passed && attemptsUsed >= MAX_ASSESSMENT_ATTEMPTS;
+
+          if (!assessment.hasContent) {
+            return (
+              <article key={assessment.id} className="rounded-2xl border border-dashed border-slate-300 bg-white/60 p-5 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/60">
+                <div className="flex min-h-[190px] flex-col justify-between gap-4">
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-[10px] font-black uppercase text-slate-400">Lesson {lesson?.sequence || 1}</span>
+                      <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">Pending</span>
+                    </div>
+                    <h3 className="mt-2 text-sm font-extrabold text-slate-900 dark:text-white">{assessment.title}</h3>
+                    <p className="mt-2 text-xs font-semibold leading-5 text-slate-400">
+                      Assessment content is being prepared by your instructor.
+                    </p>
+                  </div>
+                  <button
+                    disabled
+                    className="w-full rounded-xl bg-slate-200 px-4 py-2.5 text-xs font-black text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-600"
+                  >
+                    Content Pending
+                  </button>
+                </div>
+              </article>
+            );
+          }
 
           return (
             <article key={assessment.id} className={`rounded-2xl border bg-white/80 p-5 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900 ${reason && !isExhausted ? 'border-slate-200 opacity-75 dark:border-slate-800' : isExhausted ? 'border-amber-200 dark:border-amber-800/60' : 'border-emerald-200 dark:border-emerald-800/60'}`}>
@@ -572,7 +632,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
                   </div>
                   <h3 className="mt-2 text-sm font-extrabold text-slate-900 dark:text-white">{assessment.title}</h3>
                   <p className="mt-2 text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">
-                    15 randomized MCQs with server validation.
+                    {assessment.questions?.length ? `${assessment.questions.length} randomized MCQs with server validation.` : 'Multiple choice questions with server validation.'}
                   </p>
                   {attempt && (
                     <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : isExhausted ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'}`}>

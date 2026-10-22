@@ -3325,7 +3325,37 @@ const shuffleArray = (array) => {
     return copy;
 };
 
-const resolveAssessmentQuestions = (assessmentId, lessonId = "") => {
+const resolveAssessmentQuestions = async (assessmentId, lessonId = "") => {
+    if (assessmentId || lessonId) {
+        try {
+            const res = await pool.query(
+                "SELECT questions FROM assessments WHERE id = $1 OR lesson_id = $2 ORDER BY updated_at DESC LIMIT 1",
+                [assessmentId || "", lessonId || ""]
+            );
+            if (res.rowCount && res.rows[0].questions) {
+                let parsed = res.rows[0].questions;
+                if (typeof parsed === "string") {
+                    try { parsed = JSON.parse(parsed); } catch {}
+                }
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    return parsed.map(q => ({
+                        id: q.id,
+                        lessonId: q.lessonId || lessonId,
+                        question: q.question || q.prompt || "",
+                        codeSnippet: q.codeSnippet || "",
+                        options: Array.isArray(q.options)
+                            ? q.options.map(o => typeof o === "string" ? o : (o.text || o.label || ""))
+                            : [],
+                        correctAnswer: q.correctAnswer || (Array.isArray(q.options) ? q.options.find(o => o.id === q.correctOptionId)?.text : "") || "",
+                        explanation: q.explanation || "",
+                        difficulty: q.difficulty || "Medium"
+                    }));
+                }
+            }
+        } catch (e) {
+            console.warn("Could not query DB for assessment questions:", e.message);
+        }
+    }
     if (lessonId && OOP_PARSED_QUESTIONS[lessonId]) {
         return OOP_PARSED_QUESTIONS[lessonId];
     }
@@ -6030,7 +6060,7 @@ app.post("/api/assessments/session/start", requireAuth, async (req, res, next) =
         // Fetch question bank and randomize questions and option order
         const rawQuestions = safeAssessmentId === "oop_pre_test"
             ? ALL_OOP_QUESTIONS
-            : resolveAssessmentQuestions(safeAssessmentId, safeLessonId);
+            : await resolveAssessmentQuestions(safeAssessmentId, safeLessonId);
         const randomizedQuestions = safeAssessmentId === "oop_pre_test"
             ? generatePreTestSessionQuestions(20).studentQuestions
             : generateSessionQuestions(rawQuestions, 15);
@@ -6223,7 +6253,7 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
         const questions = Array.isArray(session.question_order) ? session.question_order : [];
         const rawBank = session.assessment_id === "oop_pre_test"
             ? ALL_OOP_QUESTIONS
-            : resolveAssessmentQuestions(session.assessment_id, session.lesson_id);
+            : await resolveAssessmentQuestions(session.assessment_id, session.lesson_id);
         const bankMap = new Map(rawBank.map(q => [q.id, q]));
 
         let score = 0;
@@ -7663,10 +7693,14 @@ app.get("/api/practice-challenges", requireAuth, async (req, res, next) => {
             SELECT c.*, COALESCE(json_agg(t.*) FILTER (WHERE t.id IS NOT NULL), '[]') AS test_cases
             FROM programming_challenges c
             LEFT JOIN challenge_test_cases t ON t.challenge_id = c.id
-            WHERE c.id = ANY($1::text[])
+            WHERE c.status <> 'Archived' AND (
+                c.id = ANY($1::text[])
+                OR c.lesson_id NOT IN ('swing_lesson_1', 'swing_lesson_2', 'swing_lesson_3', 'swing_lesson_4', 'swing_lesson_5')
+                OR $2::boolean = true
+            )
             GROUP BY c.id
-            ORDER BY c.id
-        `, [allowedIds]);
+            ORDER BY c.sequence ASC NULLS LAST, c.id ASC
+        `, [allowedIds, includeSwing]);
         const challenges = result.rows.map(toClientPracticeChallenge);
 
         // For student role, NEVER expose hidden test cases or matchers to frontend

@@ -12,6 +12,8 @@ interface PracticeIDEProps {
   currentUser: AuthenticatedUser;
   onSubmitCompleted: (submission: PracticeSubmission) => void;
   theme?: 'light' | 'dark';
+  lessons?: VideoLesson[];
+  initialLessonId?: string;
   activeRecommendation?: AdaptiveRecommendation | null;
 }
 
@@ -38,7 +40,7 @@ type DraftDb = Record<string, string>;
 const formatDateTime = (value: string) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
-export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, activeRecommendation }: PracticeIDEProps) {
+export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, lessons = [], initialLessonId, activeRecommendation }: PracticeIDEProps) {
   const isDark = theme === 'dark';
   const [watchDb, setWatchDb] = useState<WatchDb>({});
   const [quizDb, setQuizDb] = useState<QuizDb>({});
@@ -47,9 +49,68 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
   const [accessLoadState, setAccessLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [accessError, setAccessError] = useState<string | null>(null);
   const [accessAttempt, setAccessAttempt] = useState(0);
+
+  const effectiveLessons = useMemo(() => {
+    return Array.isArray(lessons) && lessons.length > 0 ? lessons : OOP_COURSE_LESSONS;
+  }, [lessons]);
+
+  const challengeList = useMemo(() => {
+    return (effectiveLessons || []).map((lesson, index) => {
+      const dynamicPractice =
+        (Array.isArray(lesson.practice_challenges) && lesson.practice_challenges[0]) ||
+        (lesson as any).content?.practice ||
+        null;
+      const staticChallenge = PRACTICE_CHALLENGES.find(c => c.lessonId === lesson.id);
+
+      const id = dynamicPractice?.id || staticChallenge?.id || `practice_${lesson.id}`;
+      const title = dynamicPractice?.title || staticChallenge?.title || `${lesson.title} Practice Challenge`;
+      const description = dynamicPractice?.description || staticChallenge?.description || lesson.description || 'Complete the programming exercise for this lesson.';
+      const starterCode = dynamicPractice?.starterCode || dynamicPractice?.starter_code || staticChallenge?.starterCode || `public class Main {\n    public static void main(String[] args) {\n        // Your code solution here\n    }\n}\n`;
+      const sampleInput = dynamicPractice?.sampleInput || dynamicPractice?.sample_input || staticChallenge?.sampleInput || '';
+      const sampleOutput = dynamicPractice?.sampleOutput || dynamicPractice?.sample_output || staticChallenge?.sampleOutput || '';
+      const passingScore = Number(dynamicPractice?.passingScore || dynamicPractice?.passing_score || staticChallenge?.passingScore || 70);
+      const topicId = dynamicPractice?.topicId || dynamicPractice?.topic_id || staticChallenge?.topicId || lesson.topic || lesson.id;
+      const hasContent = Boolean(dynamicPractice?.starterCode || dynamicPractice?.starter_code || staticChallenge);
+
+      return {
+        id,
+        lessonId: lesson.id,
+        topicId,
+        title,
+        description,
+        starterCode,
+        sampleInput,
+        sampleOutput,
+        passingScore,
+        hasContent,
+        sequence: lesson.sequence || index + 1,
+        testCases: staticChallenge?.testCases || []
+      };
+    });
+  }, [effectiveLessons]);
+
   const [draftDb, setDraftDb] = useState<DraftDb>(() => getStoredJson(DRAFT_KEY, {}));
-  const [activeChallengeId, setActiveChallengeId] = useState(() => PRACTICE_CHALLENGES[0].id);
-  const activeChallenge = PRACTICE_CHALLENGES.find(challenge => challenge.id === activeChallengeId) || PRACTICE_CHALLENGES[0];
+
+  const initialTargetId = useMemo(() => {
+    if (initialLessonId) {
+      const matching = challengeList.find(c => c.lessonId === initialLessonId);
+      if (matching) return matching.id;
+    }
+    return challengeList[0]?.id || PRACTICE_CHALLENGES[0].id;
+  }, [challengeList, initialLessonId]);
+
+  const [activeChallengeId, setActiveChallengeId] = useState<string>(initialTargetId);
+
+  useEffect(() => {
+    if (initialLessonId) {
+      const matching = challengeList.find(c => c.lessonId === initialLessonId);
+      if (matching) {
+        setActiveChallengeId(matching.id);
+      }
+    }
+  }, [initialLessonId, challengeList]);
+
+  const activeChallenge = challengeList.find(challenge => challenge.id === activeChallengeId) || challengeList[0] || PRACTICE_CHALLENGES[0];
   const studentKey = currentUser.id || currentUser.userId || currentUser.email;
   const submissionKey = `${studentKey}:${activeChallenge.id}`;
   const currentSubmission = submissionDb[submissionKey];
@@ -81,7 +142,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     testResults: submitted.testResults || []
   } : null);
 
-  const activeLesson = OOP_COURSE_LESSONS.find(lesson => lesson.id === activeChallenge.lessonId);
+  const activeLesson = effectiveLessons.find(lesson => lesson.id === activeChallenge.lessonId) || OOP_COURSE_LESSONS[0];
 
   const mapBackendSubmission = (row: any): PracticeSubmission => ({
     ...row,
@@ -121,7 +182,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
     let mounted = true;
     setAccessLoadState('loading');
     setAccessError(null);
-    const accessRequests = OOP_COURSE_LESSONS.map(lesson => lessonApi.getAccess(lesson.id, currentUser.token));
+    const accessRequests = effectiveLessons.map(lesson => lessonApi.getAccess(lesson.id, currentUser.token));
     Promise.all([
       progressApi.getVideoProgress(currentUser.id || '', currentUser.token),
       progressApi.getQuizAttempts(currentUser.id || '', currentUser.token),
@@ -134,7 +195,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
       const failedAccess = accessResults.some(result => result.status === 'rejected');
       setAccessDb(accessResults.reduce((acc: Record<string, any>, result: any, index: number) => {
         if (result.status === 'fulfilled') {
-          const lessonId = result.value.data?.current?.lessonId || OOP_COURSE_LESSONS[index].id;
+          const lessonId = result.value.data?.current?.lessonId || effectiveLessons[index]?.id;
           acc[lessonId] = result.value.data;
         }
         return acc;
@@ -159,7 +220,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
       setAccessError(error?.message || 'Unable to load authoritative lesson access.');
     });
     return () => { mounted = false; };
-  }, [accessAttempt, activeChallenge.id, currentUser.email, currentUser.id, currentUser.name, currentUser.section, currentUser.token, currentUser.userId]);
+  }, [accessAttempt, activeChallenge.id, currentUser.email, currentUser.id, currentUser.name, currentUser.section, currentUser.token, currentUser.userId, effectiveLessons]);
 
   const lockReason = useMemo(() => {
     const access = accessDb[activeChallenge.lessonId];
@@ -175,7 +236,8 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
 
   const isLocked = Boolean(lockReason) || Boolean(submitted && submitted.submissionStatus !== 'returned');
   const selectChallenge = (challengeId: string) => {
-    const challenge = PRACTICE_CHALLENGES.find(item => item.id === challengeId) || PRACTICE_CHALLENGES[0];
+    const challenge = challengeList.find(item => item.id === challengeId) || challengeList[0];
+    if (!challenge) return;
     const key = `${studentKey}:${challenge.id}`;
     setActiveChallengeId(challenge.id);
     const record = submissionDb[key];
@@ -240,6 +302,10 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
 
   const submitCode = async () => {
     if (submitted && submitted.submissionStatus !== 'returned') return;
+    if (!activeChallenge.hasContent) {
+      setConsoleLogs(['Practice challenge for this lesson is pending instructor preparation.']);
+      return;
+    }
     if (!sourceCode.trim()) {
       setConsoleLogs(['Please enter your code before submitting.']);
       return;
@@ -320,23 +386,28 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
             </span>
           </div>
           <div className="mt-3 space-y-2 max-h-[480px] overflow-y-auto pr-1">
-            {PRACTICE_CHALLENGES.map((challenge, index) => {
-              const lessonChallenge = getPracticeChallengeForLesson(challenge.lessonId);
+            {challengeList.map((challenge, index) => {
               const challengeKey = `${studentKey}:${challenge.id}`;
               const status = submissionDb[challengeKey]?.submissionStatus;
               const lessonAccess = accessDb[challenge.lessonId];
               const done = Boolean(lessonAccess?.current?.practiceUnlocked && (status === 'submitted' || status === 'graded'));
+              const isSelected = activeChallenge.id === challenge.id;
               return (
                 <button
                   key={challenge.id}
                   type="button"
-                  onClick={() => selectChallenge(lessonChallenge.id)}
-                  className={`w-full rounded-md border px-3 py-2 text-left text-xs font-bold transition cursor-pointer ${activeChallenge.id === challenge.id ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-200' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400'}`}
+                  onClick={() => selectChallenge(challenge.id)}
+                  className={`w-full rounded-md border px-3 py-2 text-left text-xs font-bold transition cursor-pointer ${isSelected ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-200' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400'}`}
                 >
-                  <span className="block font-mono text-[10px] text-slate-400">Topic {index + 1}</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="block font-mono text-[10px] text-slate-400">Lesson {challenge.sequence}</span>
+                    {!challenge.hasContent && (
+                      <span className="rounded bg-slate-200 px-1 py-0.5 text-[8px] uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-400">Pending</span>
+                    )}
+                  </div>
                   <span className="block truncate">{challenge.title}</span>
                   <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[9px] uppercase ${done ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
-                    {!lessonAccess?.canAccess ? 'Locked until previous lesson is completed' : status === 'graded' ? 'Graded' : status === 'submitted' ? 'Waiting for review' : status === 'returned' ? 'Returned for revision' : lessonAccess?.current?.practiceUnlocked ? 'Available' : 'Locked until video and assessment are complete'}
+                    {!challenge.hasContent ? 'Content Pending' : !lessonAccess?.canAccess ? 'Locked until previous lesson is completed' : status === 'graded' ? 'Graded' : status === 'submitted' ? 'Waiting for review' : status === 'returned' ? 'Returned for revision' : lessonAccess?.current?.practiceUnlocked ? 'Available' : 'Locked until video and assessment are complete'}
                   </span>
                 </button>
               );
@@ -412,12 +483,12 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
             <div>
               <h3 className="text-[10px] font-black uppercase text-slate-400">Requirements</h3>
               <ul className="mt-2 space-y-1.5 text-xs font-semibold leading-5 text-slate-600 dark:text-slate-300">
-                {activeChallenge.requirements.map(item => <li key={item}>- {item}</li>)}
+                {(activeChallenge.requirements || []).map(item => <li key={item}>- {item}</li>)}
               </ul>
             </div>
             <div className="rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-950">
               <span className="block font-mono text-[10px] font-black uppercase text-slate-400">Sample Output</span>
-              <pre className="mt-1 whitespace-pre-wrap font-mono text-slate-800 dark:text-slate-200">{activeChallenge.sampleOutput}</pre>
+              <pre className="mt-1 whitespace-pre-wrap font-mono text-slate-800 dark:text-slate-200">{activeChallenge.sampleOutput || 'Standard output'}</pre>
             </div>
           </div>
         </section>
@@ -441,7 +512,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
             <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
               <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Validation Breakdown</p>
               <div className="space-y-1">
-                {lastResult.testResults.map(test => (
+                {(lastResult.testResults || []).map(test => (
                   <div key={test.id} className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 text-[10px] font-bold ${test.passed ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-900/50' : 'bg-rose-950/40 text-rose-300 border border-rose-900/50'}`}>
                     <span className="truncate">{test.expectedOutput || (test.isHidden ? 'Hidden validation criteria' : 'Sample test')}</span>
                     <span className="shrink-0">{test.passed ? 'Passed ✓' : 'Failed ✗'}</span>
@@ -453,10 +524,10 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, act
           <button
             type="button"
             onClick={submitCode}
-            disabled={Boolean(lockReason) || (Boolean(submitted) && submitted.submissionStatus !== 'returned') || isSubmitting}
+            disabled={!activeChallenge.hasContent || Boolean(lockReason) || (Boolean(submitted) && submitted.submissionStatus !== 'returned') || isSubmitting}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 py-3 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
           >
-            <Send className="h-4 w-4" /> {isSubmitting ? 'Submitting...' : submitted?.submissionStatus === 'returned' ? 'Submit Practice Revision' : 'Submit Practice'}
+            <Send className="h-4 w-4" /> {!activeChallenge.hasContent ? 'Content Pending' : isSubmitting ? 'Submitting...' : submitted?.submissionStatus === 'returned' ? 'Submit Practice Revision' : 'Submit Practice'}
           </button>
         </section>
 

@@ -1562,6 +1562,8 @@ export default function App() {
                 currentUser={displayUser}
                 onSubmitCompleted={handleStudentSubmitCode}
                 theme={theme}
+                lessons={videoLessons}
+                initialLessonId={selectedLessonId || undefined}
                 activeRecommendation={null}
               />
             )}
