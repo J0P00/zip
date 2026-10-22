@@ -309,7 +309,14 @@ const readSessionUser = (): AuthenticatedUser | null => {
   try {
     const saved = localStorage.getItem(SESSION_USER_KEY);
     const user = saved ? sanitizeUser(JSON.parse(saved)) : null;
-    if (user?.token) setAuthToken(user.token);
+    const token = getAuthToken();
+    if (user) {
+      if (!user.token && token) {
+        user.token = token;
+      } else if (user.token && !token) {
+        setAuthToken(user.token);
+      }
+    }
     return user;
   } catch {
     return null;
@@ -327,10 +334,12 @@ const readWorkspaceView = (): WorkspaceViewState => {
 
 const persistSessionUser = (user: AuthenticatedUser) => {
   try {
-    localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+    const token = user.token || getAuthToken();
+    const userToSave: AuthenticatedUser = { ...user, token };
+    localStorage.setItem(SESSION_USER_KEY, JSON.stringify(userToSave));
     const canonicalId = user.id || user.userId || user.email;
     if (canonicalId) localStorage.setItem('oophub_current_user_id', canonicalId);
-    if (user.token) setAuthToken(user.token);
+    if (token) setAuthToken(token);
   } catch {
     // The active React session still works if storage is unavailable.
   }
@@ -442,6 +451,8 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isRestoringSession, setIsRestoringSession] = useState(() => Boolean(getAuthToken()) && !savedUser);
+  const [sessionRestoreError, setSessionRestoreError] = useState<string | null>(null);
+  const [sessionRestoreAttempt, setSessionRestoreAttempt] = useState(0);
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
@@ -574,17 +585,21 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       persistSessionUser(currentUser);
+      setIsRestoringSession(false);
+      setSessionRestoreError(null);
       return;
     }
 
     const token = getAuthToken();
     if (!token) {
       setIsRestoringSession(false);
+      setSessionRestoreError(null);
       return;
     }
 
     let isCancelled = false;
     setIsRestoringSession(true);
+    setSessionRestoreError(null);
 
     authApi.me(token)
       .then(response => {
@@ -604,13 +619,24 @@ export default function App() {
         persistSessionUser(restoredUser);
         setCurrentUser(restoredUser);
         setPersona(restoredUser.role);
+        setSessionRestoreError(null);
       })
-      .catch(error => {
+      .catch((error: any) => {
         if (isCancelled) return;
         console.warn('Session restore failed:', error);
-        setAuthToken('');
-        clearSessionUser();
-        setPersona('public');
+        if (error?.status === 401) {
+          // Token is genuinely invalid or expired on backend
+          setAuthToken('');
+          clearSessionUser();
+          setCurrentUser(null);
+          setPersona('public');
+          setSessionRestoreError(null);
+        } else {
+          // Network errors, timeouts, or 500s during cold-start must NOT destroy session
+          setSessionRestoreError(
+            error?.message || 'Unable to connect to the server. The backend may be starting up.'
+          );
+        }
       })
       .finally(() => {
         if (!isCancelled) setIsRestoringSession(false);
@@ -619,7 +645,7 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [currentUser]);
+  }, [currentUser, sessionRestoreAttempt]);
 
   // Intercept 401/403 expired sessions from apiRequest and redirect to login
   useEffect(() => {
@@ -1377,6 +1403,39 @@ export default function App() {
           <div className="space-y-3">
             <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
             <p className="text-sm font-bold text-slate-600">Restoring your workspace...</p>
+          </div>
+        </main>
+      ) : sessionRestoreError && !currentUser ? (
+        <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-200 p-8 space-y-4">
+            <div className="mx-auto w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <h2 className="text-lg font-bold text-slate-800">Connection Interrupted</h2>
+            <p className="text-sm text-slate-600">{sessionRestoreError}</p>
+            <div className="pt-2 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setSessionRestoreAttempt(prev => prev + 1)}
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition cursor-pointer"
+              >
+                Retry Connection
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthToken('');
+                  clearSessionUser();
+                  setCurrentUser(null);
+                  setPersona('public');
+                  setSessionRestoreError(null);
+                  setAuthMode('login');
+                }}
+                className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer"
+              >
+                Sign In with Different Account
+              </button>
+            </div>
           </div>
         </main>
       ) : authMode ? (

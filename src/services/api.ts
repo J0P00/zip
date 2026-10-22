@@ -105,14 +105,21 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
     error.body = payload;
     error.endpoint = path;
 
-    // Check if token or session is expired or invalid
+    // Authentication endpoints where 401 indicates invalid credentials, not an expired session
+    const isPublicAuthRoute =
+      path.startsWith('/api/auth/login') ||
+      path.startsWith('/api/auth/register') ||
+      path.startsWith('/api/auth/forgot-password') ||
+      path.startsWith('/api/auth/reset-password') ||
+      path.startsWith('/api/auth/lookup-account');
+
+    // Only genuine 401 Unauthorized on authenticated routes indicates an expired or invalid session.
+    // HTTP 403 indicates permission/authorization denial (e.g. locked lesson or role mismatch),
+    // and must NEVER be treated as session expiration or cause unexpected redirects to login.
     const isSessionExpired =
-      response.status === 401 ||
-      (response.status === 403 && (
-        /token|session|expired|unauthorized|invalid/i.test(errorMsg) ||
-        path.startsWith('/api/student-results') ||
-        path.startsWith('/api/progress')
-      ));
+      Boolean(token) &&
+      !isPublicAuthRoute &&
+      response.status === 401;
 
     if (isSessionExpired && typeof window !== 'undefined') {
       window.dispatchEvent(
