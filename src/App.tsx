@@ -1192,7 +1192,12 @@ export default function App() {
     setStudentTab('dashboard');
   };
 
-  const handleDirectNavigation = (view: StudentSubView) => {
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
+
+  const handleDirectNavigation = (view: StudentSubView, lessonId?: string) => {
+    if (lessonId) {
+      setSelectedLessonId(lessonId);
+    }
     setStudentTab(view);
   };
 
@@ -1532,6 +1537,7 @@ export default function App() {
                 onSubmitCompleted={handleStudentSubmitCode}
                 onUnlocked={() => addNotification('Java Swing Unlocked', 'Java Swing Programming is now available after completing OOP.', 'unlock')}
                 initialTab={studentTab === 'swing' ? 'swing' : 'oop'}
+                initialLessonId={selectedLessonId || undefined}
                 theme={theme}
               />
             )}
@@ -1561,7 +1567,7 @@ export default function App() {
               <Assessments 
                 key={`assessments-${displayUser.id || displayUser.userId || displayUser.email}`}
                 currentUser={displayUser}
-                onNavigateTo={(view) => setStudentTab(view as any)}
+                onNavigateTo={handleDirectNavigation}
                 onCorrectAnswerAdded={handleCorrectAnswerAdded}
                 lessons={videoLessons}
                 activeRecommendation={activeRecommendation}

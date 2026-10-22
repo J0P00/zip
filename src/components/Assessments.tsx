@@ -13,7 +13,7 @@ const MAX_ASSESSMENT_ATTEMPTS = 3;
 interface AssessmentsProps {
   currentUser: AuthenticatedUser;
   onCorrectAnswerAdded: (xp: number, attempt: QuizAttempt) => void;
-  onNavigateTo?: (view: StudentSubView) => void;
+  onNavigateTo?: (view: StudentSubView, lessonId?: string) => void;
   lessons: VideoLesson[];
   activeRecommendation?: AdaptiveRecommendation | null;
 }
@@ -76,6 +76,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
   const [preTestAttempt, setPreTestAttempt] = useState<any>(null);
 
   // Security state
+  const [resettingLessonId, setResettingLessonId] = useState<string | null>(null);
   const [violationCount, setViolationCount] = useState(0);
   const [securityWarning, setSecurityWarning] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -357,6 +358,59 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
     }
   };
 
+  const handleRewatchVideo = async (lessonId: string, assessmentId?: string) => {
+    try {
+      setResettingLessonId(lessonId);
+      const token = currentUser.token;
+      await assessmentApi.resetAssessment(lessonId, token);
+
+      // Optimistically sync local states
+      setEvidenceDb(prev => ({
+        ...prev,
+        [lessonId]: {
+          ...prev[lessonId],
+          videoProgress: 0,
+          videoCompleted: false,
+          assessmentUnlocked: false,
+          assessmentPassed: false,
+          completed: false,
+          lessonUnlocked: true
+        }
+      }));
+
+      if (assessmentId) {
+        setQuizDb(prev => {
+          const next = { ...prev };
+          delete next[assessmentId];
+          return next;
+        });
+      }
+
+      setWatchDb(prev => ({
+        ...prev,
+        [lessonId]: {
+          lessonId,
+          lastPosition: 0,
+          completionPercentage: 0,
+          completed: false
+        }
+      }));
+
+      setView('dashboard');
+      if (onNavigateTo) {
+        onNavigateTo('videos', lessonId);
+      }
+    } catch (err: any) {
+      console.error('Failed to reset assessment for video review loop:', err);
+      setView('dashboard');
+      if (onNavigateTo) {
+        onNavigateTo('videos', lessonId);
+      }
+    } finally {
+      setResettingLessonId(null);
+    }
+  };
+
   const handleAnswerSelect = (option: string) => {
     if (!currentQuestion) return;
     const nextAnswers = { ...answers, [currentQuestion.id]: option };
@@ -506,33 +560,50 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
           const attempt = quizDb[assessment.id];
           const passed = attempt?.passed;
           const attemptsUsed = attempt?.attemptCount ?? attempt?.attemptNumber ?? 0;
+          const isExhausted = !passed && attemptsUsed >= MAX_ASSESSMENT_ATTEMPTS;
 
           return (
-            <article key={assessment.id} className={`rounded-2xl border bg-white/80 p-5 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900 ${reason ? 'border-slate-200 opacity-75 dark:border-slate-800' : 'border-emerald-200 dark:border-emerald-800/60'}`}>
+            <article key={assessment.id} className={`rounded-2xl border bg-white/80 p-5 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900 ${reason && !isExhausted ? 'border-slate-200 opacity-75 dark:border-slate-800' : isExhausted ? 'border-amber-200 dark:border-amber-800/60' : 'border-emerald-200 dark:border-emerald-800/60'}`}>
               <div className="flex min-h-[190px] flex-col justify-between gap-4">
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-[10px] font-black uppercase text-slate-400">Lesson {lesson?.sequence}</span>
-                    {reason ? <Lock className="h-4 w-4 text-slate-400" /> : passed ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <Award className="h-4 w-4 text-emerald-600" />}
+                    {reason && !isExhausted ? <Lock className="h-4 w-4 text-slate-400" /> : passed ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : isExhausted ? <RotateCcw className="h-4 w-4 text-amber-600" /> : <Award className="h-4 w-4 text-emerald-600" />}
                   </div>
                   <h3 className="mt-2 text-sm font-extrabold text-slate-900 dark:text-white">{assessment.title}</h3>
                   <p className="mt-2 text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">
                     15 randomized MCQs with server validation.
                   </p>
                   {attempt && (
-                    <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'}`}>
+                    <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : isExhausted ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'}`}>
                       Latest: {attempt.score}/{attempt.total} ({attempt.percentage}%) - Attempt {attempt.attemptNumber} of {MAX_ASSESSMENT_ATTEMPTS} - {Math.max(0, MAX_ASSESSMENT_ATTEMPTS - attemptsUsed)} remaining
+                      {isExhausted && (
+                        <span className="block mt-1 font-semibold text-amber-700 dark:text-amber-300">
+                          Attempts exhausted. Re-watch video to 95% to retake.
+                        </span>
+                      )}
                     </p>
                   )}
-                  {reason && <p className="mt-3 text-[11px] font-bold leading-5 text-slate-400">{reason}</p>}
+                  {reason && !isExhausted && <p className="mt-3 text-[11px] font-bold leading-5 text-slate-400">{reason}</p>}
                 </div>
-                <button
-                  disabled={Boolean(reason) || attemptsUsed >= MAX_ASSESSMENT_ATTEMPTS}
-                  onClick={() => startAssessment(assessment.id)}
-                  className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-800"
-                >
-                  {attemptsUsed >= MAX_ASSESSMENT_ATTEMPTS ? 'Attempts Exhausted' : attempt?.passed ? 'Retake Assessment' : 'Start Secure Assessment'}
-                </button>
+                {isExhausted ? (
+                  <button
+                    disabled={resettingLessonId === assessment.lessonId}
+                    onClick={() => handleRewatchVideo(assessment.lessonId, assessment.id)}
+                    className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-800 cursor-pointer shadow-sm"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    {resettingLessonId === assessment.lessonId ? 'Resetting...' : 'Re-watch Video to Retake'}
+                  </button>
+                ) : (
+                  <button
+                    disabled={Boolean(reason) || attemptsUsed >= MAX_ASSESSMENT_ATTEMPTS}
+                    onClick={() => startAssessment(assessment.id)}
+                    className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-800 cursor-pointer"
+                  >
+                    {attempt?.passed ? 'Retake Assessment' : 'Start Secure Assessment'}
+                  </button>
+                )}
               </div>
             </article>
           );
@@ -694,7 +765,11 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
           </div>
           <h2 className="mt-4 text-2xl font-extrabold text-slate-900 dark:text-white">{latestAttempt.passed ? 'Assessment Passed' : 'Assessment Not Passed'}</h2>
           <p className="mt-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
-            {latestAttempt.passed ? `Practice IDE is unlocked for Lesson ${activeLesson.sequence}: ${activeLesson.title}. Complete it to unlock the next Lesson.` : `Score is below the ${ASSESSMENT_PASSING_SCORE}% passing threshold. Rewatch Lesson ${activeLesson.sequence}: ${activeLesson.title}, then retake the assessment.`}
+            {latestAttempt.passed
+              ? `Practice IDE is unlocked for Lesson ${activeLesson.sequence}: ${activeLesson.title}. Complete it to unlock the next Lesson.`
+              : (latestAttempt.attemptCount ?? latestAttempt.attemptNumber) >= MAX_ASSESSMENT_ATTEMPTS
+                ? `You have used all ${MAX_ASSESSMENT_ATTEMPTS} attempts. Please re-watch Lesson ${activeLesson.sequence}: ${activeLesson.title} to 95% to unlock 3 new attempts.`
+                : `Score is below the ${ASSESSMENT_PASSING_SCORE}% passing threshold. Rewatch Lesson ${activeLesson.sequence}: ${activeLesson.title}, then retake the assessment.`}
           </p>
           <div className="mt-6 grid grid-cols-4 gap-3 border-y border-slate-100 py-5 dark:border-slate-800">
             <div><span className="block text-[10px] font-black uppercase text-slate-400">Score</span><strong className="font-mono text-xl dark:text-white">{latestAttempt.score}/{latestAttempt.total}</strong></div>
@@ -708,10 +783,31 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
                 Review Answers
               </button>
             )}
-            {(latestAttempt.attemptCount ?? latestAttempt.attemptNumber) < MAX_ASSESSMENT_ATTEMPTS && <button onClick={() => startAssessment(activeAssessment.id)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-5 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer">
-              <RotateCcw className="h-4 w-4" /> Retake Assessment
-            </button>}
-            <button onClick={() => { setView('dashboard'); onNavigateTo?.(latestAttempt.passed ? 'ide' : 'videos'); }} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white hover:bg-emerald-700 transition cursor-pointer">
+            {(latestAttempt.attemptCount ?? latestAttempt.attemptNumber) < MAX_ASSESSMENT_ATTEMPTS ? (
+              <button onClick={() => startAssessment(activeAssessment.id)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-5 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer">
+                <RotateCcw className="h-4 w-4" /> Retake Assessment
+              </button>
+            ) : !latestAttempt.passed ? (
+              <button
+                disabled={resettingLessonId === activeLesson.id}
+                onClick={() => handleRewatchVideo(activeLesson.id, activeAssessment.id)}
+                className="flex items-center gap-1.5 rounded-xl bg-amber-600 px-5 py-2.5 text-xs font-black text-white hover:bg-amber-700 transition cursor-pointer shadow-sm"
+              >
+                <RotateCcw className="h-4 w-4" />
+                {resettingLessonId === activeLesson.id ? 'Resetting...' : 'Re-watch Video to Retake'}
+              </button>
+            ) : null}
+            <button
+              onClick={() => {
+                if (!latestAttempt.passed && (latestAttempt.attemptCount ?? latestAttempt.attemptNumber) >= MAX_ASSESSMENT_ATTEMPTS) {
+                  handleRewatchVideo(activeLesson.id, activeAssessment.id);
+                } else {
+                  setView('dashboard');
+                  onNavigateTo?.(latestAttempt.passed ? 'ide' : 'videos', activeLesson.id);
+                }
+              }}
+              className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white hover:bg-emerald-700 transition cursor-pointer"
+            >
               Continue Learning
             </button>
           </div>

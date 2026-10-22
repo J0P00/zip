@@ -6245,6 +6245,190 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
     }
 });
 
+const resetLessonAssessmentAndVideo = async (studentId, rawIdentifier) => {
+    const studentUserRow = await pool.query(
+        "SELECT id, user_id, email FROM users WHERE id::text = $1 OR user_id = $1 OR LOWER(email) = LOWER($1) LIMIT 1",
+        [String(studentId)]
+    );
+    const studentUuid = studentUserRow.rows[0]?.id || studentId;
+    const studentUserId = studentUserRow.rows[0]?.user_id || String(studentId);
+    const studentEmail = studentUserRow.rows[0]?.email || "";
+
+    const raw = String(rawIdentifier || "").trim();
+    const isSwing = raw.toLowerCase().startsWith("swing");
+    const numMatch = raw.match(/(\d+)/);
+    const lessonSeq = numMatch ? parseInt(numMatch[1], 10) : null;
+
+    let canonicalLessonId = raw;
+    let canonicalAssessmentId = "";
+
+    if (isSwing) {
+        canonicalLessonId = lessonSeq ? `swing_lesson_${lessonSeq}` : raw;
+        canonicalAssessmentId = lessonSeq ? `swing_assessment_${lessonSeq}` : raw;
+    } else {
+        canonicalLessonId = lessonSeq ? `oop_lesson_${lessonSeq}` : raw;
+        canonicalAssessmentId = lessonSeq ? `oop_assessment_${lessonSeq}` : raw;
+    }
+
+    if (isSwing) {
+        const sl = await pool.query("SELECT id, sequence FROM swing_lessons WHERE id = $1 OR sequence = $2 LIMIT 1", [canonicalLessonId, lessonSeq || 0]);
+        if (sl.rowCount > 0) {
+            canonicalLessonId = sl.rows[0].id;
+            canonicalAssessmentId = `swing_assessment_${sl.rows[0].sequence}`;
+        }
+    } else {
+        const ol = await pool.query("SELECT id, sequence FROM lessons WHERE id = $1 OR sequence = $2 LIMIT 1", [canonicalLessonId, lessonSeq || 0]);
+        if (ol.rowCount > 0) {
+            canonicalLessonId = ol.rows[0].id;
+            canonicalAssessmentId = `oop_assessment_${ol.rows[0].sequence}`;
+        }
+    }
+
+    const seqStr = lessonSeq ? String(lessonSeq) : "";
+
+    // 1. Delete assessment sessions (security events cascade delete)
+    await pool.query(`
+        DELETE FROM assessment_sessions
+        WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)}
+          AND (
+              assessment_id = $4
+              OR assessment_id = $5
+              OR lesson_id = $6
+              OR lesson_id = $7
+          )
+    `, [studentUuid, studentUserId, studentEmail, canonicalAssessmentId, isSwing ? `swing_assessment_${seqStr}` : `oop_assessment_${seqStr}`, canonicalLessonId, seqStr]);
+
+    // 2. Delete quiz attempts
+    if (isSwing) {
+        await pool.query(`
+            DELETE FROM swing_quiz_attempts
+            WHERE ${studentTextMatchSql("student_id", 1, 2, 3)}
+              AND (
+                  lesson_id = $4
+                  OR lesson_id = REPLACE($4, 'swing_lesson_', '')
+                  OR assessment_id = $5
+                  OR assessment_id = 'swing_assessment_' || $6
+              )
+        `, [studentUuid, studentUserId, studentEmail, canonicalLessonId, canonicalAssessmentId, seqStr]);
+    } else {
+        await pool.query(`
+            DELETE FROM quiz_attempts
+            WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)}
+              AND (
+                  lesson_id = $4
+                  OR lesson_id = $5
+                  OR assessment_id = $6
+                  OR assessment_id = 'oop_assessment_' || $7
+                  OR EXISTS (SELECT 1 FROM assessments a WHERE a.id = quiz_attempts.assessment_id AND (a.lesson_id = $4 OR a.lesson_id = $5))
+              )
+        `, [studentUuid, studentUserId, studentEmail, canonicalLessonId, seqStr, canonicalAssessmentId, seqStr]);
+    }
+
+    // 3. Reset video progress in student_progress, video_progress, and lesson_progress (or swing_progress)
+    if (isSwing) {
+        await pool.query(`
+            UPDATE swing_progress
+            SET video_completed = FALSE,
+                video_percentage = 0,
+                video_last_position = 0,
+                quiz_passed = FALSE,
+                quiz_score = 0,
+                quiz_total = 0,
+                overall_percentage = 0,
+                updated_at = NOW()
+            WHERE ${studentTextMatchSql("student_id", 1, 2, 3)}
+              AND (
+                  lesson_id = $4
+                  OR lesson_id = REPLACE($4, 'swing_lesson_', '')
+                  OR lesson_id = $5
+              )
+        `, [studentUuid, studentUserId, studentEmail, canonicalLessonId, seqStr]);
+    } else {
+        await pool.query(`
+            UPDATE student_progress
+            SET completion_percentage = 0,
+                last_position = 0,
+                completed = FALSE,
+                updated_at = NOW()
+            WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)}
+              AND (
+                  video_id = $4
+                  OR video_id = REPLACE($4, 'oop_lesson_', '')
+                  OR video_id = 'vid_' || $4
+                  OR video_id = $5
+              )
+        `, [studentUuid, studentUserId, studentEmail, canonicalLessonId, seqStr]);
+
+        await pool.query(`
+            UPDATE video_progress
+            SET watch_percentage = 0,
+                "current_time" = 0,
+                completed = FALSE,
+                updated_at = NOW()
+            WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)}
+              AND (
+                  lesson_id = $4
+                  OR lesson_id = REPLACE($4, 'oop_lesson_', '')
+                  OR lesson_id = $5
+              )
+        `, [studentUuid, studentUserId, studentEmail, canonicalLessonId, seqStr]);
+
+        await pool.query(`
+            UPDATE lesson_progress
+            SET video_completed = FALSE,
+                quiz_passed = FALSE,
+                completed = FALSE,
+                updated_at = NOW()
+            WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)}
+              AND (
+                  lesson_id = $4
+                  OR lesson_id = REPLACE($4, 'oop_lesson_', '')
+                  OR lesson_id = $5
+              )
+        `, [studentUuid, studentUserId, studentEmail, canonicalLessonId, seqStr]);
+    }
+
+    await logActivity(studentUuid, "assessment_reset", `Assessment attempts and video progress reset for ${canonicalLessonId}`, {
+        lessonId: canonicalLessonId,
+        assessmentId: canonicalAssessmentId
+    });
+
+    await verifyLessonCompletion(studentUuid, canonicalLessonId);
+
+    const access = await getLessonAccessState(studentUuid, canonicalLessonId);
+    return {
+        studentId: studentUuid,
+        lessonId: canonicalLessonId,
+        assessmentId: canonicalAssessmentId,
+        videoProgress: 0,
+        videoCompleted: false,
+        assessmentUnlocked: false,
+        quizAttempts: 0,
+        access
+    };
+};
+
+app.post(["/api/assessments/:lessonId/reset", "/api/assessments/reset/:lessonId", "/api/assessments/reset"], requireAuth, async (req, res, next) => {
+    try {
+        const rawIdentifier = req.params.lessonId || req.body?.lessonId || req.body?.assessmentId;
+        if (!rawIdentifier) {
+            return res.status(400).json({ success: false, message: "lessonId or assessmentId is required." });
+        }
+        const targetStudentId = (req.authUser.role === "teacher" && (req.body?.studentId || req.query?.studentId))
+            ? (req.body?.studentId || req.query?.studentId)
+            : req.authUser.id;
+
+        const result = await resetLessonAssessmentAndVideo(targetStudentId, rawIdentifier);
+        res.json({
+            success: true,
+            message: "Assessment attempts and video progress have been reset. Re-watch the lesson video to unlock the assessment.",
+            data: result
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.get("/api/assessments/sessions/student/:studentId", requireAuth, async (req, res, next) => {
     try {
         if (req.authUser.role === "student" && req.authUser.id !== req.params.studentId) {
@@ -8853,7 +9037,8 @@ module.exports = {
     getLessonEvidence,
     getOOPCompletionStatus,
     getSwingCompletionStatus,
-    getLessonAccessState
+    getLessonAccessState,
+    resetLessonAssessmentAndVideo
 };
 
 

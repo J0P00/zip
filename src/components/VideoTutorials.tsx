@@ -24,9 +24,10 @@ import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 interface VideoTutorialsProps {
   currentUser: AuthenticatedUser;
   lessons: VideoLesson[];
-  onNavigateTo: (view: StudentSubView) => void;
+  onNavigateTo: (view: StudentSubView, lessonId?: string) => void;
   onUpdateVideoProgress: (id: string, progress: number) => void;
   studentResults?: StudentResultsData | null;
+  initialLessonId?: string;
 }
 
 interface WatchRecord {
@@ -67,7 +68,7 @@ const getPrerequisiteMessage = (lesson: VideoLesson, allLessons: VideoLesson[], 
   return '';
 };
 
-export default function VideoTutorials({ currentUser, lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress, studentResults = null }: VideoTutorialsProps) {
+export default function VideoTutorials({ currentUser, lessons: sourceLessons, onNavigateTo, onUpdateVideoProgress, studentResults = null, initialLessonId }: VideoTutorialsProps) {
   const [watchDb, setWatchDb] = useState<WatchDb>({});
   const [quizDb, setQuizDb] = useState<QuizDb>({});
   const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
@@ -93,8 +94,14 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   }), [sourceLessons, watchDb, quizDb, submissionDb, studentKey, studentResults]);
 
   const firstAvailable = lessons.find(lesson => lesson.status === 'active') || lessons[0];
-  const [activeLessonId, setActiveLessonId] = useState(firstAvailable?.id || '');
+  const [activeLessonId, setActiveLessonId] = useState(initialLessonId || firstAvailable?.id || '');
   const activeLesson = lessons.find(lesson => lesson.id === activeLessonId) || firstAvailable;
+
+  useEffect(() => {
+    if (initialLessonId && lessons.some(l => l.id === initialLessonId)) {
+      setActiveLessonId(initialLessonId);
+    }
+  }, [initialLessonId, lessons]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const youtubeContainerRef = useRef<HTMLDivElement | null>(null);
   const youtubePlayerRef = useRef<any>(null);

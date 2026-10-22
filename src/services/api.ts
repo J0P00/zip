@@ -267,7 +267,12 @@ export const assessmentApi = {
   getStudentSessions: (studentId: string, token?: string) =>
     apiRequest<{ success: boolean; data: any[] }>(`/api/assessments/sessions/student/${encodeURIComponent(studentId)}`, { token }),
   getSessionEvents: (sessionId: string, token?: string) =>
-    apiRequest<{ success: boolean; session: any; data: import('../types').AssessmentSecurityEvent[] }>(`/api/assessments/sessions/${encodeURIComponent(sessionId)}/events`, { token })
+    apiRequest<{ success: boolean; session: any; data: import('../types').AssessmentSecurityEvent[] }>(`/api/assessments/sessions/${encodeURIComponent(sessionId)}/events`, { token }),
+  resetAssessment: (lessonId: string, token?: string) =>
+    apiRequest<{ success: boolean; message: string; data: any }>(`/api/assessments/${encodeURIComponent(lessonId)}/reset`, {
+      method: 'POST',
+      token
+    })
 };
 
 export const practiceApi = {

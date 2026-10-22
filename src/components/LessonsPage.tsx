@@ -22,12 +22,13 @@ import JavaSwingModule from './JavaSwingModule';
 interface LessonsPageProps {
   currentUser: AuthenticatedUser;
   lessons: VideoLesson[];
-  onNavigateTo: (view: StudentSubView) => void;
+  onNavigateTo: (view: StudentSubView, lessonId?: string) => void;
   onUpdateVideoProgress: (id: string, progress: number) => void;
   studentResults?: StudentResultsData | null;
   onSubmitCompleted?: (submission: PracticeSubmission) => void;
   onUnlocked?: () => void;
   initialTab?: 'oop' | 'swing';
+  initialLessonId?: string;
   theme?: 'light' | 'dark';
 }
 
@@ -40,6 +41,7 @@ export default function LessonsPage({
   onSubmitCompleted = () => {},
   onUnlocked,
   initialTab = 'oop',
+  initialLessonId,
   theme = 'light'
 }: LessonsPageProps) {
   const isDark = theme === 'dark';
@@ -170,6 +172,7 @@ export default function LessonsPage({
             onNavigateTo={onNavigateTo}
             onUpdateVideoProgress={onUpdateVideoProgress}
             studentResults={studentResults}
+            initialLessonId={initialLessonId}
           />
         )}
 
