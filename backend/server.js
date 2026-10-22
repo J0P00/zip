@@ -40,13 +40,33 @@ const allowedOrigins = (process.env.CORS_ORIGIN || process.env.CORS_ORIGINS || "
     .map((origin) => origin.trim())
     .filter(Boolean);
 
+const isOriginAllowed = (origin) => {
+    if (!origin) return true;
+    if (!allowedOrigins.length || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+        return true;
+    }
+    const cleanOrigin = origin.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (allowedOrigins.some(o => o.replace(/^https?:\/\//, '').replace(/\/$/, '') === cleanOrigin)) {
+        return true;
+    }
+    // Always permit the production frontend and vercel app deployments
+    if (origin === 'https://oop-pedagogical.vercel.app' || /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) {
+        return true;
+    }
+    // Local development
+    if (/^https?:\/\/localhost(:\d+)?$/.test(origin) || /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+        return true;
+    }
+    return false;
+};
+
 const corsMiddleware = cors({
     origin(origin, callback) {
-        if (!origin) return callback(null, true);
-        if (!allowedOrigins.length || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+        if (isOriginAllowed(origin)) {
             return callback(null, true);
         }
-        return callback(new Error(`CORS blocked origin: ${origin}`));
+        console.warn(`[CORS] Blocked unrecognized origin: ${origin}`);
+        return callback(null, false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -54,6 +74,19 @@ const corsMiddleware = cors({
 });
 app.use(corsMiddleware);
 app.options(/.*/, corsMiddleware);
+
+const studentUuidMatchSql = (colName, paramIndex1 = 1, paramIndex2 = 2, paramIndex3 = 3) => `(
+    (CASE WHEN $${paramIndex1}::text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN ${colName} = $${paramIndex1}::uuid ELSE FALSE END)
+    OR ${colName}::text = $${paramIndex1}::text
+    ${paramIndex2 ? `OR ${colName}::text = $${paramIndex2}::text` : ''}
+    ${paramIndex3 ? `OR ${colName}::text = $${paramIndex3}::text` : ''}
+)`;
+
+const studentTextMatchSql = (colName, paramIndex1 = 1, paramIndex2 = 2, paramIndex3 = 3) => `(
+    ${colName}::text = $${paramIndex1}::text
+    ${paramIndex2 ? `OR ${colName}::text = $${paramIndex2}::text` : ''}
+    ${paramIndex3 ? `OR ${colName}::text = $${paramIndex3}::text` : ''}
+)`;
 app.use(express.json({ limit: "10mb" }));
 
 const notificationStreams = new Map();
@@ -2882,16 +2915,16 @@ const getLessonEvidence = async (studentId, lessonId) => {
     if (!isSwing) {
         const videoResult = await pool.query(
             `SELECT GREATEST(
-                COALESCE((SELECT MAX(completion_percentage) FROM student_progress WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3) AND (video_id = $4 OR video_id = REPLACE($4, 'oop_lesson_', '') OR video_id = 'vid_' || $4)), 0),
-                COALESCE((SELECT MAX(watch_percentage) FROM video_progress WHERE (student_id::text = $1::text OR student_id::text = $2 OR student_id::text = $3) AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', ''))), 0),
-                COALESCE((SELECT 100 FROM lesson_progress WHERE (student_id::text = $1::text OR student_id::text = $2 OR student_id::text = $3) AND lesson_id = $4 AND video_completed = TRUE), 0)
+                COALESCE((SELECT MAX(completion_percentage) FROM student_progress WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)} AND (video_id = $4 OR video_id = REPLACE($4, 'oop_lesson_', '') OR video_id = 'vid_' || $4)), 0),
+                COALESCE((SELECT MAX(watch_percentage) FROM video_progress WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)} AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', ''))), 0),
+                COALESCE((SELECT 100 FROM lesson_progress WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)} AND lesson_id = $4 AND video_completed = TRUE), 0)
             ) AS completion_percentage,
             EXISTS (
-                SELECT 1 FROM student_progress WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3) AND (video_id = $4 OR video_id = REPLACE($4, 'oop_lesson_', '') OR video_id = 'vid_' || $4) AND (completed = TRUE OR completion_percentage >= ${VIDEO_COMPLETION_THRESHOLD})
+                SELECT 1 FROM student_progress WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)} AND (video_id = $4 OR video_id = REPLACE($4, 'oop_lesson_', '') OR video_id = 'vid_' || $4) AND (completed = TRUE OR completion_percentage >= ${VIDEO_COMPLETION_THRESHOLD})
                 UNION ALL
-                SELECT 1 FROM video_progress WHERE (student_id::text = $1::text OR student_id::text = $2 OR student_id::text = $3) AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', '')) AND (completed = TRUE OR watch_percentage >= ${VIDEO_COMPLETION_THRESHOLD})
+                SELECT 1 FROM video_progress WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)} AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', '')) AND (completed = TRUE OR watch_percentage >= ${VIDEO_COMPLETION_THRESHOLD})
                 UNION ALL
-                SELECT 1 FROM lesson_progress WHERE (student_id::text = $1::text OR student_id::text = $2 OR student_id::text = $3) AND lesson_id = $4 AND video_completed = TRUE
+                SELECT 1 FROM lesson_progress WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)} AND lesson_id = $4 AND video_completed = TRUE
             ) AS is_completed`,
             [studentUuid, studentUserId, studentEmail, lessonId]
         );
@@ -2900,7 +2933,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
                 EXISTS (
                     SELECT 1
                     FROM quiz_attempts qa
-                    WHERE (qa.student_user_id::text = $1::text OR qa.student_user_id::text = $2 OR qa.student_user_id::text = $3)
+                    WHERE ${studentUuidMatchSql("qa.student_user_id", 1, 2, 3)}
                       AND (
                         qa.lesson_id = $4
                         OR qa.assessment_id = 'oop_assessment_' || (SELECT sequence FROM lessons WHERE id = $4)
@@ -2910,7 +2943,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
                       AND (${normalizedAssessmentPercentageSql("qa")} >= ${ASSESSMENT_PASSING_SCORE} OR qa.passed = TRUE)
                 ) AS passed,
                 (SELECT ${normalizedAssessmentPercentageSql("latest")} FROM quiz_attempts latest
-                 WHERE (latest.student_user_id::text = $1::text OR latest.student_user_id::text = $2 OR latest.student_user_id::text = $3)
+                 WHERE ${studentUuidMatchSql("latest.student_user_id", 1, 2, 3)}
                    AND (
                      latest.lesson_id = $4
                      OR latest.assessment_id = 'oop_assessment_' || (SELECT sequence FROM lessons WHERE id = $4)
@@ -2937,8 +2970,8 @@ const getLessonEvidence = async (studentId, lessonId) => {
             LEFT JOIN programming_challenges pc ON pc.id = ps.challenge_id
             WHERE (
                 ps.student_id = $1::text
-                OR ps.student_id = $2
-                OR ps.student_id = $3
+                OR ps.student_id = $2::text
+                OR ps.student_id = $3::text
                 OR ps.student_id IN (SELECT id::text FROM users WHERE id::text = $1::text OR user_id = $2 OR LOWER(email) = LOWER($3))
                 OR ps.student_id IN (SELECT user_id FROM users WHERE id::text = $1::text OR user_id = $2 OR LOWER(email) = LOWER($3))
                 OR ps.student_id IN (SELECT email FROM users WHERE id::text = $1::text OR user_id = $2 OR LOWER(email) = LOWER($3))
@@ -2974,7 +3007,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
         const lessonProgressResult = await pool.query(`
             SELECT practice_completed, completed
             FROM lesson_progress
-            WHERE (student_id::text = $1::text OR student_id::text = $2 OR student_id::text = $3)
+            WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)}
               AND lesson_id = $4
         `, [studentUuid, studentUserId, studentEmail, lessonId]);
         const lpRow = lessonProgressResult.rows[0];
@@ -2994,7 +3027,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
         const swingProgressResult = await pool.query(
             `SELECT video_completed, video_percentage, video_last_position, quiz_passed, exercise_completed, overall_percentage
              FROM swing_progress 
-             WHERE (student_id::text = $1::text OR student_id = $2 OR student_id = $3) AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'swing_lesson_', ''))`,
+             WHERE ${studentTextMatchSql("student_id", 1, 2, 3)} AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'swing_lesson_', ''))`,
             [studentUuid, studentUserId, studentEmail, lessonId]
         );
 
@@ -6243,12 +6276,26 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
         if (!studentIdCheck.valid) return res.status(studentIdCheck.status).json({ success: false, message: studentIdCheck.message });
         const studentId = studentIdCheck.value;
         const userRow = await pool.query(
-            "SELECT id, user_id FROM users WHERE id::text = $1 OR user_id = $1 OR LOWER(email) = LOWER($1) LIMIT 1",
+            "SELECT id, user_id, email FROM users WHERE id::text = $1 OR user_id = $1 OR LOWER(email) = LOWER($1) LIMIT 1",
             [studentId]
         );
         const resolvedId = userRow.rows[0]?.id || studentId;
         const resolvedUserId = userRow.rows[0]?.user_id || studentId;
-        if (req.authUser.role === "student" && req.authUser.id !== resolvedId && req.authUser.userId !== resolvedUserId) {
+        const resolvedEmail = userRow.rows[0]?.email || "";
+
+        const authId = String(req.authUser.id || "");
+        const authUserId = String(req.authUser.userId || req.authUser.user_id || "");
+        const authEmail = String(req.authUser.email || "").toLowerCase();
+        const targetId = String(resolvedId || "");
+        const targetUId = String(resolvedUserId || "");
+        const targetMail = String(resolvedEmail || "").toLowerCase();
+
+        const isSelf = 
+            (authId && (authId === targetId || authId === targetUId)) ||
+            (authUserId && (authUserId === targetUId || authUserId === targetId)) ||
+            (authEmail && authEmail === targetMail);
+
+        if (req.authUser.role === "student" && !isSelf) {
             return res.status(403).json({ success: false, message: "Students can only view their own progress." });
         }
         const result = await pool.query(
@@ -6260,7 +6307,7 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
                     sp.completed,
                     sp.updated_at
                 FROM student_progress sp
-                WHERE sp.student_user_id::text = $1 OR sp.student_user_id::text = $2
+                WHERE ${studentUuidMatchSql("sp.student_user_id", 1, 2, 3)}
                 UNION ALL
                 SELECT 
                     vp.lesson_id AS raw_id,
@@ -6269,7 +6316,7 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
                     vp.completed,
                     vp.updated_at
                 FROM video_progress vp
-                WHERE vp.student_id::text = $1 OR vp.student_id::text = $2
+                WHERE ${studentUuidMatchSql("vp.student_id", 1, 2, 3)}
                 UNION ALL
                 SELECT 
                     sw.lesson_id AS raw_id,
@@ -6278,7 +6325,7 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
                     sw.video_completed AS completed,
                     sw.updated_at
                 FROM swing_progress sw
-                WHERE sw.student_id::text = $1 OR sw.student_id::text = $2
+                WHERE ${studentTextMatchSql("sw.student_id", 1, 2, 3)}
             ),
             normalized AS (
                 SELECT
@@ -6317,7 +6364,7 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
                 COALESCE(updated_at, NOW()) AS updated_at
             FROM aggregated
             ORDER BY canonical_id ASC`,
-            [resolvedId, resolvedUserId]
+            [resolvedId, resolvedUserId, resolvedEmail]
         );
         const rows = [];
         for (const r of result.rows) {
@@ -6425,20 +6472,20 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                              AND (ps.submission_id IS NOT NULL OR lp.practice_completed)
                        )::int AS completed_lessons
                 FROM lessons l
-                LEFT JOIN student_progress sp ON (sp.student_user_id::text = $1::text OR sp.student_user_id::text = $2 OR sp.student_user_id::text = $3) AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
-                LEFT JOIN video_progress vp ON (vp.student_id::text = $1::text OR vp.student_id = $2 OR vp.student_id = $3) AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
-                LEFT JOIN lesson_progress lp ON (lp.student_id::text = $1::text OR lp.student_id::text = $2 OR lp.student_id::text = $3) AND lp.lesson_id = l.id
+                LEFT JOIN student_progress sp ON ${studentUuidMatchSql("sp.student_user_id", 1, 2, 3)} AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
+                LEFT JOIN video_progress vp ON ${studentUuidMatchSql("vp.student_id", 1, 2, 3)} AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
+                LEFT JOIN lesson_progress lp ON ${studentUuidMatchSql("lp.student_id", 1, 2, 3)} AND lp.lesson_id = l.id
                 LEFT JOIN LATERAL (
                   SELECT (${normalizedAssessmentPercentageSql("quiz_attempts")} >= ${ASSESSMENT_PASSING_SCORE} OR passed) AS passed
                   FROM quiz_attempts
-                  WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3) AND (lesson_id = l.id OR assessment_id = 'oop_assessment_' || l.sequence)
+                  WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)} AND (lesson_id = l.id OR assessment_id = 'oop_assessment_' || l.sequence)
                   ORDER BY attempt_number DESC, date_completed DESC LIMIT 1
                 ) qa ON TRUE
                 LEFT JOIN LATERAL (
                   SELECT ps.id AS submission_id, ps.challenge_id, ps.score, ps.teacher_score, ps.compile_status 
                   FROM practice_submissions ps
                   LEFT JOIN programming_challenges pc ON pc.id = ps.challenge_id
-                  WHERE (ps.student_id = $1::text OR ps.student_id = $2 OR ps.student_id = $3)
+                  WHERE ${studentTextMatchSql("ps.student_id", 1, 2, 3)}
                     AND (pc.lesson_id = l.id OR ps.challenge_id = 'practice_' || l.sequence OR ps.challenge_id IN (SELECT id FROM programming_challenges WHERE lesson_id = l.id))
                     AND COALESCE(ps.review_status, '') <> 'returned'
                     AND COALESCE(ps.remedial_required, FALSE) = FALSE
@@ -6460,9 +6507,9 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                         ) AS completion_percentage,
                         (COALESCE(sp.completed, FALSE) OR COALESCE(vp.completed, FALSE) OR COALESCE(lp.video_completed, FALSE) OR GREATEST(COALESCE(sp.completion_percentage, 0), COALESCE(vp.watch_percentage, 0)) >= 95) AS completed
                     FROM lessons l
-                    LEFT JOIN student_progress sp ON (sp.student_user_id::text = $1::text OR sp.student_user_id::text = $2 OR sp.student_user_id::text = $3) AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
-                    LEFT JOIN video_progress vp ON (vp.student_id::text = $1::text OR vp.student_id = $2 OR vp.student_id = $3) AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
-                    LEFT JOIN lesson_progress lp ON (lp.student_id::text = $1::text OR lp.student_id::text = $2 OR lp.student_id::text = $3) AND lp.lesson_id = l.id
+                    LEFT JOIN student_progress sp ON ${studentUuidMatchSql("sp.student_user_id", 1, 2, 3)} AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
+                    LEFT JOIN video_progress vp ON ${studentUuidMatchSql("vp.student_id", 1, 2, 3)} AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
+                    LEFT JOIN lesson_progress lp ON ${studentUuidMatchSql("lp.student_id", 1, 2, 3)} AND lp.lesson_id = l.id
                     WHERE l.status <> 'Archived' AND ${OOP_LESSON_ALIAS_FILTER_SQL("l")}
                 ) v
             `, [dbStudentId, targetUserId, targetEmail]),
@@ -6470,7 +6517,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 SELECT COUNT(*)::int AS quiz_attempts, COALESCE(ROUND(AVG(percentage)), 0)::int AS average_quiz_score
                 FROM (
                   SELECT DISTINCT ON (assessment_id) percentage
-                  FROM quiz_attempts WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3)
+                  FROM quiz_attempts WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)}
                   ORDER BY assessment_id, attempt_number DESC, date_completed DESC
                 ) latest
             `, [dbStudentId, targetUserId, targetEmail]),
@@ -6484,7 +6531,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                        )::int AS completed_practice_activities,
                       COALESCE(ROUND(AVG(ps.score)), 0)::int AS average_practice_score
                 FROM programming_challenges pc
-                LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND (ps.student_id = $1::text OR ps.student_id = $2 OR ps.student_id = $3)
+                LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND ${studentTextMatchSql("ps.student_id", 1, 2, 3)}
                 WHERE pc.status <> 'Archived'
             `, [dbStudentId, targetUserId, targetEmail]),
             pool.query(`
@@ -6492,9 +6539,9 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                        COUNT(DISTINCT sp.id) FILTER (WHERE sp.content_completed OR sp.video_completed OR sp.quiz_passed OR sp.exercise_completed)::int AS swing_completed_activities,
                        COUNT(DISTINCT sl.id) FILTER (WHERE NOT (COALESCE(sp.content_completed, FALSE) AND COALESCE(sp.video_completed, FALSE) AND COALESCE(sp.quiz_passed, FALSE) AND COALESCE(sp.exercise_completed, FALSE)))::int AS swing_pending_activities
                 FROM swing_lessons sl
-                LEFT JOIN swing_progress sp ON sp.lesson_id = sl.id AND (sp.student_id = $1::text OR sp.student_id = $2 OR sp.student_id = $3)
+                LEFT JOIN swing_progress sp ON sp.lesson_id = sl.id AND ${studentTextMatchSql("sp.student_id", 1, 2, 3)}
                 LEFT JOIN swing_programming_exercises se ON se.lesson_id = sl.id
-                LEFT JOIN swing_submissions ss ON ss.exercise_id = se.id AND (ss.student_id = $1::text OR ss.student_id = $2 OR ss.student_id = $3)
+                LEFT JOIN swing_submissions ss ON ss.exercise_id = se.id AND ${studentTextMatchSql("ss.student_id", 1, 2, 3)}
             `, [dbStudentId, targetUserId, targetEmail])
                         , pool.query(`
                                 SELECT l.id, l.title, l.sequence,
@@ -6512,7 +6559,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                        EXISTS (
                                            SELECT 1
                                            FROM quiz_attempts passed_attempt
-                                           WHERE (passed_attempt.student_user_id::text = $1::text OR passed_attempt.student_user_id::text = $2 OR passed_attempt.student_user_id::text = $3)
+                                           WHERE ${studentUuidMatchSql("passed_attempt.student_user_id", 1, 2, 3)}
                                                AND (passed_attempt.lesson_id = l.id OR passed_attempt.assessment_id = 'oop_assessment_' || l.sequence)
                                                AND (${normalizedAssessmentPercentageSql("passed_attempt")} >= ${ASSESSMENT_PASSING_SCORE} OR passed_attempt.passed = TRUE)
                                        ) AS quiz_passed,
@@ -6520,14 +6567,14 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                        lp.completed AS lesson_completed,
                                        (sp.id IS NOT NULL OR vp.id IS NOT NULL OR qa.id IS NOT NULL OR ps.challenge_id IS NOT NULL OR lp.id IS NOT NULL) AS attempted
                                 FROM lessons l
-                                LEFT JOIN student_progress sp ON (sp.student_user_id::text = $1::text OR sp.student_user_id::text = $2 OR sp.student_user_id::text = $3) AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
-                                LEFT JOIN video_progress vp ON (vp.student_id::text = $1::text OR vp.student_id = $2 OR vp.student_id = $3) AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
-                                LEFT JOIN lesson_progress lp ON (lp.student_id::text = $1::text OR lp.student_id::text = $2 OR lp.student_id::text = $3) AND lp.lesson_id = l.id
+                                LEFT JOIN student_progress sp ON ${studentUuidMatchSql("sp.student_user_id", 1, 2, 3)} AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
+                                LEFT JOIN video_progress vp ON ${studentUuidMatchSql("vp.student_id", 1, 2, 3)} AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
+                                LEFT JOIN lesson_progress lp ON ${studentUuidMatchSql("lp.student_id", 1, 2, 3)} AND lp.lesson_id = l.id
                                 LEFT JOIN LATERAL (
                                     SELECT id, percentage, passed,
-                                           (SELECT COUNT(*)::int FROM quiz_attempts counted WHERE (counted.student_user_id::text = $1::text OR counted.student_user_id::text = $2 OR counted.student_user_id::text = $3) AND (counted.lesson_id = l.id OR counted.assessment_id = 'oop_assessment_' || l.sequence)) AS attempt_count
+                                           (SELECT COUNT(*)::int FROM quiz_attempts counted WHERE ${studentUuidMatchSql("counted.student_user_id", 1, 2, 3)} AND (counted.lesson_id = l.id OR counted.assessment_id = 'oop_assessment_' || l.sequence)) AS attempt_count
                                     FROM quiz_attempts
-                                    WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3) AND (lesson_id = l.id OR assessment_id = 'oop_assessment_' || l.sequence)
+                                    WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)} AND (lesson_id = l.id OR assessment_id = 'oop_assessment_' || l.sequence)
                                     ORDER BY attempt_number DESC, date_completed DESC
                                     LIMIT 1
                                 ) qa ON TRUE
@@ -6535,7 +6582,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                     SELECT ps.id AS submission_id, ps.challenge_id, ps.score
                                     FROM practice_submissions ps
                                     LEFT JOIN programming_challenges pc ON pc.id = ps.challenge_id
-                                    WHERE (ps.student_id = $1::text OR ps.student_id = $2 OR ps.student_id = $3)
+                                    WHERE ${studentTextMatchSql("ps.student_id", 1, 2, 3)}
                                       AND (pc.lesson_id = l.id OR ps.challenge_id = 'practice_' || l.sequence OR ps.challenge_id IN (SELECT id FROM programming_challenges WHERE lesson_id = l.id))
                                     ORDER BY 
                                       CASE WHEN ps.compile_status = 'success' AND COALESCE(ps.review_status, '') <> 'returned' AND COALESCE(ps.remedial_required, FALSE) = FALSE THEN 1 ELSE 2 END,
@@ -6563,18 +6610,18 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                        ss.submission_score,
                                        (sg.id IS NOT NULL OR ss.submission_score IS NOT NULL) AS attempted
                                 FROM swing_lessons sl
-                                LEFT JOIN swing_progress sg ON (sg.student_id::text = $1::text OR sg.student_id = $2 OR sg.student_id = $3) AND (sg.lesson_id = sl.id OR sg.lesson_id = REPLACE(sl.id, 'swing_lesson_', ''))
+                                LEFT JOIN swing_progress sg ON ${studentTextMatchSql("sg.student_id", 1, 2, 3)} AND (sg.lesson_id = sl.id OR sg.lesson_id = REPLACE(sl.id, 'swing_lesson_', ''))
                                 LEFT JOIN LATERAL (
-                                     SELECT score, total, percentage, passed, (SELECT COUNT(*)::int FROM swing_quiz_attempts counted WHERE (counted.student_id::text = $1::text OR counted.student_id = $2 OR counted.student_id = $3) AND counted.assessment_id = 'swing_assessment_' || sl.sequence) AS attempt_count
+                                     SELECT score, total, percentage, passed, (SELECT COUNT(*)::int FROM swing_quiz_attempts counted WHERE ${studentTextMatchSql("counted.student_id", 1, 2, 3)} AND counted.assessment_id = 'swing_assessment_' || sl.sequence) AS attempt_count
                                     FROM swing_quiz_attempts
-                                    WHERE (student_id::text = $1::text OR student_id = $2 OR student_id = $3) AND (lesson_id = sl.id OR lesson_id = REPLACE(sl.id, 'swing_lesson_', ''))
+                                    WHERE ${studentTextMatchSql("student_id", 1, 2, 3)} AND (lesson_id = sl.id OR lesson_id = REPLACE(sl.id, 'swing_lesson_', ''))
                                     ORDER BY attempt_number DESC, date_completed DESC
                                     LIMIT 1
                                 ) qa ON TRUE
                                 LEFT JOIN LATERAL (
                                     SELECT MAX(score) AS submission_score
                                     FROM swing_submissions
-                                    WHERE (student_id::text = $1::text OR student_id = $2 OR student_id = $3)
+                                    WHERE ${studentTextMatchSql("student_id", 1, 2, 3)}
                                         AND exercise_id IN (SELECT id FROM swing_programming_exercises WHERE lesson_id = sl.id)
                                 ) ss ON TRUE
                                 ORDER BY sl.sequence, sl.title
@@ -6587,7 +6634,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                        qa.attempt_number, qa.date_completed, COALESCE(l.title, qa.assessment_id) AS lesson_title
                 FROM quiz_attempts qa
                 LEFT JOIN lessons l ON l.id = qa.lesson_id
-                WHERE (qa.student_user_id::text = $1::text OR qa.student_user_id::text = $2 OR qa.student_user_id::text = $3) AND qa.assessment_id <> 'oop_pre_test'
+                WHERE ${studentUuidMatchSql("qa.student_user_id", 1, 2, 3)} AND qa.assessment_id <> 'oop_pre_test'
                 ORDER BY qa.date_completed DESC, qa.attempt_number DESC
                 LIMIT 50
             `, [dbStudentId, targetUserId, targetEmail]),
@@ -6596,20 +6643,20 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                        CASE WHEN completed OR completion_percentage >= 95 THEN 'Completed video' ELSE 'Updated video progress' END AS detail,
                        video_id AS lesson_id, updated_at AS timestamp
                 FROM student_progress
-                WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3)
+                WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)}
                 UNION ALL
                 SELECT qa.id, 'assessment' AS type,
                        'Completed assessment with ' || ROUND(qa.percentage)::text || '%' AS detail,
                        qa.lesson_id, qa.date_completed AS timestamp
                 FROM quiz_attempts qa
-                WHERE (qa.student_user_id::text = $1::text OR qa.student_user_id::text = $2 OR qa.student_user_id::text = $3) AND qa.assessment_id <> 'oop_pre_test'
+                WHERE ${studentUuidMatchSql("qa.student_user_id", 1, 2, 3)} AND qa.assessment_id <> 'oop_pre_test'
                 UNION ALL
                 SELECT ps.id, 'practice' AS type,
                        'Submitted practice code' AS detail,
                        pc.lesson_id, ps.submitted_at AS timestamp
                 FROM practice_submissions ps
                 JOIN programming_challenges pc ON pc.id = ps.challenge_id
-                WHERE (ps.student_id::text = $1::text OR ps.student_id = $2 OR ps.student_id = $3)
+                WHERE ${studentTextMatchSql("ps.student_id", 1, 2, 3)}
                 ORDER BY timestamp DESC
                 LIMIT 30
             `, [dbStudentId, targetUserId, targetEmail])
@@ -8090,8 +8137,34 @@ const normalizeTeacherSubmission = (row) => ({
     gradedAt: row.graded_at || null
 });
 
-app.get("/api/practice-submissions", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+app.get("/api/practice-submissions", requireAuth, requireRole(["teacher", "student"]), async (req, res, next) => {
     try {
+        if (req.authUser.role === "student") {
+            const authenticatedStudentIds = [
+                req.authUser.id,
+                req.authUser.userId,
+                req.authUser.user_id,
+                req.authUser.email
+            ].filter(Boolean);
+            const result = await pool.query(`
+                SELECT ps.*, pc.title AS challenge_title, pc.topic_id, pc.lesson_id,
+                       pc.description AS challenge_description, pc.requirements AS challenge_requirements,
+                       pc.sample_output AS challenge_sample_output,
+                       u.id AS student_user_id, u.name AS student_name, u.email AS student_email,
+                       COALESCE(s.section, 'Unassigned') AS section,
+                       grader.name AS graded_by_name
+                FROM practice_submissions ps
+                LEFT JOIN programming_challenges pc ON pc.id = ps.challenge_id
+                LEFT JOIN users u ON ps.student_id IN (u.id::text, u.user_id, u.email)
+                LEFT JOIN students s ON s.user_id = u.id
+                LEFT JOIN users grader ON grader.id = ps.graded_by
+                WHERE ps.student_id = ANY($1::text[])
+                ORDER BY ps.submitted_at DESC
+            `, [authenticatedStudentIds]);
+            const submissions = result.rows.map(normalizeTeacherSubmission);
+            return res.json({ success: true, data: submissions });
+        }
+
         const [studentCountResult, totalCountResult, result] = await Promise.all([
             pool.query(`
                 SELECT COUNT(DISTINCT u.id)::int AS count

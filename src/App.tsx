@@ -621,6 +621,23 @@ export default function App() {
     };
   }, [currentUser]);
 
+  // Intercept 401/403 expired sessions from apiRequest and redirect to login
+  useEffect(() => {
+    const handleAuthExpired = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.warn('[Auth] Session expired or unauthorized, automatically redirecting to login:', customEvent.detail);
+      setAuthToken('');
+      clearSessionUser();
+      setCurrentUser(null);
+      setPersona('public');
+      setAuthMode('login');
+    };
+    window.addEventListener('oophub:auth-expired', handleAuthExpired);
+    return () => {
+      window.removeEventListener('oophub:auth-expired', handleAuthExpired);
+    };
+  }, []);
+
   useEffect(() => {
     if (!currentUser || !getAuthToken()) {
       setActiveRecommendation(null);
@@ -756,7 +773,12 @@ export default function App() {
   useEffect(() => {
     if (!currentUser || !['teacher', 'student'].includes(currentUser.role)) return;
     let cancelled = false;
-    practiceApi.listSubmissions()
+    const activeToken = currentUser.token || getAuthToken();
+    const fetchPromise = currentUser.role === 'teacher'
+      ? practiceApi.listSubmissions(activeToken)
+      : practiceApi.listMine(activeToken);
+
+    fetchPromise
       .then(response => {
         if (!cancelled) setPendingSubmissions(response.data.map(practiceSubmissionRowToPending));
       })

@@ -104,6 +104,24 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
     error.status = response.status;
     error.body = payload;
     error.endpoint = path;
+
+    // Check if token or session is expired or invalid
+    const isSessionExpired =
+      response.status === 401 ||
+      (response.status === 403 && (
+        /token|session|expired|unauthorized|invalid/i.test(errorMsg) ||
+        path.startsWith('/api/student-results') ||
+        path.startsWith('/api/progress')
+      ));
+
+    if (isSessionExpired && typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('oophub:auth-expired', {
+          detail: { status: response.status, message: errorMsg, endpoint: path }
+        })
+      );
+    }
+
     throw error;
   }
 
@@ -254,7 +272,7 @@ export const assessmentApi = {
 
 export const practiceApi = {
   listChallenges: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-challenges'),
-  listSubmissions: () => apiRequest<{ success: boolean; data: any[] }>('/api/practice-submissions'),
+  listSubmissions: (token?: string) => apiRequest<{ success: boolean; data: any[] }>('/api/practice-submissions', { token }),
   listMine: (token?: string) => apiRequest<{ success: boolean; data: any[] }>('/api/practice-submissions/me', { token }),
   runCode: (challengeId: string, sourceCode: string) =>
     apiRequest<{ success: boolean; data: any }>(`/api/practice-challenges/${encodeURIComponent(challengeId)}/run`, {

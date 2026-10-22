@@ -4,21 +4,23 @@ const clampPercent = (value) => Math.min(100, Math.max(0, Number(value) || 0));
  * Calculate progress only from recorded evidence. Missing evidence is never
  * treated as completion, including lessons without a configured challenge.
  */
-const calculateLessonProgress = ({ videoCompleted = false, assessmentPassed = false, practiceCompleted = false }) => {
+const calculateLessonProgress = (options = {}) => {
+    const { videoCompleted = false, assessmentPassed = false, practiceCompleted = false } = options || {};
     const completedParts = [videoCompleted, assessmentPassed, practiceCompleted].filter(Boolean).length;
     return Math.round((completedParts / 3) * 10000) / 100;
 };
 
-const isPracticeCompleted = ({
-    id,
-    submissionId = null,
-    remedialRequired = false,
-    validationFailed = false,
-    compileStatus = null,
-    score = null,
-    teacherScore = null,
-    reviewStatus = null
-}) => {
+const isPracticeCompleted = (options = {}) => {
+    const {
+        id = null,
+        submissionId = null,
+        remedialRequired = false,
+        validationFailed = false,
+        compileStatus = null,
+        score = null,
+        teacherScore = null,
+        reviewStatus = null
+    } = options || {};
     const hasSubmission = Boolean(submissionId || id);
     if (!hasSubmission) return false;
     if (validationFailed === true || remedialRequired === true) return false;
@@ -43,4 +45,3 @@ const calculateCourseProgress = (lessonProgresses) => {
 };
 
 module.exports = { calculateLessonProgress, calculateCourseProgress, calculateTotalCourseProgress, isPracticeCompleted };
-

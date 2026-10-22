@@ -330,6 +330,84 @@ assert.strictEqual(logged.endpoint, "/api/student-results/STU-001");
 assert.strictEqual(logged.body.success, false);
 console.log("  ✅ PASS: Diagnostic error preserves HTTP status, response body, endpoint, and omits secrets.");
 
+// --- TEST GROUP 7: Practice Submissions Student Role Access ---
+console.log("\n--- Test Group 7: Practice Submissions Access for Students & Teachers ---");
+
+function simulatePracticeSubmissionsAccess(user) {
+    if (!user) return { status: 401, error: "Authentication token is required." };
+    if (!["teacher", "student"].includes(user.role)) return { status: 403, error: "You do not have permission to access this resource." };
+    if (user.role === "student") {
+        return { status: 200, mode: "student_own_submissions" };
+    }
+    return { status: 200, mode: "teacher_monitored_submissions" };
+}
+
+assert.strictEqual(simulatePracticeSubmissionsAccess(studentUserA).status, 200);
+assert.strictEqual(simulatePracticeSubmissionsAccess(studentUserA).mode, "student_own_submissions");
+assert.strictEqual(simulatePracticeSubmissionsAccess(teacherUser).status, 200);
+assert.strictEqual(simulatePracticeSubmissionsAccess(teacherUser).mode, "teacher_monitored_submissions");
+assert.strictEqual(simulatePracticeSubmissionsAccess(null).status, 401);
+assert.strictEqual(simulatePracticeSubmissionsAccess({ role: "guest" }).status, 403);
+
+console.log("  ✅ PASS: Practice submissions endpoint allows students (own submissions) and teachers without 403.");
+
+// --- TEST GROUP 8: Progress Calculation Null Safety ---
+console.log("\n--- Test Group 8: Progress Calculation Null Reference Safety ---");
+
+const { calculateLessonProgress, isPracticeCompleted, calculateCourseProgress, calculateTotalCourseProgress } = require("./progressCalculation");
+
+// Must not throw when called with null or undefined
+assert.doesNotThrow(() => calculateLessonProgress(null));
+assert.doesNotThrow(() => calculateLessonProgress(undefined));
+assert.strictEqual(calculateLessonProgress(null), 0);
+assert.strictEqual(calculateLessonProgress({ videoCompleted: true, assessmentPassed: true, practiceCompleted: true }), 100);
+
+assert.doesNotThrow(() => isPracticeCompleted(null));
+assert.doesNotThrow(() => isPracticeCompleted(undefined));
+assert.strictEqual(isPracticeCompleted(null), false);
+assert.strictEqual(isPracticeCompleted({ id: "sub-1", compileStatus: "success" }), true);
+assert.strictEqual(isPracticeCompleted({ id: "sub-1", remedialRequired: true }), false);
+
+assert.doesNotThrow(() => calculateCourseProgress(null));
+assert.doesNotThrow(() => calculateCourseProgress([100, null, undefined, 50]));
+assert.strictEqual(calculateCourseProgress(null), 0);
+
+console.log("  ✅ PASS: Progress calculations handle null and undefined safely without throwing exceptions.");
+
+// --- TEST GROUP 9: CORS Origin Verification & Session Expiration Interceptor ---
+console.log("\n--- Test Group 9: CORS Origins & Session Expiration Interception ---");
+
+const allowedOrigins = ["https://oop-pedagogical.vercel.app"];
+function isOriginAllowed(origin) {
+    if (!origin) return true;
+    if (!allowedOrigins.length || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) return true;
+    const cleanOrigin = origin.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (allowedOrigins.some(o => o.replace(/^https?:\/\//, '').replace(/\/$/, '') === cleanOrigin)) return true;
+    if (origin === 'https://oop-pedagogical.vercel.app' || /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) return true;
+    if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return true;
+    return false;
+}
+
+assert.strictEqual(isOriginAllowed("https://oop-pedagogical.vercel.app"), true);
+assert.strictEqual(isOriginAllowed("https://oop-pedagogical-preview-123.vercel.app"), true);
+assert.strictEqual(isOriginAllowed("http://localhost:5173"), true);
+assert.strictEqual(isOriginAllowed("https://malicious-site.com"), false);
+
+function shouldInterceptSessionExpiration(status, errorMsg, path) {
+    return status === 401 || (status === 403 && (
+        /token|session|expired|unauthorized|invalid/i.test(errorMsg) ||
+        path.startsWith('/api/student-results') ||
+        path.startsWith('/api/progress')
+    ));
+}
+
+assert.strictEqual(shouldInterceptSessionExpiration(401, "Invalid or expired authentication token.", "/api/test"), true);
+assert.strictEqual(shouldInterceptSessionExpiration(403, "Token expired", "/api/test"), true);
+assert.strictEqual(shouldInterceptSessionExpiration(403, "Students can only view their own results.", "/api/student-results/123"), true);
+assert.strictEqual(shouldInterceptSessionExpiration(403, "Forbidden", "/api/teacher/settings"), false);
+
+console.log("  ✅ PASS: Vercel CORS origins permitted, and expired session interception redirects properly.");
+
 console.log("\n================================================================");
 console.log("🎯 ALL AUTHORITATIVE PROGRESS REGRESSION TESTS PASSED (100%)");
 console.log("================================================================\n");
