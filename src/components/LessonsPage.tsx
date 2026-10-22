@@ -54,20 +54,15 @@ export default function LessonsPage({
   const oopCount = 12;
   const swingCount = 5;
 
-  const oopCompletedCount = Math.min(
-    oopCount,
-    studentResults?.completedLessons ||
-      (studentResults?.oopTopics || []).filter(t => t.lessonCompleted).length
-  );
-
-  const swingUnlocked = Boolean(studentResults?.swingUnlocked || oopCompletedCount >= oopCount);
+  const oopCompletedCount = (studentResults?.oopTopics || []).filter(t => t.lessonCompleted).length;
+  const swingUnlocked = Boolean(studentResults?.swingUnlocked ?? (oopCompletedCount >= oopCount));
   const swingCompletedCount = Math.min(
     swingCount,
     (studentResults?.swingTopics || []).filter(t => t.lessonCompleted).length
   );
 
-  const totalCompleted = oopCompletedCount + swingCompletedCount;
-  const overallCurriculumPct = Math.round((totalCompleted / totalLessonsCount) * 100);
+  const totalCompleted = studentResults?.completedLessons ?? (oopCompletedCount + swingCompletedCount);
+  const overallCurriculumPct = studentResults?.overallProgress ?? Math.round((totalCompleted / totalLessonsCount) * 100);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto py-6 px-4" id="lessons-hub-container">

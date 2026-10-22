@@ -70,6 +70,8 @@ export interface SwingTopicResult {
   overallPercentage: number | null;
   contentCompleted: boolean;
   videoCompleted: boolean;
+  videoPercentage?: number | null;
+  videoLastPosition?: number | null;
   quizPassed: boolean;
   exerciseCompleted: boolean;
   submissionScore: number | null;

@@ -270,9 +270,13 @@ export default function StudentDashboard({
   const assessmentProgress = Math.round((passedAssessmentCount / Math.max(1, lessonCount)) * 100);
   const practiceProgress = Math.round((completedPracticeCount / Math.max(1, lessonCount)) * 100);
   const videoProgress = studentResults?.videoPercentage ?? 0;
-  const curriculumLessonCount = lessonCount + 5;
-  const curriculumCompletedLessons = effectiveCompletedLessons + swingProgress.completedLessons;
-  const curriculumProgress = Math.round(((journeyProgress * lessonCount) + (swingProgress.completedLessons * 100)) / curriculumLessonCount);
+  const curriculumLessonCount = 17;
+  const curriculumCompletedLessons = studentResults
+    ? studentResults.completedLessons
+    : effectiveCompletedLessons + swingProgress.completedLessons;
+  const curriculumProgress = studentResults
+    ? studentResults.overallProgress
+    : Math.round((curriculumCompletedLessons / curriculumLessonCount) * 100);
   const [analyticsRange, setAnalyticsRange] = React.useState<'7' | '30' | 'all'>('all');
   const analyticsSince = analyticsRange === 'all' ? 0 : Date.now() - Number(analyticsRange) * 24 * 60 * 60 * 1000;
   const assessmentHistory = (dashboardResults?.assessmentHistory || []).filter(item => !analyticsSince || new Date(item.dateCompleted).getTime() >= analyticsSince);

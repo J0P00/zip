@@ -1197,7 +1197,9 @@ export default function App() {
       )
     : getTeacherScopedLeaderboard(leaderboardUsers, displayUser, monitoringRequests);
 
-  const learningProgress = Math.min(100, Math.round((completedLessonsCount / OOP_LESSON_COUNT) * 100));
+  const TOTAL_COURSE_LESSONS = 17;
+  const effectiveCompletedLessonsCount = studentResults?.completedLessons ?? completedLessonsCount;
+  const learningProgress = studentResults?.overallProgress ?? Math.min(100, Math.round((effectiveCompletedLessonsCount / TOTAL_COURSE_LESSONS) * 100));
   const profileMetrics = displayUser.role === 'teacher'
     ? [
         { label: 'Courses Available', value: String(OOP_COURSE_LESSONS.length), helper: 'Lessons available in the active learning path' },
@@ -1205,8 +1207,8 @@ export default function App() {
         { label: 'Assessments Managed', value: String(INITIAL_QUESTIONS.length + pendingSubmissions.length), helper: 'Question banks and submissions under review' }
       ]
     : [
-          { label: 'Completed Courses', value: completedLessonsCount >= OOP_LESSON_COUNT ? '1' : '0', helper: 'Courses completed from the active learning path' },
-          { label: 'Learning Progress', value: `${learningProgress}%`, helper: 'Progress through the current OOP lesson sequence' },
+          { label: 'Completed Courses', value: effectiveCompletedLessonsCount >= TOTAL_COURSE_LESSONS ? '1' : '0', helper: 'Courses completed from the active learning path' },
+          { label: 'Learning Progress', value: `${learningProgress}%`, helper: 'Progress through the full 17-lesson curriculum' },
         ];
 
   const handleUpdateProfile = (updates: Partial<AuthenticatedUser>) => {

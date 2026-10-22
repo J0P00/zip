@@ -49,7 +49,8 @@ const formatTime = (seconds: number) => {
 type SubmissionDb = Record<string, { score?: number; compileStatus?: string }>;
 
 const getTopic = (results: StudentResultsData | null | undefined, lessonId: string) =>
-  results?.oopTopics?.find(topic => topic.id === lessonId);
+  results?.oopTopics?.find(topic => topic.id === lessonId) ||
+  results?.swingTopics?.find(topic => topic.id === lessonId);
 
 const lessonCompletedFromTopic = (topic?: StudentTopicResult) => Boolean(topic?.lessonCompleted);
 
@@ -310,7 +311,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
       completed: Boolean(queued?.completed || completed)
     };
 
-    if (flush) {
+    if (completed || flush) {
       if (progressSaveTimerRef.current) {
         clearTimeout(progressSaveTimerRef.current);
         progressSaveTimerRef.current = null;
