@@ -697,6 +697,32 @@ const isSwingLessonId = (lessonId = "") => /^swing_lesson_\d+$/i.test(String(les
 const OOP_LESSON_FILTER_SQL = "(id NOT LIKE 'swing_%' AND COALESCE(course_id, 'oop_fundamentals') <> 'java_swing' AND LOWER(COALESCE(module, '')) NOT LIKE '%swing%')";
 const OOP_LESSON_ALIAS_FILTER_SQL = (alias = "l") => `(${alias}.id NOT LIKE 'swing_%' AND COALESCE(${alias}.course_id, 'oop_fundamentals') <> 'java_swing' AND LOWER(COALESCE(${alias}.module, '')) NOT LIKE '%swing%')`;
 
+const OOP_CLOUDINARY_VIDEOS = {
+    oop_lesson_1: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200171/Lesson_1Classes_Objects.mp4",
+    oop_lesson_2: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200164/Lesson_2_Constructor.mp4",
+    oop_lesson_3: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200165/Lesson_3Object_Method.mp4",
+    oop_lesson_4: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200173/Lesson_4_Encapsulation.mp4",
+    oop_lesson_5: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200164/Lesson_5_Constructor_Overloading.mp4",
+    oop_lesson_6: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200163/Lesson_6_Inheritance.mp4",
+    oop_lesson_7: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200159/Lesson_7_Polymorphism.mp4",
+    oop_lesson_8: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200159/Lesson_8_Abstract_Classes.mp4",
+    oop_lesson_9: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200162/Lesson_9_Interfaces_Abstract.mp4",
+    oop_lesson_10: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200166/Lesson_10_Interfaces.mp4",
+    oop_lesson_11: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200177/Lesson_11_Array_Of_Object.mp4",
+    oop_lesson_12: "https://res.cloudinary.com/jaudkms2/video/upload/v1791200177/Lesson_12_Enum.mp4"
+};
+
+const resolveLessonVideoUrl = (row) => {
+    const rawUrl = String(row.video_url || "").trim();
+    if (row.storage_provider === STORAGE_PROVIDER && row.storage_key) {
+        return rawUrl;
+    }
+    if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+        return rawUrl;
+    }
+    return OOP_CLOUDINARY_VIDEOS[row.id] || rawUrl;
+};
+
 const toClientLesson = (row) => {
     const isSwing = isSwingLessonId(row.id) || row.course_id === "java_swing" || String(row.module || "").toLowerCase().includes("swing");
     return {
@@ -706,7 +732,7 @@ const toClientLesson = (row) => {
         courseId: row.course_id || (isSwing ? "java_swing" : "oop_fundamentals"),
         sequence: Number(row.sequence || 0),
         duration: row.duration || "",
-        videoUrl: row.video_url || "",
+        videoUrl: resolveLessonVideoUrl(row),
         storageProvider: row.storage_provider || "",
         storageKey: row.storage_key || "",
         storageContentType: row.storage_content_type || "",
@@ -1739,7 +1765,7 @@ const seedLessons = async (db = pool) => {
             "OOP Fundamentals",
             1,
             "04:55",
-            "/videos/lesson1.mp4",
+            OOP_CLOUDINARY_VIDEOS.oop_lesson_1,
             "Introduces Java classes as blueprints and objects as instances with fields, methods, state, and behavior.",
             JSON.stringify(["Class blueprint", "Object instance", "Fields and methods", "new keyword", "State and behavior"]),
             "Published",
@@ -1751,7 +1777,7 @@ const seedLessons = async (db = pool) => {
             "OOP Fundamentals",
             2,
             "05:25",
-            "/videos/lesson2.mp4",
+            OOP_CLOUDINARY_VIDEOS.oop_lesson_2,
             "Explains Java constructors, object initialization, constructor names, parameters, and default constructor behavior.",
             JSON.stringify(["Constructor purpose", "Same name as class", "No return type", "Parameterized constructor", "Default constructor"]),
             "Published",
@@ -1763,7 +1789,7 @@ const seedLessons = async (db = pool) => {
             "OOP Fundamentals",
             3,
             "05:04",
-            "/videos/lesson3.mp4",
+            OOP_CLOUDINARY_VIDEOS.oop_lesson_3,
             "Covers object methods as class-defined behaviors, calling methods through objects, parameters, returns, and field access.",
             JSON.stringify(["Object behavior", "Method call", "Parameters", "Return values", "Instance field access"]),
             "Published",
@@ -1775,7 +1801,7 @@ const seedLessons = async (db = pool) => {
             "OOP Fundamentals",
             4,
             "06:10",
-            "/OOP%20Lesson/Topic4-Inheritance.mp4",
+            OOP_CLOUDINARY_VIDEOS.oop_lesson_4,
             "Explains data hiding with private fields and controlled access through getter and setter methods.",
             JSON.stringify(["Data hiding", "private fields", "getters", "setters", "validation"]),
             "Published",
@@ -1787,7 +1813,7 @@ const seedLessons = async (db = pool) => {
             "OOP Fundamentals",
             5,
             "02:34",
-            "/OOP%20Lesson/Topic5-MethodOveriding.mp4",
+            OOP_CLOUDINARY_VIDEOS.oop_lesson_5,
             "Shows how one class can define multiple constructors with different parameter lists for flexible object creation.",
             JSON.stringify(["Constructor overload", "Different parameters", "this()", "Initialization paths", "Compile-time selection"]),
             "Published",
@@ -1799,7 +1825,7 @@ const seedLessons = async (db = pool) => {
             "Core OOP",
             6,
             "03:00",
-            "/videos/lesson6.mp4",
+            OOP_CLOUDINARY_VIDEOS.oop_lesson_6,
             "Introduces inheritance in Java, showing how child classes reuse and extend parent class fields and methods.",
             JSON.stringify(["Parent class", "Child class", "extends keyword", "is-a relationship", "Code reuse"]),
             "Published",
@@ -1811,7 +1837,7 @@ const seedLessons = async (db = pool) => {
             "Core OOP",
             7,
             "02:24",
-            "/videos/lesson7.mp4",
+            OOP_CLOUDINARY_VIDEOS.oop_lesson_7,
             "Covers polymorphism through overloaded methods, overridden behavior, parent references, and dynamic method dispatch.",
             JSON.stringify(["Many forms", "Method overloading", "Method overriding", "Parent reference", "Runtime dispatch"]),
             "Published",
@@ -1823,7 +1849,7 @@ const seedLessons = async (db = pool) => {
             "Advanced OOP",
             8,
             "02:29",
-            "/OOP%20Lesson/Topic8%20abstraction%20.mp4?v=compressed-20260726",
+            OOP_CLOUDINARY_VIDEOS.oop_lesson_8,
             "Explains abstract classes as shared base definitions that can declare required behavior and provide reusable concrete methods.",
             JSON.stringify(["abstract class", "Abstract method", "Concrete method", "Shared base class", "Subclass responsibility"]),
             "Published",
@@ -1835,7 +1861,7 @@ const seedLessons = async (db = pool) => {
             "Advanced OOP",
             9,
             "10:40",
-            "/OOP%20Lesson/topic9-INTERFACE.mp4?v=compressed-20260726-2124",
+            OOP_CLOUDINARY_VIDEOS.oop_lesson_9,
             "Introduces interfaces and abstraction as ways to expose essential behavior while hiding implementation details.",
             JSON.stringify(["interface keyword", "implements keyword", "Behavior contract", "Implementation hiding", "Default methods"]),
             "Published",
@@ -1847,7 +1873,7 @@ const seedLessons = async (db = pool) => {
             "Advanced OOP",
             10,
             "21:24",
-            "/videos/lesson10.mp4",
+            OOP_CLOUDINARY_VIDEOS.oop_lesson_10,
             "Shows how arrays can store object references, how each element must be initialized, and how loops process object collections.",
             JSON.stringify(["Object reference array", "Element initialization", "Null elements", "Array traversal", "Object state per element"]),
             "Published",
@@ -1859,7 +1885,7 @@ const seedLessons = async (db = pool) => {
             "Advanced OOP",
             11,
             "23:26",
-            "/JAVA%20OOP%20Video%20Lesson/Lesson%2011%20Array%20Of%20Object.mp4",
+            OOP_CLOUDINARY_VIDEOS.oop_lesson_11,
             "Shows how arrays can store object references, how each element must be initialized, and how loops process object collections.",
             JSON.stringify(["Object reference array", "Element initialization", "Null elements", "Array traversal", "Object state per element"]),
             "Published",
@@ -1871,7 +1897,7 @@ const seedLessons = async (db = pool) => {
             "Advanced OOP",
             12,
             "32:11",
-            "/JAVA%20OOP%20Video%20Lesson/Lesson%2012%20Enum.mp4",
+            OOP_CLOUDINARY_VIDEOS.oop_lesson_12,
             "Explains Java enums as type-safe named constants that can also contain fields, constructors, and methods.",
             JSON.stringify(["enum keyword", "Named constants", "Type safety", "switch with enum", "Enum fields and methods"]),
             "Published",
@@ -1907,7 +1933,10 @@ const seedLessons = async (db = pool) => {
                 ELSE lessons.sequence
               END,
               duration = EXCLUDED.duration,
-              video_url = COALESCE(NULLIF(lessons.video_url, ''), EXCLUDED.video_url),
+              video_url = CASE
+                WHEN EXCLUDED.video_url LIKE 'http%' THEN EXCLUDED.video_url
+                ELSE COALESCE(NULLIF(lessons.video_url, ''), EXCLUDED.video_url)
+              END,
               description = COALESCE(NULLIF(lessons.description, ''), EXCLUDED.description),
               learning_objectives = CASE
                 WHEN lessons.learning_objectives IS NULL OR lessons.learning_objectives = '[]'::jsonb THEN EXCLUDED.learning_objectives

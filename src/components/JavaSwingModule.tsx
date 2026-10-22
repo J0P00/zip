@@ -99,6 +99,8 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [videoErrorMessage, setVideoErrorMessage] = useState<string | null>(null);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [videoAttempt, setVideoAttempt] = useState(0);
   const [loadedSwingDurations, setLoadedSwingDurations] = useState<Record<string, string>>({});
   const swingVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -187,8 +189,34 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
 
   useEffect(() => {
     setVideoError(false);
+    setVideoErrorMessage(null);
+    setIsBuffering(false);
     setVideoAttempt(0);
   }, [activeLessonId]);
+
+  const handleSwingVideoError = () => {
+    setIsBuffering(false);
+    setVideoError(true);
+    const err = swingVideoRef.current?.error;
+    let message = "Unable to load video. Check your connection or tap retry.";
+    if (err) {
+      switch (err.code) {
+        case 1:
+          message = "Playback interrupted. Tap retry to reload.";
+          break;
+        case 2:
+          message = "Network connection problem. Please check your internet connection.";
+          break;
+        case 3:
+          message = "Playback decoding error. Tap retry to restart.";
+          break;
+        case 4:
+          message = "Video source unavailable or format not supported on this device.";
+          break;
+      }
+    }
+    setVideoErrorMessage(message);
+  };
 
   useEffect(() => {
     const key = `${userKeyFor(currentUser)}:${activeExercise.id}`;
@@ -662,32 +690,86 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
       <div className="grid gap-6 lg:grid-cols-12">
         <section className="lg:col-span-8">
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm">
-            <div className="aspect-video bg-black">
+            <div className="relative aspect-video bg-black flex items-center justify-center">
               {(() => {
                 const video = JAVA_SWING_VIDEOS.find(item => item.lessonId === activeLesson.id) || JAVA_SWING_VIDEOS[0];
-                return video.embedUrl.endsWith('.mp4') ? (
+                const isDirectVideo = video.embedUrl.includes('.mp4') || !video.embedUrl.includes('youtube');
+                return isDirectVideo ? (
                   <video
                     key={video.id + '-' + videoAttempt}
                     ref={swingVideoRef}
-                    src={video.embedUrl}
                     controls
+                    playsInline
+                    // @ts-ignore
+                    webkit-playsinline="true"
+                    preload="metadata"
                     className="h-full w-full object-contain"
                     onLoadedMetadata={() => {
                       setVideoError(false);
+                      setVideoErrorMessage(null);
                       const saved = progressDb[activeLesson.id]?.videoLastPosition || 0;
                       if (swingVideoRef.current && saved > 0 && saved < swingVideoRef.current.duration) {
                         swingVideoRef.current.currentTime = saved;
                       }
                     }}
+                    onCanPlay={() => {
+                      setIsBuffering(false);
+                      setVideoError(false);
+                    }}
+                    onWaiting={() => setIsBuffering(true)}
+                    onPlaying={() => setIsBuffering(false)}
                     onTimeUpdate={() => persistSwingVideoProgress(false)}
                     onPause={() => persistSwingVideoProgress(true)}
                     onEnded={() => persistSwingVideoProgress(true)}
-                    onError={() => setVideoError(true)}
-                  />
+                    onError={handleSwingVideoError}
+                  >
+                    <source src={video.embedUrl} type="video/mp4" />
+                    Your browser does not support HTML5 video playback.
+                  </video>
                 ) : (
                   <iframe src={video.embedUrl} title={video.title} className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
                 );
               })()}
+
+              {isBuffering && !videoError && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
+                  <div className="flex flex-col items-center gap-2 rounded-xl bg-slate-900/80 px-4 py-3 text-white backdrop-blur-sm">
+                    <div className="h-7 w-7 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
+                    <span className="text-xs font-semibold">Loading video...</span>
+                  </div>
+                </div>
+              )}
+
+              {videoError && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/85 p-6 text-center text-white">
+                  <AlertCircle className="h-10 w-10 text-amber-400" />
+                  <p className="text-sm font-bold">{videoErrorMessage || 'Unable to play this Swing video on your device.'}</p>
+                  <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVideoError(false);
+                        setVideoErrorMessage(null);
+                        setVideoAttempt(prev => prev + 1);
+                        swingVideoRef.current?.load();
+                      }}
+                      className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-black text-white shadow-sm transition"
+                    >
+                      Retry video
+                    </button>
+                    {activeLesson && (
+                      <a
+                        href={JAVA_SWING_VIDEOS.find(item => item.lessonId === activeLesson.id)?.embedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-lg bg-white/10 hover:bg-white/20 px-4 py-2 text-xs font-bold text-white transition"
+                      >
+                        Open direct video
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="border-t border-slate-800 bg-white p-5">
               <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">

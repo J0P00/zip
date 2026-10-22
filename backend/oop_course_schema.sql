@@ -792,17 +792,17 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.desc
 
 INSERT INTO oop_lessons (id, course_id, lesson_number, title, video_source, duration, assessment_id)
 VALUES
-  ('oop_lesson_1', 'oop_fundamentals', 1, 'Classes & Objects', '/videos/lesson1.mp4', '04:55', 'oop_assessment_1'),
-  ('oop_lesson_2', 'oop_fundamentals', 2, 'Constructors', '/videos/lesson2.mp4', '05:25', 'oop_assessment_2'),
-  ('oop_lesson_3', 'oop_fundamentals', 3, 'Object Methods', '/videos/lesson3.mp4', '05:04', 'oop_assessment_3'),
-  ('oop_lesson_4', 'oop_fundamentals', 4, 'Encapsulation', '/videos/lesson4.mp4', '06:10', 'oop_assessment_4'),
-  ('oop_lesson_5', 'oop_fundamentals', 5, 'Constructor Overloading', '/videos/lesson5.mp4', '02:34', 'oop_assessment_5'),
-  ('oop_lesson_6', 'oop_fundamentals', 6, 'Inheritance', '/videos/lesson6.mp4', '03:00', 'oop_assessment_6'),
-  ('oop_lesson_7', 'oop_fundamentals', 7, 'Polymorphism', '/videos/lesson7.mp4', '02:24', 'oop_assessment_7'),
-  ('oop_lesson_8', 'oop_fundamentals', 8, 'Abstract Classes', '/videos/lesson8.mp4', '02:29', 'oop_assessment_8'),
-  ('oop_lesson_9', 'oop_fundamentals', 9, 'Interfaces / Abstraction', '/videos/lesson9.mp4', '10:40', 'oop_assessment_9'),
-  ('oop_lesson_10', 'oop_fundamentals', 10, 'Interfaces', '/videos/lesson10.mp4', '21:24', 'oop_assessment_10'),
-  ('oop_lesson_11', 'oop_fundamentals', 11, 'Enum', '/videos/lesson11.mp4', '15:25', 'oop_assessment_11')
+  ('oop_lesson_1', 'oop_fundamentals', 1, 'Classes & Objects', 'https://res.cloudinary.com/jaudkms2/video/upload/v1791200171/Lesson_1Classes_Objects.mp4', '04:55', 'oop_assessment_1'),
+  ('oop_lesson_2', 'oop_fundamentals', 2, 'Constructors', 'https://res.cloudinary.com/jaudkms2/video/upload/v1791200164/Lesson_2_Constructor.mp4', '05:25', 'oop_assessment_2'),
+  ('oop_lesson_3', 'oop_fundamentals', 3, 'Object Methods', 'https://res.cloudinary.com/jaudkms2/video/upload/v1791200165/Lesson_3Object_Method.mp4', '05:04', 'oop_assessment_3'),
+  ('oop_lesson_4', 'oop_fundamentals', 4, 'Encapsulation', 'https://res.cloudinary.com/jaudkms2/video/upload/v1791200173/Lesson_4_Encapsulation.mp4', '06:10', 'oop_assessment_4'),
+  ('oop_lesson_5', 'oop_fundamentals', 5, 'Constructor Overloading', 'https://res.cloudinary.com/jaudkms2/video/upload/v1791200164/Lesson_5_Constructor_Overloading.mp4', '02:34', 'oop_assessment_5'),
+  ('oop_lesson_6', 'oop_fundamentals', 6, 'Inheritance', 'https://res.cloudinary.com/jaudkms2/video/upload/v1791200163/Lesson_6_Inheritance.mp4', '03:00', 'oop_assessment_6'),
+  ('oop_lesson_7', 'oop_fundamentals', 7, 'Polymorphism', 'https://res.cloudinary.com/jaudkms2/video/upload/v1791200159/Lesson_7_Polymorphism.mp4', '02:24', 'oop_assessment_7'),
+  ('oop_lesson_8', 'oop_fundamentals', 8, 'Abstract Classes', 'https://res.cloudinary.com/jaudkms2/video/upload/v1791200159/Lesson_8_Abstract_Classes.mp4', '02:29', 'oop_assessment_8'),
+  ('oop_lesson_9', 'oop_fundamentals', 9, 'Interfaces / Abstraction', 'https://res.cloudinary.com/jaudkms2/video/upload/v1791200162/Lesson_9_Interfaces_Abstract.mp4', '10:40', 'oop_assessment_9'),
+  ('oop_lesson_10', 'oop_fundamentals', 10, 'Interfaces', 'https://res.cloudinary.com/jaudkms2/video/upload/v1791200166/Lesson_10_Interfaces.mp4', '21:24', 'oop_assessment_10'),
+  ('oop_lesson_11', 'oop_fundamentals', 11, 'Enum', 'https://res.cloudinary.com/jaudkms2/video/upload/v1791200177/Lesson_11_Array_Of_Object.mp4', '15:25', 'oop_assessment_11')
 ON CONFLICT (id) DO UPDATE
 SET title = EXCLUDED.title,
     video_source = EXCLUDED.video_source,

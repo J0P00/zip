@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertCircle,
   BookOpen,
   CheckCircle,
   FileText,
@@ -104,6 +105,8 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const [isMuted, setIsMuted] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [videoError, setVideoError] = useState(false);
+  const [videoErrorMessage, setVideoErrorMessage] = useState<string | null>(null);
+  const [isBuffering, setIsBuffering] = useState(false);
   const youtubeVideoId = activeLesson ? getYouTubeVideoId(activeLesson.videoUrl) : '';
   const lastProgressPersistRef = useRef(0);
   const watchDbRef = useRef<WatchDb>({});
@@ -248,14 +251,97 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     return () => window.clearInterval(timer);
   }, [youtubeVideoId, duration, activeLesson?.id]);
 
-  useEffect(() => {
-    if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.play().catch(() => setIsPlaying(false));
-    } else {
-      videoRef.current.pause();
+  const handleTogglePlay = () => {
+    if (youtubePlayerRef.current && youtubeVideoId) {
+      if (isPlaying) {
+        youtubePlayerRef.current.pauseVideo();
+        setIsPlaying(false);
+      } else {
+        youtubePlayerRef.current.playVideo();
+        setIsPlaying(true);
+      }
+      return;
     }
-  }, [isPlaying]);
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused || video.ended) {
+      const p = video.play();
+      if (p !== undefined) {
+        p.then(() => {
+          setIsPlaying(true);
+          setVideoError(false);
+        }).catch(err => {
+          console.warn('Playback prevented or interrupted:', err);
+          setIsPlaying(false);
+        });
+      }
+    } else {
+      video.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.volume = volume;
+      videoRef.current.muted = isMuted;
+    }
+  }, [volume, isMuted]);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
+
+  const handleVideoError = () => {
+    setIsPlaying(false);
+    setIsBuffering(false);
+    const err = videoRef.current?.error;
+    let message = "Video unavailable. Please check your connection and tap retry.";
+    if (err) {
+      switch (err.code) {
+        case 1:
+          message = "Playback interrupted. Tap retry to reload.";
+          break;
+        case 2:
+          message = "Network connection problem. Please check your internet connection.";
+          break;
+        case 3:
+          message = "Playback decoding error. Tap retry to restart.";
+          break;
+        case 4:
+          message = "Video source unavailable or format not supported on this device.";
+          break;
+      }
+    } else if (!activeLesson?.videoUrl) {
+      message = "Video URL is unavailable for this lesson.";
+    }
+    setVideoErrorMessage(message);
+    setVideoError(true);
+  };
+
+  const handleRetryVideo = () => {
+    setVideoError(false);
+    setVideoErrorMessage(null);
+    setIsBuffering(true);
+    const video = videoRef.current;
+    if (video) {
+      video.load();
+      const p = video.play();
+      if (p !== undefined) {
+        p.then(() => {
+          setIsPlaying(true);
+          setIsBuffering(false);
+        }).catch(() => {
+          setIsPlaying(false);
+          setIsBuffering(false);
+        });
+      }
+    }
+  };
 
   useEffect(() => {
     watchDbRef.current = watchDb;
@@ -370,6 +456,16 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     setCurrentTime(allowedTime);
   };
 
+  const handleSeeking = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const allowedTime = Math.min(video.currentTime, maxWatchedTime + 5, duration || video.currentTime);
+    if (video.currentTime > allowedTime) {
+      video.currentTime = allowedTime;
+      setCurrentTime(allowedTime);
+    }
+  };
+
   const handleFullscreen = () => {
     void shellRef.current?.requestFullscreen?.().catch(() => undefined);
   };
@@ -457,80 +553,160 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
       <div className="grid gap-6 lg:grid-cols-12">
         <section className="lg:col-span-8">
           <div ref={shellRef} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-950 shadow-sm sm:rounded-2xl">
-            <div className="relative aspect-video bg-black">
-              {youtubeVideoId ? <div ref={youtubeContainerRef} className="h-full w-full" aria-label="YouTube video player" /> : <video
-                key={activeLesson.id}
-                ref={videoRef}
-                src={activeLesson.videoUrl}
-                className="h-full w-full object-contain"
-                playsInline
-                preload="metadata"
-                onLoadedMetadata={() => {
-                  setVideoError(false);
-                  handleLoadedMetadata();
-                }}
-                onPause={() => {
-                  setIsPlaying(false);
-                  if (videoRef.current && !videoRef.current.ended) {
-                    persistProgress(videoRef.current.currentTime, videoRef.current.duration, true);
-                  }
-                }}
-                onError={() => {
-                  setIsPlaying(false);
-                  setVideoError(true);
-                }}
-                onTimeUpdate={handleTimeUpdate}
-                onEnded={() => {
-                  setIsPlaying(false);
-                  if (videoRef.current) persistProgress(videoRef.current.duration, videoRef.current.duration, true);
-                }}
-              />}
-              {videoError && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/75 p-6 text-center text-white">
-                  <p className="text-sm font-bold">Video unavailable. Please try again.</p>
-                  <button type="button" onClick={() => { setVideoError(false); videoRef.current?.load(); }} className="rounded-lg bg-white px-4 py-2 text-xs font-black text-slate-900">Retry video</button>
+            <div className="relative aspect-video bg-black flex items-center justify-center">
+              {youtubeVideoId ? (
+                <div ref={youtubeContainerRef} className="h-full w-full" aria-label="YouTube video player" />
+              ) : (
+                <video
+                  key={activeLesson.id}
+                  ref={videoRef}
+                  controls
+                  playsInline
+                  // @ts-ignore
+                  webkit-playsinline="true"
+                  preload="metadata"
+                  className="h-full w-full object-contain"
+                  onLoadedMetadata={() => {
+                    setVideoError(false);
+                    setVideoErrorMessage(null);
+                    handleLoadedMetadata();
+                  }}
+                  onCanPlay={() => {
+                    setIsBuffering(false);
+                    setVideoError(false);
+                  }}
+                  onWaiting={() => setIsBuffering(true)}
+                  onPlay={() => {
+                    setIsPlaying(true);
+                    setVideoError(false);
+                  }}
+                  onPlaying={() => {
+                    setIsBuffering(false);
+                    setIsPlaying(true);
+                  }}
+                  onPause={() => {
+                    setIsPlaying(false);
+                    if (videoRef.current && !videoRef.current.ended) {
+                      persistProgress(videoRef.current.currentTime, videoRef.current.duration, true);
+                    }
+                  }}
+                  onSeeking={handleSeeking}
+                  onTimeUpdate={handleTimeUpdate}
+                  onError={handleVideoError}
+                  onEnded={() => {
+                    setIsPlaying(false);
+                    if (videoRef.current) {
+                      persistProgress(videoRef.current.duration, videoRef.current.duration, true);
+                    }
+                  }}
+                >
+                  <source src={activeLesson.videoUrl} type="video/mp4" />
+                  Your browser does not support HTML5 video playback.
+                </video>
+              )}
+
+              {isBuffering && !videoError && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
+                  <div className="flex flex-col items-center gap-2 rounded-xl bg-slate-900/80 px-4 py-3 text-white backdrop-blur-sm">
+                    <div className="h-7 w-7 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
+                    <span className="text-xs font-semibold">Loading video...</span>
+                  </div>
                 </div>
               )}
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-2.5 sm:p-4">
+
+              {videoError && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/85 p-6 text-center text-white">
+                  <AlertCircle className="h-10 w-10 text-amber-400" />
+                  <p className="text-sm font-bold">{videoErrorMessage || 'Video unavailable. Please try again.'}</p>
+                  <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
+                    <button
+                      type="button"
+                      onClick={handleRetryVideo}
+                      className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-black text-white shadow-sm transition"
+                    >
+                      Retry video
+                    </button>
+                    {activeLesson.videoUrl && (
+                      <a
+                        href={activeLesson.videoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-lg bg-white/10 hover:bg-white/20 px-4 py-2 text-xs font-bold text-white transition"
+                      >
+                        Open direct video link
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 bg-slate-900 px-3 py-2 text-white sm:px-4 sm:py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleTogglePlay}
+                  className="flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs font-bold transition"
+                  title="Play or pause"
+                >
+                  {isPlaying ? <Pause className="h-3.5 w-3.5 fill-white" /> : <Play className="h-3.5 w-3.5 fill-white" />}
+                  <span>{isPlaying ? 'Pause' : 'Play'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (youtubePlayerRef.current && youtubeVideoId) youtubePlayerRef.current.seekTo(Math.max(0, currentTime - 10), true);
+                    else if (videoRef.current) videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+                  }}
+                  className="flex items-center gap-1 rounded-lg bg-white/10 hover:bg-white/20 px-2.5 py-1.5 text-xs font-semibold transition"
+                  title="Rewind 10 seconds"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">10s</span>
+                </button>
+                <span className="min-w-0 font-mono text-[11px] font-bold text-slate-300">
+                  {formatTime(currentTime)} / {formatTime(duration)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1 text-[11px] font-bold text-slate-300">
+                  <span className="hidden min-[380px]:inline">Speed:</span>
+                  <select
+                    value={playbackRate}
+                    onChange={event => setPlaybackRate(Number(event.target.value))}
+                    className="rounded-md border border-slate-700 bg-slate-800 px-1.5 py-1 text-xs font-bold text-white outline-none focus:border-emerald-500"
+                  >
+                    {[0.75, 1, 1.25, 1.5, 2].map(rate => (
+                      <option key={rate} value={rate} className="bg-slate-900 text-white">{rate}x</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsMuted(value => !value)}
+                  className="rounded-lg bg-white/10 hover:bg-white/20 p-1.5 text-white transition"
+                  title={isMuted ? 'Unmute' : 'Mute'}
+                >
+                  {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                </button>
                 <input
                   type="range"
                   min={0}
-                  max={duration || 0}
-                  value={Math.min(currentTime, duration || currentTime)}
-                  onChange={handleSeek}
-                  className="w-full accent-emerald-500"
-                  aria-label="Video progress"
+                  max={1}
+                  step={0.05}
+                  value={volume}
+                  onChange={event => setVolume(Number(event.target.value))}
+                  className="hidden w-16 accent-emerald-500 min-[480px]:block"
+                  aria-label="Volume"
                 />
-                <div className="mt-2 flex flex-col gap-2 text-white sm:mt-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <button onClick={() => {
-                      if (youtubePlayerRef.current && youtubeVideoId) {
-                        if (isPlaying) youtubePlayerRef.current.pauseVideo(); else youtubePlayerRef.current.playVideo();
-                      } else setIsPlaying(value => !value);
-                    }} className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Play or pause">
-                      {isPlaying ? <Pause className="h-4 w-4 fill-white" /> : <Play className="h-4 w-4 fill-white" />}
-                    </button>
-                    <button onClick={() => {
-                      if (youtubePlayerRef.current && youtubeVideoId) youtubePlayerRef.current.seekTo(Math.max(0, currentTime - 10), true);
-                      else if (videoRef.current) videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
-                    }} className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Rewind 10 seconds">
-                      <RotateCcw className="h-4 w-4" />
-                    </button>
-                    <span className="min-w-0 font-mono text-[11px] font-bold sm:text-xs">{formatTime(currentTime)} / {formatTime(duration)}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select value={playbackRate} onChange={event => setPlaybackRate(Number(event.target.value))} className="rounded-lg bg-white/10 px-2 py-2 text-xs font-bold outline-none">
-                      {[0.75, 1, 1.25, 1.5, 2].map(rate => <option key={rate} value={rate}>{rate}x</option>)}
-                    </select>
-                    <button onClick={() => setIsMuted(value => !value)} className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Mute or unmute">
-                      {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                    </button>
-                    <input type="range" min={0} max={1} step={0.05} value={volume} onChange={event => setVolume(Number(event.target.value))} className="hidden w-20 accent-emerald-500 min-[380px]:block" aria-label="Volume" />
-                    <button onClick={handleFullscreen} className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Fullscreen">
-                      <Maximize2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleFullscreen}
+                  className="rounded-lg bg-white/10 hover:bg-white/20 p-1.5 text-white transition"
+                  title="Fullscreen"
+                >
+                  <Maximize2 className="h-4 w-4" />
+                </button>
               </div>
             </div>
             <div className="border-t border-slate-800 bg-white p-4 sm:p-5 dark:bg-slate-950">

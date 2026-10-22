@@ -491,16 +491,21 @@ export default function App() {
         const normalizedLessons = oopBackendLessons.map((lesson: any) => {
           const fallback = OOP_COURSE_LESSONS.find(item => item.id === lesson.id);
           const rawBackendVideoUrl = lesson.videoUrl || lesson.video_url || '';
-          const backendVideoUrl = lesson.storageProvider === 'local' && rawBackendVideoUrl.startsWith('/api/')
+          const isPrivateApi = rawBackendVideoUrl.startsWith('/api/');
+          const backendVideoUrl = isPrivateApi
             ? `${API_BASE_URL}${rawBackendVideoUrl}`
             : rawBackendVideoUrl;
-          const hasPrivateStorage = lesson.storageProvider === 'local';
-          const usesMissingPlaceholder = backendVideoUrl.startsWith('/videos/') || backendVideoUrl.startsWith('/OOP%20Lesson/');
+          const isHosted = backendVideoUrl.startsWith('http://') || backendVideoUrl.startsWith('https://');
+          const cloudinaryUrl = lessonVideos.oop[lesson.id as keyof typeof lessonVideos.oop]?.secureUrl;
+          const finalVideoUrl = isPrivateApi
+            ? backendVideoUrl
+            : (isHosted ? backendVideoUrl : (cloudinaryUrl || fallback?.videoUrl || backendVideoUrl));
+
           return {
             ...fallback,
             ...lesson,
             id: lesson.id,
-            videoUrl: hasPrivateStorage ? backendVideoUrl : ((!usesMissingPlaceholder && backendVideoUrl) ? backendVideoUrl : (lessonVideos.oop[lesson.id as keyof typeof lessonVideos.oop]?.secureUrl || (usesMissingPlaceholder ? (fallback?.videoUrl || backendVideoUrl) : (backendVideoUrl || fallback?.videoUrl || '')))),
+            videoUrl: finalVideoUrl,
             duration: lesson.duration || fallback?.duration || ''
           } as VideoLesson;
         });
