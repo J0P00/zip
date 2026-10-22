@@ -67,7 +67,7 @@ type RequestOptions = RequestInit & {
 };
 
 async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const token = options.token ?? getAuthToken();
+  const token = options.token || getAuthToken();
   const headers = new Headers(options.headers);
   headers.set('Content-Type', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);

@@ -662,7 +662,8 @@ export default function App() {
     setStudentResultsLoading(true);
     setStudentResultsError(null);
     try {
-      const response = await progressApi.getStudentResults(getCanonicalStudentId(user), user.token);
+      const activeToken = user.token || getAuthToken();
+      const response = await progressApi.getStudentResults(getCanonicalStudentId(user), activeToken);
       setStudentResults(response.data);
       setCompletedLessonsCount(response.data.completedLessons);
       setPoints(response.data.overallProgress);
@@ -1054,7 +1055,8 @@ export default function App() {
     setStreak(0);
     setPoints(0);
     setCompletedLessonsCount(0);
-    progressApi.getStudentResults(studentId, currentUser.token)
+    const activeToken = currentUser.token || getAuthToken();
+    progressApi.getStudentResults(studentId, activeToken)
       .then(response => {
         if (cancelled) return;
         setStudentResults(response.data);

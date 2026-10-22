@@ -1110,9 +1110,10 @@ const requireAuth = async (req, res, next) => {
 
     try {
         const payload = jwt.verify(token, JWT_SECRET);
+        const identifier = String(payload.id || payload.userId || payload.email || "");
         const result = await pool.query(
-            "SELECT id, user_id, email, role FROM users WHERE id = $1",
-            [payload.id]
+            "SELECT id, user_id, email, role FROM users WHERE id::text = $1 OR user_id = $1 OR LOWER(email) = LOWER($1) LIMIT 1",
+            [identifier]
         );
         if (result.rowCount === 0) {
             return res.status(401).json({ success: false, message: "User session is no longer valid." });
@@ -1122,7 +1123,15 @@ const requireAuth = async (req, res, next) => {
         }
         // Authorization and identity are refreshed from PostgreSQL so a stale
         // token cannot retain a changed role or cross-user identifier.
-        req.authUser = { ...payload, ...result.rows[0] };
+        req.authUser = {
+            ...payload,
+            ...result.rows[0],
+            id: result.rows[0].id,
+            user_id: result.rows[0].user_id,
+            userId: result.rows[0].user_id || payload.userId,
+            email: result.rows[0].email,
+            role: result.rows[0].role
+        };
         return next();
     } catch {
         return res.status(401).json({ success: false, message: "Invalid or expired authentication token." });
@@ -6374,10 +6383,34 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             return res.status(403).json({ success: false, message: "Students can only view their own results." });
         }
 
+        const authId = String(req.authUser.id || "");
+        const authUserId = String(req.authUser.userId || req.authUser.user_id || "");
+        const authEmail = String(req.authUser.email || "").toLowerCase();
+        const targetId = String(targetUser.id || "");
+        const targetUId = String(targetUser.user_id || "");
+        const targetMail = String(targetUser.email || "").toLowerCase();
+
+        const isSelf = 
+            (authId && authId === targetId) ||
+            (authUserId && (authUserId === targetUId || authUserId === targetId)) ||
+            (authEmail && authEmail === targetMail) ||
+            (authId && authId === targetUId);
+
+        if (req.authUser.role === "student" && !isSelf) {
+            return res.status(403).json({ success: false, message: "Students can only view their own results." });
+        }
+
         const dbStudentId = targetUser.id;
         const targetUserId = targetUser.user_id || String(dbStudentId);
         const targetEmail = targetUser.email || "";
-        const oopCompletion = await getOOPCompletionStatus(dbStudentId);
+
+        let oopCompletion = { oopComplete: false };
+        try {
+            oopCompletion = await getOOPCompletionStatus(dbStudentId);
+        } catch (oopErr) {
+            console.warn("Failed to get OOP completion status:", oopErr.message);
+        }
+
         const [course, videos, quizzes, practice, swing, oopTopics, swingTopics] = await Promise.all([
             pool.query(`
                 SELECT COUNT(*)::int AS total_lessons,
@@ -6387,13 +6420,13 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                              AND (ps.submission_id IS NOT NULL OR lp.practice_completed)
                        )::int AS completed_lessons
                 FROM lessons l
-                LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
-                LEFT JOIN video_progress vp ON vp.student_id = $1 AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
-                LEFT JOIN lesson_progress lp ON lp.student_id = $1 AND lp.lesson_id = l.id
+                LEFT JOIN student_progress sp ON (sp.student_user_id::text = $1::text OR sp.student_user_id::text = $2 OR sp.student_user_id::text = $3) AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
+                LEFT JOIN video_progress vp ON (vp.student_id::text = $1::text OR vp.student_id = $2 OR vp.student_id = $3) AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
+                LEFT JOIN lesson_progress lp ON (lp.student_id::text = $1::text OR lp.student_id::text = $2 OR lp.student_id::text = $3) AND lp.lesson_id = l.id
                 LEFT JOIN LATERAL (
                   SELECT (${normalizedAssessmentPercentageSql("quiz_attempts")} >= ${ASSESSMENT_PASSING_SCORE} OR passed) AS passed
                   FROM quiz_attempts
-                  WHERE (student_user_id = $1 OR student_user_id = $2 OR student_user_id = $3) AND (lesson_id = l.id OR assessment_id = 'oop_assessment_' || l.sequence)
+                  WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3) AND (lesson_id = l.id OR assessment_id = 'oop_assessment_' || l.sequence)
                   ORDER BY attempt_number DESC, date_completed DESC LIMIT 1
                 ) qa ON TRUE
                 LEFT JOIN LATERAL (
@@ -6422,17 +6455,17 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                         ) AS completion_percentage,
                         (COALESCE(sp.completed, FALSE) OR COALESCE(vp.completed, FALSE) OR COALESCE(lp.video_completed, FALSE) OR GREATEST(COALESCE(sp.completion_percentage, 0), COALESCE(vp.watch_percentage, 0)) >= 95) AS completed
                     FROM lessons l
-                    LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
-                    LEFT JOIN video_progress vp ON vp.student_id = $1 AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
-                    LEFT JOIN lesson_progress lp ON lp.student_id = $1 AND lp.lesson_id = l.id
+                    LEFT JOIN student_progress sp ON (sp.student_user_id::text = $1::text OR sp.student_user_id::text = $2 OR sp.student_user_id::text = $3) AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
+                    LEFT JOIN video_progress vp ON (vp.student_id::text = $1::text OR vp.student_id = $2 OR vp.student_id = $3) AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
+                    LEFT JOIN lesson_progress lp ON (lp.student_id::text = $1::text OR lp.student_id::text = $2 OR lp.student_id::text = $3) AND lp.lesson_id = l.id
                     WHERE l.status <> 'Archived' AND ${OOP_LESSON_ALIAS_FILTER_SQL("l")}
                 ) v
-            `, [dbStudentId]),
+            `, [dbStudentId, targetUserId, targetEmail]),
             pool.query(`
                 SELECT COUNT(*)::int AS quiz_attempts, COALESCE(ROUND(AVG(percentage)), 0)::int AS average_quiz_score
                 FROM (
                   SELECT DISTINCT ON (assessment_id) percentage
-                  FROM quiz_attempts WHERE (student_user_id = $1 OR student_user_id = $2 OR student_user_id = $3)
+                  FROM quiz_attempts WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3)
                   ORDER BY assessment_id, attempt_number DESC, date_completed DESC
                 ) latest
             `, [dbStudentId, targetUserId, targetEmail]),
@@ -6474,7 +6507,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                        EXISTS (
                                            SELECT 1
                                            FROM quiz_attempts passed_attempt
-                                           WHERE (passed_attempt.student_user_id = $1 OR passed_attempt.student_user_id = $2 OR passed_attempt.student_user_id = $3)
+                                           WHERE (passed_attempt.student_user_id::text = $1::text OR passed_attempt.student_user_id::text = $2 OR passed_attempt.student_user_id::text = $3)
                                                AND (passed_attempt.lesson_id = l.id OR passed_attempt.assessment_id = 'oop_assessment_' || l.sequence)
                                                AND (${normalizedAssessmentPercentageSql("passed_attempt")} >= ${ASSESSMENT_PASSING_SCORE} OR passed_attempt.passed = TRUE)
                                        ) AS quiz_passed,
@@ -6482,14 +6515,14 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                        lp.completed AS lesson_completed,
                                        (sp.id IS NOT NULL OR vp.id IS NOT NULL OR qa.id IS NOT NULL OR ps.challenge_id IS NOT NULL OR lp.id IS NOT NULL) AS attempted
                                 FROM lessons l
-                                LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
-                                LEFT JOIN video_progress vp ON vp.student_id = $1 AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
-                                LEFT JOIN lesson_progress lp ON lp.student_id = $1 AND lp.lesson_id = l.id
+                                LEFT JOIN student_progress sp ON (sp.student_user_id::text = $1::text OR sp.student_user_id::text = $2 OR sp.student_user_id::text = $3) AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
+                                LEFT JOIN video_progress vp ON (vp.student_id::text = $1::text OR vp.student_id = $2 OR vp.student_id = $3) AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
+                                LEFT JOIN lesson_progress lp ON (lp.student_id::text = $1::text OR lp.student_id::text = $2 OR lp.student_id::text = $3) AND lp.lesson_id = l.id
                                 LEFT JOIN LATERAL (
                                     SELECT id, percentage, passed,
-                                           (SELECT COUNT(*)::int FROM quiz_attempts counted WHERE (counted.student_user_id = $1 OR counted.student_user_id = $2 OR counted.student_user_id = $3) AND (counted.lesson_id = l.id OR counted.assessment_id = 'oop_assessment_' || l.sequence)) AS attempt_count
+                                           (SELECT COUNT(*)::int FROM quiz_attempts counted WHERE (counted.student_user_id::text = $1::text OR counted.student_user_id::text = $2 OR counted.student_user_id::text = $3) AND (counted.lesson_id = l.id OR counted.assessment_id = 'oop_assessment_' || l.sequence)) AS attempt_count
                                     FROM quiz_attempts
-                                    WHERE (student_user_id = $1 OR student_user_id = $2 OR student_user_id = $3) AND (lesson_id = l.id OR assessment_id = 'oop_assessment_' || l.sequence)
+                                    WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3) AND (lesson_id = l.id OR assessment_id = 'oop_assessment_' || l.sequence)
                                     ORDER BY attempt_number DESC, date_completed DESC
                                     LIMIT 1
                                 ) qa ON TRUE
@@ -6525,22 +6558,22 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                        ss.submission_score,
                                        (sg.id IS NOT NULL OR ss.submission_score IS NOT NULL) AS attempted
                                 FROM swing_lessons sl
-                                LEFT JOIN swing_progress sg ON sg.student_id = $1::text AND (sg.lesson_id = sl.id OR sg.lesson_id = REPLACE(sl.id, 'swing_lesson_', ''))
+                                LEFT JOIN swing_progress sg ON (sg.student_id::text = $1::text OR sg.student_id = $2 OR sg.student_id = $3) AND (sg.lesson_id = sl.id OR sg.lesson_id = REPLACE(sl.id, 'swing_lesson_', ''))
                                 LEFT JOIN LATERAL (
-                                     SELECT score, total, percentage, passed, (SELECT COUNT(*)::int FROM swing_quiz_attempts counted WHERE counted.student_id = $1::text AND counted.assessment_id = 'swing_assessment_' || sl.sequence) AS attempt_count
+                                     SELECT score, total, percentage, passed, (SELECT COUNT(*)::int FROM swing_quiz_attempts counted WHERE (counted.student_id::text = $1::text OR counted.student_id = $2 OR counted.student_id = $3) AND counted.assessment_id = 'swing_assessment_' || sl.sequence) AS attempt_count
                                     FROM swing_quiz_attempts
-                                    WHERE student_id = $1::text AND (lesson_id = sl.id OR lesson_id = REPLACE(sl.id, 'swing_lesson_', ''))
+                                    WHERE (student_id::text = $1::text OR student_id = $2 OR student_id = $3) AND (lesson_id = sl.id OR lesson_id = REPLACE(sl.id, 'swing_lesson_', ''))
                                     ORDER BY attempt_number DESC, date_completed DESC
                                     LIMIT 1
                                 ) qa ON TRUE
                                 LEFT JOIN LATERAL (
                                     SELECT MAX(score) AS submission_score
                                     FROM swing_submissions
-                                    WHERE student_id = $1::text
+                                    WHERE (student_id::text = $1::text OR student_id = $2 OR student_id = $3)
                                         AND exercise_id IN (SELECT id FROM swing_programming_exercises WHERE lesson_id = sl.id)
                                 ) ss ON TRUE
                                 ORDER BY sl.sequence, sl.title
-                        `, [dbStudentId])
+                        `, [dbStudentId, targetUserId, targetEmail])
         ]);
         const [assessmentHistoryResult, activityTimelineResult] = await Promise.all([
             pool.query(`
@@ -6548,32 +6581,32 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                        qa.attempt_number, qa.date_completed, COALESCE(l.title, qa.assessment_id) AS lesson_title
                 FROM quiz_attempts qa
                 LEFT JOIN lessons l ON l.id = qa.lesson_id
-                WHERE qa.student_user_id = $1 AND qa.assessment_id <> 'oop_pre_test'
+                WHERE (qa.student_user_id::text = $1::text OR qa.student_user_id::text = $2 OR qa.student_user_id::text = $3) AND qa.assessment_id <> 'oop_pre_test'
                 ORDER BY qa.date_completed DESC, qa.attempt_number DESC
                 LIMIT 50
-            `, [dbStudentId]),
+            `, [dbStudentId, targetUserId, targetEmail]),
             pool.query(`
                 SELECT id, 'video' AS type,
                        CASE WHEN completed OR completion_percentage >= 95 THEN 'Completed video' ELSE 'Updated video progress' END AS detail,
                        video_id AS lesson_id, updated_at AS timestamp
                 FROM student_progress
-                WHERE student_user_id = $1
+                WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3)
                 UNION ALL
                 SELECT qa.id, 'assessment' AS type,
                        'Completed assessment with ' || ROUND(qa.percentage)::text || '%' AS detail,
                        qa.lesson_id, qa.date_completed AS timestamp
                 FROM quiz_attempts qa
-                WHERE qa.student_user_id = $1 AND qa.assessment_id <> 'oop_pre_test'
+                WHERE (qa.student_user_id::text = $1::text OR qa.student_user_id::text = $2 OR qa.student_user_id::text = $3) AND qa.assessment_id <> 'oop_pre_test'
                 UNION ALL
                 SELECT ps.id, 'practice' AS type,
                        'Submitted practice code' AS detail,
                        pc.lesson_id, ps.submitted_at AS timestamp
                 FROM practice_submissions ps
                 JOIN programming_challenges pc ON pc.id = ps.challenge_id
-                WHERE ps.student_id = $1::text
+                WHERE (ps.student_id::text = $1::text OR ps.student_id = $2 OR ps.student_id = $3)
                 ORDER BY timestamp DESC
                 LIMIT 30
-            `, [dbStudentId])
+            `, [dbStudentId, targetUserId, targetEmail])
         ]);
         const row = { ...course.rows[0], ...videos.rows[0], ...quizzes.rows[0], ...practice.rows[0], ...swing.rows[0] };
         const totalLessons = Number(row.total_lessons || 0);
@@ -6581,7 +6614,12 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         const submittedPracticeActivities = Number(row.submitted_practice_activities || 0);
         const totalPracticeActivities = Number(row.total_practice_activities || 0);
         const oopTopicRows = await Promise.all(oopTopics.rows.map(async topic => {
-            const accessState = await getLessonAccessState(dbStudentId, topic.id);
+            let accessState = { canAccess: false, reason: null, current: null };
+            try {
+                accessState = await getLessonAccessState(dbStudentId, topic.id);
+            } catch (accErr) {
+                console.warn(`Failed to get lesson access state for ${topic.id}:`, accErr.message);
+            }
             const evidence = accessState.current;
             return {
                 id: topic.id,
@@ -6610,7 +6648,12 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
 
         const oopComplete = oopCompletion.oopComplete;
         const swingTopicRows = await Promise.all(swingTopics.rows.map(async topic => {
-            const accessState = await getLessonAccessState(dbStudentId, topic.id);
+            let accessState = { canAccess: false, reason: null, current: null };
+            try {
+                accessState = await getLessonAccessState(dbStudentId, topic.id);
+            } catch (accErr) {
+                console.warn(`Failed to get swing access state for ${topic.id}:`, accErr.message);
+            }
             const evidence = accessState.current;
             return {
                 id: topic.id,
@@ -6712,6 +6755,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             }
         });
     } catch (error) {
+        console.error("GET /api/student-results/:studentId error:", error);
         next(error);
     }
 });
