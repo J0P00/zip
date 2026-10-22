@@ -2689,6 +2689,34 @@ const checkAndAwardBadges = async (studentId) => {
     }
 };
 
+const logProgressionDiagnostics = ({
+    studentId,
+    lessonId,
+    videoProgress,
+    videoCompleted,
+    assessmentScore,
+    assessmentPassed,
+    submissionId,
+    challengeId,
+    compileStatus,
+    reviewStatus,
+    remedialRequired,
+    practiceCompleted,
+    lessonCompleted,
+    nextLessonId,
+    nextLessonUnlocked,
+    accessReason
+}) => {
+    console.log(`[Progression Diagnostic] Student: ${studentId} | Lesson: ${lessonId}`);
+    console.log(`  - Video: ${videoProgress}% (completed: ${videoCompleted}) [threshold: ${VIDEO_COMPLETION_THRESHOLD}%]`);
+    console.log(`  - Assessment: ${assessmentScore !== null ? `${assessmentScore}%` : 'N/A'} (passed: ${assessmentPassed}) [threshold: ${ASSESSMENT_PASSING_SCORE}%]`);
+    console.log(`  - Practice: subId=${submissionId || 'none'}, challenge=${challengeId || 'none'}, compile=${compileStatus || 'N/A'}, review=${reviewStatus || 'N/A'}, remedial=${remedialRequired} (completed: ${practiceCompleted})`);
+    console.log(`  - Lesson Completion: ${lessonCompleted}`);
+    if (nextLessonId !== undefined) {
+        console.log(`  - Next Lesson (${nextLessonId || 'none'}) Access: unlocked=${nextLessonUnlocked}${accessReason ? `, reason="${accessReason}"` : ''}`);
+    }
+};
+
 const getLessonEvidence = async (studentId, lessonId) => {
     let isSwing = isSwingLessonId(lessonId);
     let lessonResult;
@@ -2748,19 +2776,28 @@ const getLessonEvidence = async (studentId, lessonId) => {
     const studentUserId = userRow.rows[0]?.user_id || String(studentId);
     const studentEmail = userRow.rows[0]?.email || "";
 
+    const lessonSeqMatch = String(lessonId).match(/(\d+)$/);
+    const lessonSeq = lessonSeqMatch ? parseInt(lessonSeqMatch[1], 10) : Number(lesson.sequence || 1);
+    const expectedChallengeId = isSwing ? `swing_practice_${lessonSeq}` : `practice_${lessonSeq}`;
+
     let videoProgress = 0;
     let videoCompleted = false;
     let assessmentScore = null;
     let assessmentPassed = false;
     let practiceRequired = false;
     let practiceCompleted = false;
+    let practiceSubmissionId = null;
+    let practiceChallengeId = null;
+    let practiceCompileStatus = null;
+    let practiceReviewStatus = null;
+    let practiceRemedialRequired = false;
 
     if (!isSwing) {
         const videoResult = await pool.query(
             `SELECT GREATEST(
-                COALESCE((SELECT MAX(completion_percentage) FROM student_progress WHERE (student_user_id = $1 OR student_user_id::text IN ($2, $3)) AND (video_id = $4 OR video_id = REPLACE($4, 'oop_lesson_', '') OR video_id = 'vid_' || $4)), 0),
-                COALESCE((SELECT MAX(watch_percentage) FROM video_progress WHERE (student_id = $1 OR student_id::text IN ($2, $3)) AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', ''))), 0),
-                COALESCE((SELECT 100 FROM lesson_progress WHERE (student_id = $1 OR student_id::text IN ($2, $3)) AND lesson_id = $4 AND video_completed = TRUE), 0)
+                COALESCE((SELECT MAX(completion_percentage) FROM student_progress WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3) AND (video_id = $4 OR video_id = REPLACE($4, 'oop_lesson_', '') OR video_id = 'vid_' || $4)), 0),
+                COALESCE((SELECT MAX(watch_percentage) FROM video_progress WHERE (student_id::text = $1::text OR student_id::text = $2 OR student_id::text = $3) AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', ''))), 0),
+                COALESCE((SELECT 100 FROM lesson_progress WHERE (student_id::text = $1::text OR student_id::text = $2 OR student_id::text = $3) AND lesson_id = $4 AND video_completed = TRUE), 0)
             ) AS completion_percentage`,
             [studentUuid, studentUserId, studentEmail, lessonId]
         );
@@ -2769,44 +2806,59 @@ const getLessonEvidence = async (studentId, lessonId) => {
                 EXISTS (
                     SELECT 1
                     FROM quiz_attempts qa
-                    WHERE (qa.student_user_id = $1 OR qa.student_user_id::text IN ($2, $3))
+                    WHERE (qa.student_user_id::text = $1::text OR qa.student_user_id::text = $2 OR qa.student_user_id::text = $3)
                       AND (
                         qa.lesson_id = $4
                         OR qa.assessment_id = 'oop_assessment_' || (SELECT sequence FROM lessons WHERE id = $4)
+                        OR qa.assessment_id = 'oop_assessment_' || $5
                         OR EXISTS (SELECT 1 FROM assessments a WHERE a.id = qa.assessment_id AND a.lesson_id = $4)
                       )
-                      AND ${normalizedAssessmentPercentageSql("qa")} >= ${ASSESSMENT_PASSING_SCORE}
+                      AND (${normalizedAssessmentPercentageSql("qa")} >= ${ASSESSMENT_PASSING_SCORE} OR qa.passed = TRUE)
                 ) AS passed,
                 (SELECT ${normalizedAssessmentPercentageSql("latest")} FROM quiz_attempts latest
-                 WHERE (latest.student_user_id = $1 OR latest.student_user_id::text IN ($2, $3))
+                 WHERE (latest.student_user_id::text = $1::text OR latest.student_user_id::text = $2 OR latest.student_user_id::text = $3)
                    AND (
                      latest.lesson_id = $4
                      OR latest.assessment_id = 'oop_assessment_' || (SELECT sequence FROM lessons WHERE id = $4)
+                     OR latest.assessment_id = 'oop_assessment_' || $5
                      OR EXISTS (SELECT 1 FROM assessments a WHERE a.id = latest.assessment_id AND a.lesson_id = $4)
                    )
                  ORDER BY latest.attempt_number DESC, latest.date_completed DESC LIMIT 1) AS percentage`,
-            [studentUuid, studentUserId, studentEmail, lessonId]
+            [studentUuid, studentUserId, studentEmail, lessonId, String(lessonSeq)]
         );
+
+        // Query practice submissions directly using student relationships and challenge/lesson association
         const challengeResult = await pool.query(`
-            SELECT pc.id, pc.passing_score,
-                   latest.id AS submission_id,
-                   latest.score, latest.teacher_score, latest.compile_status,
-                   latest.review_status, latest.remedial_required
-            FROM programming_challenges pc
-            LEFT JOIN LATERAL (
-                SELECT ps.id, ps.score, ps.teacher_score, ps.compile_status,
-                       ps.review_status, ps.remedial_required
-                FROM practice_submissions ps
-                WHERE (ps.student_id = $1::text OR ps.student_id = $2 OR ps.student_id = $3)
-                  AND ps.challenge_id = pc.id
-                ORDER BY ps.submitted_at DESC
-                LIMIT 1
-            ) latest ON TRUE
-            WHERE (pc.lesson_id = $4 OR pc.id = 'practice_' || (SELECT sequence FROM lessons WHERE id = $4))
-              AND pc.status <> 'Archived'
-            ORDER BY pc.id
+            SELECT ps.id AS submission_id,
+                   ps.challenge_id,
+                   COALESCE(pc.lesson_id, $4) AS lesson_id,
+                   COALESCE(pc.passing_score, 70) AS passing_score,
+                   ps.score,
+                   ps.teacher_score,
+                   ps.compile_status,
+                   ps.review_status,
+                   ps.remedial_required,
+                   ps.submitted_at
+            FROM practice_submissions ps
+            LEFT JOIN programming_challenges pc ON pc.id = ps.challenge_id
+            WHERE (
+                ps.student_id = $1::text
+                OR ps.student_id = $2
+                OR ps.student_id = $3
+                OR ps.student_id IN (SELECT id::text FROM users WHERE id::text = $1::text OR user_id = $2 OR LOWER(email) = LOWER($3))
+                OR ps.student_id IN (SELECT user_id FROM users WHERE id::text = $1::text OR user_id = $2 OR LOWER(email) = LOWER($3))
+                OR ps.student_id IN (SELECT email FROM users WHERE id::text = $1::text OR user_id = $2 OR LOWER(email) = LOWER($3))
+            )
+            AND (
+                pc.lesson_id = $4
+                OR ps.challenge_id = $5
+                OR pc.id = $5
+                OR ps.challenge_id = 'practice_' || $6
+                OR ps.challenge_id IN (SELECT id FROM programming_challenges WHERE lesson_id = $4)
+            )
+            ORDER BY ps.submitted_at DESC
             LIMIT 1
-        `, [studentUuid, studentUserId, studentEmail, lessonId]);
+        `, [studentUuid, studentUserId, studentEmail, lessonId, expectedChallengeId, String(lessonSeq)]);
 
         videoProgress = Number(videoResult.rows[0]?.completion_percentage || 0);
         videoCompleted = videoProgress >= VIDEO_COMPLETION_THRESHOLD;
@@ -2816,21 +2868,37 @@ const getLessonEvidence = async (studentId, lessonId) => {
 
         practiceRequired = true;
         const practice = challengeResult.rows[0];
-        // Practice completion requires a valid, passing evaluated submission
-        // without remedial requirement. Teacher review is separate and does not delay unlocking.
+        practiceSubmissionId = practice?.submission_id || null;
+        practiceChallengeId = practice?.challenge_id || null;
+        practiceCompileStatus = practice?.compile_status || null;
+        practiceReviewStatus = practice?.review_status || null;
+        practiceRemedialRequired = Boolean(practice?.remedial_required);
+
+        // Also check authoritative lesson_progress as backup evidence if submission was verified
+        const lessonProgressResult = await pool.query(`
+            SELECT practice_completed, completed
+            FROM lesson_progress
+            WHERE (student_id::text = $1::text OR student_id::text = $2 OR student_id::text = $3)
+              AND lesson_id = $4
+        `, [studentUuid, studentUserId, studentEmail, lessonId]);
+        const lpRow = lessonProgressResult.rows[0];
+
+        // Practice completion requires a valid submission without remedial requirement.
+        // Teacher review is separate and does not delay unlocking.
         practiceCompleted = isPracticeCompleted({
+            id: practice?.submission_id,
             submissionId: practice?.submission_id,
-            remedialRequired: practice?.remedial_required,
-            compileStatus: practice?.compile_status,
+            remedialRequired: practiceRemedialRequired,
+            compileStatus: practiceCompileStatus,
             score: practice?.score,
             teacherScore: practice?.teacher_score,
-            reviewStatus: practice?.review_status
-        });
+            reviewStatus: practiceReviewStatus
+        }) || (Boolean(lpRow?.practice_completed) && !practiceRemedialRequired);
     } else {
         const swingProgressResult = await pool.query(
             `SELECT video_completed, video_percentage, video_last_position, quiz_passed, exercise_completed, overall_percentage
              FROM swing_progress 
-             WHERE (student_id = $1::text OR student_id = $2 OR student_id = $3) AND lesson_id = $4`,
+             WHERE (student_id::text = $1::text OR student_id = $2 OR student_id = $3) AND lesson_id = $4`,
             [studentUuid, studentUserId, studentEmail, lessonId]
         );
 
@@ -2854,6 +2922,11 @@ const getLessonEvidence = async (studentId, lessonId) => {
         assessmentPassed,
         practiceRequired,
         practiceCompleted,
+        practiceSubmissionId,
+        practiceChallengeId,
+        practiceCompileStatus,
+        practiceReviewStatus,
+        practiceRemedialRequired,
         assessmentUnlocked: videoCompleted,
         practiceUnlocked: Boolean(videoCompleted && assessmentPassed),
         nextLessonUnlocked: isFullyCompleted,
@@ -2909,15 +2982,35 @@ const getLessonAccessState = async (studentId, lessonId) => {
     const current = await getLessonEvidence(studentId, lessonId);
     if (!current) return { canAccess: false, reason: "Lesson not found." };
 
-    const withLessonAccess = (canAccess, reason = null) => ({
-        canAccess,
-        reason,
-        current: {
-            ...current,
-            lessonUnlocked: canAccess,
+    const withLessonAccess = (canAccess, reason = null) => {
+        logProgressionDiagnostics({
+            studentId,
+            lessonId,
+            videoProgress: current.videoProgress,
+            videoCompleted: current.videoCompleted,
+            assessmentScore: current.assessmentScore,
+            assessmentPassed: current.assessmentPassed,
+            submissionId: current.practiceSubmissionId,
+            challengeId: current.practiceChallengeId,
+            compileStatus: current.practiceCompileStatus,
+            reviewStatus: current.practiceReviewStatus,
+            remedialRequired: current.practiceRemedialRequired,
+            practiceCompleted: current.practiceCompleted,
+            lessonCompleted: current.completed,
+            nextLessonId: lessonId,
+            nextLessonUnlocked: canAccess,
             accessReason: reason
-        }
-    });
+        });
+        return {
+            canAccess,
+            reason,
+            current: {
+                ...current,
+                lessonUnlocked: canAccess,
+                accessReason: reason
+            }
+        };
+    };
 
     let previousLessonId = null;
 
@@ -7800,21 +7893,56 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
 
         const safeChallengeId = cleanText(challengeId, 120);
 
+        const catalogChallenge = PRACTICE_CHALLENGES.find(c => c.id === safeChallengeId) ||
+            JAVA_SWING_EXERCISES.find(c => c.id === safeChallengeId);
+
         const prerequisite = await pool.query(`
-            SELECT pc.id, pc.lesson_id, pc.title AS challenge_title, pc.passing_score
+            SELECT pc.*,
+                   pc.id,
+                   pc.lesson_id,
+                   pc.title,
+                   pc.title AS challenge_title,
+                   pc.topic_id AS "topicId",
+                   pc.sample_output AS "sampleOutput",
+                   pc.passing_score
             FROM programming_challenges pc
             WHERE pc.id = $1 AND pc.status <> 'Archived'
         `, [safeChallengeId]);
 
-        if (!prerequisite.rowCount) {
+        let challengeData = prerequisite.rowCount ? prerequisite.rows[0] : null;
+        if (!challengeData && catalogChallenge) {
+            challengeData = {
+                ...catalogChallenge,
+                id: catalogChallenge.id,
+                title: catalogChallenge.title,
+                challenge_title: catalogChallenge.title,
+                topicId: catalogChallenge.topicId,
+                sampleOutput: catalogChallenge.sampleOutput || "",
+                passing_score: catalogChallenge.passingScore || 70,
+                lesson_id: catalogChallenge.lessonId || catalogChallenge.lesson_id
+            };
+        } else if (challengeData && catalogChallenge) {
+            challengeData = {
+                ...catalogChallenge,
+                ...challengeData,
+                title: challengeData.title || catalogChallenge.title,
+                challenge_title: challengeData.title || catalogChallenge.title,
+                topicId: challengeData.topicId || challengeData.topic_id || catalogChallenge.topicId,
+                sampleOutput: challengeData.sampleOutput || challengeData.sample_output || catalogChallenge.sampleOutput || "",
+                passing_score: challengeData.passing_score || catalogChallenge.passingScore || 70,
+                lesson_id: challengeData.lesson_id || catalogChallenge.lessonId || catalogChallenge.lesson_id
+            };
+        }
+
+        if (!challengeData || !challengeData.lesson_id) {
             return res.status(404).json({ success: false, message: "Practice challenge not found." });
         }
 
-        const lessonAccess = await getLessonAccessState(req.authUser.id, prerequisite.rows[0].lesson_id);
+        const lessonAccess = await getLessonAccessState(req.authUser.id, challengeData.lesson_id);
         if (!lessonAccess.canAccess || !lessonAccess.current.videoCompleted) {
             return res.status(403).json({ success: false, message: "Pass the current lesson assessment before submitting practice." });
         }
-        const lessonId = prerequisite.rows[0].lesson_id;
+        const lessonId = challengeData.lesson_id;
         const assessmentResult = await pool.query(`
             SELECT qa.assessment_id, qa.lesson_id, qa.score, qa.total, qa.percentage, qa.correct_answers
             FROM quiz_attempts qa
@@ -7855,17 +7983,17 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             testResults: []
         };
         try {
-            const validation = await evaluateJavaSubmission(prerequisite.rows[0], String(sourceCode));
+            const validation = await evaluateJavaSubmission(challengeData, String(sourceCode));
             evalResult = {
                 compileStatus: validation.compileStatus,
                 score: validation.score,
                 programOutput: validation.programOutput || '',
                 errorMessage: validation.compilerError || '',
-                testResults: buildEvaluationResults(validation, prerequisite.rows[0])
+                testResults: buildEvaluationResults(validation, challengeData)
             };
         } catch (evalErr) {
             if (evalErr.code === "JAVA_COMPILER_UNAVAILABLE") {
-                const staticCheck = validateBasicJavaStructure(prerequisite.rows[0], String(sourceCode));
+                const staticCheck = validateBasicJavaStructure(challengeData, String(sourceCode));
                 const passed = staticCheck.oopStructureCheck === 'passed';
                 evalResult = {
                     compileStatus: passed ? 'success' : 'failed',
@@ -7906,9 +8034,9 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
         await logActivity(
             req.authUser.id,
             "practice_submitted",
-            `Submitted practice for ${prerequisite.rows[0].challenge_title || safeChallengeId}`,
+            `Submitted practice for ${challengeData.challenge_title || safeChallengeId}`,
             {
-                lessonId: prerequisite.rows[0].lesson_id || null,
+                lessonId: challengeData.lesson_id || null,
                 challengeId: safeChallengeId,
                 submissionStatus: 'pending_review'
             }
@@ -7927,10 +8055,10 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
                         recipientUserId: teacher.teacher_id,
                         type: "new_practice_submission",
                         title: "New Practice Submission",
-                        message: (req.authUser.email || "A student") + " submitted " + (prerequisite.rows[0].challenge_title || safeChallengeId) + " practice.",
+                        message: (req.authUser.email || "A student") + " submitted " + (challengeData.challenge_title || safeChallengeId) + " practice.",
                         relatedSubmissionId: result.rows[0].id,
                         relatedPracticeId: safeChallengeId,
-                        practiceTitle: prerequisite.rows[0].challenge_title || safeChallengeId,
+                        practiceTitle: challengeData.challenge_title || safeChallengeId,
                         grade: null,
                         maxGrade: 100,
                         metadata: { studentId: req.authUser.id, studentEmail: req.authUser.email || "" }
@@ -7948,8 +8076,8 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
             console.warn("Unable to initialize teacher submission notification:", notificationError);
         }
 
-        await verifyLessonCompletion(req.authUser.id, prerequisite.rows[0].lesson_id);
-        const updatedLessonAccess = await getLessonAccessState(req.authUser.id, prerequisite.rows[0].lesson_id);
+        await verifyLessonCompletion(req.authUser.id, challengeData.lesson_id);
+        const updatedLessonAccess = await getLessonAccessState(req.authUser.id, challengeData.lesson_id);
         const nextLessonResult = await pool.query(
             `SELECT id FROM lessons
              WHERE sequence = (
@@ -7957,10 +8085,10 @@ app.post("/api/practice-submissions", requireAuth, requireRole(["student"]), asy
              ) AND status <> 'Archived'
                AND ${OOP_LESSON_FILTER_SQL}
              LIMIT 1`,
-            [prerequisite.rows[0].lesson_id]
+            [challengeData.lesson_id]
         );
         let nextLessonId = nextLessonResult.rowCount ? nextLessonResult.rows[0].id : null;
-        if (!nextLessonId && prerequisite.rows[0].lesson_id === "oop_lesson_12") {
+        if (!nextLessonId && challengeData.lesson_id === "oop_lesson_12") {
             const oopStatus = await getOOPCompletionStatus(req.authUser.id);
             if (oopStatus.oopComplete) {
                 nextLessonId = "swing_lesson_1";
