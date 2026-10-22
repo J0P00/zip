@@ -68,14 +68,14 @@ console.log("\n--- Test Group 3: Performance Aggregation Engine ---");
 
 // Mock sample attempts
 const mockQuizAttempts = [
-    // Lesson 1: 3 attempts, scores 80, 90, 70 (avg = 80, passRate = 100% since all >= 60 or >= 80)
-    { lesson_id: "oop_lesson_1", score: 80, passed: true },
+    // Lesson 1: 3 attempts, scores 90, 100, 50 (avg = 80, passRate = 67% at 60% threshold)
     { lesson_id: "oop_lesson_1", score: 90, passed: true },
-    { lesson_id: "oop_lesson_1", score: 70, passed: false }, // if pass mark is 80
+    { lesson_id: "oop_lesson_1", score: 100, passed: true },
+    { lesson_id: "oop_lesson_1", score: 50, passed: false }, // below 60% threshold
 
-    // Lesson 2: 2 attempts, scores 60, 65 (avg = 62.5 -> 63, passRate = 50%)
-    { lesson_id: "oop_lesson_2", score: 60, passed: false },
-    { lesson_id: "oop_lesson_2", score: 65, passed: true },
+    // Lesson 2: 2 attempts, scores 55, 70 (avg = 62.5 -> 63, passRate = 50% at 60% threshold)
+    { lesson_id: "oop_lesson_2", score: 55, passed: false },
+    { lesson_id: "oop_lesson_2", score: 70, passed: true },
 
     // Lesson 6 (Inheritance): 2 attempts, scores 50, 40 (avg = 45, passRate = 0%)
     { lesson_id: "oop_lesson_6", score: 50, passed: false },

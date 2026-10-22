@@ -101,7 +101,7 @@ const sendNotificationEvent = (userId, notification) => {
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const isProduction = process.env.NODE_ENV === "production";
-const ASSESSMENT_PASSING_SCORE = 80;
+const ASSESSMENT_PASSING_SCORE = 60;
 const PRE_TEST_PASSING_SCORE = 60;
 const VIDEO_COMPLETION_THRESHOLD = 95;
 const MAX_ASSESSMENT_ATTEMPTS = 3;
@@ -1367,7 +1367,7 @@ const initializeDatabase = async () => {
           lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
           title TEXT NOT NULL,
           quiz_type TEXT NOT NULL DEFAULT 'Multiple Choice',
-          passing_score NUMERIC NOT NULL DEFAULT 80,
+          passing_score NUMERIC NOT NULL DEFAULT 60,
           attempts INTEGER NOT NULL DEFAULT 1,
           questions JSONB NOT NULL DEFAULT '[]'::jsonb,
           status TEXT NOT NULL DEFAULT 'Draft',
@@ -1375,7 +1375,9 @@ const initializeDatabase = async () => {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
-        ALTER TABLE assessments ALTER COLUMN passing_score SET DEFAULT 80;
+        ALTER TABLE assessments ALTER COLUMN passing_score SET DEFAULT 60;
+        UPDATE assessments SET passing_score = 60 WHERE passing_score = 80;
+        UPDATE quiz_attempts SET passed = TRUE WHERE (score::numeric / NULLIF(total, 0)::numeric * 100) >= 60 AND passed = FALSE;
         CREATE TABLE IF NOT EXISTS student_progress (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           student_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1638,11 +1640,13 @@ const initializeDatabase = async () => {
           id TEXT PRIMARY KEY,
           lesson_id TEXT NOT NULL REFERENCES swing_lessons(id) ON DELETE CASCADE,
           title TEXT NOT NULL,
-          passing_percentage INTEGER NOT NULL DEFAULT 80,
+          passing_percentage INTEGER NOT NULL DEFAULT 60,
           question_count INTEGER NOT NULL DEFAULT 10,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
-        ALTER TABLE swing_quizzes ALTER COLUMN passing_percentage SET DEFAULT 80;
+        ALTER TABLE swing_quizzes ALTER COLUMN passing_percentage SET DEFAULT 60;
+        UPDATE swing_quizzes SET passing_percentage = 60 WHERE passing_percentage = 80;
+        UPDATE swing_quiz_attempts SET passed = TRUE WHERE (score::numeric / NULLIF(total, 0)::numeric * 100) >= 60 AND passed = FALSE;
 
         CREATE TABLE IF NOT EXISTS swing_questions (
           id TEXT PRIMARY KEY,

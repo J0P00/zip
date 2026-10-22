@@ -148,7 +148,7 @@ public class Main {
   // ----------------------------------------------------
   console.log('\n--- Group 3: Server Assessment Scoring Engine ---');
 
-  test('Accurate scoring when all answers are correct (100% >= 80% pass threshold)', () => {
+  test('Accurate scoring when all answers are correct (100% >= 60% pass threshold)', () => {
     const questions = OOP_PARSED_QUESTIONS['oop_lesson_1'];
     const studentAnswers = {};
     questions.forEach(q => {
@@ -163,13 +163,13 @@ public class Main {
     });
 
     const score = Math.round((correctCount / questions.length) * 100);
-    const passed = score >= 80;
+    const passed = score >= 60;
 
     assert.strictEqual(score, 100);
     assert.strictEqual(passed, true);
   });
 
-  test('Fails assessment when score is below 80% pass threshold', () => {
+  test('Fails assessment when score is below 60% pass threshold', () => {
     const questions = OOP_PARSED_QUESTIONS['oop_lesson_1'];
     const studentAnswers = {}; // No correct answers
 
@@ -181,7 +181,7 @@ public class Main {
     });
 
     const score = Math.round((correctCount / questions.length) * 100);
-    const passed = score >= 80;
+    const passed = score >= 60;
 
     assert.strictEqual(score, 0);
     assert.strictEqual(passed, false);
@@ -238,11 +238,11 @@ public class Main {
 
   test('Practice IDE unlocks only when Assessment is passed (configured threshold)', () => {
     function isPracticeUnlocked(assessmentPassed, quizScore) {
-      return Boolean(assessmentPassed) || Number(quizScore || 0) >= 80;
+      return Boolean(assessmentPassed) || Number(quizScore || 0) >= 60;
     }
 
-    assert.strictEqual(isPracticeUnlocked(false, 79), false, '79% quiz should lock practice');
-    assert.strictEqual(isPracticeUnlocked(false, 80), true, '80% quiz should unlock practice');
+    assert.strictEqual(isPracticeUnlocked(false, 59), false, '59% quiz should lock practice');
+    assert.strictEqual(isPracticeUnlocked(false, 60), true, '60% quiz should unlock practice');
     assert.strictEqual(isPracticeUnlocked(true, 100), true, '100% quiz should unlock practice');
   });
 

@@ -1,5 +1,5 @@
 // Auto-generated canonical Java Swing course catalog for backend seeding and APIs
-const SWING_PASSING_SCORE = 80;
+const SWING_PASSING_SCORE = 60;
 
 const JAVA_SWING_LESSONS = [
   {
@@ -325,7 +325,7 @@ const JAVA_SWING_ASSESSMENTS = [
     "lessonId": "swing_lesson_1",
     "title": "Creating a Simple Window (JFrame) Quiz",
     "quizType": "Multiple Choice",
-    "passingScore": 80,
+    "passingScore": 60,
     "attempts": 3,
     "status": "Published",
     "questions": [
@@ -616,7 +616,7 @@ const JAVA_SWING_ASSESSMENTS = [
     "lessonId": "swing_lesson_2",
     "title": "JLabel, JTextField, & JTextArea Quiz",
     "quizType": "Multiple Choice",
-    "passingScore": 80,
+    "passingScore": 60,
     "attempts": 3,
     "status": "Published",
     "questions": [
@@ -907,7 +907,7 @@ const JAVA_SWING_ASSESSMENTS = [
     "lessonId": "swing_lesson_3",
     "title": "JButton & ActionListener Quiz",
     "quizType": "Multiple Choice",
-    "passingScore": 80,
+    "passingScore": 60,
     "attempts": 3,
     "status": "Published",
     "questions": [
@@ -1198,7 +1198,7 @@ const JAVA_SWING_ASSESSMENTS = [
     "lessonId": "swing_lesson_4",
     "title": "JPanel & Layout Managers Quiz",
     "quizType": "Multiple Choice",
-    "passingScore": 80,
+    "passingScore": 60,
     "attempts": 3,
     "status": "Published",
     "questions": [
@@ -1489,7 +1489,7 @@ const JAVA_SWING_ASSESSMENTS = [
     "lessonId": "swing_lesson_5",
     "title": "JOptionPane Dialogs Quiz",
     "quizType": "Multiple Choice",
-    "passingScore": 80,
+    "passingScore": 60,
     "attempts": 3,
     "status": "Published",
     "questions": [

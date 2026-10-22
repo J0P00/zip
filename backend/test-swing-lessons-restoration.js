@@ -205,7 +205,7 @@ async function runTests() {
     console.log("================================================================\n");
 
     // 1. Verify Java Swing Catalog Integrity
-    assert.strictEqual(SWING_PASSING_SCORE, 80, "Swing passing score must be 80%");
+    assert.strictEqual(SWING_PASSING_SCORE, 60, "Swing passing score must be 60%");
     assert.strictEqual(JAVA_SWING_LESSONS.length, 5, "Must have 5 Java Swing lessons");
     assert.strictEqual(JAVA_SWING_VIDEOS.length, 5, "Must have 5 Java Swing videos");
     assert.strictEqual(JAVA_SWING_ASSESSMENTS.length, 5, "Must have 5 Java Swing assessments");
@@ -221,14 +221,14 @@ async function runTests() {
         assert.ok(video.embedUrl.startsWith("https://res.cloudinary.com/"), `Invalid Cloudinary URL for ${lessonId}: ${video.embedUrl}`);
         assert.ok(assessment, `Missing assessment for ${lessonId}`);
         assert.strictEqual(assessment.id, `swing_assessment_${i}`);
-        assert.strictEqual(assessment.passingScore, 80);
+        assert.strictEqual(assessment.passingScore, 60);
         assert.strictEqual(assessment.questions.length, 20, `Expected 20 questions for ${lessonId}`);
         assert.strictEqual(SWING_QUESTIONS_BY_LESSON[lessonId].length, 20);
         assert.ok(exercise, `Missing practice exercise for ${lessonId}`);
         assert.strictEqual(exercise.id, `swing_exercise_${i}`);
         assert.strictEqual(exercise.passingScore, 80);
     }
-    console.log("  ✅ PASS: All 5 Java Swing lessons, Cloudinary video URLs, 20-question assessments (80%), and Practice IDE exercises verified.");
+    console.log("  ✅ PASS: All 5 Java Swing lessons, Cloudinary video URLs, 20-question assessments (60%), and Practice IDE exercises verified.");
 
     // 2. Verify seedLessons() idempotently populates all 17 lessons without duplicates
     const db = new FakeLessonRestoreDb();
@@ -283,10 +283,10 @@ async function runTests() {
     assert.ok(lessonMgmtSource.includes("JAVA_SWING_VIDEOS"), "LessonManagementTab must import JAVA_SWING_VIDEOS");
     assert.ok(lessonMgmtSource.includes("JAVA_SWING_ASSESSMENTS"), "LessonManagementTab must import JAVA_SWING_ASSESSMENTS");
     assert.ok(lessonMgmtSource.includes("JAVA_SWING_EXERCISES"), "LessonManagementTab must import JAVA_SWING_EXERCISES");
-    assert.ok(lessonMgmtSource.includes("ASSESSMENT_PASSING_SCORE"), "LessonManagementTab must use ASSESSMENT_PASSING_SCORE (80%)");
+    assert.ok(lessonMgmtSource.includes("ASSESSMENT_PASSING_SCORE"), "LessonManagementTab must use ASSESSMENT_PASSING_SCORE");
 
     const swingModSource = fs.readFileSync(path.join(__dirname, "../src/components/JavaSwingModule.tsx"), "utf8");
-    assert.ok(!swingModSource.includes("60%"), "JavaSwingModule.tsx must not contain stale 60% passing score text");
+    assert.ok(swingModSource.includes("SWING_PASSING_PERCENTAGE"), "JavaSwingModule.tsx must use SWING_PASSING_PERCENTAGE");
     console.log("  ✅ PASS: Frontend Teacher Lesson Management and Java Swing Module verified.");
 
     console.log("\n================================================================");

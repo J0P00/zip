@@ -90,7 +90,7 @@ class VideoProgressStore {
             student_user_id: studentId,
             lesson_id: canonicalId,
             percentage: Number(percentage) || 0,
-            passed: Boolean(passed) || Number(percentage) >= 80
+            passed: Boolean(passed) || Number(percentage) >= 60
         });
         this.syncLessonProgress(studentId, canonicalId);
     }

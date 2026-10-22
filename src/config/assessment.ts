@@ -1,1 +1,1 @@
-export const ASSESSMENT_PASSING_SCORE = 80;
+export const ASSESSMENT_PASSING_SCORE = 60;

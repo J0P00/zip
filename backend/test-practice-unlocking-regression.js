@@ -15,7 +15,7 @@ describe = (name, fn) => {
 };
 
 const VIDEO_THRESHOLD = 95;
-const QUIZ_PASSING_SCORE = 80;
+const QUIZ_PASSING_SCORE = 60;
 
 // Replicate rule-based progression logic matching server.js
 function calculateLessonEvidence({ videoPercent, quizScore, practiceSubmissions = [] }) {
@@ -117,26 +117,26 @@ describe("Lesson Progression, Practice Gate & Unlocking Scenarios A - K", () => 
     assert.strictEqual(calculateNextLessonAccess(evidenceC).canAccess, true);
     console.log("  ✅ PASS: reviewStatus = 'pending_review' does not block lesson unlocking.");
 
-    // Scenario D: Failed assessment (< 80%) blocks practice submission and next lesson remains locked
-    console.log("\n--- Scenario D: Failed assessment (< 80%) blocks practice and next lesson ---");
+    // Scenario D: Failed assessment (< 60%) blocks practice submission and next lesson remains locked
+    console.log("\n--- Scenario D: Failed assessment (< 60%) blocks practice and next lesson ---");
     const evidenceD = calculateLessonEvidence({
         videoPercent: 96,
-        quizScore: 75, // Below 80%
+        quizScore: 55, // Below 60%
         practiceSubmissions: []
     });
-    assert.strictEqual(evidenceD.assessmentPassed, false, "Score of 75% must not pass");
+    assert.strictEqual(evidenceD.assessmentPassed, false, "Score of 55% must not pass");
     assert.strictEqual(evidenceD.practiceUnlocked, false, "Practice IDE must remain locked");
     assert.strictEqual(evidenceD.completed, false, "Lesson 1 is incomplete");
     const accessLesson2D = calculateNextLessonAccess(evidenceD);
     assert.strictEqual(accessLesson2D.canAccess, false);
     assert.ok(accessLesson2D.reason.includes("Pass the previous lesson assessment"), "Reason must mention assessment");
-    console.log("  ✅ PASS: Assessment < 80% blocks practice unlocking and keeps next lesson locked.");
+    console.log("  ✅ PASS: Assessment < 60% blocks practice unlocking and keeps next lesson locked.");
 
     // Scenario E: Practice submitted without passing quiz keeps next lesson locked
     console.log("\n--- Scenario E: Practice submitted without passing quiz keeps next lesson locked ---");
     const evidenceE = calculateLessonEvidence({
         videoPercent: 96,
-        quizScore: 60,
+        quizScore: 50, // Below 60%
         practiceSubmissions: [{ compileStatus: 'success', reviewStatus: 'pending_review' }]
     });
     assert.strictEqual(evidenceE.completed, false, "Lesson cannot be complete without passing assessment");
