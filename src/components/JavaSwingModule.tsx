@@ -289,7 +289,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
         videoPercentage: pending.percentage,
         lastPosition: pending.position,
         videoCompleted: pending.completed
-      });
+      }, currentUser.token);
       if (pending.completed) onSubmitCompleted({ id: 'swing_video_progress' } as any);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to save video progress.');
@@ -358,7 +358,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
             lastPosition: current.videoLastPosition || 0,
             videoCompleted: true
           }
-        : { lessonId: activeLesson.id, contentCompleted: true });
+        : { lessonId: activeLesson.id, contentCompleted: true }, currentUser.token);
       onSubmitCompleted({ id: 'dummy_progress' } as any);
     } catch (err) {}
 

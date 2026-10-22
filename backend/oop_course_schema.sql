@@ -1037,3 +1037,43 @@ CREATE TABLE IF NOT EXISTS pre_tests (
 INSERT INTO pre_tests (id, course_id, title, description, question_pool_count, questions_per_attempt, time_limit_seconds, passing_score, max_attempts, status, post_test_assessment_id)
 VALUES ('oop_pre_test', 'oop_fundamentals', 'Java OOP Pre-Test Assessment', 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.', 240, 20, 600, 60, 3, 'Published', 'oop_post_test')
 ON CONFLICT (id) DO NOTHING;
+
+
+-- Authoritative video progress normalization and repair
+UPDATE student_progress
+SET completed = TRUE
+WHERE completion_percentage >= 95 AND completed = FALSE;
+
+UPDATE student_progress
+SET completion_percentage = 100
+WHERE completed = TRUE AND completion_percentage < 95;
+
+UPDATE video_progress
+SET completed = TRUE
+WHERE watch_percentage >= 95 AND completed = FALSE;
+
+UPDATE video_progress
+SET watch_percentage = 100
+WHERE completed = TRUE AND watch_percentage < 95;
+
+-- Normalize legacy number IDs (e.g. video_id = '1' -> 'oop_lesson_1')
+INSERT INTO student_progress (student_user_id, video_id, last_position, completion_percentage, completed, date_completed, notes, created_at, updated_at)
+SELECT student_user_id, 'oop_lesson_' || video_id, last_position, completion_percentage, completed, date_completed, notes, created_at, updated_at
+FROM student_progress
+WHERE video_id ~ '^[0-9]+$'
+ON CONFLICT (student_user_id, video_id) DO UPDATE SET
+  last_position = GREATEST(student_progress.last_position, EXCLUDED.last_position),
+  completion_percentage = GREATEST(student_progress.completion_percentage, EXCLUDED.completion_percentage),
+  completed = student_progress.completed OR EXCLUDED.completed,
+  updated_at = NOW();
+
+-- Cross-sync video_progress from student_progress
+INSERT INTO video_progress (student_id, lesson_id, "current_time", duration, watch_percentage, completed, created_at, updated_at)
+SELECT sp.student_user_id, sp.video_id, sp.last_position, 0, sp.completion_percentage, sp.completed, sp.created_at, sp.updated_at
+FROM student_progress sp
+JOIN lessons l ON l.id = sp.video_id
+ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+  "current_time" = GREATEST(video_progress."current_time", EXCLUDED."current_time"),
+  watch_percentage = GREATEST(video_progress.watch_percentage, EXCLUDED.watch_percentage),
+  completed = video_progress.completed OR EXCLUDED.completed,
+  updated_at = NOW();

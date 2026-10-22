@@ -84,7 +84,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     return {
       ...lesson,
       status: completed ? 'completed' as const : access as VideoLesson['status'],
-      progressPercent: access === 'active' || completed ? topic?.videoPercentage ?? watch?.completionPercentage ?? 0 : 0
+      progressPercent: access === 'active' || completed ? Math.max(Number(topic?.videoPercentage || 0), Number(watch?.completionPercentage || 0)) : 0
     };
   }), [sourceLessons, watchDb, quizDb, submissionDb, studentKey, studentResults]);
 
@@ -169,12 +169,15 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     const nextPosition = watch?.lastPosition || 0;
     setCurrentTime(nextPosition);
     setMaxWatchedTime(nextPosition);
+    if (videoRef.current && nextPosition > 0 && Math.abs(videoRef.current.currentTime - nextPosition) > 2) {
+      videoRef.current.currentTime = nextPosition;
+    }
 
     if (previousLessonIdRef.current !== activeLesson.id) {
       setIsPlaying(false);
       previousLessonIdRef.current = activeLesson.id;
     }
-  }, [activeLesson?.id]);
+  }, [activeLesson?.id, watchDb[activeLesson?.id]?.lastPosition]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -352,7 +355,6 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     const next = Object.values(pendingProgressRef.current)[0];
     if (!next) return;
 
-    delete pendingProgressRef.current[next.lessonId];
     progressSaveInFlightRef.current = true;
     try {
       await progressApi.saveVideoProgress({
@@ -360,9 +362,13 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
         lastPosition: next.position,
         completionPercentage: next.percentage,
         completed: next.completed
-      });
+      }, currentUser.token);
+
+      delete pendingProgressRef.current[next.lessonId];
+      onUpdateVideoProgress(next.lessonId, next.percentage);
     } catch (error) {
       console.warn('Unable to sync video progress with backend:', error);
+      // Retain in pending queue to retry automatically
     } finally {
       progressSaveInFlightRef.current = false;
       if (Object.keys(pendingProgressRef.current).length > 0) {
@@ -371,11 +377,26 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     }
   };
 
+  const parseDurationString = (durStr?: string) => {
+    if (!durStr) return 0;
+    const parts = durStr.split(':').map(Number);
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    return 0;
+  };
+
   const persistProgress = (position: number, nextDuration = duration, flush = false) => {
     if (!activeLesson) return;
     const lessonId = activeLesson.id;
     const existing = watchDbRef.current[lessonId];
-    const measuredPercentage = nextDuration > 0 ? Math.min(100, Math.round((position / nextDuration) * 100)) : 0;
+    const fallbackDuration = parseDurationString(activeLesson.duration);
+    const validDuration = (Number.isFinite(nextDuration) && nextDuration > 0)
+      ? nextDuration
+      : (Number.isFinite(duration) && duration > 0)
+        ? duration
+        : fallbackDuration;
+
+    const measuredPercentage = validDuration > 0 ? Math.min(100, Math.round((position / validDuration) * 100)) : 0;
     if (existing?.completionPercentage >= 95 && measuredPercentage < existing.completionPercentage) return;
 
     const percentage = Math.max(existing?.completionPercentage || 0, measuredPercentage);
@@ -391,13 +412,12 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     const nextDb = { ...watchDbRef.current, [lessonId]: record };
     watchDbRef.current = nextDb;
     setWatchDb(nextDb);
-    onUpdateVideoProgress(lessonId, percentage);
 
     const queued = pendingProgressRef.current[lessonId];
     pendingProgressRef.current[lessonId] = {
       lessonId,
       position: Math.max(queued?.position || 0, position),
-      duration: nextDuration,
+      duration: validDuration,
       percentage: Math.max(queued?.percentage || 0, percentage),
       completed: Boolean(queued?.completed || completed)
     };

@@ -308,7 +308,9 @@ type WorkspaceViewState = {
 const readSessionUser = (): AuthenticatedUser | null => {
   try {
     const saved = localStorage.getItem(SESSION_USER_KEY);
-    return saved ? sanitizeUser(JSON.parse(saved)) : null;
+    const user = saved ? sanitizeUser(JSON.parse(saved)) : null;
+    if (user?.token) setAuthToken(user.token);
+    return user;
   } catch {
     return null;
   }
@@ -328,6 +330,7 @@ const persistSessionUser = (user: AuthenticatedUser) => {
     localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
     const canonicalId = user.id || user.userId || user.email;
     if (canonicalId) localStorage.setItem('oophub_current_user_id', canonicalId);
+    if (user.token) setAuthToken(user.token);
   } catch {
     // The active React session still works if storage is unavailable.
   }

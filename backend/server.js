@@ -1739,6 +1739,55 @@ const initializeDatabase = async () => {
         VALUES ('oop_pre_test', 'oop_fundamentals', 'Java OOP Pre-Test Assessment', 'Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.', 240, 20, 600, 60, 3, 'Published', 'oop_post_test')
         ON CONFLICT (id) DO NOTHING;
         UPDATE pre_tests SET time_limit_seconds = 600 WHERE id = 'oop_pre_test' AND time_limit_seconds = 1200;
+
+        -- Authoritative video progress normalization and repair
+        UPDATE student_progress
+        SET completed = TRUE
+        WHERE completion_percentage >= 95 AND completed = FALSE;
+
+        UPDATE student_progress
+        SET completion_percentage = 100
+        WHERE completed = TRUE AND completion_percentage < 95;
+
+        UPDATE video_progress
+        SET completed = TRUE
+        WHERE watch_percentage >= 95 AND completed = FALSE;
+
+        UPDATE video_progress
+        SET watch_percentage = 100
+        WHERE completed = TRUE AND watch_percentage < 95;
+
+        -- Normalize legacy number IDs (e.g. video_id = '1' -> 'oop_lesson_1')
+        INSERT INTO student_progress (student_user_id, video_id, last_position, completion_percentage, completed, date_completed, notes, created_at, updated_at)
+        SELECT student_user_id, 'oop_lesson_' || video_id, last_position, completion_percentage, completed, date_completed, notes, created_at, updated_at
+        FROM student_progress
+        WHERE video_id ~ '^[0-9]+$'
+        ON CONFLICT (student_user_id, video_id) DO UPDATE SET
+          last_position = GREATEST(student_progress.last_position, EXCLUDED.last_position),
+          completion_percentage = GREATEST(student_progress.completion_percentage, EXCLUDED.completion_percentage),
+          completed = student_progress.completed OR EXCLUDED.completed,
+          updated_at = NOW();
+
+        -- Cross-sync video_progress from student_progress
+        INSERT INTO video_progress (student_id, lesson_id, "current_time", duration, watch_percentage, completed, created_at, updated_at)
+        SELECT sp.student_user_id, sp.video_id, sp.last_position, 0, sp.completion_percentage, sp.completed, sp.created_at, sp.updated_at
+        FROM student_progress sp
+        JOIN lessons l ON l.id = sp.video_id
+        ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+          "current_time" = GREATEST(video_progress."current_time", EXCLUDED."current_time"),
+          watch_percentage = GREATEST(video_progress.watch_percentage, EXCLUDED.watch_percentage),
+          completed = video_progress.completed OR EXCLUDED.completed,
+          updated_at = NOW();
+
+        -- Cross-sync student_progress from video_progress
+        INSERT INTO student_progress (student_user_id, video_id, last_position, completion_percentage, completed, created_at, updated_at)
+        SELECT vp.student_id, vp.lesson_id, vp."current_time", vp.watch_percentage, vp.completed, vp.created_at, vp.updated_at
+        FROM video_progress vp
+        ON CONFLICT (student_user_id, video_id) DO UPDATE SET
+          last_position = GREATEST(student_progress.last_position, EXCLUDED.last_position),
+          completion_percentage = GREATEST(student_progress.completion_percentage, EXCLUDED.completion_percentage),
+          completed = student_progress.completed OR EXCLUDED.completed,
+          updated_at = NOW();
     `);
     const practiceSubmissionColumns = await executeInitQuery("Check practice_submissions columns", `
         SELECT column_name
@@ -2827,7 +2876,14 @@ const getLessonEvidence = async (studentId, lessonId) => {
                 COALESCE((SELECT MAX(completion_percentage) FROM student_progress WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3) AND (video_id = $4 OR video_id = REPLACE($4, 'oop_lesson_', '') OR video_id = 'vid_' || $4)), 0),
                 COALESCE((SELECT MAX(watch_percentage) FROM video_progress WHERE (student_id::text = $1::text OR student_id::text = $2 OR student_id::text = $3) AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', ''))), 0),
                 COALESCE((SELECT 100 FROM lesson_progress WHERE (student_id::text = $1::text OR student_id::text = $2 OR student_id::text = $3) AND lesson_id = $4 AND video_completed = TRUE), 0)
-            ) AS completion_percentage`,
+            ) AS completion_percentage,
+            EXISTS (
+                SELECT 1 FROM student_progress WHERE (student_user_id::text = $1::text OR student_user_id::text = $2 OR student_user_id::text = $3) AND (video_id = $4 OR video_id = REPLACE($4, 'oop_lesson_', '') OR video_id = 'vid_' || $4) AND (completed = TRUE OR completion_percentage >= ${VIDEO_COMPLETION_THRESHOLD})
+                UNION ALL
+                SELECT 1 FROM video_progress WHERE (student_id::text = $1::text OR student_id::text = $2 OR student_id::text = $3) AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', '')) AND (completed = TRUE OR watch_percentage >= ${VIDEO_COMPLETION_THRESHOLD})
+                UNION ALL
+                SELECT 1 FROM lesson_progress WHERE (student_id::text = $1::text OR student_id::text = $2 OR student_id::text = $3) AND lesson_id = $4 AND video_completed = TRUE
+            ) AS is_completed`,
             [studentUuid, studentUserId, studentEmail, lessonId]
         );
         const quizResult = await pool.query(
@@ -2890,7 +2946,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
         `, [studentUuid, studentUserId, studentEmail, lessonId, expectedChallengeId, String(lessonSeq)]);
 
         videoProgress = Number(videoResult.rows[0]?.completion_percentage || 0);
-        videoCompleted = videoProgress >= VIDEO_COMPLETION_THRESHOLD;
+        videoCompleted = videoProgress >= VIDEO_COMPLETION_THRESHOLD || Boolean(videoResult.rows[0]?.is_completed);
         assessmentPassed = Boolean(quizResult.rows[0]?.passed);
         assessmentScore = quizResult.rows[0]?.percentage === null || quizResult.rows[0]?.percentage === undefined
             ? null : Number(quizResult.rows[0].percentage);
@@ -2927,13 +2983,13 @@ const getLessonEvidence = async (studentId, lessonId) => {
         const swingProgressResult = await pool.query(
             `SELECT video_completed, video_percentage, video_last_position, quiz_passed, exercise_completed, overall_percentage
              FROM swing_progress 
-             WHERE (student_id::text = $1::text OR student_id = $2 OR student_id = $3) AND lesson_id = $4`,
+             WHERE (student_id::text = $1::text OR student_id = $2 OR student_id = $3) AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'swing_lesson_', ''))`,
             [studentUuid, studentUserId, studentEmail, lessonId]
         );
 
         const row = swingProgressResult.rows[0];
         videoProgress = Number(row?.video_percentage || 0);
-        videoCompleted = videoProgress >= VIDEO_COMPLETION_THRESHOLD;
+        videoCompleted = videoProgress >= VIDEO_COMPLETION_THRESHOLD || Boolean(row?.video_completed);
         assessmentPassed = Boolean(row?.quiz_passed);
         practiceRequired = true;
         practiceCompleted = Boolean(row?.exercise_completed);
@@ -6182,16 +6238,86 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
             return res.status(403).json({ success: false, message: "Students can only view their own progress." });
         }
         const result = await pool.query(
-            `SELECT sp.id, sp.student_user_id, sp.video_id, sp.last_position,
+            `WITH combined_progress AS (
+                SELECT 
+                    sp.video_id AS raw_id,
+                    sp.last_position,
                     sp.completion_percentage,
-                    (sp.completed OR sp.completion_percentage >= 95) AS completed,
-                    sp.date_completed, sp.notes, sp.created_at, sp.updated_at
-             FROM student_progress sp
-             WHERE sp.student_user_id = $1
-             ORDER BY sp.updated_at DESC`,
-            [resolvedId]
+                    sp.completed,
+                    sp.updated_at
+                FROM student_progress sp
+                WHERE sp.student_user_id::text = $1 OR sp.student_user_id::text = $2
+                UNION ALL
+                SELECT 
+                    vp.lesson_id AS raw_id,
+                    vp."current_time" AS last_position,
+                    vp.watch_percentage AS completion_percentage,
+                    vp.completed,
+                    vp.updated_at
+                FROM video_progress vp
+                WHERE vp.student_id::text = $1 OR vp.student_id::text = $2
+                UNION ALL
+                SELECT 
+                    sw.lesson_id AS raw_id,
+                    sw.video_last_position AS last_position,
+                    sw.video_percentage AS completion_percentage,
+                    sw.video_completed AS completed,
+                    sw.updated_at
+                FROM swing_progress sw
+                WHERE sw.student_id::text = $1 OR sw.student_id::text = $2
+            ),
+            normalized AS (
+                SELECT
+                    CASE 
+                        WHEN raw_id ~ '^[0-9]+$' THEN 'oop_lesson_' || raw_id
+                        WHEN raw_id LIKE 'vid_%' THEN REPLACE(raw_id, 'vid_', '')
+                        ELSE raw_id
+                    END AS canonical_id,
+                    raw_id,
+                    last_position,
+                    completion_percentage,
+                    completed,
+                    updated_at
+                FROM combined_progress
+            ),
+            aggregated AS (
+                SELECT 
+                    canonical_id,
+                    MAX(last_position) AS last_position,
+                    MAX(completion_percentage) AS completion_percentage,
+                    (BOOL_OR(completed) OR MAX(completion_percentage) >= 95) AS completed,
+                    MAX(updated_at) AS updated_at
+                FROM normalized
+                GROUP BY canonical_id
+            )
+            SELECT 
+                canonical_id AS id,
+                $1 AS student_user_id,
+                canonical_id AS video_id,
+                COALESCE(last_position, 0) AS last_position,
+                COALESCE(completion_percentage, 0) AS completion_percentage,
+                COALESCE(completed, FALSE) AS completed,
+                CASE WHEN completed THEN updated_at ELSE NULL END AS date_completed,
+                '' AS notes,
+                updated_at AS created_at,
+                COALESCE(updated_at, NOW()) AS updated_at
+            FROM aggregated
+            ORDER BY canonical_id ASC`,
+            [resolvedId, resolvedUserId]
         );
-        res.json({ success: true, data: result.rows });
+        const rows = [];
+        for (const r of result.rows) {
+            rows.push(r);
+            if (r.video_id && r.video_id.startsWith("oop_lesson_")) {
+                const num = r.video_id.replace("oop_lesson_", "");
+                rows.push({
+                    ...r,
+                    id: `${r.id}_alias`,
+                    video_id: num
+                });
+            }
+        }
+        res.json({ success: true, data: rows });
     } catch (error) {
         next(error);
     }
@@ -6248,17 +6374,25 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         const [course, videos, quizzes, practice, swing, oopTopics, swingTopics] = await Promise.all([
             pool.query(`
                 SELECT COUNT(*)::int AS total_lessons,
-                       COUNT(*) FILTER (WHERE sp.completed AND COALESCE(qa.passed, FALSE) AND ps.challenge_id IS NOT NULL)::int AS completed_lessons
+                       COUNT(*) FILTER (
+                           WHERE (COALESCE(sp.completed, FALSE) OR COALESCE(vp.completed, FALSE) OR COALESCE(lp.video_completed, FALSE) OR GREATEST(COALESCE(sp.completion_percentage, 0), COALESCE(vp.watch_percentage, 0)) >= 95)
+                             AND COALESCE(qa.passed, FALSE)
+                             AND ps.challenge_id IS NOT NULL
+                       )::int AS completed_lessons
                 FROM lessons l
-                LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND sp.video_id = l.id
+                LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
+                LEFT JOIN video_progress vp ON vp.student_id = $1 AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
+                LEFT JOIN lesson_progress lp ON lp.student_id = $1 AND lp.lesson_id = l.id
                 LEFT JOIN LATERAL (
-                  SELECT passed FROM quiz_attempts WHERE student_user_id = $1 AND lesson_id = l.id
+                  SELECT (${normalizedAssessmentPercentageSql("quiz_attempts")} >= ${ASSESSMENT_PASSING_SCORE} OR passed) AS passed
+                  FROM quiz_attempts
+                  WHERE student_user_id = $1 AND (lesson_id = l.id OR assessment_id = 'oop_assessment_' || l.sequence)
                   ORDER BY attempt_number DESC, date_completed DESC LIMIT 1
                 ) qa ON TRUE
                 LEFT JOIN LATERAL (
                   SELECT ps.challenge_id, ps.score, ps.teacher_score, ps.compile_status FROM practice_submissions ps
                   JOIN programming_challenges pc ON pc.id = ps.challenge_id
-                                    WHERE ps.student_id = $1::text AND pc.lesson_id = l.id
+                  WHERE ps.student_id = $1::text AND pc.lesson_id = l.id
                   ORDER BY ps.submitted_at DESC LIMIT 1
                 ) ps ON TRUE
                 WHERE l.status <> 'Archived'
@@ -6268,7 +6402,19 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                 SELECT COUNT(*)::int AS total_videos,
                        COUNT(*) FILTER (WHERE completed)::int AS completed_videos,
                        COALESCE(ROUND(AVG(completion_percentage)), 0)::int AS video_percentage
-                FROM student_progress WHERE student_user_id = $1
+                FROM (
+                    SELECT 
+                        GREATEST(
+                            COALESCE(sp.completion_percentage, 0),
+                            COALESCE(vp.watch_percentage, 0)
+                        ) AS completion_percentage,
+                        (COALESCE(sp.completed, FALSE) OR COALESCE(vp.completed, FALSE) OR COALESCE(lp.video_completed, FALSE) OR GREATEST(COALESCE(sp.completion_percentage, 0), COALESCE(vp.watch_percentage, 0)) >= 95) AS completed
+                    FROM lessons l
+                    LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
+                    LEFT JOIN video_progress vp ON vp.student_id = $1 AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
+                    LEFT JOIN lesson_progress lp ON lp.student_id = $1 AND lp.lesson_id = l.id
+                    WHERE l.status <> 'Archived' AND ${OOP_LESSON_ALIAS_FILTER_SQL("l")}
+                ) v
             `, [dbStudentId]),
             pool.query(`
                 SELECT COUNT(*)::int AS quiz_attempts, COALESCE(ROUND(AVG(percentage)), 0)::int AS average_quiz_score
@@ -6301,27 +6447,36 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
             `, [dbStudentId])
                         , pool.query(`
                                 SELECT l.id, l.title, l.sequence,
-                                             sp.completion_percentage AS video_percentage,
-                                             (COALESCE(sp.completed, FALSE) OR COALESCE(sp.completion_percentage, 0) >= 95) AS video_completed,
-                                                                                         qa.percentage AS quiz_percentage,
-                                                                                         EXISTS (
-                                                                                             SELECT 1
-                                                                                             FROM quiz_attempts passed_attempt
-                                                                                             WHERE passed_attempt.student_user_id = $1
-                                                                                                 AND passed_attempt.lesson_id = l.id
-                                                                                                 AND ${normalizedAssessmentPercentageSql("passed_attempt")} >= ${ASSESSMENT_PASSING_SCORE}
-                                                                                         ) AS quiz_passed,
-                                             ps.score AS practice_score,
-                                             lp.completed AS lesson_completed,
-                                             (sp.id IS NOT NULL OR qa.id IS NOT NULL OR ps.challenge_id IS NOT NULL OR lp.id IS NOT NULL) AS attempted
+                                       GREATEST(
+                                           COALESCE(sp.completion_percentage, 0),
+                                           COALESCE(vp.watch_percentage, 0)
+                                       ) AS video_percentage,
+                                       (
+                                           COALESCE(sp.completed, FALSE)
+                                           OR COALESCE(vp.completed, FALSE)
+                                           OR COALESCE(lp.video_completed, FALSE)
+                                           OR GREATEST(COALESCE(sp.completion_percentage, 0), COALESCE(vp.watch_percentage, 0)) >= 95
+                                       ) AS video_completed,
+                                       qa.percentage AS quiz_percentage,
+                                       EXISTS (
+                                           SELECT 1
+                                           FROM quiz_attempts passed_attempt
+                                           WHERE passed_attempt.student_user_id = $1
+                                               AND (passed_attempt.lesson_id = l.id OR passed_attempt.assessment_id = 'oop_assessment_' || l.sequence)
+                                               AND (${normalizedAssessmentPercentageSql("passed_attempt")} >= ${ASSESSMENT_PASSING_SCORE} OR passed_attempt.passed = TRUE)
+                                       ) AS quiz_passed,
+                                       ps.score AS practice_score,
+                                       lp.completed AS lesson_completed,
+                                       (sp.id IS NOT NULL OR vp.id IS NOT NULL OR qa.id IS NOT NULL OR ps.challenge_id IS NOT NULL OR lp.id IS NOT NULL) AS attempted
                                 FROM lessons l
-                                LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND sp.video_id = l.id
+                                LEFT JOIN student_progress sp ON sp.student_user_id = $1 AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
+                                LEFT JOIN video_progress vp ON vp.student_id = $1 AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
                                 LEFT JOIN lesson_progress lp ON lp.student_id = $1 AND lp.lesson_id = l.id
                                 LEFT JOIN LATERAL (
                                     SELECT id, percentage, passed,
-                                           (SELECT COUNT(*)::int FROM quiz_attempts counted WHERE counted.student_user_id = $1 AND counted.lesson_id = l.id) AS attempt_count
+                                           (SELECT COUNT(*)::int FROM quiz_attempts counted WHERE counted.student_user_id = $1 AND (counted.lesson_id = l.id OR counted.assessment_id = 'oop_assessment_' || l.sequence)) AS attempt_count
                                     FROM quiz_attempts
-                                    WHERE student_user_id = $1 AND lesson_id = l.id
+                                    WHERE student_user_id = $1 AND (lesson_id = l.id OR assessment_id = 'oop_assessment_' || l.sequence)
                                     ORDER BY attempt_number DESC, date_completed DESC
                                     LIMIT 1
                                 ) qa ON TRUE
@@ -6339,26 +6494,26 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                         `, [dbStudentId])
                         , pool.query(`
                                 SELECT sl.id, sl.title, sl.sequence,
-                                             sg.overall_percentage,
-                                             sg.content_completed,
-                                             sg.video_completed,
-                                             sg.video_percentage,
-                                             sg.video_last_position,
-                                             sg.quiz_passed,
-                                             sg.exercise_completed,
-                                             qa.score AS quiz_score,
-                                             qa.total AS quiz_total,
-                                             qa.percentage AS quiz_percentage,
-                                             qa.passed AS quiz_attempt_passed,
-                                              qa.attempt_count AS quiz_attempt_count,
-                                             ss.submission_score,
-                                             (sg.id IS NOT NULL OR ss.submission_score IS NOT NULL) AS attempted
+                                       sg.overall_percentage,
+                                       sg.content_completed,
+                                       (COALESCE(sg.video_completed, FALSE) OR COALESCE(sg.video_percentage, 0) >= 95) AS video_completed,
+                                       sg.video_percentage,
+                                       sg.video_last_position,
+                                       sg.quiz_passed,
+                                       sg.exercise_completed,
+                                       qa.score AS quiz_score,
+                                       qa.total AS quiz_total,
+                                       qa.percentage AS quiz_percentage,
+                                       qa.passed AS quiz_attempt_passed,
+                                       qa.attempt_count AS quiz_attempt_count,
+                                       ss.submission_score,
+                                       (sg.id IS NOT NULL OR ss.submission_score IS NOT NULL) AS attempted
                                 FROM swing_lessons sl
-                                LEFT JOIN swing_progress sg ON sg.student_id = $1::text AND sg.lesson_id = sl.id
+                                LEFT JOIN swing_progress sg ON sg.student_id = $1::text AND (sg.lesson_id = sl.id OR sg.lesson_id = REPLACE(sl.id, 'swing_lesson_', ''))
                                 LEFT JOIN LATERAL (
                                      SELECT score, total, percentage, passed, (SELECT COUNT(*)::int FROM swing_quiz_attempts counted WHERE counted.student_id = $1::text AND counted.assessment_id = 'swing_assessment_' || sl.sequence) AS attempt_count
                                     FROM swing_quiz_attempts
-                                    WHERE student_id = $1::text AND lesson_id = sl.id
+                                    WHERE student_id = $1::text AND (lesson_id = sl.id OR lesson_id = REPLACE(sl.id, 'swing_lesson_', ''))
                                     ORDER BY attempt_number DESC, date_completed DESC
                                     LIMIT 1
                                 ) qa ON TRUE
@@ -6551,7 +6706,12 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
         const idToValidate = videoId || lessonId;
         const videoIdCheck = validateId(idToValidate, "videoId", "PUT /api/progress");
         if (!videoIdCheck.valid) return res.status(videoIdCheck.status).json({ success: false, message: videoIdCheck.message });
-        const safeVideoId = videoIdCheck.value;
+        let safeVideoId = videoIdCheck.value;
+        if (/^\d+$/.test(safeVideoId)) {
+            safeVideoId = `oop_lesson_${safeVideoId}`;
+        } else if (safeVideoId.startsWith("vid_")) {
+            safeVideoId = safeVideoId.replace(/^vid_/, "");
+        }
 
         if (req.authUser.role !== "student") {
             return res.status(403).json({ success: false, message: "Only students can update lesson progress." });
@@ -6559,7 +6719,7 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
 
         const safeLastPosition = clampNumber(lastPosition, 0, 60 * 60 * 6);
         const safeCompletionPercentage = clampNumber(completionPercentage, 0, 100);
-        const safeCompleted = safeCompletionPercentage >= 95;
+        const safeCompleted = safeCompletionPercentage >= 95 || Boolean(completed);
         const safeNotes = cleanText(notes, 5000);
         const access = await getLessonAccessState(req.authUser.id, safeVideoId);
         if (!access.canAccess) {
@@ -6567,7 +6727,7 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
         }
 
         const previousProgress = await pool.query(
-            "SELECT completion_percentage, completed FROM student_progress WHERE student_user_id = $1 AND video_id = $2",
+            "SELECT completion_percentage, completed FROM student_progress WHERE student_user_id = $1 AND (video_id = $2 OR video_id = REPLACE($2, 'oop_lesson_', ''))",
             [req.authUser.id, safeVideoId]
         );
         const previousPercentage = Number(previousProgress.rows[0]?.completion_percentage || 0);
@@ -6593,27 +6753,38 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
             RETURNING *
         `, [req.authUser.id, safeVideoId, safeLastPosition, safeCompletionPercentage, safeCompleted, safeNotes]);
 
-        // Get lesson duration
+        // Get lesson duration and sync to video_progress or swing_progress
         const durationRes = await pool.query("SELECT duration FROM lessons WHERE id = $1", [safeVideoId]);
-        let durationSeconds = 0;
-        if (durationRes.rowCount > 0 && durationRes.rows[0].duration) {
-            const parts = durationRes.rows[0].duration.split(':').map(Number);
-            if (parts.length === 2) durationSeconds = parts[0] * 60 + parts[1];
-            else if (parts.length === 3) durationSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-        }
+        if (durationRes.rowCount > 0) {
+            let durationSeconds = 0;
+            if (durationRes.rows[0].duration) {
+                const parts = durationRes.rows[0].duration.split(':').map(Number);
+                if (parts.length === 2) durationSeconds = parts[0] * 60 + parts[1];
+                else if (parts.length === 3) durationSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+            }
 
-        // Insert into video_progress
-        await pool.query(`
-            INSERT INTO video_progress (student_id, lesson_id, "current_time", duration, watch_percentage, completed)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (student_id, lesson_id) DO UPDATE SET
-              "current_time" = GREATEST(video_progress."current_time", EXCLUDED."current_time"),
-              duration = EXCLUDED.duration,
-              watch_percentage = GREATEST(video_progress.watch_percentage, EXCLUDED.watch_percentage),
-              completed = video_progress.completed OR EXCLUDED.completed
-                OR GREATEST(video_progress.watch_percentage, EXCLUDED.watch_percentage) >= 95,
-              updated_at = NOW()
-        `, [req.authUser.id, safeVideoId, safeLastPosition, durationSeconds, safeCompletionPercentage, safeCompleted]);
+            await pool.query(`
+                INSERT INTO video_progress (student_id, lesson_id, "current_time", duration, watch_percentage, completed)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+                  "current_time" = GREATEST(video_progress."current_time", EXCLUDED."current_time"),
+                  duration = EXCLUDED.duration,
+                  watch_percentage = GREATEST(video_progress.watch_percentage, EXCLUDED.watch_percentage),
+                  completed = video_progress.completed OR EXCLUDED.completed
+                    OR GREATEST(video_progress.watch_percentage, EXCLUDED.watch_percentage) >= 95,
+                  updated_at = NOW()
+            `, [req.authUser.id, safeVideoId, safeLastPosition, durationSeconds, safeCompletionPercentage, safeCompleted]);
+        } else if (safeVideoId.startsWith("swing_lesson_")) {
+            await pool.query(`
+                INSERT INTO swing_progress (student_id, lesson_id, video_completed, video_last_position, video_percentage)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+                  video_completed = swing_progress.video_completed OR EXCLUDED.video_completed,
+                  video_last_position = GREATEST(swing_progress.video_last_position, EXCLUDED.video_last_position),
+                  video_percentage = GREATEST(swing_progress.video_percentage, EXCLUDED.video_percentage),
+                  updated_at = NOW()
+            `, [req.authUser.id, safeVideoId, safeCompleted, safeLastPosition, safeCompletionPercentage]);
+        }
 
         if (safeCompleted) {
             await awardXP(req.authUser.id, 20, `Video Completion: ${safeVideoId}`);
@@ -6775,7 +6946,7 @@ app.put("/api/swing/progress", requireAuth, async (req, res, next) => {
 
         const safeVideoPercentage = clampNumber(videoPercentage, 0, 100);
         const safeLastPosition = clampNumber(lastPosition, 0, 21600);
-        const safeVideoCompleted = safeVideoPercentage >= VIDEO_COMPLETION_THRESHOLD;
+        const safeVideoCompleted = safeVideoPercentage >= VIDEO_COMPLETION_THRESHOLD || Boolean(videoCompleted);
         const access = await getLessonAccessState(req.authUser.id, lessonId);
         if (!access.canAccess) return res.status(403).json({ success: false, message: access.reason });
 
@@ -6783,6 +6954,18 @@ app.put("/api/swing/progress", requireAuth, async (req, res, next) => {
             'INSERT INTO swing_progress (student_id, lesson_id, video_completed, content_completed, overall_percentage, video_last_position, video_percentage) VALUES ($1, $2, $3, COALESCE($4, FALSE), COALESCE($5, 0), $6, $7) ON CONFLICT (student_id, lesson_id) DO UPDATE SET video_completed = swing_progress.video_completed OR EXCLUDED.video_completed, content_completed = swing_progress.content_completed OR EXCLUDED.content_completed, overall_percentage = GREATEST(swing_progress.overall_percentage, EXCLUDED.overall_percentage), video_last_position = GREATEST(swing_progress.video_last_position, EXCLUDED.video_last_position), video_percentage = GREATEST(swing_progress.video_percentage, EXCLUDED.video_percentage), updated_at = NOW() RETURNING *',
             [req.authUser.id, lessonId, safeVideoCompleted, contentCompleted, overallPercentage, safeLastPosition, safeVideoPercentage]
         );
+
+        // Also sync to student_progress
+        await pool.query(`
+            INSERT INTO student_progress (student_user_id, video_id, last_position, completion_percentage, completed, date_completed)
+            VALUES ($1, $2, $3, $4, $5, CASE WHEN $5 THEN NOW() ELSE NULL END)
+            ON CONFLICT (student_user_id, video_id) DO UPDATE SET
+              last_position = GREATEST(student_progress.last_position, EXCLUDED.last_position),
+              completion_percentage = GREATEST(student_progress.completion_percentage, EXCLUDED.completion_percentage),
+              completed = student_progress.completed OR EXCLUDED.completed OR GREATEST(student_progress.completion_percentage, EXCLUDED.completion_percentage) >= 95,
+              date_completed = CASE WHEN student_progress.completed THEN student_progress.date_completed WHEN EXCLUDED.completed THEN NOW() ELSE student_progress.date_completed END,
+              updated_at = NOW()
+        `, [req.authUser.id, lessonId, safeLastPosition, safeVideoPercentage, safeVideoCompleted]);
 
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {

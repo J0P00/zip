@@ -151,18 +151,20 @@ export const progressApi = {
     lastPosition?: number;
     completionPercentage: number;
     completed: boolean;
-  }) =>
+  }, token?: string) =>
     apiRequest<{ success: boolean; data: any }>('/api/progress', {
       method: 'PUT',
+      token,
       body: JSON.stringify(body)
     }),
   getQuizAttempts: (studentId: string, token?: string) =>
     apiRequest<{ success: boolean; data: any[] }>(`/api/quiz-attempts/${studentId}`, { token }),
   getStudentResults: (studentId: string, token?: string) =>
     apiRequest<{ success: boolean; data: import('./interpretation').StudentResultsData }>(`/api/student-results/${encodeURIComponent(studentId)}`, { token }),
-  saveQuizAttempt: (body: Record<string, unknown>) =>
+  saveQuizAttempt: (body: Record<string, unknown>, token?: string) =>
     apiRequest<{ success: boolean; data: any }>('/api/quiz-attempts', {
       method: 'POST',
+      token,
       body: JSON.stringify(body)
     })
 };
@@ -277,9 +279,9 @@ export const practiceApi = {
 };
 
 export const swingApi = {
-  updateProgress: (body: any) => apiRequest<{ success: boolean; data: any }>('/api/swing/progress', { method: 'PUT', body: JSON.stringify(body) }),
-  submitQuiz: (body: any) => apiRequest<{ success: boolean; data: any }>('/api/swing/quiz-attempts', { method: 'POST', body: JSON.stringify(body) }),
-  submitCode: (body: any) => apiRequest<{ success: boolean; data: any }>('/api/swing/submissions', { method: 'POST', body: JSON.stringify(body) })
+  updateProgress: (body: any, token?: string) => apiRequest<{ success: boolean; data: any }>('/api/swing/progress', { method: 'PUT', token, body: JSON.stringify(body) }),
+  submitQuiz: (body: any, token?: string) => apiRequest<{ success: boolean; data: any }>('/api/swing/quiz-attempts', { method: 'POST', token, body: JSON.stringify(body) }),
+  submitCode: (body: any, token?: string) => apiRequest<{ success: boolean; data: any }>('/api/swing/submissions', { method: 'POST', token, body: JSON.stringify(body) })
 };
 
 export const notificationApi = {
