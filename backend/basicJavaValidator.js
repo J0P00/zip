@@ -11,15 +11,35 @@ const requirement = (name, passed, message) => ({
  */
 function validateBasicJavaStructure(challenge, sourceCode) {
   const source = String(sourceCode || '');
-  const topic = `${challenge?.title || ''} ${challenge?.topicId || ''} ${challenge?.topic_id || ''}`.toLowerCase();
+  const topicId = String(challenge?.topicId || challenge?.topic_id || challenge?.id || '').toLowerCase();
+  const challengeTitle = String(challenge?.title || '').toLowerCase();
+  const challengeId = String(challenge?.id || '').toLowerCase();
+  const topic = `${challengeTitle} ${topicId}`.toLowerCase();
+
   const checks = [
     requirement('Java class exists', /\bclass\s+[A-Za-z_$][\w$]*/.test(source), 'A Java class was not detected.')
   ];
 
-  if (topic.includes('class') || topic.includes('object') || /\bstudent\b/i.test(source)) {
-    checks.push(requirement('Student class exists', /\bclass\s+Student\b/.test(source), 'Student class was not detected.'));
+  const isLesson1 = challengeId === 'practice_1' || topicId === 'classes-objects' || challengeTitle.includes('student');
+  const isLesson2 = challengeId === 'practice_2' || topicId === 'constructors' || challengeTitle.includes('book');
+  const isLesson3 = challengeId === 'practice_3' || topicId === 'object-methods' || challengeTitle.includes('calculator') || challengeTitle.includes('method');
+  const isLesson4 = challengeId === 'practice_4' || topicId === 'encapsulation' || challengeTitle.includes('bankaccount');
+  const isLesson5 = challengeId === 'practice_5' || topicId === 'constructor-overloading' || challengeTitle.includes('profile');
+
+  if (isLesson1) {
+    checks.push(requirement('Student class exists', /\bclass\s+Student\b/.test(source) || /\bnew\s+Student\b/.test(source), 'Student class was not detected.'));
+  } else if (isLesson2) {
+    checks.push(requirement('Book class exists', /\bclass\s+Book\b/.test(source), 'Book class was not detected.'));
+  } else if (isLesson3) {
+    checks.push(requirement('Calculator class or method exists', /\bclass\s+Calculator\b/.test(source) || /\badd\s*\(/.test(source), 'Calculator class or add method was not detected.'));
   }
-  if (topic.includes('constructor') || /\bclass\s+Student\b/.test(source)) {
+
+  if (isLesson4 || topic.includes('encapsulat')) {
+    checks.push(requirement('Private fields detected', /\bprivate\s+[\w$<>[\], ?]+\s+[A-Za-z_$][\w$]*\s*(?:=|;)/.test(source), 'Encapsulation requirement not detected: private fields are missing.'));
+    checks.push(requirement('Getter/setter methods detected', /\b(get|set)[A-Z][A-Za-z0-9_$]*\s*\(/.test(source), 'Encapsulation requirement not detected: getter/setter methods are missing.'));
+  }
+
+  if (isLesson5 || (topic.includes('constructor') && !isLesson2)) {
     const classMatches = [...source.matchAll(/\bclass\s+([A-Za-z_$][\w$]*)\b[^{]*\{/g)];
     const hasRequiredConstructor = classMatches.some(match => {
       const className = match[1];
@@ -30,10 +50,7 @@ function validateBasicJavaStructure(challenge, sourceCode) {
     });
     checks.push(requirement('Constructor detected', hasRequiredConstructor, 'A constructor matching the instantiated class was not detected.'));
   }
-  if (topic.includes('encapsulat')) {
-    checks.push(requirement('Private fields detected', /\bprivate\s+[\w$<>[\], ?]+\s+[A-Za-z_$][\w$]*\s*(?:=|;)/.test(source), 'Encapsulation requirement not detected: private fields are missing.'));
-    checks.push(requirement('Getter/setter methods detected', /\b(get|set)[A-Z][A-Za-z0-9_$]*\s*\(/.test(source), 'Encapsulation requirement not detected: getter/setter methods are missing.'));
-  }
+
   if (topic.includes('inherit')) {
     checks.push(requirement('Inheritance detected', /\bextends\s+[A-Za-z_$][\w$]*/.test(source), 'Inheritance requirement not detected.'));
   }

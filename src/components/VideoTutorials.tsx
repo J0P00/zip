@@ -60,7 +60,8 @@ const getPrerequisiteMessage = (lesson: VideoLesson, allLessons: VideoLesson[], 
   const previous = allLessons.find(item => item.sequence === lesson.sequence - 1);
   if (!previous) return 'Complete the previous lesson requirements first.';
   const previousTopic = getTopic(studentResults, previous.id);
-  if (!previousTopic?.lessonCompleted) {
+  const previousCompleted = Boolean(previousTopic?.lessonCompleted || previous.status === 'completed');
+  if (!previousCompleted) {
     return previousTopic?.accessReason || `Complete the ${previous.title} lesson, including its practice, before continuing.`;
   }
   return '';
@@ -77,7 +78,10 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     const challenge = PRACTICE_CHALLENGES.find(item => item.lessonId === lesson.id);
     const submission = challenge ? submissionDb[`${studentKey}:${challenge.id}`] : undefined;
     const topic = getTopic(studentResults, lesson.id);
-    const completed = Boolean(topic?.lessonCompleted);
+    const videoDone = Boolean(topic?.videoCompleted || (watch?.completionPercentage || 0) >= 95);
+    const quizPassed = Boolean(topic?.quizPassed);
+    const practiceDone = Boolean(topic?.practiceCompleted || (submission && submission.compileStatus === 'success'));
+    const completed = Boolean(topic?.lessonCompleted || (videoDone && quizPassed && practiceDone));
     const access = topic
       ? (topic.lessonUnlocked ? 'active' : 'locked')
       : (lesson.sequence === 1 ? 'active' : 'locked');
@@ -799,17 +803,24 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 const isLocked = lesson.status === 'locked';
                 const progress = lesson.progressPercent || 0;
                 const topic = getTopic(studentResults, lesson.id);
+                const challenge = PRACTICE_CHALLENGES.find(item => item.lessonId === lesson.id);
+                const submission = challenge ? submissionDb[`${studentKey}:${challenge.id}`] : undefined;
                 const videoDone = Boolean(topic?.videoCompleted || (watchDb[lesson.id]?.completionPercentage || 0) >= 95);
                 const quizPassed = Boolean(topic?.quizPassed);
+                const practiceDone = Boolean(topic?.practiceCompleted || (submission && submission.compileStatus === 'success'));
+                const isLessonComplete = Boolean(lesson.status === 'completed' || topic?.lessonCompleted || (videoDone && quizPassed && practiceDone));
+
                 const statusLabel = isLocked
                   ? 'Locked'
-                  : lesson.status === 'completed'
+                  : isLessonComplete
                     ? 'Lesson completed'
-                    : quizPassed
-                      ? 'Assessment passed'
-                      : videoDone
-                        ? 'Video completed'
-                        : progress > 0 ? 'In progress' : 'Ready';
+                    : practiceDone
+                      ? 'Practice completed'
+                      : quizPassed
+                        ? 'Assessment passed'
+                        : videoDone
+                          ? 'Video completed'
+                          : progress > 0 ? 'In progress' : 'Ready';
                 const lockReason = getPrerequisiteMessage(lesson, lessons, studentResults);
 
                 return (
@@ -829,10 +840,10 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                         <h4 className="truncate text-sm font-extrabold text-slate-900 dark:text-white">{lesson.title}</h4>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${isLocked ? 'bg-slate-100 text-slate-500' : lesson.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : videoDone || quizPassed ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${isLocked ? 'bg-slate-100 text-slate-500' : isLessonComplete ? 'bg-emerald-100 text-emerald-700' : videoDone || quizPassed || practiceDone ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
                           {statusLabel}
                         </span>
-                        {isLocked ? <Lock className="h-4 w-4 text-slate-400" /> : lesson.status === 'completed' ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <Play className="h-4 w-4 text-slate-500" />}
+                        {isLocked ? <Lock className="h-4 w-4 text-slate-400" /> : isLessonComplete ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <Play className="h-4 w-4 text-slate-500" />}
                       </div>
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
