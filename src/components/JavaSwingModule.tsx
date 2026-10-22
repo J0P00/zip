@@ -610,13 +610,13 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><GraduationCap className="h-4 w-4 text-emerald-600" /> Learning Objectives</h3>
             <ul className="mt-3 space-y-2 text-xs font-semibold leading-5 text-slate-600">
-              {activeLesson.objectives.map(item => <li key={item} className="flex gap-2"><Check className="mt-0.5 h-3.5 w-3.5 text-emerald-600" />{item}</li>)}
+              {(activeLesson.objectives || []).map(item => <li key={item} className="flex gap-2"><Check className="mt-0.5 h-3.5 w-3.5 text-emerald-600" />{item}</li>)}
             </ul>
           </section>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><LayoutGrid className="h-4 w-4 text-emerald-600" /> Topic Map</h3>
             <div className="mt-3 flex flex-wrap gap-2">
-              {activeLesson.topics.map(topic => <span key={topic} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-black text-slate-600">{topic}</span>)}
+              {(activeLesson.topics || []).map(topic => <span key={topic} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-black text-slate-600">{topic}</span>)}
             </div>
           </section>
         </div>
@@ -624,7 +624,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="text-sm font-extrabold text-slate-900">Lesson Content</h3>
           <div className="mt-3 space-y-3 text-sm font-semibold leading-7 text-slate-600">
-            {activeLesson.content.map(item => <p key={item}>{item}</p>)}
+            {(Array.isArray(activeLesson.content) ? activeLesson.content : []).map(item => <p key={item}>{item}</p>)}
           </div>
         </section>
 

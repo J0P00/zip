@@ -145,6 +145,18 @@ const normalizeQuestionDraft = (q: any, index: number): AssessmentQuestionDraft 
   };
 };
 
+const normalizeObjectivesArray = (val: any): string[] => {
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
+    return val.split('\n').map((s: string) => s.trim()).filter(Boolean);
+  }
+  return [];
+};
+
 const buildBaselineLessons = (): ManagedLesson[] => {
   const oopLessons: ManagedLesson[] = (OOP_COURSE_LESSONS || []).map((l, i) => {
     const assessment = OOP_ASSESSMENTS.find(a => a.lessonId === l.id);
@@ -495,8 +507,9 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   };
 
   const handleOpenEdit = (lesson: ManagedLesson) => {
+    if (!lesson) return;
     setEditingLesson(lesson);
-    const content = (lesson as any).content || {};
+    const content = (lesson as any).content || { video: null, assessment: null, practice: null };
     const existingAssessment = content.assessment;
     const existingPractice = content.practice;
 
@@ -505,12 +518,17 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     const staticSwingAssessment = JAVA_SWING_ASSESSMENTS.find(a => a.lessonId === lesson.id);
     const staticAssessment: any = staticOopAssessment || staticSwingAssessment;
 
-    const rawQuestions =
-      Array.isArray(existingAssessment?.questions) && existingAssessment.questions.length > 0
-        ? existingAssessment.questions
-        : Array.isArray(staticAssessment?.questions) && staticAssessment.questions.length > 0
-        ? staticAssessment.questions
-        : [];
+    let rawQuestions: any[] = [];
+    if (Array.isArray(existingAssessment?.questions) && existingAssessment.questions.length > 0) {
+      rawQuestions = existingAssessment.questions;
+    } else if (typeof existingAssessment?.questions === 'string') {
+      try {
+        const p = JSON.parse(existingAssessment.questions);
+        if (Array.isArray(p)) rawQuestions = p;
+      } catch {}
+    } else if (Array.isArray(staticAssessment?.questions) && staticAssessment.questions.length > 0) {
+      rawQuestions = staticAssessment.questions;
+    }
 
     const initialQuestions: AssessmentQuestionDraft[] =
       rawQuestions.length > 0
@@ -556,28 +574,32 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       (isSwing ? 'https://docs.oracle.com/javase/tutorial/uiswing/' : '');
 
     const track = (lesson.track || (isSwing ? 'swing' : 'oop')) as 'oop' | 'swing';
-    const displaySeq = isSwing && lesson.sequence > 12 ? lesson.sequence - 12 : lesson.sequence;
+    const displaySeq = isSwing && lesson.sequence > 12 ? lesson.sequence - 12 : (lesson.sequence || 1);
 
     setFormData({
       track,
-      title: lesson.title,
+      title: lesson.title || '',
       module: lesson.module || (isSwing ? 'Java Swing' : 'Object-Oriented Programming (Java)'),
       sequence: displaySeq,
-      status: lesson.status,
+      status: lesson.status || 'Published',
       description: lesson.description || '',
-      learningObjectives: Array.isArray(lesson.learningObjectives) ? lesson.learningObjectives.join('\n') : '',
+      learningObjectives: Array.isArray(lesson.learningObjectives)
+        ? lesson.learningObjectives.join('\n')
+        : typeof (lesson as any).learningObjectives === 'string'
+        ? (lesson as any).learningObjectives
+        : '',
       citationText: existingCitationText,
       citationUrl: existingCitationUrl,
       videoUrl: lesson.videoUrl || content.video?.videoUrl || staticSwingVideo?.embedUrl || staticOopLesson?.videoUrl || '',
       enableAssessment: true,
-      assessmentTitle: existingAssessment?.title || staticAssessment?.title || `${lesson.title} Assessment`,
+      assessmentTitle: existingAssessment?.title || staticAssessment?.title || `${lesson.title || 'Lesson'} Assessment`,
       assessmentQuizType: existingAssessment?.quizType || 'Multiple Choice',
-      assessmentPassingScore: Number(existingAssessment?.passingScore ?? staticAssessment?.passingPercentage ?? ASSESSMENT_PASSING_SCORE),
+      assessmentPassingScore: Number(existingAssessment?.passingScore ?? staticAssessment?.passingPercentage ?? (isSwing ? SWING_PASSING_PERCENTAGE : ASSESSMENT_PASSING_SCORE)),
       assessmentAttempts: Number(existingAssessment?.attempts ?? 3),
       assessmentStatus: (existingAssessment?.status as any) || 'Published',
       assessmentQuestions: initialQuestions,
       enablePractice: true,
-      practiceTitle: existingPractice?.title || staticPractice?.title || `${lesson.title} Practice Challenge`,
+      practiceTitle: existingPractice?.title || staticPractice?.title || `${lesson.title || 'Lesson'} Practice Challenge`,
       practiceDescription: existingPractice?.description || staticPractice?.description || '',
       practiceStarterCode: existingPractice?.starterCode || staticPractice?.starterCode || DEFAULT_STARTER_CODE,
       practiceSampleInput: existingPractice?.sampleInput || staticPractice?.sampleInput || '',
@@ -589,7 +611,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     setRawQuestionsJson(JSON.stringify(initialQuestions, null, 2));
     setJsonMode(false);
     setLinkedContent({
-      ...content,
+      video: content.video || null,
       assessment: existingAssessment || (staticAssessment ? { id: staticAssessment.id } : null),
       practice: existingPractice || (staticPractice ? { id: staticPractice.id } : null)
     });
@@ -1179,21 +1201,28 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                       {/* Learning Objectives */}
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1 max-w-xs">
-                          {(lesson?.learningObjectives || []).slice(0, 2).map((obj, i) => (
-                            <span
-                              key={i}
-                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
-                                isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'
-                              }`}
-                            >
-                              {obj}
-                            </span>
-                          ))}
-                          {(lesson?.learningObjectives || []).length > 2 && (
-                            <span className="text-[10px] text-slate-400 font-bold self-center">
-                              +{(lesson?.learningObjectives || []).length - 2} more
-                            </span>
-                          )}
+                          {(() => {
+                            const objs = normalizeObjectivesArray(lesson?.learningObjectives);
+                            return (
+                              <>
+                                {objs.slice(0, 2).map((obj, i) => (
+                                  <span
+                                    key={i}
+                                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                                      isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'
+                                    }`}
+                                  >
+                                    {obj}
+                                  </span>
+                                ))}
+                                {objs.length > 2 && (
+                                  <span className="text-[10px] text-slate-400 font-bold self-center">
+                                    +{objs.length - 2} more
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       </td>
 
@@ -1299,7 +1328,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                 { id: 'video', label: '2. Video Tutorial', icon: Video, active: Boolean(formData.videoUrl) },
                 {
                   id: 'assessment',
-                  label: `3. Assessment (${formData.assessmentQuestions.length} Qs)`,
+                  label: `3. Assessment (${(formData.assessmentQuestions || []).length} Qs)`,
                   icon: FileQuestion,
                   active: formData.enableAssessment
                 },
@@ -2078,7 +2107,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
             <div>
               <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">Learning Objectives</h4>
               <ul className="mt-2 space-y-1">
-                {(previewingLesson.learningObjectives || []).map((obj, i) => (
+                {normalizeObjectivesArray(previewingLesson.learningObjectives).map((obj, i) => (
                   <li key={i} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                     <span>{obj}</span>

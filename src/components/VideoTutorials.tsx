@@ -117,6 +117,13 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
       : (lesson.sequence === 1 && !isSwing ? 'active' : 'locked');
     return {
       ...lesson,
+      concepts: Array.isArray(lesson.concepts)
+        ? lesson.concepts
+        : Array.isArray((lesson as any).learningObjectives)
+        ? (lesson as any).learningObjectives
+        : Array.isArray((lesson as any).learning_objectives)
+        ? (lesson as any).learning_objectives
+        : [],
       status: completed ? 'completed' as const : access as VideoLesson['status'],
       progressPercent: access === 'active' || completed ? Math.max(Number(topic?.videoPercentage || 0), Number(watch?.completionPercentage || 0)) : 0
     };
@@ -772,12 +779,12 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
             <div className="border-t border-slate-800 bg-white p-4 sm:p-5 dark:bg-slate-950">
               <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
-                  <span className="font-mono text-[10px] font-black uppercase text-slate-400">Lesson {activeLesson.sequence}</span>
-                  <h3 className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">{activeLesson.title}</h3>
-                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{activeLesson.description}</p>
+                  <span className="font-mono text-[10px] font-black uppercase text-slate-400">Lesson {activeLesson?.sequence || 1}</span>
+                  <h3 className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">{activeLesson?.title || 'Lesson'}</h3>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{activeLesson?.description || ''}</p>
                 </div>
                 <button
-                  disabled={(watchDb[activeLesson.id]?.completionPercentage || 0) < 95}
+                  disabled={Boolean(activeLesson?.id && (watchDb[activeLesson.id]?.completionPercentage || 0) < 95)}
                   onClick={() => onNavigateTo('assessments')}
                   className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
                 >
@@ -785,7 +792,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 </button>
               </div>
               <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                {activeLesson.concepts.map(concept => (
+                {(activeLesson?.concepts || (activeLesson as any)?.learningObjectives || (activeLesson as any)?.learning_objectives || []).map((concept: string) => (
                   <div key={concept} className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
                     <CheckCircle className="h-4 w-4 text-emerald-600" />
                     {concept}
@@ -835,7 +842,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
             </div>
             <div className="max-h-[620px] space-y-2 overflow-y-auto pr-1">
               {lessons.map(lesson => {
-                const isActive = lesson.id === activeLesson.id;
+                const isActive = lesson.id === activeLesson?.id;
                 const isLocked = lesson.status === 'locked';
                 const progress = lesson.progressPercent || 0;
                 const topic = getTopic(studentResults, lesson.id);
