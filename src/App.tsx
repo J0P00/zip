@@ -28,7 +28,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Film,
-  PanelTop
+  PanelTop,
+  CheckCircle2
 } from 'lucide-react';
 
 // Import Types
@@ -77,9 +78,7 @@ import Leaderboard from './components/Leaderboard';
 import TeacherPortal from './components/TeacherPortal';
 import AuthPage from './components/AuthPage';
 import ProfilePage from './components/ProfilePage';
-import Navbar from './components/Navbar';
 import PreTestAssessment from './components/PreTestAssessment';
-import DiagnosticResultsPage from './components/DiagnosticResultsPage';
 import LessonsPage from './components/LessonsPage';
 import { API_BASE_URL, appApi, authApi, getAuthToken, monitoringApi, notificationApi, practiceApi, progressApi, recommendationApi, setAuthToken, userApi } from './services/api';
 import { generateRuleBasedRecommendation, getRecommendationHistory, storeRecommendation } from './services/recommendationEngine';
@@ -1331,27 +1330,38 @@ export default function App() {
           setTheme={setTheme}
         />
       ) : (
-        <div className="flex-grow flex flex-col">
-          <Navbar 
-            user={displayUser}
-            theme={theme}
-            setTheme={setTheme}
-            currentView={persona === 'student' ? studentTab : teacherTab}
-            onNavigate={(view) => {
-              if (persona === 'student') setStudentTab(view as StudentSubView);
-              else if (persona === 'teacher') setTeacherTab(view as TeacherSubView);
-            }}
-            onUpdateProfile={handleUpdateProfile}
-            onLogoutTrigger={() => setShowLogoutConfirm(true)}
-            notifications={notifications}
-            onMarkNotificationRead={handleMarkNotificationRead}
-            onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
-          />
-          <div className="flex-grow flex flex-col md:flex-row">
-            
-            {/* Universal Persona Sidebar Layout */}
-            <aside className={`hidden md:flex ${sidebarWidthClass} bg-slate-900 text-slate-300 border-r border-slate-800 flex-col shrink-0 transition-all duration-200`} id="portal-sidebar-nav">
-            
+        <div className="flex-grow flex flex-col md:flex-row min-h-screen">
+          {/* Mobile Top Header (hidden on desktop) */}
+          <div className="md:hidden flex items-center justify-between p-4 bg-slate-900 border-b border-slate-800 text-white shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                OOP
+              </div>
+              <span className="font-mono text-xs font-bold uppercase tracking-wider text-white">
+                OOP Pedagogical Hub
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 cursor-pointer transition"
+              aria-label="Toggle navigation menu"
+            >
+              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
+
+          {/* Mobile Backdrop */}
+          {isMobileMenuOpen && (
+            <div 
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-xs" 
+            />
+          )}
+
+          {/* Universal Persona Sidebar Layout */}
+          <aside className={`${isMobileMenuOpen ? 'flex fixed inset-y-0 left-0 z-50 w-72 shadow-2xl' : 'hidden'} md:flex md:static ${sidebarWidthClass} bg-slate-900 text-slate-300 border-r border-slate-800 flex-col shrink-0 transition-all duration-200`} id="portal-sidebar-nav">
+          
             {/* Top Workspace Identity block */}
             <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/40">
               <div className={`flex items-center gap-2.5 ${isSidebarCollapsed ? 'md:justify-center md:w-full' : ''}`}>
@@ -1393,7 +1403,7 @@ export default function App() {
                 { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
                 { id: 'lessons', label: 'Lessons', icon: <BookOpen className="w-4 h-4" />, badge: '17' },
                 { id: 'pretest', label: 'Pre-Test', icon: <ClipboardCheck className="w-4 h-4" /> },
-                { id: 'diagnostic-results', label: 'Diagnostic Results', icon: <BarChart3 className="w-4 h-4" /> },
+                { id: 'assessments', label: 'Assessments', icon: <CheckCircle2 className="w-4 h-4" /> },
                 { id: 'ide', label: 'Practice IDE', icon: <Code2 className="w-4 h-4" /> },
                 { id: 'profile', label: 'Profile', icon: <UserRound className="w-4 h-4" /> },
               ].map((tab) => (
@@ -1526,21 +1536,13 @@ export default function App() {
               />
             )}
 
-            {persona === 'student' && studentTab === 'pretest' && (
+            {persona === 'student' && (studentTab === 'pretest' || studentTab === 'diagnostic-results') && (
               <PreTestAssessment
                 key={`pretest-${displayUser.id || displayUser.userId || displayUser.email}`}
                 currentUser={displayUser}
+                initialView={studentTab === 'diagnostic-results' ? 'diagnostic_results' : 'intro'}
                 onNavigateTo={handleDirectNavigation}
                 onFinish={() => handleDirectNavigation('diagnostic-results')}
-                theme={theme}
-              />
-            )}
-
-            {persona === 'student' && studentTab === 'diagnostic-results' && (
-              <DiagnosticResultsPage
-                key={`diagnostics-${displayUser.id || displayUser.userId || displayUser.email}`}
-                currentUser={displayUser}
-                onNavigateTo={handleDirectNavigation}
                 theme={theme}
               />
             )}
@@ -1602,7 +1604,6 @@ export default function App() {
           </main>
 
         </div>
-      </div>
       )}
 
       {persona === 'student' && !authMode && (
@@ -1615,7 +1616,7 @@ export default function App() {
             { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
             { id: 'lessons', label: 'Lessons', icon: <BookOpen className="w-4 h-4" /> },
             { id: 'pretest', label: 'Pre-Test', icon: <ClipboardCheck className="w-4 h-4" /> },
-            { id: 'diagnostic-results', label: 'Diagnostic', icon: <BarChart3 className="w-4 h-4" /> },
+            { id: 'assessments', label: 'Assessments', icon: <CheckCircle2 className="w-4 h-4" /> },
             { id: 'ide', label: 'IDE', icon: <Code2 className="w-4 h-4" /> },
             { id: 'profile', label: 'Profile', icon: <UserRound className="w-4 h-4" /> },
           ].map(item => (

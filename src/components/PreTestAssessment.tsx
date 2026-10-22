@@ -15,16 +15,19 @@ import {
   BookOpen,
   Sparkles,
   ShieldAlert,
-  Loader2
+  Loader2,
+  BarChart3
 } from 'lucide-react';
 import { AuthenticatedUser, StudentSubView } from '../types';
 import { preTestApi } from '../services/api';
+import DiagnosticResultsPage from './DiagnosticResultsPage';
 
 interface PreTestAssessmentProps {
   currentUser: AuthenticatedUser;
   onFinish?: () => void;
   onNavigateTo?: (view: StudentSubView) => void;
   theme?: 'light' | 'dark';
+  initialView?: 'intro' | 'diagnostic_results';
 }
 
 interface PreTestQuestionItem {
@@ -44,12 +47,19 @@ export default function PreTestAssessment({
   currentUser,
   onFinish,
   onNavigateTo,
-  theme = 'light'
+  theme = 'light',
+  initialView = 'intro'
 }: PreTestAssessmentProps) {
   const isDark = theme === 'dark';
-  const [viewState, setViewState] = useState<'intro' | 'active' | 'review_map' | 'result'>('intro');
+  const [viewState, setViewState] = useState<'intro' | 'active' | 'review_map' | 'result' | 'diagnostic_results'>(initialView || 'intro');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialView) {
+      setViewState(initialView);
+    }
+  }, [initialView]);
 
   // Attempt data
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -230,10 +240,69 @@ export default function PreTestAssessment({
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  // Sub-navigation bar inside Pre-Test module
+  const renderPreTestHeader = () => {
+    if (viewState === 'active' || viewState === 'review_map') return null;
+
+    return (
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-6 border-b border-slate-200 dark:border-slate-800 pb-3" id="pretest-subnav">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setViewState(resultData ? 'result' : 'intro')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+              viewState !== 'diagnostic_results'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+            id="pretest-tab-test"
+          >
+            <ClipboardCheck className="h-4 w-4" />
+            <span>Pre-Test Assessment</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewState('diagnostic_results')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+              viewState === 'diagnostic_results'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+            id="pretest-tab-diagnostic-results"
+          >
+            <BarChart3 className="h-4 w-4" />
+            <span>Diagnostic Results</span>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // DIAGNOSTIC RESULTS VIEW INSIDE PRE-TEST
+  if (viewState === 'diagnostic_results') {
+    return (
+      <div className="space-y-4 animate-fade-in max-w-5xl mx-auto py-4">
+        {renderPreTestHeader()}
+        <DiagnosticResultsPage
+          currentUser={currentUser}
+          onNavigateTo={(view) => {
+            if (view === 'pretest') {
+              setViewState('intro');
+            } else if (onNavigateTo) {
+              onNavigateTo(view);
+            }
+          }}
+          theme={theme}
+        />
+      </div>
+    );
+  }
+
   // 1. INTRO / START SCREEN
   if (viewState === 'intro') {
     return (
       <div className="space-y-6 animate-fade-in max-w-4xl mx-auto py-6">
+        {renderPreTestHeader()}
         <div className={`rounded-3xl border p-8 shadow-sm ${cardClass}`}>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-emerald-500/10 px-3 py-1 font-mono text-xs font-black uppercase text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
@@ -268,7 +337,7 @@ export default function PreTestAssessment({
               </div>
               <button
                 type="button"
-                onClick={() => onNavigateTo ? onNavigateTo('diagnostic-results') : null}
+                onClick={() => setViewState('diagnostic_results')}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 px-3.5 py-2 text-xs font-black text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition cursor-pointer shrink-0 shadow-xs"
               >
                 <span>View Diagnostic Results</span>
@@ -276,6 +345,30 @@ export default function PreTestAssessment({
               </button>
             </div>
           )}
+
+          {/* Quick Access to Diagnostic Results */}
+          <div className="mt-5 rounded-2xl border border-sky-200 dark:border-sky-900/50 bg-sky-50/50 dark:bg-sky-950/30 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <BarChart3 className="h-5 w-5 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-xs font-black text-sky-950 dark:text-sky-200 block">
+                  Diagnostic Performance & Recommendations
+                </strong>
+                <span className="text-[11px] text-sky-800 dark:text-sky-300">
+                  Inspect your personalized strengths, concept proficiencies, and topic-level mastery insights.
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setViewState('diagnostic_results')}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 text-xs font-black transition cursor-pointer shrink-0 shadow-xs"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              <span>View Diagnostic Results</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
 
           {/* Key Guidelines */}
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -670,6 +763,7 @@ export default function PreTestAssessment({
   if (viewState === 'result' && resultData) {
     return (
       <div className="space-y-6 animate-fade-in max-w-4xl mx-auto py-6">
+        {renderPreTestHeader()}
         {/* Results Banner */}
         <div className={`rounded-3xl border p-8 shadow-sm ${cardClass}`}>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -719,9 +813,10 @@ export default function PreTestAssessment({
           <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
             <button
               type="button"
-              onClick={() => onNavigateTo ? onNavigateTo('diagnostic-results') : onFinish && onFinish()}
+              onClick={() => setViewState('diagnostic_results')}
               className="rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-black text-white hover:bg-emerald-700 shadow-md transition cursor-pointer flex items-center gap-1.5"
             >
+              <BarChart3 className="h-4 w-4" />
               <span>View Diagnostic Results</span>
               <ArrowRight className="h-4 w-4" />
             </button>
