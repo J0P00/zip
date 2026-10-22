@@ -31,16 +31,49 @@ const classifyTopicMastery = (averageScore, attemptCount) => {
     return "Struggling";
 };
 
+const resolveOopLessonList = (lessonRows = []) => {
+    if (Array.isArray(lessonRows) && lessonRows.length > 0) {
+        // Filter out swing lessons if any leaked in
+        const oopRows = lessonRows.filter(row => {
+            if (!row || !row.id) return false;
+            const id = String(row.id).toLowerCase();
+            const module = String(row.module || '').toLowerCase();
+            const track = String(row.track || '').toLowerCase();
+            if (id.startsWith('swing_') || module.includes('swing') || track === 'swing') {
+                return false;
+            }
+            return true;
+        });
+
+        // Deduplicate by ID
+        const seen = new Set();
+        const valid = [];
+        for (const row of oopRows) {
+            if (!seen.has(row.id)) {
+                seen.add(row.id);
+                valid.push(row);
+            }
+        }
+        if (valid.length > 0) {
+            return valid.sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
+        }
+    }
+
+    // Default canonical 12 lessons
+    return OOP_TOPIC_IDS.map((id, index) => ({
+        id,
+        sequence: index + 1,
+        title: CANONICAL_OOP_LESSON_TITLES[id] || `Lesson ${index + 1}`
+    }));
+};
+
 const buildOopTopicNameMap = (lessonRows = []) => {
-    const titlesById = new Map(
-        (lessonRows || [])
-            .filter(row => row && OOP_TOPIC_IDS.includes(row.id) && String(row.title || "").trim())
-            .map(row => [row.id, String(row.title).trim()])
-    );
-    return OOP_TOPIC_IDS.reduce((map, id) => {
-        map[id] = titlesById.get(id) || CANONICAL_OOP_LESSON_TITLES[id];
-        return map;
-    }, {});
+    const lessons = resolveOopLessonList(lessonRows);
+    const map = {};
+    for (const l of lessons) {
+        map[l.id] = (l.title && String(l.title).trim()) || CANONICAL_OOP_LESSON_TITLES[l.id] || `Lesson ${l.sequence}`;
+    }
+    return map;
 };
 
 const extractAttemptPercentage = (attempt) => {
@@ -65,11 +98,13 @@ const extractAttemptPercentage = (attempt) => {
 };
 
 const computeOopTopicPerformance = (quizAttempts = [], lessonRows = []) => {
+    const lessons = resolveOopLessonList(lessonRows);
     const topicNames = buildOopTopicNameMap(lessonRows);
-    const sequenceById = new Map((lessonRows || []).map(row => [row.id, Number(row.sequence)]));
+    const sequenceById = new Map(lessons.map((row, idx) => [row.id, Number.isFinite(Number(row.sequence)) ? Number(row.sequence) : idx + 1]));
 
-    return OOP_TOPIC_IDS
-        .map((topicId, index) => {
+    return lessons
+        .map((lesson, index) => {
+            const topicId = lesson.id;
             const attempts = (quizAttempts || []).filter(attempt => attempt && attempt.lesson_id === topicId);
             const attemptCount = attempts.length;
             const percentages = attempts.map(attempt => extractAttemptPercentage(attempt));
@@ -84,7 +119,7 @@ const computeOopTopicPerformance = (quizAttempts = [], lessonRows = []) => {
                 topicId,
                 lessonId: topicId,
                 sequence: Number.isFinite(sequenceById.get(topicId)) ? sequenceById.get(topicId) : index + 1,
-                topicName: topicNames[topicId],
+                topicName: topicNames[topicId] || lesson.title,
                 attemptCount,
                 attempts: attemptCount,
                 averageScore,
@@ -101,5 +136,6 @@ module.exports = {
     CANONICAL_OOP_LESSON_TITLES,
     classifyTopicMastery,
     buildOopTopicNameMap,
-    computeOopTopicPerformance
+    computeOopTopicPerformance,
+    resolveOopLessonList
 };

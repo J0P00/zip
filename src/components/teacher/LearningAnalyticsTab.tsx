@@ -330,13 +330,13 @@ export default function LearningAnalyticsTab({ theme = 'light' }: LearningAnalyt
         </div>
       </div>
 
-      {/* 3. 12 OOP Topic Strengths and Weaknesses Matrix */}
+      {/* 3. OOP Topic Strengths and Weaknesses Matrix */}
       <div className={`overflow-hidden rounded-2xl border shadow-sm ${cardClass}`}>
         <div className="p-5 border-b dark:border-slate-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-base font-black flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-emerald-600" />
-              12 OOP Topics Performance & Mastery Matrix
+              {analytics?.topicPerformance ? `${analytics.topicPerformance.length} ` : ''}OOP Topics Performance & Mastery Matrix
             </h3>
             <p className="text-xs text-slate-400">
               Evaluates student attempt counts, quiz pass rates, and pedagogical mastery across each OOP topic.

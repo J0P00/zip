@@ -459,7 +459,7 @@ export default function PreTestInsightsCard({
           <div className="flex items-center gap-2">
             <BookOpen className="h-4 w-4 text-slate-500" />
             <h3 className="text-sm font-black text-slate-900 dark:text-white">
-              12 Java OOP Topics Performance Matrix
+              {insights?.topicPerformance?.length ? `${insights.topicPerformance.length} ` : ''}Java OOP Topics Performance Matrix
             </h3>
           </div>
           <span className="text-[11px] font-mono text-slate-400">

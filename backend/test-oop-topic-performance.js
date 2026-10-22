@@ -216,6 +216,38 @@ assert.strictEqual(deduplicated.length, 12, "Deduplication must discard duplicat
 console.log("  ✅ PASS: All mastery level filters ('All', 'Strong', 'Average', 'Struggling', 'Not Assessed') accurately isolate topics");
 console.log("  ✅ PASS: Defensive deduplication by topicId/topicName verified");
 
+// --- TEST GROUP 5: Dynamic Aggregation for Appended Lessons (e.g. Lesson 13 Testing) ---
+console.log("\n--- Test Group 5: Dynamic Aggregation for Appended Lessons (Lesson 13 Testing) ---");
+
+const dynamicLessonRows = [
+    ...mockLessonRows,
+    { id: "oop_lesson_13", title: "Testing", sequence: 13, module: "Object-Oriented Programming (Java)" },
+    { id: "swing_lesson_1", title: "Java Swing Intro", sequence: 14, module: "Java Swing" } // should be filtered out
+];
+
+const dynamicAttempts = [
+    ...mockQuizAttempts,
+    { lesson_id: "oop_lesson_13", score: 85, passed: true },
+    { lesson_id: "oop_lesson_13", score: 95, passed: true }
+];
+
+const dynamicMatrix = computeOopTopicPerformance(dynamicAttempts, dynamicLessonRows);
+
+assert.strictEqual(dynamicMatrix.length, 13, `Dynamic matrix must output exactly 13 rows for 13 OOP lessons, found ${dynamicMatrix.length}`);
+const row13 = dynamicMatrix[12];
+assert.strictEqual(row13.topicId, "oop_lesson_13");
+assert.strictEqual(row13.sequence, 13);
+assert.strictEqual(row13.topicName, "Testing");
+assert.strictEqual(row13.attempts, 2);
+assert.strictEqual(row13.avgScore, 90); // (85 + 95) / 2 = 90
+assert.strictEqual(row13.passRate, 100);
+assert.strictEqual(row13.status, "Strong");
+assert(!dynamicMatrix.some(t => t.topicId.startsWith("swing_")), "Java Swing lessons must never leak into the OOP matrix");
+
+console.log("  ✅ PASS: Appended Lesson 13 (Testing) dynamically populates row 13 in the matrix");
+console.log("  ✅ PASS: Lesson 13 attempts and scores correctly aggregated (2 attempts, 90% avg, Strong)");
+console.log("  ✅ PASS: Java Swing lessons cleanly excluded from OOP matrix");
+
 console.log("\n================================================================");
 console.log("🎯 ALL OOP TOPICS PERFORMANCE & MASTERY MATRIX TESTS PASSED (100%)");
 console.log("================================================================\n");
