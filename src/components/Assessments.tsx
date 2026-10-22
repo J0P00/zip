@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { AlertCircle, Award, Check, CheckCircle, ChevronLeft, ChevronRight, Clock, Lock, RotateCcw, ShieldAlert, X, ClipboardCheck } from 'lucide-react';
 import { AdaptiveRecommendation, AssessmentReviewQuestion, AssessmentSessionData, AssessmentSessionQuestion, AuthenticatedUser, LessonEvidence, StudentSubView, VideoLesson } from '../types';
 import { OOP_ASSESSMENTS, OOP_COURSE_LESSONS } from '../data/oopCourse';
+import { JAVA_SWING_LESSONS, JAVA_SWING_ASSESSMENTS, JAVA_SWING_VIDEOS, SWING_PASSING_PERCENTAGE } from '../data/javaSwingCourse';
+import { lessonVideos } from '../data/lessonVideos';
 import { assessmentApi, lessonApi, practiceApi, progressApi, preTestApi } from '../services/api';
 import RecommendationCard from './RecommendationCard';
 import SecureWatermark from './SecureWatermark';
@@ -45,13 +47,25 @@ type WatchDb = Record<string, WatchRecord>;
 type QuizDb = Record<string, QuizAttempt>;
 type SubmissionDb = Record<string, { score?: number; compileStatus?: string }>;
 
-const getAssessmentLockedReason = (lessonId: string, effectiveLessons: VideoLesson[], evidenceDb: Record<string, LessonEvidence>, evidenceLoaded: boolean) => {
+const getAssessmentLockedReason = (
+  lessonId: string,
+  effectiveLessons: VideoLesson[],
+  evidenceDb: Record<string, LessonEvidence>,
+  evidenceLoaded: boolean,
+  evidenceError?: string | null
+) => {
   const lesson = (effectiveLessons || []).find(item => item.id === lessonId);
   if (!lesson) return 'Lesson unavailable';
 
   const evidence = evidenceDb[lessonId];
-  if (!evidenceLoaded || !evidence) return 'Checking lesson video progress...';
-  if (!evidence.lessonUnlocked) return evidence.accessReason || 'Complete the previous lesson, including its practice, before continuing.';
+  if (!evidenceLoaded) return 'Checking lesson video progress...';
+  if (evidenceError && !evidence) return 'Unable to verify progress. Please retry.';
+  if (!evidence) return 'Checking lesson video progress...';
+  if (!evidence.lessonUnlocked) {
+    return evidence.accessReason || (lessonId.startsWith('swing_')
+      ? 'Complete all 12 Java OOP lessons before unlocking Java Swing.'
+      : 'Complete the previous lesson, including its practice, before continuing.');
+  }
   return evidence.assessmentUnlocked ? '' : 'Watch at least 95% of this lesson video first.';
 };
 
@@ -59,26 +73,54 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
   const [watchDb, setWatchDb] = useState<WatchDb>({});
   const [evidenceDb, setEvidenceDb] = useState<Record<string, LessonEvidence>>({});
   const [evidenceLoaded, setEvidenceLoaded] = useState(false);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const [isRetryingEvidence, setIsRetryingEvidence] = useState(false);
   const [quizDb, setQuizDb] = useState<QuizDb>({});
   const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
 
   const effectiveLessons = useMemo(() => {
-    return Array.isArray(lessons) && lessons.length > 0 ? lessons : OOP_COURSE_LESSONS;
+    const baseLessons = Array.isArray(lessons) && lessons.length > 0 ? lessons : OOP_COURSE_LESSONS;
+    const hasSwing = baseLessons.some(l => l.id.startsWith('swing_lesson_'));
+    if (hasSwing) {
+      return baseLessons;
+    }
+    const swingVideoLessons: VideoLesson[] = JAVA_SWING_LESSONS.map(sl => {
+      const video = JAVA_SWING_VIDEOS.find(v => v.lessonId === sl.id);
+      const secureUrl = lessonVideos.javaSwing[sl.id as keyof typeof lessonVideos.javaSwing]?.secureUrl || video?.embedUrl || '';
+      return {
+        id: sl.id,
+        title: sl.title,
+        duration: video?.duration || '10:00',
+        sequence: 12 + sl.sequence,
+        status: 'locked' as const,
+        videoUrl: secureUrl,
+        description: sl.introduction || (Array.isArray(sl.objectives) ? sl.objectives.join(' ') : ''),
+        concepts: sl.topics || [],
+        topic: sl.title,
+        module: 'Java Swing GUI',
+        courseId: 'java_swing',
+        unlockedAssessmentId: `swing_assessment_${sl.sequence}`
+      };
+    });
+    return [...baseLessons, ...swingVideoLessons];
   }, [lessons]);
 
   const assessmentList = useMemo(() => {
     return (effectiveLessons || []).map(lesson => {
       const dynamicAssessment =
-        (Array.isArray(lesson.assessments) && lesson.assessments[0]) ||
+        (Array.isArray((lesson as any).assessments) && (lesson as any).assessments[0]) ||
         (lesson as any).content?.assessment ||
         null;
-      const staticAssessment = OOP_ASSESSMENTS.find(item => item.lessonId === lesson.id);
+      const isSwing = lesson.id.startsWith('swing_lesson_');
+      const staticAssessment = isSwing
+        ? JAVA_SWING_ASSESSMENTS.find(item => item.lessonId === lesson.id || item.id === `swing_assessment_${lesson.id.replace('swing_lesson_', '')}`)
+        : OOP_ASSESSMENTS.find(item => item.lessonId === lesson.id);
 
-      const id = dynamicAssessment?.id || staticAssessment?.id || `assessment_${lesson.id}`;
+      const id = dynamicAssessment?.id || staticAssessment?.id || (isSwing ? `swing_assessment_${lesson.id.replace('swing_lesson_', '')}` : `assessment_${lesson.id}`);
       const title = dynamicAssessment?.title || staticAssessment?.title || `${lesson.title} Assessment`;
-      const passingPercentage = Number(dynamicAssessment?.passingScore ?? staticAssessment?.passingPercentage ?? ASSESSMENT_PASSING_SCORE);
+      const passingPercentage = Number(dynamicAssessment?.passingScore ?? staticAssessment?.passingPercentage ?? (isSwing ? SWING_PASSING_PERCENTAGE : ASSESSMENT_PASSING_SCORE));
       const attempts = Number(dynamicAssessment?.attempts || MAX_ASSESSMENT_ATTEMPTS);
-      const questions = dynamicAssessment?.questions || staticAssessment?.questions || [];
+      const questions = dynamicAssessment?.questions || (staticAssessment as any)?.questions || [];
       const hasContent = Boolean(Array.isArray(questions) && questions.length > 0) || Boolean(staticAssessment);
 
       return {
@@ -126,38 +168,48 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
   const sessionDataRef = useRef(sessionData);
   sessionDataRef.current = sessionData;
 
-  // Initial progress sync
-  useEffect(() => {
-    let isMounted = true;
+  // Initial progress sync & resilient fetch
+  const fetchEvidence = useCallback(async () => {
     const token = currentUser.token;
     const user = currentUser.id;
     if (!token || !user) return;
 
-    Promise.all([
-      progressApi.getVideoProgress(user, token),
-      progressApi.getQuizAttempts(user, token),
-      practiceApi.listMine(token),
-      ...effectiveLessons.map(lesson => lessonApi.getAccess(lesson.id, token))
-    ])
-      .then(([videoResponse, response, submissions, ...accessResponses]) => {
-        if (!isMounted) return;
-        setEvidenceLoaded(true);
-        setEvidenceDb(accessResponses.reduce((acc: Record<string, LessonEvidence>, accessResponse: any) => {
-          if (accessResponse.data?.current) {
-            const evidence = accessResponse.data.current;
-            const evidenceKey = evidence.lessonId || (evidence as LessonEvidence & { id?: string }).id || '';
-            acc[evidenceKey] = {
+    setEvidenceError(null);
+    setIsRetryingEvidence(true);
+
+    try {
+      const [videoResult, quizResult, practiceResult, ...accessResults] = await Promise.allSettled([
+        progressApi.getVideoProgress(user, token),
+        progressApi.getQuizAttempts(user, token),
+        practiceApi.listMine(token),
+        ...effectiveLessons.map(lesson => lessonApi.getAccess(lesson.id, token))
+      ]);
+
+      const newEvidenceDb: Record<string, LessonEvidence> = {};
+      let accessSuccessCount = 0;
+
+      accessResults.forEach((res, index) => {
+        const lesson = effectiveLessons[index];
+        if (res.status === 'fulfilled' && res.value?.data?.current) {
+          const evidence = res.value.data.current;
+          const evidenceKey = evidence.lessonId || (evidence as any).id || lesson?.id;
+          if (evidenceKey) {
+            newEvidenceDb[evidenceKey] = {
               ...evidence,
-              // canStart is the backend-authoritative availability decision.
-              lessonUnlocked: Boolean(accessResponse.data.canAccess),
-              accessReason: accessResponse.data.reason || null,
-              assessmentUnlocked: Boolean(accessResponse.data.canStart)
+              lessonUnlocked: Boolean(res.value.data.canAccess),
+              accessReason: res.value.data.reason || null,
+              assessmentUnlocked: Boolean(res.value.data.canStart)
             };
+            accessSuccessCount++;
           }
-          return acc;
-        }, {}));
+        }
+      });
+
+      setEvidenceDb(prev => ({ ...prev, ...newEvidenceDb }));
+
+      if (videoResult.status === 'fulfilled' && Array.isArray(videoResult.value?.data)) {
         setWatchDb(
-          videoResponse.data.reduce((acc: WatchDb, row: any) => ({
+          videoResult.value.data.reduce((acc: WatchDb, row: any) => ({
             ...acc,
             [row.video_id]: {
               lessonId: row.video_id,
@@ -167,26 +219,33 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
             }
           }), {})
         );
-        const remoteDb = response.data.reduce((acc: QuizDb, row: any) => {
-          acc[row.assessment_id] = {
-            assessmentId: row.assessment_id,
-            lessonId: row.lesson_id || '',
-            score: row.score,
-            total: row.total,
-            percentage: Number(row.percentage || 0),
-            correctAnswers: row.correct_answers,
-            incorrectAnswers: row.incorrect_answers,
-            passed: Boolean(row.passed),
-            attemptNumber: Number(row.attempt_number || 0),
-            attemptCount: Number(row.attempt_count || row.attempt_number || 0),
-            answers: row.answers || {},
-            dateCompleted: row.date_completed
-          };
-          return acc;
-        }, {});
-        setQuizDb(remoteDb);
+      }
+
+      if (quizResult.status === 'fulfilled' && Array.isArray(quizResult.value?.data)) {
+        setQuizDb(
+          quizResult.value.data.reduce((acc: QuizDb, row: any) => {
+            acc[row.assessment_id] = {
+              assessmentId: row.assessment_id,
+              lessonId: row.lesson_id || '',
+              score: row.score,
+              total: row.total,
+              percentage: Number(row.percentage || 0),
+              correctAnswers: row.correct_answers,
+              incorrectAnswers: row.incorrect_answers,
+              passed: Boolean(row.passed),
+              attemptNumber: Number(row.attempt_number || 0),
+              attemptCount: Number(row.attempt_count || row.attempt_number || 0),
+              answers: row.answers || {},
+              dateCompleted: row.date_completed
+            };
+            return acc;
+          }, {})
+        );
+      }
+
+      if (practiceResult.status === 'fulfilled' && Array.isArray(practiceResult.value?.data)) {
         setSubmissionDb(
-          submissions.data.reduce((acc: SubmissionDb, row: any) => ({
+          practiceResult.value.data.reduce((acc: SubmissionDb, row: any) => ({
             ...acc,
             [`${user}:${row.challenge_id}`]: {
               score: Number(row.score || 0),
@@ -194,11 +253,23 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
             }
           }), {})
         );
-      })
-      .catch(error => {
-        if (isMounted) setEvidenceLoaded(true);
-        console.warn('Unable to load assessment access from backend:', error);
-      });
+      }
+
+      if (effectiveLessons.length > 0 && accessSuccessCount === 0) {
+        setEvidenceError("Unable to load lesson access data from the server. Please check your connection and retry.");
+      }
+    } catch (err: any) {
+      console.warn("Unable to load assessment access from backend:", err);
+      setEvidenceError("Unable to load assessment access from backend. Please check your connection and retry.");
+    } finally {
+      setEvidenceLoaded(true);
+      setIsRetryingEvidence(false);
+    }
+  }, [currentUser.id, currentUser.token, effectiveLessons]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchEvidence();
 
     preTestApi.getMyAttempts().then(res => {
       if (isMounted && res.data && res.data.length > 0) {
@@ -209,13 +280,13 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
     return () => {
       isMounted = false;
     };
-  }, [currentUser.id, currentUser.token, effectiveLessons]);
+  }, [fetchEvidence]);
 
   // Check for active uncompleted session on mount
   useEffect(() => {
     let isMounted = true;
     if (assessmentList.length > 0 && view === 'dashboard') {
-      const firstAvailable = assessmentList.find(a => a.hasContent && !getAssessmentLockedReason(a.lessonId, effectiveLessons, evidenceDb, evidenceLoaded));
+      const firstAvailable = assessmentList.find(a => a.hasContent && !getAssessmentLockedReason(a.lessonId, effectiveLessons, evidenceDb, evidenceLoaded, evidenceError));
       if (firstAvailable) {
         assessmentApi.getActiveSession(firstAvailable.id).then(res => {
           if (!isMounted || !res.data) return;
@@ -362,7 +433,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
   const startAssessment = async (assessmentId: string) => {
     const assessment = assessmentList.find(item => item.id === assessmentId);
     if (!assessment || !assessment.hasContent) return;
-    const reason = getAssessmentLockedReason(assessment.lessonId, effectiveLessons, evidenceDb, evidenceLoaded);
+    const reason = getAssessmentLockedReason(assessment.lessonId, effectiveLessons, evidenceDb, evidenceLoaded, evidenceError);
     if (reason) return;
     const attemptsUsed = quizDb[assessmentId]?.attemptCount ?? quizDb[assessmentId]?.attemptNumber ?? 0;
     if (attemptsUsed >= MAX_ASSESSMENT_ATTEMPTS) {
@@ -581,6 +652,23 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
         </div>
       </section>
 
+      {evidenceError && (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-bold text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+            <span>{evidenceError}</span>
+          </div>
+          <button
+            onClick={fetchEvidence}
+            disabled={isRetryingEvidence}
+            className="flex items-center gap-1.5 shrink-0 rounded-lg bg-rose-600 px-3 py-1.5 font-bold text-white hover:bg-rose-700 disabled:opacity-50 transition cursor-pointer"
+          >
+            <RotateCcw className={`h-3.5 w-3.5 ${isRetryingEvidence ? 'animate-spin' : ''}`} />
+            <span>{isRetryingEvidence ? 'Retrying...' : 'Retry'}</span>
+          </button>
+        </div>
+      )}
+
       {sessionError && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-bold text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
           <AlertCircle className="mb-1 inline h-4 w-4 mr-1 text-rose-600" />
@@ -591,7 +679,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
       <div className="grid gap-5 lg:grid-cols-4">
         {assessmentList.map(assessment => {
           const lesson = assessment.lesson || effectiveLessons.find(item => item.id === assessment.lessonId);
-          const reason = getAssessmentLockedReason(assessment.lessonId, effectiveLessons, evidenceDb, evidenceLoaded);
+          const reason = getAssessmentLockedReason(assessment.lessonId, effectiveLessons, evidenceDb, evidenceLoaded, evidenceError);
           const attempt = quizDb[assessment.id];
           const passed = attempt?.passed;
           const attemptsUsed = attempt?.attemptCount ?? attempt?.attemptNumber ?? 0;
@@ -627,7 +715,9 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
               <div className="flex min-h-[190px] flex-col justify-between gap-4">
                 <div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-[10px] font-black uppercase text-slate-400">Lesson {lesson?.sequence}</span>
+                    <span className="font-mono text-[10px] font-black uppercase text-slate-400">
+                      {lesson?.id.startsWith('swing_') ? `Lesson ${lesson.sequence} (Swing ${lesson.sequence - 12})` : `Lesson ${lesson?.sequence || 1}`}
+                    </span>
                     {reason && !isExhausted ? <Lock className="h-4 w-4 text-slate-400" /> : passed ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : isExhausted ? <RotateCcw className="h-4 w-4 text-amber-600" /> : <Award className="h-4 w-4 text-emerald-600" />}
                   </div>
                   <h3 className="mt-2 text-sm font-extrabold text-slate-900 dark:text-white">{assessment.title}</h3>
@@ -646,7 +736,16 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
                   )}
                   {reason && !isExhausted && <p className="mt-3 text-[11px] font-bold leading-5 text-slate-400">{reason}</p>}
                 </div>
-                {isExhausted ? (
+                {reason === 'Unable to verify progress. Please retry.' ? (
+                  <button
+                    onClick={fetchEvidence}
+                    disabled={isRetryingEvidence}
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-4 py-2.5 text-xs font-black text-rose-700 transition hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 cursor-pointer"
+                  >
+                    <RotateCcw className={`h-3.5 w-3.5 ${isRetryingEvidence ? 'animate-spin' : ''}`} />
+                    <span>{isRetryingEvidence ? 'Retrying...' : 'Retry Check'}</span>
+                  </button>
+                ) : isExhausted ? (
                   <button
                     disabled={resettingLessonId === assessment.lessonId}
                     onClick={() => handleRewatchVideo(assessment.lessonId, assessment.id)}

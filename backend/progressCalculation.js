@@ -24,7 +24,8 @@ const isPracticeCompleted = (options = {}) => {
     const hasSubmission = Boolean(submissionId || id);
     if (!hasSubmission) return false;
     if (validationFailed === true || remedialRequired === true) return false;
-    if (compileStatus === 'failed' || compileStatus === 'runtime_error') return false;
+    const status = String(compileStatus || '').toLowerCase();
+    if (status === 'failed' || status === 'runtime_error' || status.includes('error') || status === 'not_executed') return false;
     if (reviewStatus === 'returned') return false;
     if (teacherScore !== null && teacherScore !== undefined) {
         return Number(teacherScore) >= 70;

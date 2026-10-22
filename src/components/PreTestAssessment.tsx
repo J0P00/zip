@@ -67,7 +67,7 @@ export default function PreTestAssessment({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [attemptNumber, setAttemptNumber] = useState(1);
-  const [passingScore, setPassingScore] = useState(70);
+  const [passingScore, setPassingScore] = useState(60);
   const [remainingSeconds, setRemainingSeconds] = useState(PRE_TEST_TIME_LIMIT_SECONDS);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);

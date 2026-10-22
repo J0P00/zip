@@ -1,4 +1,4 @@
-const ASSESSMENT_PASSING_SCORE = 60;
+const ASSESSMENT_PASSING_SCORE = 80;
 
 const normalizeAssessmentPercentage = ({ percentage, score, total, correctAnswers } = {}) => {
   const rawPercentage = Number(percentage);

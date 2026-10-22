@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, Code2, Lock, RotateCcw, Send, Shield, Terminal } from 'lucide-react';
-import { AdaptiveRecommendation, AuthenticatedUser, PracticeSubmission } from '../types';
+import { AdaptiveRecommendation, AuthenticatedUser, PracticeSubmission, VideoLesson } from '../types';
 import { getStoredJson, OOP_ASSESSMENTS, OOP_COURSE_LESSONS, setStoredJson } from '../data/oopCourse';
 import { getPracticeChallengeForLesson, PRACTICE_CHALLENGES } from '../oopPracticeCatalog';
 import RecommendationCard from './RecommendationCard';
@@ -57,7 +57,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
   const challengeList = useMemo(() => {
     return (effectiveLessons || []).map((lesson, index) => {
       const dynamicPractice =
-        (Array.isArray(lesson.practice_challenges) && lesson.practice_challenges[0]) ||
+        (Array.isArray((lesson as any).practice_challenges) && (lesson as any).practice_challenges[0]) ||
         (lesson as any).content?.practice ||
         null;
       const staticChallenge = PRACTICE_CHALLENGES.find(c => c.lessonId === lesson.id);
@@ -78,6 +78,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
         topicId,
         title,
         description,
+        requirements: (staticChallenge as any)?.requirements || [],
         starterCode,
         sampleInput,
         sampleOutput,
@@ -110,7 +111,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
     }
   }, [initialLessonId, challengeList]);
 
-  const activeChallenge = challengeList.find(challenge => challenge.id === activeChallengeId) || challengeList[0] || PRACTICE_CHALLENGES[0];
+  const activeChallenge = (challengeList.find(challenge => challenge.id === activeChallengeId) || challengeList[0] || PRACTICE_CHALLENGES[0]) as any;
   const studentKey = currentUser.id || currentUser.userId || currentUser.email;
   const submissionKey = `${studentKey}:${activeChallenge.id}`;
   const currentSubmission = submissionDb[submissionKey];
