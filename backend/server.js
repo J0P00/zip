@@ -3180,28 +3180,56 @@ const getLessonEvidence = async (studentId, lessonId) => {
     };
 };
 
+const REQUIRED_CANONICAL_OOP_LESSON_IDS = Object.freeze([
+    'oop_lesson_1', 'oop_lesson_2', 'oop_lesson_3', 'oop_lesson_4',
+    'oop_lesson_5', 'oop_lesson_6', 'oop_lesson_7', 'oop_lesson_8',
+    'oop_lesson_9', 'oop_lesson_10', 'oop_lesson_11', 'oop_lesson_12'
+]);
+
 const getOOPCompletionStatus = async (studentId) => {
-    const lessonsResult = await pool.query(`
-        SELECT id
+    // 1. Fetch the 12 required canonical OOP lessons using their stable identifiers
+    const requiredLessonsResult = await pool.query(`
+        SELECT id, sequence, title, module, course_id
         FROM lessons
-        WHERE status <> 'Archived'
-          AND ${OOP_LESSON_FILTER_SQL}
+        WHERE id = ANY($1::text[])
+          AND status <> 'Archived'
         ORDER BY sequence, id
-    `);
+    `, [REQUIRED_CANONICAL_OOP_LESSON_IDS]);
+
+    // Use actual database rows for the required 12 lessons (fallback to stable IDs if any not yet in DB)
+    const targetLessons = requiredLessonsResult.rows.length >= 12
+        ? requiredLessonsResult.rows
+        : (requiredLessonsResult.rows.length > 0 
+            ? requiredLessonsResult.rows 
+            : REQUIRED_CANONICAL_OOP_LESSON_IDS.map((id, idx) => ({ id, sequence: idx + 1 })));
+
     const evidence = await Promise.all(
-        lessonsResult.rows.map(lesson => getLessonEvidence(studentId, lesson.id))
+        targetLessons.map(lesson => getLessonEvidence(studentId, lesson.id))
     );
-    const totalCount = evidence.length;
+    const requiredCount = targetLessons.length;
     const completedCount = evidence.filter(item => item?.completed === true).length;
-    const lessonsComplete = totalCount > 0 && completedCount === totalCount;
-    const assessmentsComplete = totalCount > 0 && evidence.every(item => item?.assessmentPassed === true);
-    const practiceComplete = totalCount > 0 && evidence.every(item => item?.practiceCompleted === true);
+    const lessonsComplete = requiredCount > 0 && completedCount === requiredCount;
+    const assessmentsComplete = requiredCount > 0 && evidence.every(item => item?.assessmentPassed === true);
+    const practiceComplete = requiredCount > 0 && evidence.every(item => item?.practiceCompleted === true);
+
+    // Total published OOP lessons in active dynamic catalog for analytics
+    let totalPublishedOOP = requiredCount;
+    try {
+        const totalPublishedRes = await pool.query(`
+            SELECT COUNT(*)::int AS count
+            FROM lessons
+            WHERE status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL}
+        `);
+        totalPublishedOOP = Math.max(requiredCount, totalPublishedRes.rows[0]?.count || 0);
+    } catch {}
+
     return {
         lessonsComplete,
         assessmentsComplete,
         practiceComplete,
         oopComplete: lessonsComplete && assessmentsComplete && practiceComplete,
-        totalLessons: totalCount,
+        totalLessons: totalPublishedOOP,
+        requiredLessons: requiredCount,
         completedLessons: completedCount
     };
 };
@@ -3262,7 +3290,6 @@ const getLessonAccessState = async (studentId, lessonId) => {
     let previousLessonId = null;
 
     if (!current.isSwing) {
-        if (current.sequence <= 1) return withLessonAccess(true);
         const previousResult = await pool.query(
             `SELECT id FROM lessons WHERE sequence < $1 AND status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL} ORDER BY sequence DESC, id DESC LIMIT 1`,
             [current.sequence]
@@ -3270,17 +3297,14 @@ const getLessonAccessState = async (studentId, lessonId) => {
         if (previousResult.rowCount) {
             previousLessonId = previousResult.rows[0].id;
         } else {
+            // First active lesson in dynamic OOP catalog has no predecessor -> accessible
             return withLessonAccess(true);
         }
     } else {
-        // Swing lessons require all OOP lessons to be completed before Swing unlocks
+        // Swing lessons require the 12 required OOP lessons to be completed before Swing unlocks
         const oopStatus = await getOOPCompletionStatus(studentId);
         if (!oopStatus.oopComplete) {
-            return withLessonAccess(false, `Complete all ${oopStatus.totalLessons || 'Java OOP'} lessons before unlocking Java Swing.`);
-        }
-
-        if (current.sequence <= 1) {
-            return withLessonAccess(true);
+            return withLessonAccess(false, `Complete all 12 required Java OOP lessons before unlocking Java Swing.`);
         }
 
         const previousResult = await pool.query(
@@ -3296,6 +3320,7 @@ const getLessonAccessState = async (studentId, lessonId) => {
             if (fallbackPrev) {
                 previousLessonId = fallbackPrev.id;
             } else {
+                // First active Swing lesson in dynamic catalog has no predecessor in Swing -> accessible
                 return withLessonAccess(true);
             }
         }
