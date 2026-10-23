@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
+  ArrowLeft,
   BookOpen,
   CheckCircle,
   FileText,
@@ -11,6 +12,7 @@ import {
   Pause,
   Play,
   RotateCcw,
+  ShieldAlert,
   Volume2,
   VolumeX
 } from 'lucide-react';
@@ -106,6 +108,8 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   const [watchDb, setWatchDb] = useState<WatchDb>({});
   const [quizDb, setQuizDb] = useState<QuizDb>({});
   const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
+  const [lockedLessonIds, setLockedLessonIds] = useState<Set<string>>(new Set());
+  const [serverLockReason, setServerLockReason] = useState<string | null>(null);
   const studentKey = currentUser.id;
   const lessons = useMemo(() => sourceLessons.map((lesson, index, arr) => {
     const watch = watchDb[lesson.id];
@@ -116,11 +120,10 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     const videoDone = Boolean(lesson.video_completed) === true || Boolean(topic?.videoCompleted || (watch?.completionPercentage || 0) >= 95);
     const quizPassed = Boolean(lesson.assessment_passed) === true || Boolean(topic?.quizPassed);
     const practiceDone = Boolean(lesson.practice_submitted) === true || Boolean((topic as any)?.practice_submitted) === true || Boolean((topic as any)?.practiceCompleted || (topic as any)?.exerciseCompleted || (submission && submission.compileStatus === 'success'));
-    const completed = Boolean(lesson.status === 'completed' || topic?.lessonCompleted || (videoDone && quizPassed && practiceDone));
     const isSwing = isSwingLessonId(lesson.id) || lesson.module === 'Java Swing' || (lesson as any).track === 'swing';
 
     // Sequential Queue Unlocking:
-    // Lesson 1 is unlocked initially. Next queue items unlock if the previous lesson meets all 3 criteria:
+    // Lesson 1 is unlocked initially. Next queue items unlock if the previous lesson strictly meets all 3 criteria:
     // video_completed === true, assessment_passed === true, and practice_submitted === true
     let queueUnlocked = false;
     if (index === 0 && !isSwing) {
@@ -131,21 +134,30 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
       const prevChallenge = PRACTICE_CHALLENGES.find(item => item.lessonId === prevLesson.id);
       const prevSubmission = prevChallenge ? submissionDb[`${studentKey}:${prevChallenge.id}`] : undefined;
 
-      const prevVideoDone = Boolean(prevLesson.video_completed) === true || Boolean(prevTopic?.videoCompleted) || (watchDb[prevLesson.id]?.completionPercentage || 0) >= 95 || prevLesson.status === 'completed';
-      const prevQuizPassed = Boolean(prevLesson.assessment_passed) === true || Boolean(prevTopic?.quizPassed) || prevLesson.status === 'completed';
-      const prevPracticeSubmitted = Boolean(prevLesson.practice_submitted) === true || Boolean((prevTopic as any)?.practice_submitted) === true || Boolean((prevTopic as any)?.practiceCompleted) || Boolean((prevTopic as any)?.exerciseCompleted) || (prevSubmission && prevSubmission.compileStatus === 'success') || prevLesson.status === 'completed';
+      const prevVideoDone = Boolean(prevLesson.video_completed) === true || Boolean(prevTopic?.videoCompleted) || (watchDb[prevLesson.id]?.completionPercentage || 0) >= 95;
+      const prevQuizPassed = Boolean(prevLesson.assessment_passed) === true || Boolean(prevTopic?.quizPassed);
+      const prevPracticeSubmitted = Boolean(prevLesson.practice_submitted) === true || Boolean((prevTopic as any)?.practice_submitted) === true || Boolean((prevTopic as any)?.practiceCompleted) || Boolean((prevTopic as any)?.exerciseCompleted) || (prevSubmission && prevSubmission.compileStatus === 'success');
 
-      const meetsThreeConditions =
-        Boolean(prevVideoDone) === true &&
-        Boolean(prevQuizPassed) === true &&
-        Boolean(prevLesson.practice_submitted || prevPracticeSubmitted) === true;
-
-      queueUnlocked = meetsThreeConditions || Boolean(prevTopic?.lessonCompleted) || prevLesson.status === 'completed';
+      const meetsThreeConditions = Boolean(prevVideoDone) && Boolean(prevQuizPassed) && Boolean(prevPracticeSubmitted);
+      queueUnlocked = meetsThreeConditions || Boolean(prevTopic?.lessonCompleted);
     }
 
-    const access = (topic?.lessonUnlocked || queueUnlocked || lesson.status === 'active' || lesson.status === 'completed')
-      ? 'active'
-      : (lesson.sequence === 1 && !isSwing ? 'active' : 'locked');
+    let isUnlocked = false;
+    if (lockedLessonIds.has(lesson.id)) {
+      isUnlocked = false;
+    } else if (topic && typeof topic.lessonUnlocked === 'boolean') {
+      isUnlocked = topic.lessonUnlocked;
+    } else if (index === 0 && !isSwing) {
+      isUnlocked = true;
+    } else {
+      isUnlocked = queueUnlocked;
+    }
+
+    const completed = Boolean(topic?.lessonCompleted || (videoDone && quizPassed && practiceDone));
+    const status: VideoLesson['status'] = !isUnlocked
+      ? 'locked'
+      : (completed ? 'completed' : 'active');
+
     return {
       ...lesson,
       video_completed: videoDone,
@@ -158,14 +170,32 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
         : Array.isArray((lesson as any).learning_objectives)
         ? (lesson as any).learning_objectives
         : [],
-      status: completed ? 'completed' as const : access as VideoLesson['status'],
-      progressPercent: access === 'active' || completed ? Math.max(Number(topic?.videoPercentage || 0), Number(watch?.completionPercentage || 0), Number(lesson.progressPercent || 0)) : 0
+      status,
+      progressPercent: isUnlocked
+        ? Math.max(Number(topic?.videoPercentage || 0), Number(watch?.completionPercentage || 0), Number(lesson.progressPercent || 0))
+        : 0
     };
-  }), [sourceLessons, watchDb, quizDb, submissionDb, studentKey, studentResults]);
+  }), [sourceLessons, watchDb, quizDb, submissionDb, studentKey, studentResults, lockedLessonIds]);
 
-  const firstAvailable = lessons.find(lesson => lesson.status === 'active') || lessons[0];
+  const firstAvailable = lessons.find(lesson => lesson.status !== 'locked') || lessons[0];
   const [activeLessonId, setActiveLessonId] = useState(initialLessonId || firstAvailable?.id || '');
   const activeLesson = lessons.find(lesson => lesson.id === activeLessonId) || firstAvailable;
+
+  const currentIndex = lessons.findIndex(l => l.id === activeLesson?.id);
+  const previousLesson = currentIndex > 0 ? lessons[currentIndex - 1] : null;
+  const activeLessonTopic = activeLesson ? getTopic(studentResults, activeLesson.id) : null;
+  const activePredecessorId = activeLessonTopic?.predecessorId || previousLesson?.id;
+
+  const isActiveLessonLocked = Boolean(
+    !activeLesson ||
+    activeLesson.status === 'locked' ||
+    lockedLessonIds.has(activeLesson.id) ||
+    (activeLessonTopic && activeLessonTopic.lessonUnlocked === false)
+  );
+
+  const activeLockReason = (activeLesson && lockedLessonIds.has(activeLesson.id) && serverLockReason)
+    ? serverLockReason
+    : (activeLessonTopic?.accessReason || (activeLesson ? getPrerequisiteMessage(activeLesson, lessons, studentResults) : 'Complete the previous lesson requirements before continuing.'));
 
   useEffect(() => {
     if (initialLessonId && lessons.some(l => l.id === initialLessonId)) {
@@ -268,7 +298,19 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   }, [volume, isMuted, playbackRate, activeLesson?.id]);
 
   useEffect(() => {
-    if (!youtubeVideoId || !youtubeContainerRef.current || !activeLesson) return;
+    if (isActiveLessonLocked) {
+      setIsPlaying(false);
+      if (videoRef.current) {
+        videoRef.current.pause();
+      }
+      if (youtubePlayerRef.current?.pauseVideo) {
+        youtubePlayerRef.current.pauseVideo();
+      }
+    }
+  }, [isActiveLessonLocked]);
+
+  useEffect(() => {
+    if (isActiveLessonLocked || !youtubeVideoId || !youtubeContainerRef.current || !activeLesson) return;
     let cancelled = false;
     const createPlayer = () => {
       if (cancelled || !youtubeContainerRef.current || !(window as any).YT?.Player) return;
@@ -312,10 +354,10 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
       window.setTimeout(() => window.clearInterval(poll), 10000);
     }
     return () => { cancelled = true; youtubePlayerRef.current?.destroy?.(); youtubePlayerRef.current = null; };
-  }, [youtubeVideoId, activeLesson?.id]);
+  }, [youtubeVideoId, activeLesson?.id, isActiveLessonLocked]);
 
   useEffect(() => {
-    if (!youtubePlayerRef.current || !youtubeVideoId) return;
+    if (isActiveLessonLocked || !youtubePlayerRef.current || !youtubeVideoId) return;
     const timer = window.setInterval(() => {
       const player = youtubePlayerRef.current;
       if (!player?.getCurrentTime) return;
@@ -333,9 +375,10 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
       }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [youtubeVideoId, duration, activeLesson?.id]);
+  }, [youtubeVideoId, duration, activeLesson?.id, isActiveLessonLocked]);
 
   const handleTogglePlay = () => {
+    if (isActiveLessonLocked) return;
     if (youtubePlayerRef.current && youtubeVideoId) {
       if (isPlaying) {
         youtubePlayerRef.current.pauseVideo();
@@ -436,6 +479,11 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
     const next = Object.values(pendingProgressRef.current)[0];
     if (!next) return;
 
+    if (lockedLessonIds.has(next.lessonId)) {
+      delete pendingProgressRef.current[next.lessonId];
+      return;
+    }
+
     progressSaveInFlightRef.current = true;
     try {
       await progressApi.saveVideoProgress({
@@ -447,10 +495,25 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
 
       delete pendingProgressRef.current[next.lessonId];
       onUpdateVideoProgress(next.lessonId, next.percentage);
-    } catch (error) {
+    } catch (error: any) {
       console.warn('Unable to sync video progress with backend:', error);
       // Remove failed item so it does not loop infinitely
       delete pendingProgressRef.current[next.lessonId];
+
+      const status = error?.status || error?.response?.status;
+      const body = error?.body || error?.response?.data;
+      if (status === 403 || body?.locked || body?.errorCode === 'LESSON_LOCKED') {
+        const lockMsg = body?.message || 'This lesson is locked by sequential progression rules.';
+        setLockedLessonIds(prev => new Set(prev).add(next.lessonId));
+        setServerLockReason(lockMsg);
+        setIsPlaying(false);
+        if (videoRef.current) {
+          videoRef.current.pause();
+        }
+        if (youtubePlayerRef.current?.pauseVideo) {
+          youtubePlayerRef.current.pauseVideo();
+        }
+      }
     } finally {
       progressSaveInFlightRef.current = false;
     }
@@ -465,7 +528,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   };
 
   const persistProgress = (position: number, nextDuration = duration, flush = false) => {
-    if (!activeLesson) return;
+    if (!activeLesson || isActiveLessonLocked || lockedLessonIds.has(activeLesson.id)) return;
     const lessonId = activeLesson.id;
     const existing = watchDbRef.current[lessonId];
     const fallbackDuration = parseDurationString(activeLesson.duration);
@@ -536,6 +599,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   };
 
   const handleTimeUpdate = () => {
+    if (isActiveLessonLocked) return;
     const video = videoRef.current;
     if (!video) return;
     setCurrentTime(video.currentTime);
@@ -600,8 +664,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
   }, [lessons]);
 
   const selectLesson = (lesson: VideoLesson) => {
-    if (lesson.status === 'locked') return;
-    if (activeLesson && activeLesson.id !== lesson.id && videoRef.current) {
+    if (activeLesson && activeLesson.id !== lesson.id && videoRef.current && !isActiveLessonLocked) {
       persistProgress(videoRef.current.currentTime, videoRef.current.duration, true);
     }
     setActiveLessonId(lesson.id);
@@ -653,7 +716,50 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
         <section className="lg:col-span-8">
           <div ref={shellRef} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-950 shadow-sm sm:rounded-2xl">
             <div className="relative aspect-video bg-black flex items-center justify-center">
-              {youtubeVideoId ? (
+              {isActiveLessonLocked ? (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/95 p-6 text-center text-white backdrop-blur-sm">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                    <ShieldAlert className="h-8 w-8" />
+                  </div>
+                  <span className="rounded-full bg-amber-500/20 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-amber-300 mb-2 border border-amber-500/30">
+                    Sequential Progression Lock
+                  </span>
+                  <h3 className="text-lg sm:text-xl font-extrabold text-white mb-2">
+                    {activeLesson.title} is Locked
+                  </h3>
+                  <p className="max-w-md text-xs sm:text-sm text-slate-300 leading-relaxed mb-6 font-medium">
+                    {activeLockReason}
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    {previousLesson && (
+                      <button
+                        type="button"
+                        onClick={() => selectLesson(previousLesson)}
+                        className="inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-4 py-2.5 text-xs font-bold text-white transition border border-slate-700 shadow-sm"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        Go to {previousLesson.title}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onNavigateTo('practice', activePredecessorId || undefined)}
+                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-xs font-black text-white transition shadow-sm"
+                    >
+                      <BookOpen className="h-4 w-4" />
+                      Complete Required Practice
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onNavigateTo('assessments', activePredecessorId || undefined)}
+                      className="inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-4 py-2.5 text-xs font-bold text-slate-200 transition border border-slate-700"
+                    >
+                      <FileText className="h-4 w-4" />
+                      View Assessments
+                    </button>
+                  </div>
+                </div>
+              ) : youtubeVideoId ? (
                 <div ref={youtubeContainerRef} className="h-full w-full" aria-label="YouTube video player" />
               ) : (
                 <video
@@ -744,8 +850,9 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
               <div className="flex min-w-0 items-center gap-2">
                 <button
                   type="button"
+                  disabled={isActiveLessonLocked}
                   onClick={handleTogglePlay}
-                  className="flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs font-bold transition"
+                  className="flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Play or pause"
                 >
                   {isPlaying ? <Pause className="h-3.5 w-3.5 fill-white" /> : <Play className="h-3.5 w-3.5 fill-white" />}
@@ -753,11 +860,13 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 </button>
                 <button
                   type="button"
+                  disabled={isActiveLessonLocked}
                   onClick={() => {
+                    if (isActiveLessonLocked) return;
                     if (youtubePlayerRef.current && youtubeVideoId) youtubePlayerRef.current.seekTo(Math.max(0, currentTime - 10), true);
                     else if (videoRef.current) videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
                   }}
-                  className="flex items-center gap-1 rounded-lg bg-white/10 hover:bg-white/20 px-2.5 py-1.5 text-xs font-semibold transition"
+                  className="flex items-center gap-1 rounded-lg bg-white/10 hover:bg-white/20 px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Rewind 10 seconds"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
@@ -772,8 +881,9 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                   <span className="hidden min-[380px]:inline">Speed:</span>
                   <select
                     value={playbackRate}
+                    disabled={isActiveLessonLocked}
                     onChange={event => setPlaybackRate(Number(event.target.value))}
-                    className="rounded-md border border-slate-700 bg-slate-800 px-1.5 py-1 text-xs font-bold text-white outline-none focus:border-emerald-500"
+                    className="rounded-md border border-slate-700 bg-slate-800 px-1.5 py-1 text-xs font-bold text-white outline-none focus:border-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {[0.75, 1, 1.25, 1.5, 2].map(rate => (
                       <option key={rate} value={rate} className="bg-slate-900 text-white">{rate}x</option>
@@ -782,8 +892,9 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 </label>
                 <button
                   type="button"
+                  disabled={isActiveLessonLocked}
                   onClick={() => setIsMuted(value => !value)}
-                  className="rounded-lg bg-white/10 hover:bg-white/20 p-1.5 text-white transition"
+                  className="rounded-lg bg-white/10 hover:bg-white/20 p-1.5 text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
                   title={isMuted ? 'Unmute' : 'Mute'}
                 >
                   {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
@@ -794,14 +905,16 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                   max={1}
                   step={0.05}
                   value={volume}
+                  disabled={isActiveLessonLocked}
                   onChange={event => setVolume(Number(event.target.value))}
-                  className="hidden w-16 accent-emerald-500 min-[480px]:block"
+                  className="hidden w-16 accent-emerald-500 min-[480px]:block disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="Volume"
                 />
                 <button
                   type="button"
+                  disabled={isActiveLessonLocked}
                   onClick={handleFullscreen}
-                  className="rounded-lg bg-white/10 hover:bg-white/20 p-1.5 text-white transition"
+                  className="rounded-lg bg-white/10 hover:bg-white/20 p-1.5 text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Fullscreen"
                 >
                   <Maximize2 className="h-4 w-4" />
@@ -816,7 +929,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                   <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{activeLesson?.description || ''}</p>
                 </div>
                 <button
-                  disabled={Boolean(activeLesson?.id && (watchDb[activeLesson.id]?.completionPercentage || 0) < 95)}
+                  disabled={isActiveLessonLocked || Boolean(activeLesson?.id && (watchDb[activeLesson.id]?.completionPercentage || 0) < 95)}
                   onClick={() => onNavigateTo('assessments')}
                   className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
                 >
@@ -902,7 +1015,7 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                   <button
                     key={lesson.id}
                     onClick={() => selectLesson(lesson)}
-                    className={`w-full rounded-2xl border p-3 text-left transition-all ${isActive ? 'border-emerald-500 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-200' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'} ${isLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                    className={`w-full rounded-2xl border p-3 text-left transition-all ${isActive ? 'border-emerald-500 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-200' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'} ${isLocked ? 'opacity-70 hover:border-amber-200' : 'cursor-pointer'}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">

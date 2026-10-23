@@ -7399,8 +7399,23 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
     }
 });
 
-app.put("/api/progress", requireAuth, async (req, res, next) => {
+app.put(["/api/progress", "/api/progress/:studentId"], requireAuth, async (req, res, next) => {
     try {
+        if (req.params.studentId) {
+            const studentIdCheck = validateId(req.params.studentId, "studentId", "PUT /api/progress/:studentId");
+            if (!studentIdCheck.valid) return res.status(studentIdCheck.status).json({ success: false, message: studentIdCheck.message });
+            const targetStudentId = String(studentIdCheck.value);
+            const authId = String(req.authUser.id || "");
+            const authUserId = String(req.authUser.userId || req.authUser.user_id || "");
+            const authEmail = String(req.authUser.email || "").toLowerCase();
+            const isSelf = (authId && (authId === targetStudentId || authId === authUserId)) ||
+                           (authUserId && authUserId === targetStudentId) ||
+                           (authEmail && authEmail === targetStudentId.toLowerCase());
+            if (req.authUser.role === "student" && !isSelf) {
+                return res.status(403).json({ success: false, message: "Students can only update their own progress." });
+            }
+        }
+
         const { videoId, lessonId, lastPosition = 0, completionPercentage = 0, completed = false, notes = "" } = req.body || {};
         const idToValidate = videoId || lessonId;
         const videoIdCheck = validateId(idToValidate, "videoId", "PUT /api/progress");
@@ -7422,7 +7437,15 @@ app.put("/api/progress", requireAuth, async (req, res, next) => {
         const safeNotes = cleanText(notes, 5000);
         const access = await getLessonAccessState(req.authUser.id, safeVideoId);
         if (!access.canAccess) {
-            return res.status(403).json({ success: false, message: access.reason });
+            return res.status(403).json({
+                success: false,
+                errorCode: "LESSON_LOCKED",
+                locked: true,
+                lessonId: safeVideoId,
+                predecessorId: access.predecessorId || null,
+                blockingPrerequisiteId: access.blockingPrerequisiteId || null,
+                message: access.reason || "Complete the previous lesson practice before continuing."
+            });
         }
 
         const previousProgress = await pool.query(
