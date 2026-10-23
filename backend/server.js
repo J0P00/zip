@@ -2997,7 +2997,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
         FROM users u
         LEFT JOIN students s ON s.user_id = u.id
         WHERE u.id::text = $1 OR u.user_id = $1 OR LOWER(u.email) = LOWER($1)
-           OR s.student_number = $1 OR s.id = $1
+           OR s.student_number = $1
         LIMIT 1
     `, [String(studentId)]);
     const studentUuid = userRow.rows[0]?.id || studentId;
@@ -3094,7 +3094,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
                 OR ps.student_id IN (SELECT id::text FROM users WHERE id::text = $1::text OR user_id = $2 OR LOWER(email) = LOWER($3))
                 OR ps.student_id IN (SELECT user_id FROM users WHERE id::text = $1::text OR user_id = $2 OR LOWER(email) = LOWER($3))
                 OR ps.student_id IN (SELECT email FROM users WHERE id::text = $1::text OR user_id = $2 OR LOWER(email) = LOWER($3))
-                OR ps.student_id IN (SELECT s.student_number FROM students s WHERE s.user_id::text = $1::text OR s.id = $1::text)
+                OR ps.student_id IN (SELECT s.student_number FROM students s WHERE s.user_id::text = $1::text)
             )
             AND (
                 pc.lesson_id = $4
