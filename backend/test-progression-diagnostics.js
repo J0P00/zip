@@ -74,11 +74,12 @@ function mockGetLessonAccessState({ catalog, evidenceMap, lessonId, oopAllComple
     const isSwing = String(lessonId).startsWith('swing_');
 
     let capturedDiagnostics = null;
-    const withLessonAccess = (canAccess, reason = null, predecessorId = null, successorId = null) => {
+    const withLessonAccess = (canAccess, reason = null, predecessorId = null, successorId = null, blockingPrerequisiteId = null) => {
         capturedDiagnostics = {
             lessonId,
             currentLessonUnlocked: canAccess,
             predecessorLessonId: predecessorId,
+            blockingPrerequisiteLessonId: blockingPrerequisiteId,
             successorLessonId: successorId,
             currentLessonCompleted: current.completed,
             accessReason: reason
@@ -86,29 +87,33 @@ function mockGetLessonAccessState({ catalog, evidenceMap, lessonId, oopAllComple
         return {
             canAccess,
             reason,
+            predecessorId,
+            blockingPrerequisiteId,
             current: {
                 ...current,
                 lessonUnlocked: canAccess,
-                accessReason: reason
+                accessReason: reason,
+                predecessorId,
+                blockingPrerequisiteId
             },
             diagnostics: capturedDiagnostics
         };
     };
 
     if (isSwing && !oopAllComplete) {
-        return withLessonAccess(false, "Complete all 12 required Java OOP lessons before unlocking Java Swing.");
+        return withLessonAccess(false, "Complete all 12 required Java OOP lessons before unlocking Java Swing.", null, null, null);
     }
 
     const currentIndex = catalog.findIndex(l => l.id === lessonId);
     if (currentIndex === -1) {
-        return withLessonAccess(false, "Lesson is archived or not part of the active course sequence.");
+        return withLessonAccess(false, "Lesson is archived or not part of the active course sequence.", null, null, null);
     }
 
     const predecessor = currentIndex > 0 ? catalog[currentIndex - 1] : null;
     const successor = currentIndex < catalog.length - 1 ? catalog[currentIndex + 1] : null;
 
     if (currentIndex === 0) {
-        return withLessonAccess(true, null, null, successor?.id || null);
+        return withLessonAccess(true, null, null, successor?.id || null, null);
     }
 
     for (let k = 0; k < currentIndex; k++) {
@@ -127,11 +132,11 @@ function mockGetLessonAccessState({ catalog, evidenceMap, lessonId, oopAllComple
                     : !predEvidence.assessmentPassed
                         ? `Pass ${pred.title || pred.id} assessment before continuing.`
                         : `Complete ${pred.title || pred.id} practice before continuing.`);
-            return withLessonAccess(false, reason, pred.id, successor?.id || null);
+            return withLessonAccess(false, reason, predecessor?.id || null, successor?.id || null, pred.id);
         }
     }
 
-    return withLessonAccess(true, null, predecessor?.id || null, successor?.id || null);
+    return withLessonAccess(true, null, predecessor?.id || null, successor?.id || null, null);
 }
 
 // Standard dynamic OOP catalog
@@ -299,7 +304,84 @@ runTest("Broken chain gating: If Lesson 2 is incomplete, Lesson 4 remains inacce
     });
 
     assert.strictEqual(accessState4.canAccess, false, "Lesson 4 must be locked because Lesson 2 is broken in the chain");
-    assert.strictEqual(accessState4.diagnostics.predecessorLessonId, 'oop_lesson_2');
+    assert.strictEqual(accessState4.diagnostics.predecessorLessonId, 'oop_lesson_3', "Immediate predecessor of Lesson 4 is Lesson 3");
+    assert.strictEqual(accessState4.diagnostics.blockingPrerequisiteLessonId, 'oop_lesson_2', "Broken chain prerequisite is Lesson 2");
+});
+
+runTest("Lesson 3 identifies Lesson 2 as immediate predecessor when Lesson 1 is incomplete", () => {
+    // When student 44434334-4916-4fbf-b300-bf2fe563e8ac has 0% on Lesson 1:
+    const evidenceMap = {
+        oop_lesson_1: { videoProgress: 0, assessmentScore: null, practiceSubmitted: false },
+        oop_lesson_2: { videoProgress: 0, assessmentScore: null, practiceSubmitted: false },
+        oop_lesson_3: { videoProgress: 0, assessmentScore: null, practiceSubmitted: false }
+    };
+
+    const accessState3 = mockGetLessonAccessState({
+        catalog: standardCatalog,
+        evidenceMap,
+        lessonId: 'oop_lesson_3'
+    });
+
+    assert.strictEqual(accessState3.canAccess, false, "Lesson 3 must be locked");
+    assert.strictEqual(accessState3.diagnostics.predecessorLessonId, 'oop_lesson_2', "Immediate predecessor must be Lesson 2, NOT Lesson 1");
+    assert.strictEqual(accessState3.diagnostics.blockingPrerequisiteLessonId, 'oop_lesson_1', "Blocking prerequisite is Lesson 1");
+});
+
+runTest("Teacher-created lesson oop_lesson_1792672023824 identifies its true predecessor when earlier lessons are incomplete", () => {
+    const catalogWithTeacherLesson = [
+        ...standardCatalog,
+        { id: 'oop_lesson_1792672023824', sequence: 13, title: 'Custom Advanced Java Topic' }
+    ];
+
+    // Lesson 1 is incomplete (0% video, N/A assessment)
+    const evidenceMap = {
+        oop_lesson_1: { videoProgress: 0, assessmentScore: null, practiceSubmitted: false }
+    };
+
+    const accessState = mockGetLessonAccessState({
+        catalog: catalogWithTeacherLesson,
+        evidenceMap,
+        lessonId: 'oop_lesson_1792672023824'
+    });
+
+    assert.strictEqual(accessState.canAccess, false, "Teacher lesson must be locked when Lesson 1 is incomplete");
+    assert.strictEqual(accessState.diagnostics.predecessorLessonId, 'oop_lesson_12', "Immediate predecessor must be Lesson 12, NOT Lesson 1");
+    assert.strictEqual(accessState.diagnostics.blockingPrerequisiteLessonId, 'oop_lesson_1', "Blocking prerequisite is Lesson 1");
+});
+
+runTest("Swing track requires all 12 canonical OOP lessons, but does not require teacher-created lessons", () => {
+    // Student completed all 12 canonical lessons (video >= 95%, assessment >= 80%, practice completed)
+    const evidenceMap = {};
+    for (let i = 1; i <= 12; i++) {
+        evidenceMap[`oop_lesson_${i}`] = { videoProgress: 100, assessmentScore: 85, practiceSubmitted: true };
+    }
+    // Teacher created lesson 13, which is NOT completed
+    evidenceMap['oop_lesson_1792672023824'] = { videoProgress: 0, assessmentScore: null, practiceSubmitted: false };
+
+    // Swing track evaluation with canonical 12 complete:
+    const swingEvidence1 = mockGetLessonAccessState({
+        catalog: [
+            { id: 'swing_lesson_1', sequence: 1, title: 'Introduction to Java Swing' }
+        ],
+        evidenceMap,
+        lessonId: 'swing_lesson_1',
+        oopAllComplete: true
+    });
+
+    assert.strictEqual(swingEvidence1.canAccess, true, "Swing Lesson 1 must unlock when 12 canonical OOP lessons are complete");
+
+    // When canonical lessons are NOT complete:
+    const swingEvidenceLocked = mockGetLessonAccessState({
+        catalog: [
+            { id: 'swing_lesson_1', sequence: 1, title: 'Introduction to Java Swing' }
+        ],
+        evidenceMap,
+        lessonId: 'swing_lesson_1',
+        oopAllComplete: false
+    });
+
+    assert.strictEqual(swingEvidenceLocked.canAccess, false, "Swing Lesson 1 must be locked when canonical OOP lessons are incomplete");
+    assert.strictEqual(swingEvidenceLocked.reason, "Complete all 12 required Java OOP lessons before unlocking Java Swing.");
 });
 
 runTest("Historical evidence is never deleted or reset by access evaluation", () => {

@@ -76,10 +76,9 @@ app.use(corsMiddleware);
 app.options(/.*/, corsMiddleware);
 
 const studentUuidMatchSql = (colName, paramIndex1 = 1, paramIndex2 = 2, paramIndex3 = 3) => `(
-    (CASE WHEN $${paramIndex1}::text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN ${colName} = $${paramIndex1}::uuid ELSE FALSE END)
-    OR ${colName}::text = $${paramIndex1}::text
+    ${colName}::text = $${paramIndex1}::text
     ${paramIndex2 ? `OR ${colName}::text = $${paramIndex2}::text` : ''}
-    ${paramIndex3 ? `OR ${colName}::text = $${paramIndex3}::text` : ''}
+    ${paramIndex3 ? `OR LOWER(${colName}::text) = LOWER($${paramIndex3}::text)` : ''}
 )`;
 
 const studentTextMatchSql = (colName, paramIndex1 = 1, paramIndex2 = 2, paramIndex3 = 3) => `(
@@ -2900,6 +2899,7 @@ const logProgressionDiagnostics = ({
     studentId,
     lessonId,
     predecessorLessonId = null,
+    blockingPrerequisiteLessonId = null,
     successorLessonId = null,
     videoProgress,
     videoCompleted,
@@ -2922,6 +2922,7 @@ const logProgressionDiagnostics = ({
         ? Boolean(currentLessonUnlocked)
         : Boolean(nextLessonUnlocked);
     const predId = predecessorLessonId || null;
+    const blockingId = blockingPrerequisiteLessonId || null;
     const succId = successorLessonId || (nextLessonId && nextLessonId !== lessonId ? nextLessonId : null);
 
     console.log(`[Progression Diagnostic] Student: ${studentId} | Lesson: ${lessonId}`);
@@ -2929,7 +2930,10 @@ const logProgressionDiagnostics = ({
     console.log(`  - Assessment: ${assessmentScore !== null ? `${assessmentScore}%` : 'N/A'} (passed: ${assessmentPassed}) [threshold: ${ASSESSMENT_PASSING_SCORE}%]`);
     console.log(`  - Practice: subId=${submissionId || 'none'}, challenge=${challengeId || 'none'}, compile=${compileStatus || 'N/A'}, review=${reviewStatus || 'N/A'}, remedial=${remedialRequired} (completed: ${practiceCompleted})`);
     console.log(`  - Current Lesson Evidence: completed=${lessonCompleted}`);
-    console.log(`  - Current Lesson (${lessonId}) Access: unlocked=${isCurrentUnlocked}${predId ? ` (predecessor: ${predId})` : ' (first lesson in course)'}${accessReason ? `, reason="${accessReason}"` : ''}`);
+    const predDetails = predId
+        ? ` (immediate predecessor: ${predId}${blockingId && blockingId !== predId ? `, blocked by prerequisite: ${blockingId}` : ''})`
+        : ' (first lesson in course)';
+    console.log(`  - Current Lesson (${lessonId}) Access: unlocked=${isCurrentUnlocked}${predDetails}${accessReason ? `, reason="${accessReason}"` : ''}`);
     if (succId) {
         console.log(`  - Successor Lesson (${succId}) Unlock Readiness: eligible=${lessonCompleted}`);
     }
@@ -2988,10 +2992,14 @@ const getLessonEvidence = async (studentId, lessonId) => {
     const lesson = lessonResult.rows[0];
 
     // Authoritative student identity resolution to prevent UUID/string mismatch
-    const userRow = await pool.query(
-        "SELECT id, user_id, email FROM users WHERE id::text = $1 OR user_id = $1 OR LOWER(email) = LOWER($1) LIMIT 1",
-        [String(studentId)]
-    );
+    const userRow = await pool.query(`
+        SELECT u.id, u.user_id, u.email
+        FROM users u
+        LEFT JOIN students s ON s.user_id = u.id
+        WHERE u.id::text = $1 OR u.user_id = $1 OR LOWER(u.email) = LOWER($1)
+           OR s.student_number = $1 OR s.id = $1
+        LIMIT 1
+    `, [String(studentId)]);
     const studentUuid = userRow.rows[0]?.id || studentId;
     const studentUserId = userRow.rows[0]?.user_id || String(studentId);
     const studentEmail = userRow.rows[0]?.email || "";
@@ -3017,16 +3025,16 @@ const getLessonEvidence = async (studentId, lessonId) => {
     if (!isSwing) {
         const videoResult = await pool.query(
             `SELECT GREATEST(
-                COALESCE((SELECT MAX(completion_percentage) FROM student_progress WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)} AND (video_id = $4 OR video_id = REPLACE($4, 'oop_lesson_', '') OR video_id = 'vid_' || $4)), 0),
-                COALESCE((SELECT MAX(watch_percentage) FROM video_progress WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)} AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', ''))), 0),
-                COALESCE((SELECT 100 FROM lesson_progress WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)} AND lesson_id = $4 AND video_completed = TRUE), 0)
+                COALESCE((SELECT MAX(completion_percentage) FROM student_progress WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)} AND (video_id = $4 OR video_id = REPLACE($4, 'oop_lesson_', '') OR video_id = 'vid_' || $4 OR video_id = 'oop_lesson_' || $4)), 0),
+                COALESCE((SELECT MAX(watch_percentage) FROM video_progress WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)} AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', '') OR lesson_id = 'oop_lesson_' || $4)), 0),
+                COALESCE((SELECT 100 FROM lesson_progress WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)} AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', '') OR lesson_id = 'oop_lesson_' || $4) AND video_completed = TRUE), 0)
             ) AS completion_percentage,
             EXISTS (
-                SELECT 1 FROM student_progress WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)} AND (video_id = $4 OR video_id = REPLACE($4, 'oop_lesson_', '') OR video_id = 'vid_' || $4) AND (completed = TRUE OR completion_percentage >= ${VIDEO_COMPLETION_THRESHOLD})
+                SELECT 1 FROM student_progress WHERE ${studentUuidMatchSql("student_user_id", 1, 2, 3)} AND (video_id = $4 OR video_id = REPLACE($4, 'oop_lesson_', '') OR video_id = 'vid_' || $4 OR video_id = 'oop_lesson_' || $4) AND (completed = TRUE OR completion_percentage >= ${VIDEO_COMPLETION_THRESHOLD})
                 UNION ALL
-                SELECT 1 FROM video_progress WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)} AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', '')) AND (completed = TRUE OR watch_percentage >= ${VIDEO_COMPLETION_THRESHOLD})
+                SELECT 1 FROM video_progress WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)} AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', '') OR lesson_id = 'oop_lesson_' || $4) AND (completed = TRUE OR watch_percentage >= ${VIDEO_COMPLETION_THRESHOLD})
                 UNION ALL
-                SELECT 1 FROM lesson_progress WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)} AND lesson_id = $4 AND video_completed = TRUE
+                SELECT 1 FROM lesson_progress WHERE ${studentUuidMatchSql("student_id", 1, 2, 3)} AND (lesson_id = $4 OR lesson_id = REPLACE($4, 'oop_lesson_', '') OR lesson_id = 'oop_lesson_' || $4) AND video_completed = TRUE
             ) AS is_completed`,
             [studentUuid, studentUserId, studentEmail, lessonId]
         );
@@ -3038,9 +3046,13 @@ const getLessonEvidence = async (studentId, lessonId) => {
                     WHERE ${studentUuidMatchSql("qa.student_user_id", 1, 2, 3)}
                       AND (
                         qa.lesson_id = $4
+                        OR qa.lesson_id = REPLACE($4, 'oop_lesson_', '')
+                        OR qa.lesson_id = 'oop_lesson_' || $4
                         OR qa.assessment_id = 'oop_assessment_' || (SELECT sequence FROM lessons WHERE id = $4)
                         OR qa.assessment_id = 'oop_assessment_' || $5
-                        OR EXISTS (SELECT 1 FROM assessments a WHERE a.id = qa.assessment_id AND a.lesson_id = $4)
+                        OR qa.assessment_id = $4
+                        OR qa.assessment_id = REPLACE($4, 'oop_lesson_', '')
+                        OR EXISTS (SELECT 1 FROM assessments a WHERE a.id = qa.assessment_id AND (a.lesson_id = $4 OR a.lesson_id = REPLACE($4, 'oop_lesson_', '')))
                       )
                       AND (${normalizedAssessmentPercentageSql("qa")} >= ${ASSESSMENT_PASSING_SCORE} OR qa.passed = TRUE)
                 ) AS passed,
@@ -3048,9 +3060,13 @@ const getLessonEvidence = async (studentId, lessonId) => {
                  WHERE ${studentUuidMatchSql("latest.student_user_id", 1, 2, 3)}
                    AND (
                      latest.lesson_id = $4
+                     OR latest.lesson_id = REPLACE($4, 'oop_lesson_', '')
+                     OR latest.lesson_id = 'oop_lesson_' || $4
                      OR latest.assessment_id = 'oop_assessment_' || (SELECT sequence FROM lessons WHERE id = $4)
                      OR latest.assessment_id = 'oop_assessment_' || $5
-                     OR EXISTS (SELECT 1 FROM assessments a WHERE a.id = latest.assessment_id AND a.lesson_id = $4)
+                     OR latest.assessment_id = $4
+                     OR latest.assessment_id = REPLACE($4, 'oop_lesson_', '')
+                     OR EXISTS (SELECT 1 FROM assessments a WHERE a.id = latest.assessment_id AND (a.lesson_id = $4 OR a.lesson_id = REPLACE($4, 'oop_lesson_', '')))
                    )
                  ORDER BY latest.attempt_number DESC, latest.date_completed DESC LIMIT 1) AS percentage`,
             [studentUuid, studentUserId, studentEmail, lessonId, String(lessonSeq)]
@@ -3078,6 +3094,7 @@ const getLessonEvidence = async (studentId, lessonId) => {
                 OR ps.student_id IN (SELECT id::text FROM users WHERE id::text = $1::text OR user_id = $2 OR LOWER(email) = LOWER($3))
                 OR ps.student_id IN (SELECT user_id FROM users WHERE id::text = $1::text OR user_id = $2 OR LOWER(email) = LOWER($3))
                 OR ps.student_id IN (SELECT email FROM users WHERE id::text = $1::text OR user_id = $2 OR LOWER(email) = LOWER($3))
+                OR ps.student_id IN (SELECT s.student_number FROM students s WHERE s.user_id::text = $1::text OR s.id = $1::text)
             )
             AND (
                 pc.lesson_id = $4
@@ -3282,11 +3299,12 @@ const getLessonAccessState = async (studentId, lessonId) => {
     const current = await getLessonEvidence(studentId, lessonId);
     if (!current) return { canAccess: false, reason: "Lesson not found." };
 
-    const withLessonAccess = (canAccess, reason = null, predecessorId = null, successorId = null) => {
+    const withLessonAccess = (canAccess, reason = null, predecessorId = null, successorId = null, blockingPrerequisiteId = null) => {
         logProgressionDiagnostics({
             studentId,
             lessonId,
             predecessorLessonId: predecessorId,
+            blockingPrerequisiteLessonId: blockingPrerequisiteId,
             successorLessonId: successorId,
             videoProgress: current.videoProgress,
             videoCompleted: current.videoCompleted,
@@ -3307,10 +3325,14 @@ const getLessonAccessState = async (studentId, lessonId) => {
         return {
             canAccess,
             reason,
+            predecessorId: predecessorId,
+            blockingPrerequisiteId: blockingPrerequisiteId || null,
             current: {
                 ...current,
                 lessonUnlocked: canAccess,
-                accessReason: reason
+                accessReason: reason,
+                predecessorId: predecessorId,
+                blockingPrerequisiteId: blockingPrerequisiteId || null
             }
         };
     };
@@ -3331,6 +3353,25 @@ const getLessonAccessState = async (studentId, lessonId) => {
                 sequence: idx + 1,
                 title: `Lesson ${idx + 1}`
             }));
+        } else {
+            activeTrackLessons.sort((a, b) => {
+                const aCanonicalIndex = REQUIRED_CANONICAL_OOP_LESSON_IDS.indexOf(a.id);
+                const bCanonicalIndex = REQUIRED_CANONICAL_OOP_LESSON_IDS.indexOf(b.id);
+                if (aCanonicalIndex !== -1 && bCanonicalIndex !== -1) {
+                    return aCanonicalIndex - bCanonicalIndex;
+                }
+                if (aCanonicalIndex !== -1) {
+                    const bSeq = Number(b.sequence || 0);
+                    return bSeq > 0 && bSeq <= (aCanonicalIndex + 1) ? 1 : -1;
+                }
+                if (bCanonicalIndex !== -1) {
+                    const aSeq = Number(a.sequence || 0);
+                    return aSeq > 0 && aSeq <= (bCanonicalIndex + 1) ? -1 : 1;
+                }
+                const seqDiff = Number(a.sequence || 0) - Number(b.sequence || 0);
+                if (seqDiff !== 0) return seqDiff;
+                return String(a.id).localeCompare(String(b.id));
+            });
         }
     } else {
         // Swing lessons require the 12 required OOP lessons to be completed before Swing unlocks
@@ -3362,7 +3403,7 @@ const getLessonAccessState = async (studentId, lessonId) => {
 
     if (currentIndex === 0) {
         // First active lesson in dynamic course catalog has no predecessor -> accessible
-        return withLessonAccess(true, null, null, successor?.id || null);
+        return withLessonAccess(true, null, null, successor?.id || null, null);
     }
 
     // Verify all predecessors in the chain from sequence start to current
@@ -3382,11 +3423,11 @@ const getLessonAccessState = async (studentId, lessonId) => {
                     : !predEvidence?.assessmentPassed
                         ? `Pass ${pred.title || pred.id} assessment before continuing.`
                         : `Complete ${pred.title || pred.id} practice before continuing.`);
-            return withLessonAccess(false, reason, pred.id, successor?.id || null);
+            return withLessonAccess(false, reason, predecessor?.id || null, successor?.id || null, pred.id);
         }
     }
 
-    return withLessonAccess(true, null, predecessor?.id || null, successor?.id || null);
+    return withLessonAccess(true, null, predecessor?.id || null, successor?.id || null, null);
 };
 
 const classifyEventSeverity = (eventType) => {
