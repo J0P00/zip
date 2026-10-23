@@ -420,7 +420,10 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
 
   const courseStats = useMemo(() => {
     const completedLessons = effectiveLessons.filter(lesson => evidenceDb[lesson.id]?.completed).length;
-    const passedAssessments = assessmentList.filter(assessment => quizDb[assessment.id]?.passed).length;
+    const passedAssessments = assessmentList.filter(assessment => {
+      const isLocked = Boolean(getAssessmentLockedReason(assessment.lessonId, effectiveLessons, evidenceDb, evidenceLoaded, evidenceError));
+      return !isLocked && quizDb[assessment.id]?.passed;
+    }).length;
     const totalCount = effectiveLessons.length || 1;
     return {
       completedLessons,
@@ -428,7 +431,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
       passedAssessments,
       overall: Math.round(((completedLessons + passedAssessments) / (totalCount * 2)) * 100)
     };
-  }, [effectiveLessons, assessmentList, evidenceDb, quizDb]);
+  }, [effectiveLessons, assessmentList, evidenceDb, evidenceLoaded, evidenceError, quizDb]);
 
   const startAssessment = async (assessmentId: string) => {
     const assessment = assessmentList.find(item => item.id === assessmentId);
@@ -710,21 +713,31 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
             );
           }
 
+          const isLocked = Boolean(reason);
+
           return (
-            <article key={assessment.id} className={`rounded-2xl border bg-white/80 p-5 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900 ${reason && !isExhausted ? 'border-slate-200 opacity-75 dark:border-slate-800' : isExhausted ? 'border-amber-200 dark:border-amber-800/60' : 'border-emerald-200 dark:border-emerald-800/60'}`}>
+            <article key={assessment.id} className={`rounded-2xl border bg-white/80 p-5 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900 ${isLocked ? 'border-slate-200 opacity-75 dark:border-slate-800' : isExhausted ? 'border-amber-200 dark:border-amber-800/60' : 'border-emerald-200 dark:border-emerald-800/60'}`}>
               <div className="flex min-h-[190px] flex-col justify-between gap-4">
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-[10px] font-black uppercase text-slate-400">
                       {lesson?.id.startsWith('swing_') ? `Lesson ${lesson.sequence} (Swing ${lesson.sequence - 12})` : `Lesson ${lesson?.sequence || 1}`}
                     </span>
-                    {reason && !isExhausted ? <Lock className="h-4 w-4 text-slate-400" /> : passed ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : isExhausted ? <RotateCcw className="h-4 w-4 text-amber-600" /> : <Award className="h-4 w-4 text-emerald-600" />}
+                    {isLocked ? (
+                      <Lock className="h-4 w-4 text-slate-400" />
+                    ) : passed ? (
+                      <CheckCircle className="h-4 w-4 text-emerald-600" />
+                    ) : isExhausted ? (
+                      <RotateCcw className="h-4 w-4 text-amber-600" />
+                    ) : (
+                      <Award className="h-4 w-4 text-emerald-600" />
+                    )}
                   </div>
                   <h3 className="mt-2 text-sm font-extrabold text-slate-900 dark:text-white">{assessment.title}</h3>
                   <p className="mt-2 text-xs font-semibold leading-5 text-slate-500 dark:text-slate-400">
                     {assessment.questions?.length ? `${assessment.questions.length} randomized MCQs with server validation.` : 'Multiple choice questions with server validation.'}
                   </p>
-                  {attempt && (
+                  {!isLocked && attempt && (
                     <p className={`mt-3 rounded-lg px-3 py-2 text-[11px] font-black ${attempt.passed ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : isExhausted ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'}`}>
                       Latest: {attempt.score}/{attempt.total} ({attempt.percentage}%) - Attempt {attempt.attemptNumber} of {MAX_ASSESSMENT_ATTEMPTS} - {Math.max(0, MAX_ASSESSMENT_ATTEMPTS - attemptsUsed)} remaining
                       {isExhausted && (
@@ -734,7 +747,12 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
                       )}
                     </p>
                   )}
-                  {reason && !isExhausted && <p className="mt-3 text-[11px] font-bold leading-5 text-slate-400">{reason}</p>}
+                  {isLocked && (
+                    <div className="mt-3 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] font-bold text-amber-800 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-300">
+                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                      <span>{reason}</span>
+                    </div>
+                  )}
                 </div>
                 {reason === 'Unable to verify progress. Please retry.' ? (
                   <button
@@ -744,6 +762,14 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
                   >
                     <RotateCcw className={`h-3.5 w-3.5 ${isRetryingEvidence ? 'animate-spin' : ''}`} />
                     <span>{isRetryingEvidence ? 'Retrying...' : 'Retry Check'}</span>
+                  </button>
+                ) : isLocked ? (
+                  <button
+                    disabled
+                    className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-slate-200 px-4 py-2.5 text-xs font-black text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500"
+                  >
+                    <Lock className="h-3.5 w-3.5" />
+                    <span>Locked</span>
                   </button>
                 ) : isExhausted ? (
                   <button
@@ -756,7 +782,7 @@ export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavig
                   </button>
                 ) : (
                   <button
-                    disabled={Boolean(reason) || attemptsUsed >= MAX_ASSESSMENT_ATTEMPTS}
+                    disabled={attemptsUsed >= MAX_ASSESSMENT_ATTEMPTS}
                     onClick={() => startAssessment(assessment.id)}
                     className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-800 cursor-pointer"
                   >

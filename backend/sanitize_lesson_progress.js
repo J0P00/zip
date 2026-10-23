@@ -68,10 +68,10 @@ function auditStudentSequentialProgress(catalog, progressRows = [], options = {}
   for (const reqId of REQUIRED_CANONICAL_OOP_LESSON_IDS) {
     const row = progressByLessonId.get(reqId);
     if (row) {
-      const isComplete =
-        Boolean(row.video_completed) &&
-        Boolean(row.quiz_passed ?? row.assessment_passed) &&
-        Boolean(row.practice_submitted || row.practice_completed);
+      const videoPassed = Boolean(row.video_completed) || Number(row.watch_percentage ?? row.video_percentage ?? row.completion_percentage ?? 0) >= 95;
+      const quizPassed = Boolean(row.quiz_passed ?? row.assessment_passed) || Number(row.quiz_score ?? row.score ?? row.percentage ?? 0) >= 80;
+      const practicePassed = Boolean(row.practice_submitted || row.practice_completed);
+      const isComplete = videoPassed && quizPassed && practicePassed;
       if (isComplete) completedRequiredOOPCount++;
     }
   }
@@ -168,10 +168,10 @@ function auditStudentSequentialProgress(catalog, progressRows = [], options = {}
       } else {
         // Predecessor Swing chain intact
         if (row) {
-          const isComplete =
-            Boolean(row.video_completed) &&
-            Boolean(row.quiz_passed ?? row.assessment_passed) &&
-            Boolean(row.practice_submitted || row.practice_completed);
+          const videoPassed = Boolean(row.video_completed) || Number(row.watch_percentage ?? row.video_percentage ?? row.completion_percentage ?? 0) >= 95;
+          const quizPassed = Boolean(row.quiz_passed ?? row.assessment_passed) || Number(row.quiz_score ?? row.score ?? row.percentage ?? 0) >= 80;
+          const practicePassed = Boolean(row.practice_submitted || row.practice_completed);
+          const isComplete = videoPassed && quizPassed && practicePassed;
 
           if (isComplete) {
             legitimateCompletions.push({
@@ -183,7 +183,7 @@ function auditStudentSequentialProgress(catalog, progressRows = [], options = {}
           } else {
             swingChainBroken = true;
             swingBreakLesson = lesson;
-            swingBreakReason = !row.video_completed ? 'video <95%' : (!row.quiz_passed ? 'assessment <80%' : 'practice unsubmitted');
+            swingBreakReason = !videoPassed ? 'video <95%' : (!quizPassed ? 'assessment <80%' : 'practice unsubmitted');
             inProgressLessons.push({ lessonId: lesson.id, title: lesson.title, track: 'Swing', reason: swingBreakReason });
 
             if (row.completed) {
@@ -234,10 +234,10 @@ function auditStudentSequentialProgress(catalog, progressRows = [], options = {}
       }
     } else {
       if (row) {
-        const isComplete =
-          Boolean(row.video_completed) &&
-          Boolean(row.quiz_passed ?? row.assessment_passed) &&
-          Boolean(row.practice_submitted || row.practice_completed);
+        const videoPassed = Boolean(row.video_completed) || Number(row.watch_percentage ?? row.video_percentage ?? row.completion_percentage ?? 0) >= 95;
+        const quizPassed = Boolean(row.quiz_passed ?? row.assessment_passed) || Number(row.quiz_score ?? row.score ?? row.percentage ?? 0) >= 80;
+        const practicePassed = Boolean(row.practice_submitted || row.practice_completed);
+        const isComplete = videoPassed && quizPassed && practicePassed;
 
         if (isComplete) {
           legitimateCompletions.push({
@@ -249,7 +249,7 @@ function auditStudentSequentialProgress(catalog, progressRows = [], options = {}
         } else {
           oopChainBroken = true;
           oopBreakLesson = lesson;
-          oopBreakReason = !row.video_completed ? 'video <95%' : (!row.quiz_passed ? 'assessment <80%' : 'practice unsubmitted');
+          oopBreakReason = !videoPassed ? 'video <95%' : (!quizPassed ? 'assessment <80%' : 'practice unsubmitted');
           inProgressLessons.push({ lessonId: lesson.id, title: lesson.title, track: 'OOP', reason: oopBreakReason });
 
           if (row.completed) {

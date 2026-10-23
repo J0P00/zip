@@ -249,7 +249,15 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
     const record = submissionDb[key];
     setSourceCode(record?.isLocked ? record.sourceCode : draftDb[key] || record?.sourceCode || challenge.starterCode);
     setLastResult(null);
-    setConsoleLogs([record ? (record.submissionStatus === 'returned' ? 'Returned for revision. Edit your code and submit again.' : `Practice ${record.submissionStatus || 'submitted'} to your teacher.`) : 'Console ready. Type your Java code solution below.']);
+    const access = accessDb[challenge.lessonId];
+    const isLockedChallenge = Boolean(access && (!access.canAccess || !access.current?.practiceUnlocked));
+    setConsoleLogs([
+      isLockedChallenge
+        ? (!access?.canAccess ? 'Practice IDE is locked until the previous lesson is fully completed.' : 'Practice IDE is locked until video and assessment are complete.')
+        : record
+        ? (record.submissionStatus === 'returned' ? 'Returned for revision. Edit your code and submit again.' : `Practice ${record.submissionStatus || 'submitted'} to your teacher.`)
+        : 'Console ready. Type your Java code solution below.'
+    ]);
   };
 
   const updateSource = (value: string) => {
@@ -401,8 +409,27 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
               const challengeKey = `${studentKey}:${challenge.id}`;
               const status = submissionDb[challengeKey]?.submissionStatus;
               const lessonAccess = accessDb[challenge.lessonId];
-              const done = Boolean(lessonAccess?.current?.practiceUnlocked && (status === 'submitted' || status === 'graded'));
+              const isLockedByPredecessor = !lessonAccess?.canAccess;
+              const isLockedByLesson = !lessonAccess?.current?.practiceUnlocked;
+              const isChallengeLocked = Boolean(isLockedByPredecessor || isLockedByLesson);
+              const done = Boolean(!isChallengeLocked && (status === 'submitted' || status === 'graded'));
               const isSelected = activeChallenge.id === challenge.id;
+
+              let badgeText = 'Available';
+              if (!challenge.hasContent) {
+                badgeText = 'Content Pending';
+              } else if (isLockedByPredecessor) {
+                badgeText = 'Locked until previous lesson is completed';
+              } else if (isLockedByLesson) {
+                badgeText = 'Locked until video and assessment are complete';
+              } else if (status === 'graded') {
+                badgeText = 'Graded';
+              } else if (status === 'submitted') {
+                badgeText = 'Waiting for review';
+              } else if (status === 'returned') {
+                badgeText = 'Returned for revision';
+              }
+
               return (
                 <button
                   key={challenge.id}
@@ -418,7 +445,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
                   </div>
                   <span className="block truncate">{challenge.title}</span>
                   <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[9px] uppercase ${done ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
-                    {!challenge.hasContent ? 'Content Pending' : !lessonAccess?.canAccess ? 'Locked until previous lesson is completed' : status === 'graded' ? 'Graded' : status === 'submitted' ? 'Waiting for review' : status === 'returned' ? 'Returned for revision' : lessonAccess?.current?.practiceUnlocked ? 'Available' : 'Locked until video and assessment are complete'}
+                    {badgeText}
                   </span>
                 </button>
               );
@@ -483,7 +510,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
               )}
             </div>
           )}
-          {submitted && (
+          {!lockReason && submitted && (
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
               Practice {submitted.submissionStatus === 'graded' ? `graded: ${submitted.teacherScore ?? 0}/100` : submitted.submissionStatus === 'returned' ? 'returned for revision' : 'submitted — waiting for teacher review'}.
               {submitted.feedback && <span className="mt-1 block font-normal">Feedback: {submitted.feedback}</span>}
@@ -538,7 +565,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
             disabled={!activeChallenge.hasContent || Boolean(lockReason) || (Boolean(submitted) && submitted.submissionStatus !== 'returned') || isSubmitting}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 py-3 text-xs font-black text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
           >
-            <Send className="h-4 w-4" /> {!activeChallenge.hasContent ? 'Content Pending' : isSubmitting ? 'Submitting...' : submitted?.submissionStatus === 'returned' ? 'Submit Practice Revision' : 'Submit Practice'}
+            <Send className="h-4 w-4" /> {!activeChallenge.hasContent ? 'Content Pending' : Boolean(lockReason) ? 'Locked' : isSubmitting ? 'Submitting...' : submitted?.submissionStatus === 'returned' ? 'Submit Practice Revision' : 'Submit Practice'}
           </button>
         </section>
 

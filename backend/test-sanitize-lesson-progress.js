@@ -267,6 +267,48 @@ runTest("Missing progress rows break sequential chain deterministically", () => 
   assert.strictEqual(audit.accessViolations[0].lessonId, 'oop_lesson_3');
 });
 
+runTest("Failing strict criteria (assessment < 80% or video < 95%) flips completed to false for that lesson and ALL subsequent lessons while preserving evidence", () => {
+  const dynamicCatalog = buildCanonicalOOPLessons();
+
+  const rows = [
+    // Lesson 1 passed strictly
+    { id: 'lp_1', lesson_id: 'oop_lesson_1', video_percentage: 100, score: 90, practice_submitted: true, completed: true },
+    // Lesson 2 failed strict quiz criteria (score 75 < 80%) but was erroneously marked completed in legacy data
+    { id: 'lp_2', lesson_id: 'oop_lesson_2', video_percentage: 98, score: 75, quiz_passed: false, practice_submitted: true, completed: true },
+    // Lesson 3 had 100% video, 100% quiz, practice submitted, and completed: true
+    { id: 'lp_3', lesson_id: 'oop_lesson_3', video_percentage: 100, score: 100, quiz_passed: true, practice_submitted: true, completed: true },
+    // Lesson 4 completed: true
+    { id: 'lp_4', lesson_id: 'oop_lesson_4', video_completed: true, quiz_passed: true, practice_submitted: true, completed: true }
+  ];
+
+  const audit = auditStudentSequentialProgress(dynamicCatalog, rows);
+
+  // Lesson 1 is legitimate
+  assert.strictEqual(audit.legitimateCompletions.length, 1);
+  assert.strictEqual(audit.legitimateCompletions[0].lessonId, 'oop_lesson_1');
+
+  // Chain breaks at Lesson 2 due to assessment <80%
+  assert.strictEqual(audit.inProgressLessons[0].lessonId, 'oop_lesson_2');
+  assert.strictEqual(audit.inProgressLessons[0].reason, 'assessment <80%');
+
+  // Lessons 3 and 4 are flagged as access violations
+  assert.strictEqual(audit.accessViolations.length, 2);
+  assert.strictEqual(audit.accessViolations[0].lessonId, 'oop_lesson_3');
+  assert.strictEqual(audit.accessViolations[1].lessonId, 'oop_lesson_4');
+
+  // Crucially: ALL of Lesson 2, Lesson 3, and Lesson 4 have their completed flag queued to flip to false!
+  assert.strictEqual(audit.reconciledFlags.length, 3);
+  assert.strictEqual(audit.reconciledFlags[0].lessonId, 'oop_lesson_2');
+  assert.strictEqual(audit.reconciledFlags[1].lessonId, 'oop_lesson_3');
+  assert.strictEqual(audit.reconciledFlags[2].lessonId, 'oop_lesson_4');
+  assert(audit.reconciledFlags.every(r => r.action === 'reconcile_completion_false'));
+
+  // Scores and percentages are completely preserved
+  assert.strictEqual(rows[1].score, 75);
+  assert.strictEqual(rows[1].video_percentage, 98);
+  assert.strictEqual(rows[2].score, 100);
+});
+
 console.log("\n================================================================================");
 console.log(`🎯 ALL ${passedCount}/${totalCount} DYNAMIC PROGRESSION & AUDIT TESTS PASSED (100%)`);
 console.log("================================================================================\n");
