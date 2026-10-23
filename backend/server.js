@@ -629,6 +629,20 @@ const resolveUserUuid = async (clientOrPool, identifier) => {
     return res.rows[0]?.id || null;
 };
 
+const isTeacherAuthorizedForStudent = async (clientOrPool, teacherId, studentIdentifier) => {
+    if (!teacherId || !studentIdentifier) return false;
+    const studentUuid = await resolveUserUuid(clientOrPool, studentIdentifier);
+    if (!studentUuid) return false;
+    const res = await clientOrPool.query(`
+        SELECT 1 FROM monitoring_requests
+        WHERE teacher_id = $1
+          AND student_id = $2
+          AND status = 'accepted'
+        LIMIT 1
+    `, [teacherId, studentUuid]);
+    return Boolean(res.rowCount);
+};
+
 const createOrUpdateNotification = async (client, payload) => {
     const recipientUserId = await resolveUserUuid(client, payload.recipientUserId);
     if (!recipientUserId) {
@@ -6666,6 +6680,13 @@ app.post(["/api/assessments/:lessonId/reset", "/api/assessments/reset/:lessonId"
             ? (req.body?.studentId || req.query?.studentId)
             : req.authUser.id;
 
+        if (req.authUser.role === "teacher" && targetStudentId !== req.authUser.id) {
+            const authorized = await isTeacherAuthorizedForStudent(pool, req.authUser.id, targetStudentId);
+            if (!authorized) {
+                return res.status(403).json({ success: false, message: "You are not authorized to reset this student's assessment." });
+            }
+        }
+
         const result = await resetLessonAssessmentAndVideo(targetStudentId, rawIdentifier);
         res.json({
             success: true,
@@ -6681,6 +6702,12 @@ app.get("/api/assessments/sessions/student/:studentId", requireAuth, async (req,
     try {
         if (req.authUser.role === "student" && req.authUser.id !== req.params.studentId) {
             return res.status(403).json({ success: false, message: "Students can only view their own assessment sessions." });
+        }
+        if (req.authUser.role === "teacher") {
+            const authorized = await isTeacherAuthorizedForStudent(pool, req.authUser.id, req.params.studentId);
+            if (!authorized) {
+                return res.status(403).json({ success: false, message: "You are not authorized to monitor this student." });
+            }
         }
         const result = await pool.query(`
             SELECT s.*, 
@@ -6710,6 +6737,12 @@ app.get("/api/assessments/sessions/:sessionId/events", requireAuth, requireRole(
         }
         if (req.authUser.role === "student" && sessionRes.rows[0].student_user_id !== req.authUser.id) {
             return res.status(403).json({ success: false, message: "Students can only view their own assessment events." });
+        }
+        if (req.authUser.role === "teacher") {
+            const authorized = await isTeacherAuthorizedForStudent(pool, req.authUser.id, sessionRes.rows[0].student_user_id);
+            if (!authorized) {
+                return res.status(403).json({ success: false, message: "You are not authorized to view this student's assessment events." });
+            }
         }
         const events = await pool.query(`
             SELECT * FROM assessment_security_events
@@ -6758,6 +6791,13 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
 
         if (req.authUser.role === "student" && !isSelf) {
             return res.status(403).json({ success: false, message: "Students can only view their own progress." });
+        }
+
+        if (req.authUser.role === "teacher" && !isSelf) {
+            const authorized = await isTeacherAuthorizedForStudent(pool, req.authUser.id, resolvedId);
+            if (!authorized) {
+                return res.status(403).json({ success: false, message: "You are not authorized to monitor this student." });
+            }
         }
         const result = await pool.query(
             `WITH combined_progress AS (
@@ -6909,6 +6949,14 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
         if (req.authUser.role === "student" && !isSelf) {
             console.warn(`[StudentResults:${requestId}] Stage: ${failureStage} - Access denied for student. authId=${authId}, targetId=${targetId}`);
             return res.status(403).json({ success: false, message: "Students can only view their own results." });
+        }
+
+        if (req.authUser.role === "teacher" && !isSelf) {
+            const authorized = await isTeacherAuthorizedForStudent(pool, req.authUser.id, targetUser.id);
+            if (!authorized) {
+                console.warn(`[StudentResults:${requestId}] Stage: ${failureStage} - Teacher ${authId} unauthorized to monitor student ${targetUser.id}`);
+                return res.status(403).json({ success: false, message: "You are not authorized to monitor this student." });
+            }
         }
 
         failureStage = "oop_completion_check";
@@ -7430,8 +7478,16 @@ app.get("/api/quiz-attempts/:studentId", requireAuth, async (req, res, next) => 
         const resolvedUserId = userRow.rows[0]?.user_id || studentId;
         const resolvedEmail = userRow.rows[0]?.email || "";
 
-        if (req.authUser.role === "student" && req.authUser.id !== resolvedId && req.authUser.userId !== resolvedUserId) {
+        const isSelf = (req.authUser.id === resolvedId || req.authUser.userId === resolvedUserId);
+        if (req.authUser.role === "student" && !isSelf) {
             return res.status(403).json({ success: false, message: "Students can only view their own quiz attempts." });
+        }
+
+        if (req.authUser.role === "teacher" && !isSelf) {
+            const authorized = await isTeacherAuthorizedForStudent(pool, req.authUser.id, resolvedId);
+            if (!authorized) {
+                return res.status(403).json({ success: false, message: "You are not authorized to monitor this student." });
+            }
         }
         const result = await pool.query(`
             WITH combined_attempts AS (
@@ -7726,9 +7782,24 @@ app.get("/api/recommendations", requireAuth, async (req, res, next) => {
         if (req.authUser.role === "student") {
             params.push(req.authUser.id, req.authUser.userId, req.authUser.email);
             where = "WHERE student_id IN ($1, $2, $3)";
-        } else if (requestedStudentId) {
-            params.push(requestedStudentId);
-            where = "WHERE student_id = $1";
+        } else if (req.authUser.role === "teacher") {
+            if (requestedStudentId) {
+                const authorized = await isTeacherAuthorizedForStudent(pool, req.authUser.id, requestedStudentId);
+                if (!authorized) {
+                    return res.status(403).json({ success: false, message: "You are not authorized to view recommendations for this student." });
+                }
+                params.push(requestedStudentId);
+                where = "WHERE student_id = $1";
+            } else {
+                params.push(req.authUser.id);
+                where = `WHERE EXISTS (
+                    SELECT 1 FROM monitoring_requests mr
+                    JOIN users u ON u.id = mr.student_id
+                    WHERE mr.teacher_id = $1
+                      AND mr.status = 'accepted'
+                      AND recommendation_history.student_id IN (u.id::text, u.user_id, u.email)
+                )`;
+            }
         }
 
         const result = await pool.query(`
@@ -7781,8 +7852,8 @@ app.post("/api/recommendations", requireAuth, async (req, res, next) => {
             RETURNING *
         `, [
             cleanText(recommendation.id || `rec_${Date.now()}`, 160),
-            cleanText(recommendation.studentId || req.authUser.id, 160),
-            cleanText(recommendation.studentName || "", 255),
+            cleanText(req.authUser.id, 160), // Enforce authenticated student ID
+            cleanText(req.authUser.name || recommendation.studentName || "", 255),
             cleanText(recommendation.lessonId || "", 120),
             cleanText(recommendation.lessonTitle || "", 255),
             cleanText(recommendation.currentTopic || "", 255),
@@ -7812,12 +7883,18 @@ app.post("/api/recommendations", requireAuth, async (req, res, next) => {
 
 app.patch("/api/recommendations/:id/complete", requireAuth, async (req, res, next) => {
     try {
+        let whereAuth = "WHERE id = $1";
+        const params = [req.params.id];
+        if (req.authUser.role === "student") {
+            whereAuth += " AND student_id IN ($2, $3, $4)";
+            params.push(req.authUser.id, req.authUser.userId, req.authUser.email);
+        }
         const result = await pool.query(`
             UPDATE recommendation_history
             SET status = 'Completed', completed_at = NOW()
-            WHERE id = $1
+            ${whereAuth}
             RETURNING *
-        `, [req.params.id]);
+        `, params);
         if (!result.rowCount) return res.status(404).json({ success: false, message: "Recommendation not found." });
         res.json({ success: true, data: toClientRecommendation(result.rows[0]) });
     } catch (error) {
@@ -8220,7 +8297,7 @@ app.patch("/api/monitoring-requests/:id", requireAuth, requireRole(["teacher", "
     }
 });
 
-app.get("/api/teacher/monitoring", requireAuth, requireRole(["teacher"]), async (_req, res, next) => {
+app.get("/api/teacher/monitoring", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const [students, teachers] = await Promise.all([
             pool.query(`
@@ -8277,6 +8354,12 @@ app.get("/api/teacher/monitoring", requireAuth, requireRole(["teacher"]), async 
                       LIMIT 1
                     ) practice ON TRUE
                     WHERE u.role = 'student'
+                      AND EXISTS (
+                        SELECT 1 FROM monitoring_requests mr
+                        WHERE mr.teacher_id = $1
+                          AND mr.student_id = u.id
+                          AND mr.status = 'accepted'
+                      )
                       AND l.status <> 'Archived'
                       AND ${OOP_LESSON_ALIAS_FILTER_SQL("l")}
                 ),
@@ -8317,6 +8400,12 @@ app.get("/api/teacher/monitoring", requireAuth, requireRole(["teacher"]), async 
                     LEFT JOIN practice_submissions ps
                       ON ps.student_id IN (u.id::text, u.user_id, u.email)
                     WHERE u.role = 'student'
+                      AND EXISTS (
+                        SELECT 1 FROM monitoring_requests mr
+                        WHERE mr.teacher_id = $1
+                          AND mr.student_id = u.id
+                          AND mr.status = 'accepted'
+                      )
                     GROUP BY u.id
                 ),
                 latest_activity AS (
@@ -8448,12 +8537,18 @@ app.get("/api/teacher/monitoring", requireAuth, requireRole(["teacher"]), async 
                 LEFT JOIN practice_metrics pm ON pm.student_id = u.id
                 LEFT JOIN latest_activity la ON la.student_id IN (u.id::text, u.user_id, u.email)
                 WHERE u.role = 'student'
+                  AND EXISTS (
+                    SELECT 1 FROM monitoring_requests mr
+                    WHERE mr.teacher_id = $1
+                      AND mr.student_id = u.id
+                      AND mr.status = 'accepted'
+                  )
                 GROUP BY u.id, s.student_number, s.course, s.year_level, s.section,
                          lt.total_lessons, sm.completed_lessons, sm.overall_progress, sm.video_progress,
                          qm.quiz_average, pm.practice_average,
                          la.type, la.action, la.lesson_id, la.lesson_title, la.lesson_sequence, la.timestamp
                 ORDER BY u.created_at DESC
-            `).catch(async error => {
+            `, [req.authUser.id]).catch(async error => {
                 console.error("[teacher-monitoring] evidence query failed; using compatibility query", {
                     message: error.message,
                     code: error.code
@@ -8508,8 +8603,14 @@ app.get("/api/teacher/monitoring", requireAuth, requireRole(["teacher"]), async 
                     FROM users u
                     JOIN students s ON s.user_id = u.id
                     WHERE u.role = 'student'
+                      AND EXISTS (
+                        SELECT 1 FROM monitoring_requests mr
+                        WHERE mr.teacher_id = $1
+                          AND mr.student_id = u.id
+                          AND mr.status = 'accepted'
+                      )
                     ORDER BY u.created_at DESC
-                `);
+                `, [req.authUser.id]);
             }),
             pool.query(`
                 SELECT u.id, u.name, u.email, u.account_status, t.employee_id, t.department

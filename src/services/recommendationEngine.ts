@@ -189,21 +189,33 @@ export const generateRuleBasedRecommendation = (input: RecommendationInput): Ada
   );
 };
 
-export const getRecommendationHistory = (): AdaptiveRecommendation[] => {
+export const getRecommendationHistory = (studentId?: string): AdaptiveRecommendation[] => {
   try {
-    const saved = localStorage.getItem(RECOMMENDATION_HISTORY_KEY);
-    return saved ? JSON.parse(saved) : [];
+    const key = studentId ? `${RECOMMENDATION_HISTORY_KEY}_${studentId}` : RECOMMENDATION_HISTORY_KEY;
+    const saved = localStorage.getItem(key);
+    const list: AdaptiveRecommendation[] = saved ? JSON.parse(saved) : [];
+    if (studentId) {
+      return list.filter(item => !item.studentId || item.studentId === studentId);
+    }
+    return list;
   } catch {
     return [];
   }
 };
 
-export const saveRecommendationHistory = (history: AdaptiveRecommendation[]) => {
-  localStorage.setItem(RECOMMENDATION_HISTORY_KEY, JSON.stringify(history));
+export const saveRecommendationHistory = (history: AdaptiveRecommendation[], studentId?: string) => {
+  try {
+    const key = studentId ? `${RECOMMENDATION_HISTORY_KEY}_${studentId}` : RECOMMENDATION_HISTORY_KEY;
+    localStorage.setItem(key, JSON.stringify(history));
+  } catch {
+    // browser storage might fail or be disabled
+  }
 };
 
 export const storeRecommendation = (recommendation: AdaptiveRecommendation): AdaptiveRecommendation[] => {
-  const next = [recommendation, ...getRecommendationHistory()].slice(0, 100);
-  saveRecommendationHistory(next);
+  const studentId = recommendation.studentId;
+  const current = getRecommendationHistory(studentId);
+  const next = [recommendation, ...current.filter(r => r.id !== recommendation.id)].slice(0, 100);
+  saveRecommendationHistory(next, studentId);
   return next;
 };

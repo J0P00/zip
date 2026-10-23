@@ -62,6 +62,8 @@ type SwingGradeResult = {
 };
 
 const QUIZ_HISTORY_KEY = 'oophub_swing_quiz_history';
+const getQuizHistoryKey = (userKey: string) => `${QUIZ_HISTORY_KEY}_${userKey}`;
+const getSwingDraftKey = (userKey: string) => `${SWING_DRAFT_KEY}_${userKey}`;
 
 const formatDateTime = (value: string) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
@@ -86,8 +88,18 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
   const [progressDb, setProgressDb] = useState<SwingProgressDb>({});
   const [quizDb, setQuizDb] = useState<SwingQuizDb>({});
   const [submissionDb, setSubmissionDb] = useState<SubmissionDb>({});
-  const [quizHistory, setQuizHistory] = useState<SwingQuizAttempt[]>(() => getStoredJson(QUIZ_HISTORY_KEY, []));
-  const [draftDb, setDraftDb] = useState<DraftDb>(() => getStoredJson(SWING_DRAFT_KEY, {}));
+  const [quizHistory, setQuizHistory] = useState<SwingQuizAttempt[]>(() =>
+    getStoredJson(getQuizHistoryKey(userKeyFor(currentUser)), [])
+  );
+  const [draftDb, setDraftDb] = useState<DraftDb>(() =>
+    getStoredJson(getSwingDraftKey(userKeyFor(currentUser)), {})
+  );
+
+  useEffect(() => {
+    const key = userKeyFor(currentUser);
+    setQuizHistory(getStoredJson(getQuizHistoryKey(key), []));
+    setDraftDb(getStoredJson(getSwingDraftKey(key), {}));
+  }, [currentUser.id, currentUser.email, currentUser.userId]);
   const [quizQuestions, setQuizQuestions] = useState<CourseQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [quizIndex, setQuizIndex] = useState(0);
@@ -439,7 +451,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
       const nextHistory = [persistedAttempt, ...quizHistory].slice(0, 100);
       setQuizDb(nextDb);
       setQuizHistory(nextHistory);
-      setStoredJson(QUIZ_HISTORY_KEY, nextHistory);
+      setStoredJson(getQuizHistoryKey(userKeyFor(currentUser)), nextHistory);
       onSubmitCompleted({ id: 'dummy_quiz' } as any);
       setLatestAttempt(persistedAttempt);
       setQuizMode("result");
@@ -456,7 +468,7 @@ export default function JavaSwingModule({ currentUser, oopUnlocked, studentResul
     setSourceCode(value);
     const next = { ...draftDb, [submissionKey]: value };
     setDraftDb(next);
-    setStoredJson(SWING_DRAFT_KEY, next);
+    setStoredJson(getSwingDraftKey(userKeyFor(currentUser)), next);
   };
 
   const runCode = () => {

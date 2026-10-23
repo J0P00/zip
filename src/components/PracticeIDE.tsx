@@ -31,6 +31,7 @@ interface QuizAttempt {
 }
 
 const DRAFT_KEY = 'oophub_practice_drafts';
+const getDraftKey = (studentKey: string) => `${DRAFT_KEY}_${studentKey}`;
 
 type WatchDb = Record<string, WatchRecord>;
 type QuizDb = Record<string, QuizAttempt>;
@@ -90,7 +91,12 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
     });
   }, [effectiveLessons]);
 
-  const [draftDb, setDraftDb] = useState<DraftDb>(() => getStoredJson(DRAFT_KEY, {}));
+  const studentKey = currentUser.id || currentUser.userId || currentUser.email;
+  const [draftDb, setDraftDb] = useState<DraftDb>(() => getStoredJson(getDraftKey(studentKey), {}));
+
+  useEffect(() => {
+    setDraftDb(getStoredJson(getDraftKey(studentKey), {}));
+  }, [studentKey]);
 
   const initialTargetId = useMemo(() => {
     if (initialLessonId) {
@@ -112,11 +118,17 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
   }, [initialLessonId, challengeList]);
 
   const activeChallenge = (challengeList.find(challenge => challenge.id === activeChallengeId) || challengeList[0] || PRACTICE_CHALLENGES[0]) as any;
-  const studentKey = currentUser.id || currentUser.userId || currentUser.email;
   const submissionKey = `${studentKey}:${activeChallenge.id}`;
   const currentSubmission = submissionDb[submissionKey];
   const submitted = currentSubmission;
   const [sourceCode, setSourceCode] = useState(() => currentSubmission?.sourceCode || draftDb[submissionKey] || activeChallenge.starterCode);
+
+  useEffect(() => {
+    const key = `${studentKey}:${activeChallenge.id}`;
+    const sub = submissionDb[key];
+    const userDrafts = getStoredJson<DraftDb>(getDraftKey(studentKey), {});
+    setSourceCode(sub?.sourceCode || userDrafts[key] || activeChallenge.starterCode);
+  }, [studentKey, activeChallenge.id]);
   const [consoleLogs, setConsoleLogs] = useState<string[]>([
     'Console ready. Type your Java code solution below.',
     'Note: Secure Practice Mode is active. Direct pasting of external code is disabled to foster genuine coding practice.'
@@ -264,7 +276,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
     setSourceCode(value);
     const next = { ...draftDb, [submissionKey]: value };
     setDraftDb(next);
-    setStoredJson(DRAFT_KEY, next);
+    setStoredJson(getDraftKey(studentKey), next);
   };
 
   // Paste & Drag-and-Drop Blocking Security Handlers

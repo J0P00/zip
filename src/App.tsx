@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { 
   Terminal, 
   BookOpen, 
@@ -345,11 +345,40 @@ const persistSessionUser = (user: AuthenticatedUser) => {
   }
 };
 
+const STUDENT_STORAGE_KEYS = [
+  SESSION_USER_KEY,
+  SESSION_VIEW_KEY,
+  'oophub_current_user_id',
+  'oophub_video_lessons',
+  'oophub_student_oop_progress',
+  'oophub_practice_drafts',
+  'oophub_practice_submissions',
+  'oophub_oop_video_progress',
+  'oophub_oop_quiz_attempts',
+  'oophub_swing_lesson_progress',
+  'oophub_swing_quiz_attempts',
+  'oophub_swing_practice_drafts',
+  'oophub_swing_submissions',
+  'oophub_swing_quiz_history',
+  'oophub_adaptive_recommendation_history',
+  'oophub_monitoring_requests',
+  'selected_lesson_id'
+];
+
 const clearSessionUser = () => {
   try {
-    localStorage.removeItem(SESSION_USER_KEY);
-    localStorage.removeItem(SESSION_VIEW_KEY);
-    localStorage.removeItem('oophub_current_user_id');
+    STUDENT_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
+    const allKeys = Object.keys(localStorage);
+    allKeys.forEach(key => {
+      if (
+        key.startsWith('oophub_swing_quiz_history_') ||
+        key.startsWith('oophub_swing_practice_drafts_') ||
+        key.startsWith('oophub_practice_drafts_') ||
+        key.startsWith('oophub_adaptive_recommendation_history_')
+      ) {
+        localStorage.removeItem(key);
+      }
+    });
   } catch {
     // Logout should still complete even if storage cleanup is blocked.
   }
@@ -453,6 +482,47 @@ export default function App() {
   const [isRestoringSession, setIsRestoringSession] = useState(() => Boolean(getAuthToken()) && !savedUser);
   const [sessionRestoreError, setSessionRestoreError] = useState<string | null>(null);
   const [sessionRestoreAttempt, setSessionRestoreAttempt] = useState(0);
+
+  // Student Statistics & User-Specific State
+  const [streak, setStreak] = useState<number>(0);
+  const [points, setPoints] = useState<number>(0);
+  const [completedLessonsCount, setCompletedLessonsCount] = useState<number>(0);
+  const [studentResults, setStudentResults] = useState<StudentResultsData | null>(null);
+  const [studentResultsError, setStudentResultsError] = useState<string | null>(null);
+  const [studentResultsLoading, setStudentResultsLoading] = useState(false);
+  const [videoLessons, setVideoLessons] = useState<VideoLesson[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>([]);
+  const [recommendationHistory, setRecommendationHistory] = useState<AdaptiveRecommendation[]>([]);
+  const [activeRecommendation, setActiveRecommendation] = useState<AdaptiveRecommendation | null>(null);
+  const [monitoringRequests, setMonitoringRequests] = useState<MonitoringRequest[]>([]);
+  const [monitoringRequestsError, setMonitoringRequestsError] = useState<string | null>(null);
+
+  const resetAllUserState = useCallback(() => {
+    setAuthToken('');
+    clearSessionUser();
+    setCurrentUser(null);
+    setPersona('public');
+    setStudentResults(null);
+    setStudentResultsError(null);
+    setStudentResultsLoading(false);
+    setStreak(0);
+    setPoints(0);
+    setCompletedLessonsCount(0);
+    setNotifications([]);
+    setPendingSubmissions([]);
+    setRecommendationHistory([]);
+    setActiveRecommendation(null);
+    setMonitoringRequests([]);
+    setMonitoringRequestsError(null);
+    setVideoLessons(OOP_COURSE_LESSONS.map(applyOopLessonCitation));
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    setShowLogoutConfirm(false);
+    resetAllUserState();
+    setAuthMode(null);
+  }, [resetAllUserState]);
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
@@ -626,10 +696,7 @@ export default function App() {
         console.warn('Session restore failed:', error);
         if (error?.status === 401) {
           // Token is genuinely invalid or expired on backend
-          setAuthToken('');
-          clearSessionUser();
-          setCurrentUser(null);
-          setPersona('public');
+          resetAllUserState();
           setSessionRestoreError(null);
         } else {
           // Network errors, timeouts, or 500s during cold-start must NOT destroy session
@@ -645,17 +712,14 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [currentUser, sessionRestoreAttempt]);
+  }, [currentUser, sessionRestoreAttempt, resetAllUserState]);
 
   // Intercept 401/403 expired sessions from apiRequest and redirect to login
   useEffect(() => {
     const handleAuthExpired = (event: Event) => {
       const customEvent = event as CustomEvent;
       console.warn('[Auth] Session expired or unauthorized, automatically redirecting to login:', customEvent.detail);
-      setAuthToken('');
-      clearSessionUser();
-      setCurrentUser(null);
-      setPersona('public');
+      resetAllUserState();
       setAuthMode('login');
     };
     window.addEventListener('oophub:auth-expired', handleAuthExpired);
@@ -667,38 +731,32 @@ export default function App() {
   useEffect(() => {
     if (!currentUser || !getAuthToken()) {
       setActiveRecommendation(null);
+      setRecommendationHistory([]);
       return;
     }
-    recommendationApi.list(currentUser.role === 'student' ? getCanonicalStudentId(currentUser) : undefined)
+    const studentId = currentUser.role === 'student' ? getCanonicalStudentId(currentUser) : undefined;
+    recommendationApi.list(studentId)
       .then(response => {
-        const localHistory = getRecommendationHistory();
+        const localHistory = getRecommendationHistory(studentId);
         const merged = [...response.data, ...localHistory]
           .filter((item, index, arr) => arr.findIndex(other => other.id === item.id) === index)
           .slice(0, 100);
         const currentUserHistory = currentUser.role === 'student'
           ? merged.filter(item => recommendationBelongsToStudent(item, currentUser))
           : merged;
-        setRecommendationHistory(merged);
+        setRecommendationHistory(currentUserHistory);
         setActiveRecommendation(currentUserHistory[0] || null);
       })
       .catch(error => {
         console.warn('Unable to load adaptive recommendation history from backend:', error);
-        const localHistory = getRecommendationHistory();
+        const localHistory = getRecommendationHistory(studentId);
         const currentUserHistory = currentUser.role === 'student'
           ? localHistory.filter(item => recommendationBelongsToStudent(item, currentUser))
           : localHistory;
-        setRecommendationHistory(localHistory);
+        setRecommendationHistory(currentUserHistory);
         setActiveRecommendation(currentUserHistory[0] || null);
       });
   }, [currentUser?.id, currentUser?.role, currentUser?.userId, currentUser?.email]);
-
-  // Student Statistics State
-  const [streak, setStreak] = useState<number>(0);
-  const [points, setPoints] = useState<number>(0);
-  const [completedLessonsCount, setCompletedLessonsCount] = useState<number>(0);
-  const [studentResults, setStudentResults] = useState<StudentResultsData | null>(null);
-  const [studentResultsError, setStudentResultsError] = useState<string | null>(null);
-  const [studentResultsLoading, setStudentResultsLoading] = useState(false);
 
   const refreshStudentResults = async (user: AuthenticatedUser | null = currentUser) => {
     if (!user || user.role !== 'student') return;
@@ -723,17 +781,9 @@ export default function App() {
     }
   };
 
-  // Dynamic shared database states
-  const [videoLessons, setVideoLessons] = useState<VideoLesson[]>([]);
-
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-
   const [leaderboardUsers, setLeaderboardUsers] = useState<LeaderboardUser[]>(() =>
     rankLeaderboard(readStoredJson<LeaderboardUser[]>(LEADERBOARD_KEY, []))
   );
-  const [pendingSubmissions, setPendingSubmissions] = useState<PendingSubmission[]>([]);
-  const [recommendationHistory, setRecommendationHistory] = useState<AdaptiveRecommendation[]>([]);
-  const [activeRecommendation, setActiveRecommendation] = useState<AdaptiveRecommendation | null>(null);
 
   useEffect(() => {
     if (leaderboardUsers.length > 0) saveStoredJson(LEADERBOARD_KEY, leaderboardUsers);
@@ -815,10 +865,6 @@ export default function App() {
       cancelled = true;
     };
   }, [currentUser?.role, currentUser?.token]);
-
-  // Monitoring Connection System State
-  const [monitoringRequests, setMonitoringRequests] = useState<MonitoringRequest[]>([]);
-  const [monitoringRequestsError, setMonitoringRequestsError] = useState<string | null>(null);
 
   useEffect(() => {
     // Students must load their own pending teacher invitations as well as
@@ -983,7 +1029,6 @@ export default function App() {
 
         return updatedVideo;
       });
-      localStorage.setItem('oophub_video_lessons', JSON.stringify(next));
       return next;
     });
   };
@@ -1098,12 +1143,13 @@ export default function App() {
     if (currentUser?.role !== 'student') {
       setStudentResults(null);
       setStudentResultsError(null);
-      setStudentResultsLoading(true);
+      setStudentResultsLoading(false);
       return;
     }
     const studentId = getCanonicalStudentId(currentUser);
     let cancelled = false;
-    ['oophub_oop_video_progress', 'oophub_oop_quiz_attempts', 'oophub_practice_submissions', 'oophub_practice_drafts'].forEach(key => localStorage.removeItem(key));
+    STUDENT_STORAGE_KEYS.filter(k => k !== SESSION_USER_KEY && k !== SESSION_VIEW_KEY && k !== 'oophub_current_user_id')
+      .forEach(key => localStorage.removeItem(key));
     setStudentResults(null);
     setStreak(0);
     setPoints(0);
@@ -1170,7 +1216,6 @@ export default function App() {
         }
         return lesson;
       });
-      localStorage.setItem('oophub_video_lessons', JSON.stringify(updated));
       return updated;
     });
 
@@ -1424,10 +1469,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
-                  setAuthToken('');
-                  clearSessionUser();
-                  setCurrentUser(null);
-                  setPersona('public');
+                  resetAllUserState();
                   setSessionRestoreError(null);
                   setAuthMode('login');
                 }}
@@ -1443,15 +1485,26 @@ export default function App() {
           initialMode={authMode}
           onCancel={() => setAuthMode(null)}
           onAuthSuccess={(user) => {
+            setStudentResults(null);
+            setStudentResultsError(null);
+            setStudentResultsLoading(false);
+            setStreak(0);
+            setPoints(0);
+            setCompletedLessonsCount(0);
+            setNotifications([]);
+            setPendingSubmissions([]);
+            setRecommendationHistory([]);
+            setActiveRecommendation(null);
+            setMonitoringRequests([]);
+            setMonitoringRequestsError(null);
+            setVideoLessons(OOP_COURSE_LESSONS.map(applyOopLessonCitation));
+
             persistSessionUser(user);
             setCurrentUser(user);
             setPersona(user.role);
             setAuthMode(null);
             if (user.role === 'student') {
               setStudentTab('dashboard');
-              setStreak(0);
-              setPoints(0);
-              setCompletedLessonsCount(0);
             } else if (user.role === 'teacher') {
               setTeacherTab('dashboard');
             }
@@ -1800,14 +1853,7 @@ export default function App() {
               </button>
               <button
                 id="logout-confirm-yes"
-                onClick={() => {
-                  setShowLogoutConfirm(false);
-                  setPersona('public');
-                  setCurrentUser(null);
-                  setAuthToken('');
-                  clearSessionUser();
-                  setAuthMode(null);
-                }}
+                onClick={handleLogout}
                 className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition shadow-md shadow-rose-100 cursor-pointer select-none"
               >
                 Yes
