@@ -3552,29 +3552,41 @@ const verifyLessonCompletion = async (studentId, lessonId) => {
         const isUuid = studentUuid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(studentUuid));
 
         if (isUuid) {
-            await pool.query(`
-                INSERT INTO lesson_progress (student_id, lesson_id, video_completed, quiz_passed, practice_completed, practice_submitted, completed, completed_at)
-                VALUES ($1, $2, $3, $4, $5, $5, $6, CASE WHEN $6 THEN NOW() ELSE NULL END)
-                ON CONFLICT (student_id, lesson_id) DO UPDATE SET
-                  video_completed = EXCLUDED.video_completed,
-                  quiz_passed = EXCLUDED.quiz_passed,
-                  practice_completed = EXCLUDED.practice_completed,
-                  practice_submitted = EXCLUDED.practice_submitted OR lesson_progress.practice_submitted,
-                  completed = EXCLUDED.completed,
-                  completed_at = CASE WHEN EXCLUDED.completed THEN NOW() ELSE lesson_progress.completed_at END,
-                  updated_at = NOW()
-            `, [studentUuid, lessonId, evidence.videoCompleted, evidence.assessmentPassed, evidence.practiceCompleted, evidence.completed]);
+            if (evidence.isSwing) {
+                await pool.query(`
+                    INSERT INTO swing_progress (student_id, lesson_id, video_completed, quiz_passed, exercise_completed, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, NOW())
+                    ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+                      video_completed = EXCLUDED.video_completed,
+                      quiz_passed = EXCLUDED.quiz_passed,
+                      exercise_completed = EXCLUDED.exercise_completed,
+                      updated_at = NOW()
+                `, [studentUuid, lessonId, Boolean(evidence.videoCompleted), Boolean(evidence.assessmentPassed), Boolean(evidence.practiceCompleted)]);
+            } else {
+                await pool.query(`
+                    INSERT INTO lesson_progress (student_id, lesson_id, video_completed, quiz_passed, practice_completed, practice_submitted, completed, completed_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7 THEN NOW() ELSE NULL END)
+                    ON CONFLICT (student_id, lesson_id) DO UPDATE SET
+                      video_completed = EXCLUDED.video_completed,
+                      quiz_passed = EXCLUDED.quiz_passed,
+                      practice_completed = EXCLUDED.practice_completed,
+                      practice_submitted = EXCLUDED.practice_submitted OR lesson_progress.practice_submitted,
+                      completed = EXCLUDED.completed,
+                      completed_at = CASE WHEN EXCLUDED.completed THEN NOW() ELSE lesson_progress.completed_at END,
+                      updated_at = NOW()
+                `, [studentUuid, lessonId, Boolean(evidence.videoCompleted), Boolean(evidence.assessmentPassed), Boolean(evidence.practiceCompleted), Boolean(evidence.practiceSubmitted), Boolean(evidence.completed)]);
 
-            if (evidence.completed) {
-                await logActivity(studentUuid, "lesson_complete", `Completed OOP Lesson: ${lessonId}`, { lessonId });
+                if (evidence.completed) {
+                    await logActivity(studentUuid, "lesson_complete", `Completed OOP Lesson: ${lessonId}`, { lessonId });
 
-                const lessonInfo = await pool.query("SELECT module FROM lessons WHERE id = $1", [lessonId]);
-                if (lessonInfo.rowCount > 0) {
-                    const moduleName = lessonInfo.rows[0].module;
-                    await checkModuleCompletion(studentUuid, moduleName);
+                    const lessonInfo = await pool.query("SELECT module FROM lessons WHERE id = $1", [lessonId]);
+                    if (lessonInfo.rowCount > 0) {
+                        const moduleName = lessonInfo.rows[0].module;
+                        await checkModuleCompletion(studentUuid, moduleName);
+                    }
+
+                    await checkAndAwardBadges(studentUuid);
                 }
-
-                await checkAndAwardBadges(studentUuid);
             }
         }
     } catch (err) {
@@ -6515,7 +6527,7 @@ app.post("/api/assessments/session/:sessionId/submit", requireAuth, async (req, 
         });
 
         // Verify lesson completion
-        if (!isSwingAssessment && session.lesson_id) {
+        if (session.lesson_id) {
             await verifyLessonCompletion(req.authUser.id, session.lesson_id);
         }
 
@@ -6859,6 +6871,15 @@ app.get("/api/progress/:studentId", requireAuth, async (req, res, next) => {
                     vp.updated_at
                 FROM video_progress vp
                 WHERE ${studentUuidMatchSql("vp.student_id", 1, 2, 3)}
+                UNION ALL
+                SELECT 
+                    lp.lesson_id AS raw_id,
+                    0 AS last_position,
+                    CASE WHEN lp.video_completed THEN 100 ELSE 0 END AS completion_percentage,
+                    lp.video_completed AS completed,
+                    lp.updated_at
+                FROM lesson_progress lp
+                WHERE ${studentUuidMatchSql("lp.student_id", 1, 2, 3)}
                 UNION ALL
                 SELECT 
                     sw.lesson_id AS raw_id,

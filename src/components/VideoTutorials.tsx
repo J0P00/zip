@@ -136,9 +136,12 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
 
       const prevVideoDone = Boolean(prevLesson.video_completed) === true || Boolean(prevTopic?.videoCompleted) || (watchDb[prevLesson.id]?.completionPercentage || 0) >= 95;
       const prevQuizPassed = Boolean(prevLesson.assessment_passed) === true || Boolean(prevTopic?.quizPassed);
-      const prevPracticeSubmitted = Boolean(prevLesson.practice_submitted) === true || Boolean((prevTopic as any)?.practice_submitted) === true || Boolean((prevTopic as any)?.practiceCompleted) || Boolean((prevTopic as any)?.exerciseCompleted) || (prevSubmission && prevSubmission.compileStatus === 'success');
+      const prevPracticePassed =
+        Boolean((prevTopic as any)?.practiceCompleted) === true ||
+        Boolean(prevLesson.practice_completed) === true ||
+        (prevSubmission && prevSubmission.compileStatus === 'success' && !(prevSubmission as any).remedialRequired);
 
-      const meetsThreeConditions = Boolean(prevVideoDone) && Boolean(prevQuizPassed) && Boolean(prevPracticeSubmitted);
+      const meetsThreeConditions = Boolean(prevVideoDone) && Boolean(prevQuizPassed) && Boolean(prevPracticePassed);
       queueUnlocked = meetsThreeConditions || Boolean(prevTopic?.lessonCompleted);
     }
 

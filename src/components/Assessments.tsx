@@ -66,7 +66,8 @@ const getAssessmentLockedReason = (
       ? 'Complete all 12 Java OOP lessons before unlocking Java Swing.'
       : 'Complete the previous lesson, including its practice, before continuing.');
   }
-  return evidence.assessmentUnlocked ? '' : 'Watch at least 95% of this lesson video first.';
+  const isVideoDone = Boolean(evidence.assessmentUnlocked || evidence.videoCompleted || (evidence.videoProgress || 0) >= 95 || lesson.video_completed);
+  return isVideoDone ? '' : 'Watch at least 95% of this lesson video first.';
 };
 
 export default function Assessments({ currentUser, onCorrectAnswerAdded, onNavigateTo, lessons = [], activeRecommendation }: AssessmentsProps) {

@@ -1001,6 +1001,7 @@ export default function App() {
         
         const updatedVideo = {
           ...video,
+          video_completed: videoRequirementCompleted || Boolean(video.video_completed),
           progressPercent: nextProgress,
           status: (videoRequirementCompleted ? 'active' : video.status) as any,
           completedStudents: completed,
@@ -1189,26 +1190,33 @@ export default function App() {
     // Identify target lesson ID from submission or challenge
     const submittedLessonId = submission.lessonId ||
       (submission.challengeId && PRACTICE_CHALLENGES.find(c => c.id === submission.challengeId)?.lessonId) ||
-      'oop_lesson_4';
+      '';
 
-    // 1. Immediately update videoLessons array in parent state
+    const isSuccessfulSubmission = Boolean(
+      (submission.compileStatus === 'success' || (submission.score && submission.score >= 70)) &&
+      !submission.remedialRequired
+    );
+
+    // 1. Update videoLessons array dynamically using the active ordered list
     setVideoLessons(prevLessons => {
-      const targetLesson = prevLessons.find(l => l.id === submittedLessonId);
-      const targetSeq = targetLesson?.sequence ?? 4;
-      const nextSeq = targetSeq + 1;
+      const targetIndex = prevLessons.findIndex(l => l.id === submittedLessonId);
+      if (targetIndex === -1) return prevLessons;
 
-      const updated = prevLessons.map(lesson => {
-        if (lesson.id === submittedLessonId || lesson.sequence === targetSeq) {
+      const nextLesson = targetIndex < prevLessons.length - 1 ? prevLessons[targetIndex + 1] : null;
+
+      const updated = prevLessons.map((lesson, idx) => {
+        if (lesson.id === submittedLessonId) {
+          const videoDone = Boolean(lesson.video_completed);
+          const assessmentPassed = Boolean(lesson.assessment_passed);
+          const practiceDone = isSuccessfulSubmission || Boolean(lesson.practice_completed);
+          const isComplete = videoDone && assessmentPassed && practiceDone;
           return {
             ...lesson,
-            video_completed: true,
-            assessment_passed: true,
             practice_submitted: true,
-            status: 'completed' as const
+            status: isComplete ? ('completed' as const) : lesson.status
           };
         }
-        if (lesson.sequence === nextSeq) {
-          // Immediately unlock Lesson 5 (next lesson) in memory
+        if (nextLesson && lesson.id === nextLesson.id && isSuccessfulSubmission) {
           return {
             ...lesson,
             status: lesson.status === 'completed' ? ('completed' as const) : ('active' as const)
@@ -1219,26 +1227,28 @@ export default function App() {
       return updated;
     });
 
-    // 2. Immediately update studentResults in parent state
+    // 2. Update studentResults in parent state
     setStudentResults(prevResults => {
       if (!prevResults) return prevResults;
-      const targetTopic = prevResults.oopTopics?.find(t => t.id === submittedLessonId);
-      const targetSeq = targetTopic?.sequence ?? 4;
-      const nextSeq = targetSeq + 1;
+      const oopTopics = prevResults.oopTopics || [];
+      const targetIndex = oopTopics.findIndex(t => t.id === submittedLessonId);
+      const nextTopic = (targetIndex !== -1 && targetIndex < oopTopics.length - 1) ? oopTopics[targetIndex + 1] : null;
 
-      const nextTopics = (prevResults.oopTopics || []).map(topic => {
-        if (topic.id === submittedLessonId || topic.sequence === targetSeq) {
+      const nextTopics = oopTopics.map((topic, idx) => {
+        if (topic.id === submittedLessonId) {
+          const videoDone = Boolean(topic.videoCompleted);
+          const quizPassed = Boolean(topic.quizPassed);
+          const practiceDone = isSuccessfulSubmission || Boolean((topic as any).practiceCompleted);
+          const isComplete = videoDone && quizPassed && practiceDone;
           return {
             ...topic,
-            videoCompleted: true,
-            quizPassed: true,
-            practiceCompleted: true,
             practice_submitted: true,
             practiceSubmitted: true,
-            lessonCompleted: true
+            practiceCompleted: practiceDone,
+            lessonCompleted: isComplete
           };
         }
-        if (topic.sequence === nextSeq) {
+        if (nextTopic && topic.id === nextTopic.id && isSuccessfulSubmission) {
           return {
             ...topic,
             lessonUnlocked: true,
@@ -1263,12 +1273,12 @@ export default function App() {
 
     setPendingSubmissions(prev => [newSub, ...prev.filter(item => item.id !== newSub.id)]);
 
-    // Lift leaderboard rankings score dynamically on the current student row
-
     addNotification(
-      'Practice IDE Submitted',
-      `${submission.challengeTitle} was submitted and is waiting for teacher review.`,
-      'submission'
+      isSuccessfulSubmission ? 'Practice Passed! 🚀' : 'Practice Submitted',
+      isSuccessfulSubmission
+        ? `${submission.challengeTitle} practice passed! The next lesson is now unlocked.`
+        : `${submission.challengeTitle} was submitted. Review any issues to unlock the next lesson.`,
+      isSuccessfulSubmission ? 'unlock' : 'submission'
     );
   };
 
@@ -1281,6 +1291,9 @@ export default function App() {
     attemptNumber: number;
   }) => {
     void refreshStudentResults();
+    if (attempt.passed && attempt.lessonId) {
+      setVideoLessons(prev => prev.map(l => l.id === attempt.lessonId ? { ...l, assessment_passed: true } : l));
+    }
     if (xpAward > 0) setPoints(prev => prev + xpAward);
     setStreak(prev => prev + 1);
 
@@ -1744,6 +1757,7 @@ export default function App() {
                 key={`practice-${displayUser.id || displayUser.userId || displayUser.email}`}
                 currentUser={displayUser}
                 onSubmitCompleted={handleStudentSubmitCode}
+                onNavigateTo={handleDirectNavigation}
                 theme={theme}
                 lessons={videoLessons}
                 initialLessonId={selectedLessonId || undefined}

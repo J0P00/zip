@@ -11,6 +11,7 @@ import { ASSESSMENT_PASSING_SCORE } from '../config/assessment';
 interface PracticeIDEProps {
   currentUser: AuthenticatedUser;
   onSubmitCompleted: (submission: PracticeSubmission) => void;
+  onNavigateTo?: (view: StudentSubView, lessonId?: string) => void;
   theme?: 'light' | 'dark';
   lessons?: VideoLesson[];
   initialLessonId?: string;
@@ -41,7 +42,7 @@ type DraftDb = Record<string, string>;
 const formatDateTime = (value: string) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
-export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, lessons = [], initialLessonId, activeRecommendation }: PracticeIDEProps) {
+export default function PracticeIDE({ currentUser, onSubmitCompleted, onNavigateTo, theme, lessons = [], initialLessonId, activeRecommendation }: PracticeIDEProps) {
   const isDark = theme === 'dark';
   const [watchDb, setWatchDb] = useState<WatchDb>({});
   const [quizDb, setQuizDb] = useState<QuizDb>({});
@@ -210,7 +211,7 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
       if (!mounted) return;
       setWatchDb(videoResponse.data.reduce((acc: WatchDb, row: any) => ({ ...acc, [row.video_id]: { lessonId: row.video_id, completionPercentage: Number(row.completion_percentage || 0), completed: Boolean(row.completed) } }), {}));
       setQuizDb(quizResponse.data.reduce((acc: QuizDb, row: any) => ({ ...acc, [row.assessment_id]: { assessmentId: row.assessment_id, lessonId: row.lesson_id || '', percentage: Number(row.percentage || 0), passed: Boolean(row.passed) } }), {}));
-      const failedAccess = accessResults.some(result => result.status === 'rejected');
+      const anySuccess = accessResults.some(result => result.status === 'fulfilled');
       setAccessDb(accessResults.reduce((acc: Record<string, any>, result: any, index: number) => {
         if (result.status === 'fulfilled') {
           const lessonId = result.value.data?.current?.lessonId || effectiveLessons[index]?.id;
@@ -218,8 +219,8 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
         }
         return acc;
       }, {}));
-      setAccessLoadState(failedAccess ? 'error' : 'ready');
-      if (failedAccess) setAccessError('Authoritative lesson access could not be loaded.');
+      setAccessLoadState(anySuccess ? 'ready' : 'error');
+      if (!anySuccess) setAccessError('Authoritative lesson access could not be loaded.');
       const remote = submissionResponse.data.reduce((acc: SubmissionDb, row: any) => {
         const mapped = mapBackendSubmission(row);
         const key = `${studentKey}:${mapped.challengeId}`;
@@ -242,15 +243,32 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
 
   const lockReason = useMemo(() => {
     const access = accessDb[activeChallenge.lessonId];
-    if (accessLoadState === 'loading') return 'Checking authoritative lesson access...';
-    if (accessLoadState === 'error') return accessError || 'Unable to verify lesson access. Retry below.';
-    if (!access) return 'Unable to verify lesson access. Retry below.';
-    if (!access.canAccess) return access.reason || 'Practice IDE is locked until the previous lesson is fully completed.';
-    if (!access.current?.videoCompleted) return 'Practice IDE is locked until the lesson video is completed at 95% or higher.';
-    if (!access.current?.assessmentPassed) return `Practice IDE is locked until the quiz score is ${ASSESSMENT_PASSING_SCORE}% or higher.`;
-    if (!access.current?.practiceUnlocked) return 'Practice IDE is locked until the lesson practice becomes available.';
-    return '';
-  }, [accessDb, accessError, accessLoadState, activeChallenge.lessonId]);
+    const matchingLesson = (lessons || []).find(l => l.id === activeChallenge.lessonId);
+
+    if (accessLoadState === 'loading') {
+      if (matchingLesson?.video_completed && matchingLesson?.assessment_passed) return '';
+      return 'Checking authoritative lesson access...';
+    }
+    if (accessLoadState === 'error' && !access && !matchingLesson) return accessError || 'Unable to verify lesson access. Retry below.';
+
+    if (access) {
+      if (!access.canAccess) return access.reason || 'Practice IDE is locked until the previous lesson is fully completed.';
+      const videoDone = Boolean(access.current?.videoCompleted || matchingLesson?.video_completed);
+      if (!videoDone) return 'Practice IDE is locked until the lesson video is completed at 95% or higher.';
+      const quizDone = Boolean(access.current?.assessmentPassed || matchingLesson?.assessment_passed);
+      if (!quizDone) return `Practice IDE is locked until the quiz score is ${ASSESSMENT_PASSING_SCORE}% or higher.`;
+      if (!access.current?.practiceUnlocked && !(videoDone && quizDone)) return 'Practice IDE is locked until the lesson practice becomes available.';
+      return '';
+    }
+
+    if (matchingLesson) {
+      if (!matchingLesson.video_completed) return 'Practice IDE is locked until the lesson video is completed at 95% or higher.';
+      if (!matchingLesson.assessment_passed) return `Practice IDE is locked until the quiz score is ${ASSESSMENT_PASSING_SCORE}% or higher.`;
+      return '';
+    }
+
+    return 'Unable to verify lesson access. Retry below.';
+  }, [accessDb, accessError, accessLoadState, activeChallenge.lessonId, lessons]);
 
   const isLocked = Boolean(lockReason) || Boolean(submitted && submitted.submissionStatus !== 'returned');
   const selectChallenge = (challengeId: string) => {
@@ -372,15 +390,30 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
         }
         return updated;
       });
+      const isSuccess = Boolean(
+        (savedSubmission.compileStatus === 'success' || (savedSubmission.score && savedSubmission.score >= 70)) &&
+        !savedSubmission.remedialRequired
+      );
+
       setLastResult(null);
-      setConsoleLogs([
-        '✓ Practice submitted successfully.',
-        'Your code has been submitted to your teacher for review.',
-        'Status: Waiting for Teacher Review',
-        `Submitted: ${formatDateTime(savedSubmission.submittedAt || new Date().toISOString())}`
-      ]);
+      if (isSuccess) {
+        setConsoleLogs([
+          '✓ Practice submitted and evaluated successfully!',
+          `Score: ${savedSubmission.score || 100}% — Automated evaluation passed.`,
+          'Status: Practice Completed (Waiting for optional teacher review)',
+          'Next lesson is now unlocked! Navigate to Videos to continue.',
+          `Submitted: ${formatDateTime(savedSubmission.submittedAt || new Date().toISOString())}`
+        ]);
+      } else {
+        setConsoleLogs([
+          '⚠️ Practice submitted, but did not meet passing criteria.',
+          savedSubmission.errorMessage || 'Automated evaluation failed. Edit your code and submit again.',
+          'Next lesson remains locked until practice passes.',
+          `Submitted: ${formatDateTime(savedSubmission.submittedAt || new Date().toISOString())}`
+        ]);
+      }
       onSubmitCompleted(savedSubmission);
-      Promise.all(OOP_COURSE_LESSONS.map(lesson => lessonApi.getAccess(lesson.id, currentUser.token)))
+      Promise.all(effectiveLessons.map(lesson => lessonApi.getAccess(lesson.id, currentUser.token)))
         .then(accessResponses => {
           setAccessDb(accessResponses.reduce((acc: Record<string, any>, accessResponse: any) => {
             const lessonId = accessResponse.data?.current?.lessonId;
@@ -579,6 +612,19 @@ export default function PracticeIDE({ currentUser, onSubmitCompleted, theme, les
           >
             <Send className="h-4 w-4" /> {!activeChallenge.hasContent ? 'Content Pending' : Boolean(lockReason) ? 'Locked' : isSubmitting ? 'Submitting...' : submitted?.submissionStatus === 'returned' ? 'Submit Practice Revision' : 'Submit Practice'}
           </button>
+          {submitted && (submitted.compileStatus === 'success' || (submitted.score && submitted.score >= 70)) && !submitted.remedialRequired && onNavigateTo && (
+            <button
+              type="button"
+              onClick={() => {
+                const currentIdx = effectiveLessons.findIndex(l => l.id === activeChallenge.lessonId);
+                const nextL = currentIdx !== -1 && currentIdx < effectiveLessons.length - 1 ? effectiveLessons[currentIdx + 1] : null;
+                onNavigateTo('videos', nextL?.id || undefined);
+              }}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-emerald-700 hover:bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition shadow-sm cursor-pointer"
+            >
+              Continue to Next Lesson Video →
+            </button>
+          )}
         </section>
 
         <RecommendationCard recommendation={activeRecommendation || null} compact />
