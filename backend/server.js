@@ -2885,6 +2885,8 @@ const checkAndAwardBadges = async (studentId) => {
 const logProgressionDiagnostics = ({
     studentId,
     lessonId,
+    predecessorLessonId = null,
+    successorLessonId = null,
     videoProgress,
     videoCompleted,
     assessmentScore,
@@ -2896,17 +2898,26 @@ const logProgressionDiagnostics = ({
     remedialRequired,
     practiceCompleted,
     lessonCompleted,
+    currentLessonUnlocked,
     nextLessonId,
     nextLessonUnlocked,
     accessReason
 }) => {
+    // Unambiguous diagnostic fields with backwards-compatible fallbacks
+    const isCurrentUnlocked = currentLessonUnlocked !== undefined
+        ? Boolean(currentLessonUnlocked)
+        : Boolean(nextLessonUnlocked);
+    const predId = predecessorLessonId || null;
+    const succId = successorLessonId || (nextLessonId && nextLessonId !== lessonId ? nextLessonId : null);
+
     console.log(`[Progression Diagnostic] Student: ${studentId} | Lesson: ${lessonId}`);
     console.log(`  - Video: ${videoProgress}% (completed: ${videoCompleted}) [threshold: ${VIDEO_COMPLETION_THRESHOLD}%]`);
     console.log(`  - Assessment: ${assessmentScore !== null ? `${assessmentScore}%` : 'N/A'} (passed: ${assessmentPassed}) [threshold: ${ASSESSMENT_PASSING_SCORE}%]`);
     console.log(`  - Practice: subId=${submissionId || 'none'}, challenge=${challengeId || 'none'}, compile=${compileStatus || 'N/A'}, review=${reviewStatus || 'N/A'}, remedial=${remedialRequired} (completed: ${practiceCompleted})`);
-    console.log(`  - Lesson Completion: ${lessonCompleted}`);
-    if (nextLessonId !== undefined) {
-        console.log(`  - Next Lesson (${nextLessonId || 'none'}) Access: unlocked=${nextLessonUnlocked}${accessReason ? `, reason="${accessReason}"` : ''}`);
+    console.log(`  - Current Lesson Evidence: completed=${lessonCompleted}`);
+    console.log(`  - Current Lesson (${lessonId}) Access: unlocked=${isCurrentUnlocked}${predId ? ` (predecessor: ${predId})` : ' (first lesson in course)'}${accessReason ? `, reason="${accessReason}"` : ''}`);
+    if (succId) {
+        console.log(`  - Successor Lesson (${succId}) Unlock Readiness: eligible=${lessonCompleted}`);
     }
 };
 
@@ -3257,10 +3268,12 @@ const getLessonAccessState = async (studentId, lessonId) => {
     const current = await getLessonEvidence(studentId, lessonId);
     if (!current) return { canAccess: false, reason: "Lesson not found." };
 
-    const withLessonAccess = (canAccess, reason = null) => {
+    const withLessonAccess = (canAccess, reason = null, predecessorId = null, successorId = null) => {
         logProgressionDiagnostics({
             studentId,
             lessonId,
+            predecessorLessonId: predecessorId,
+            successorLessonId: successorId,
             videoProgress: current.videoProgress,
             videoCompleted: current.videoCompleted,
             assessmentScore: current.assessmentScore,
@@ -3272,8 +3285,9 @@ const getLessonAccessState = async (studentId, lessonId) => {
             remedialRequired: current.practiceRemedialRequired,
             practiceCompleted: current.practiceCompleted,
             lessonCompleted: current.completed,
-            nextLessonId: lessonId,
-            nextLessonUnlocked: canAccess,
+            currentLessonUnlocked: canAccess,
+            nextLessonId: successorId,
+            nextLessonUnlocked: current.completed,
             accessReason: reason
         });
         return {
@@ -3287,18 +3301,22 @@ const getLessonAccessState = async (studentId, lessonId) => {
         };
     };
 
-    let previousLessonId = null;
+    let activeTrackLessons = [];
 
     if (!current.isSwing) {
-        const previousResult = await pool.query(
-            `SELECT id FROM lessons WHERE sequence < $1 AND status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL} ORDER BY sequence DESC, id DESC LIMIT 1`,
-            [current.sequence]
-        );
-        if (previousResult.rowCount) {
-            previousLessonId = previousResult.rows[0].id;
-        } else {
-            // First active lesson in dynamic OOP catalog has no predecessor -> accessible
-            return withLessonAccess(true);
+        const oopLessonsResult = await pool.query(`
+            SELECT id, sequence, title, module, course_id, track
+            FROM lessons
+            WHERE status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL}
+            ORDER BY sequence ASC, id ASC
+        `);
+        activeTrackLessons = oopLessonsResult.rows;
+        if (!activeTrackLessons.length) {
+            activeTrackLessons = REQUIRED_CANONICAL_OOP_LESSON_IDS.map((id, idx) => ({
+                id,
+                sequence: idx + 1,
+                title: `Lesson ${idx + 1}`
+            }));
         }
     } else {
         // Swing lessons require the 12 required OOP lessons to be completed before Swing unlocks
@@ -3307,37 +3325,54 @@ const getLessonAccessState = async (studentId, lessonId) => {
             return withLessonAccess(false, `Complete all 12 required Java OOP lessons before unlocking Java Swing.`);
         }
 
-        const previousResult = await pool.query(
-            `SELECT id FROM swing_lessons WHERE sequence < $1 ORDER BY sequence DESC, id DESC LIMIT 1`,
-            [current.sequence]
-        );
-        if (previousResult.rowCount) {
-            previousLessonId = previousResult.rows[0].id;
-        } else {
-            const fallbackPrev = JAVA_SWING_LESSONS
-                .filter(item => item.sequence < current.sequence)
-                .sort((a, b) => b.sequence - a.sequence)[0];
-            if (fallbackPrev) {
-                previousLessonId = fallbackPrev.id;
-            } else {
-                // First active Swing lesson in dynamic catalog has no predecessor in Swing -> accessible
-                return withLessonAccess(true);
-            }
+        const swingLessonsResult = await pool.query(`
+            SELECT sl.id, sl.sequence, sl.title, 'Java Swing' AS module
+            FROM swing_lessons sl
+            LEFT JOIN lessons l ON l.id = sl.id
+            WHERE COALESCE(l.status, 'Published') <> 'Archived'
+            ORDER BY sl.sequence ASC, sl.id ASC
+        `);
+        activeTrackLessons = swingLessonsResult.rowCount ? swingLessonsResult.rows : JAVA_SWING_LESSONS;
+    }
+
+    const currentIndex = activeTrackLessons.findIndex(
+        l => l.id === lessonId || l.id === String(lessonId).replace('oop_lesson_', '') || l.id === `oop_lesson_${lessonId}`
+    );
+
+    if (currentIndex === -1) {
+        return withLessonAccess(false, "Lesson is archived or not part of the active course sequence.");
+    }
+
+    const predecessor = currentIndex > 0 ? activeTrackLessons[currentIndex - 1] : null;
+    const successor = currentIndex < activeTrackLessons.length - 1 ? activeTrackLessons[currentIndex + 1] : null;
+
+    if (currentIndex === 0) {
+        // First active lesson in dynamic course catalog has no predecessor -> accessible
+        return withLessonAccess(true, null, null, successor?.id || null);
+    }
+
+    // Verify all predecessors in the chain from sequence start to current
+    for (let k = 0; k < currentIndex; k++) {
+        const pred = activeTrackLessons[k];
+        const predEvidence = await getLessonEvidence(studentId, pred.id);
+        if (!predEvidence?.completed) {
+            const isImmediate = (k === currentIndex - 1);
+            const reason = isImmediate
+                ? (!predEvidence?.videoCompleted
+                    ? `Complete the previous lesson video to at least ${VIDEO_COMPLETION_THRESHOLD}% first.`
+                    : !predEvidence?.assessmentPassed
+                        ? "Pass the previous lesson assessment before continuing."
+                        : "Complete the previous lesson practice before continuing.")
+                : (!predEvidence?.videoCompleted
+                    ? `Complete ${pred.title || pred.id} video to at least ${VIDEO_COMPLETION_THRESHOLD}% first.`
+                    : !predEvidence?.assessmentPassed
+                        ? `Pass ${pred.title || pred.id} assessment before continuing.`
+                        : `Complete ${pred.title || pred.id} practice before continuing.`);
+            return withLessonAccess(false, reason, pred.id, successor?.id || null);
         }
     }
 
-    if (!previousLessonId) return withLessonAccess(false, "Complete the previous lesson requirements first.");
-
-    const previous = await getLessonEvidence(studentId, previousLessonId);
-    const previousLessonCompleted = Boolean(previous?.completed);
-    if (previousLessonCompleted) return withLessonAccess(true);
-
-    const reason = !previous?.videoCompleted
-        ? `Complete the previous lesson video to at least ${VIDEO_COMPLETION_THRESHOLD}% first.`
-        : !previous?.assessmentPassed
-            ? "Pass the previous lesson assessment before continuing."
-            : "Complete the previous lesson practice before continuing.";
-    return withLessonAccess(false, reason);
+    return withLessonAccess(true, null, predecessor?.id || null, successor?.id || null);
 };
 
 const classifyEventSeverity = (eventType) => {
