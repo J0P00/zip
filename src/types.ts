@@ -583,6 +583,8 @@ export interface AssessmentSubmitResult {
   review: AssessmentReviewQuestion[];
 }
 
+export type LessonStatus = 'draft' | 'published' | 'archived';
+
 export interface ManagedLesson {
   id: string;
   title: string;
@@ -594,7 +596,7 @@ export interface ManagedLesson {
   videoUrl: string;
   description: string;
   learningObjectives: string[];
-  status: 'Draft' | 'Published' | 'Archived';
+  status: LessonStatus | 'Draft' | 'Published' | 'Archived';
   storageProvider?: string;
   storageKey?: string;
   citationText?: string;

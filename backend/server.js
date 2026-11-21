@@ -769,6 +769,33 @@ const resolveLessonVideoUrl = (row) => {
     return OOP_CLOUDINARY_VIDEOS[row.id] || rawUrl;
 };
 
+const VALID_LESSON_STATUSES = ["draft", "published", "archived"];
+
+const normalizeLessonStatus = (value, fallback = "draft") => {
+    if (value === undefined || value === null || String(value).trim() === "") return fallback;
+    const normalized = String(value).trim().toLowerCase();
+    if (VALID_LESSON_STATUSES.includes(normalized)) return normalized;
+    return null;
+};
+
+const toTitleCaseStatus = (value, fallback = "Draft") => {
+    const normalized = normalizeLessonStatus(value, null);
+    if (!normalized) return fallback;
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+
+const isValidHttpOrLocalUrl = (value) => {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) return true;
+    if (trimmed.startsWith("/")) return true;
+    try {
+        const parsed = new URL(trimmed);
+        return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch {
+        return false;
+    }
+};
+
 const toClientLesson = (row) => {
     if (!row) return null;
     const isSwing = isSwingLessonId(row.id) || row.course_id === "java_swing" || String(row.module || "").toLowerCase().includes("swing") || row.track === "swing" || row.metadata?.track === "swing";
@@ -821,7 +848,7 @@ const toClientLesson = (row) => {
             assessment: null,
             practice: null
         },
-        status: row.status || "Draft",
+        status: normalizeLessonStatus(row.status, "draft") || "draft",
         metadata: row.metadata || {},
         citationText: row.metadata?.citationText || row.metadata?.citation_text || "",
         citationUrl: row.metadata?.citationUrl || row.metadata?.citation_url || "",
@@ -1147,7 +1174,7 @@ const toClientAssessment = (row) => {
         passingScore: Number(row.passing_score || 0),
         attempts: Number(row.attempts || 0),
         questions,
-        status: row.status || "Draft",
+        status: normalizeLessonStatus(row.status, "draft") || "draft",
         createdAt: row.created_at,
         updatedAt: row.updated_at
     };
@@ -1180,7 +1207,7 @@ const toClientPracticeChallenge = (row) => {
         sampleInput: row.sample_input || "",
         sampleOutput: row.sample_output || "",
         passingScore: Number(row.passing_score || 70),
-        status: row.status || "Draft",
+        status: normalizeLessonStatus(row.status, "draft") || "draft",
         testCases: (canonical?.testCases || row.test_cases || []).map(normalizeChallengeTestCase),
         createdAt: row.created_at,
         updatedAt: row.updated_at
@@ -1436,8 +1463,20 @@ const initializeDatabase = async () => {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS learning_objectives JSONB NOT NULL DEFAULT '[]'::jsonb;
-        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Draft';
+        ALTER TABLE lessons ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'draft';
         ALTER TABLE lessons ADD COLUMN IF NOT EXISTS track TEXT DEFAULT 'oop';
+        UPDATE lessons SET status = LOWER(TRIM(status)) WHERE status IS NOT NULL AND LOWER(TRIM(status)) IN ('draft', 'published', 'archived');
+        UPDATE lessons SET status = 'draft' WHERE status IS NULL OR LOWER(TRIM(status)) NOT IN ('draft', 'published', 'archived');
+        ALTER TABLE lessons ALTER COLUMN status SET DEFAULT 'draft';
+        ALTER TABLE lessons ALTER COLUMN video_url DROP NOT NULL;
+        ALTER TABLE lessons ALTER COLUMN description DROP NOT NULL;
+        ALTER TABLE lessons ALTER COLUMN duration DROP NOT NULL;
+        ALTER TABLE lessons ALTER COLUMN module DROP NOT NULL;
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lessons_status_check') THEN
+            ALTER TABLE lessons ADD CONSTRAINT lessons_status_check CHECK (LOWER(status) IN ('draft', 'published', 'archived'));
+          END IF;
+        END $$;
         UPDATE lessons SET track = 'swing' WHERE module = 'Java Swing' OR id LIKE 'swing_%' OR metadata->>'track' = 'swing';
         CREATE TABLE IF NOT EXISTS assessments (
           id TEXT PRIMARY KEY,
@@ -1508,7 +1547,9 @@ const initializeDatabase = async () => {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
-        ALTER TABLE programming_challenges ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Draft';
+        ALTER TABLE programming_challenges ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'draft';
+        ALTER TABLE programming_challenges ALTER COLUMN description SET DEFAULT '';
+        ALTER TABLE programming_challenges ALTER COLUMN description DROP NOT NULL;
         ALTER TABLE programming_challenges ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE SET NULL;
         ALTER TABLE programming_challenges ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
         CREATE TABLE IF NOT EXISTS challenge_test_cases (
@@ -2598,7 +2639,7 @@ const getStudentPoints = async (studentId) => {
 const getStudentProgressSummary = async (studentId) => {
     try {
         // 1. Get all published OOP lessons
-        const lessonsRes = await pool.query(`SELECT * FROM lessons WHERE status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL} ORDER BY sequence, title`);
+        const lessonsRes = await pool.query(`SELECT * FROM lessons WHERE LOWER(status) = 'published' AND ${OOP_LESSON_FILTER_SQL} ORDER BY sequence, title`);
         const lessons = lessonsRes.rows;
 
         // 2. Get user info
@@ -3343,7 +3384,7 @@ const getLessonAccessState = async (studentId, lessonId) => {
         const oopLessonsResult = await pool.query(`
             SELECT id, sequence, title, module, course_id, track
             FROM lessons
-            WHERE status <> 'Archived' AND ${OOP_LESSON_FILTER_SQL}
+            WHERE LOWER(status) = 'published' AND ${OOP_LESSON_FILTER_SQL}
             ORDER BY sequence ASC, id ASC
         `);
         activeTrackLessons = oopLessonsResult.rows;
@@ -3384,7 +3425,7 @@ const getLessonAccessState = async (studentId, lessonId) => {
             SELECT sl.id, sl.sequence, sl.title, 'Java Swing' AS module
             FROM swing_lessons sl
             LEFT JOIN lessons l ON l.id = sl.id
-            WHERE COALESCE(l.status, 'Published') <> 'Archived'
+            WHERE LOWER(COALESCE(l.status, 'published')) = 'published'
             ORDER BY sl.sequence ASC, sl.id ASC
         `);
         activeTrackLessons = swingLessonsResult.rowCount ? swingLessonsResult.rows : JAVA_SWING_LESSONS;
@@ -4161,7 +4202,7 @@ const buildDefaultSwingLessonRow = (swingLesson, swingVideo) => ({
     video_url: swingVideo?.embedUrl || "",
     description: swingLesson.introduction || swingLesson.summary || "",
     learning_objectives: swingLesson.objectives || [],
-    status: "Published",
+    status: "published",
     metadata: { track: "swing" }
 });
 
@@ -4205,7 +4246,7 @@ const fetchOrderedLessonRows = async () => {
                 video_url: dbSv?.embed_url || fallbackVideo?.embedUrl || "",
                 description: dbSl?.introduction || swingLesson.introduction || swingLesson.summary || "",
                 learning_objectives: dbSl?.objectives || swingLesson.objectives || [],
-                status: "Published",
+                status: normalizeLessonStatus(dbSl?.status, "published") || "published",
                 metadata: { track: "swing" }
             });
         }
@@ -4223,7 +4264,11 @@ const fetchOrderedLessonRows = async () => {
 
 app.get("/api/lessons", optionalAuth, async (req, res, next) => {
     try {
-        const rows = await fetchOrderedLessonRows();
+        const isInstructor = req.authUser && ["teacher", "admin"].includes(req.authUser.role);
+        let rows = await fetchOrderedLessonRows();
+        if (!isInstructor) {
+            rows = rows.filter(row => normalizeLessonStatus(row.status, "draft") === "published");
+        }
         res.json({ success: true, data: await Promise.all(rows.map(row => toClientLessonForRequest(row, req))) });
     } catch (error) {
         next(error);
@@ -4241,11 +4286,36 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
         } else {
             id = `lesson_${Date.now()}`;
         }
+
+        const status = normalizeLessonStatus(body.status, "draft");
+        if (!status) {
+            logDiagnosticError("POST /api/lessons", "status", body.status, "Invalid lesson status");
+            return res.status(400).json({ success: false, message: "Invalid status. Status must be 'draft', 'published', or 'archived'." });
+        }
+        const isDraft = status === "draft";
+
         const title = cleanText(body.title || body.lessonTitle || "", 255);
         if (!title) {
             logDiagnosticError("POST /api/lessons", "title", body.title, "Lesson title is required");
             return res.status(400).json({ success: false, message: "Lesson title is required." });
         }
+
+        const rawTrackInput = body.curriculum_track !== undefined ? body.curriculum_track : body.track;
+        let track = "oop";
+        if (rawTrackInput !== undefined && rawTrackInput !== null && String(rawTrackInput).trim() !== "") {
+            const rawTrack = String(rawTrackInput).toLowerCase().trim();
+            if (rawTrack !== "oop" && rawTrack !== "swing" && rawTrack !== "java_swing") {
+                logDiagnosticError("POST /api/lessons", "track", rawTrackInput, "Track must be 'oop' or 'swing'");
+                return res.status(400).json({ success: false, message: "Invalid curriculum_track. Track must be 'oop' or 'swing'." });
+            }
+            track = (rawTrack === "swing" || rawTrack === "java_swing") ? "swing" : "oop";
+        } else if (body.courseId === "java_swing" || String(body.module || "").toLowerCase().includes("swing") || String(id).startsWith("swing_")) {
+            track = "swing";
+        } else if (isDraft && body.curriculum_track === undefined && body.track === undefined && !body.courseId && !body.module) {
+            // Default to 'oop' if omitted, preserving compatibility while supporting explicit curriculum_track
+            track = "oop";
+        }
+
         const objectives = Array.isArray(body.learningObjectives)
             ? body.learningObjectives.slice(0, 20)
             : String(body.learningObjectives || "").split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
@@ -4255,9 +4325,12 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
         const storageKey = cleanText(body.storageKey || body.storage_key || "", 500);
         const storageContentType = cleanText(body.storageContentType || body.storage_content_type || "", 120).toLowerCase();
 
-        const storageSizeCheck = validateStorageSize(body.storageSize ?? body.storage_size, "POST /api/lessons");
-        if (!storageSizeCheck.valid) return res.status(storageSizeCheck.status).json({ success: false, message: storageSizeCheck.message });
-        const storageSize = storageSizeCheck.value ?? null;
+        let storageSize = null;
+        if (!isDraft || (body.storageSize !== undefined && body.storageSize !== null) || (body.storage_size !== undefined && body.storage_size !== null)) {
+            const storageSizeCheck = validateStorageSize(body.storageSize ?? body.storage_size, "POST /api/lessons");
+            if (!storageSizeCheck.valid) return res.status(storageSizeCheck.status).json({ success: false, message: storageSizeCheck.message });
+            storageSize = storageSizeCheck.value ?? null;
+        }
 
         if (storageProvider) {
             if (storageProvider !== STORAGE_PROVIDER) {
@@ -4269,23 +4342,16 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
         }
 
         const seqCheck = validateSequenceNumber(body.sequence ?? body.lessonOrder, "POST /api/lessons", { min: 0, defaultVal: 0 });
-        if (!seqCheck.valid) return res.status(seqCheck.status).json({ success: false, message: seqCheck.message });
-        const sequence = seqCheck.value;
+        if (!seqCheck.valid && !isDraft) return res.status(seqCheck.status).json({ success: false, message: seqCheck.message });
+        const sequence = seqCheck.valid ? seqCheck.value : 0;
 
         const videoUrl = storageProvider === STORAGE_PROVIDER && storageKey
             ? storageMarker(storageKey)
             : cleanText(body.videoUrl || body.video_url || "", 2000);
 
-        let track = "oop";
-        if (body.track !== undefined && body.track !== null) {
-            const rawTrack = String(body.track).toLowerCase().trim();
-            if (rawTrack !== "oop" && rawTrack !== "swing" && rawTrack !== "java_swing") {
-                logDiagnosticError("POST /api/lessons", "track", body.track, "Track must be 'oop' or 'swing'");
-                return res.status(400).json({ success: false, message: "Invalid track. Track must be 'oop' or 'swing'." });
-            }
-            track = (rawTrack === "swing" || rawTrack === "java_swing") ? "swing" : "oop";
-        } else if (body.courseId === "java_swing" || String(body.module || "").toLowerCase().includes("swing") || String(id).startsWith("swing_")) {
-            track = "swing";
+        if (status === "published" && videoUrl && !isValidHttpOrLocalUrl(videoUrl)) {
+            logDiagnosticError("POST /api/lessons", "videoUrl", videoUrl, "Invalid video URL format");
+            return res.status(400).json({ success: false, message: "Enter a valid http:// or https:// video URL before publishing." });
         }
 
         const metadata = body.metadata && typeof body.metadata === "object" ? { ...body.metadata } : {};
@@ -4310,7 +4376,7 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
             videoUrl,
             cleanText(body.description || "", 5000),
             JSON.stringify(objectives),
-            cleanText(body.status || "Draft", 40),
+            status,
             JSON.stringify(metadata),
             storageProvider || null,
             storageKey || null,
@@ -4328,7 +4394,7 @@ app.post("/api/lessons", requireAuth, requireRole(["teacher"]), async (req, res,
                       title = EXCLUDED.title,
                       introduction = EXCLUDED.introduction,
                       status = EXCLUDED.status
-                `, [id, sequence, title, cleanText(body.description || "", 5000), cleanText(body.status || "Draft", 40)]);
+                `, [id, sequence, title, cleanText(body.description || "", 5000), status]);
             } catch (swingSyncErr) {
                 console.warn("Non-fatal swing_lessons insert sync warning:", swingSyncErr.message);
             }
@@ -4416,12 +4482,33 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
             }
         }
 
+        let normalizedStatus = null;
+        if (body.status !== undefined && body.status !== null && String(body.status).trim() !== "") {
+            normalizedStatus = normalizeLessonStatus(body.status, null);
+            if (!normalizedStatus) {
+                logDiagnosticError("PUT /api/lessons/:id", "status", body.status, "Invalid lesson status");
+                return res.status(400).json({ success: false, message: "Invalid status. Status must be 'draft', 'published', or 'archived'." });
+            }
+        }
+        const isDraftUpdate = normalizedStatus === "draft";
+
+        const rawTitleInput = body.title !== undefined ? body.title : body.lessonTitle;
+        if (rawTitleInput !== undefined && !cleanText(rawTitleInput || "", 255)) {
+            return res.status(400).json({ success: false, message: "Lesson title cannot be empty." });
+        }
+
+        const rawVideoUrlInput = body.videoUrl !== undefined ? body.videoUrl : body.video_url;
+        if (normalizedStatus === "published" && rawVideoUrlInput !== undefined && cleanText(rawVideoUrlInput || "", 2000) && !isValidHttpOrLocalUrl(rawVideoUrlInput)) {
+            return res.status(400).json({ success: false, message: "Enter a valid http:// or https:// video URL before publishing." });
+        }
+
         let track = null;
-        if (body.track !== undefined && body.track !== null) {
-            const rawTrack = String(body.track).toLowerCase().trim();
+        const rawTrackInput = body.curriculum_track !== undefined ? body.curriculum_track : body.track;
+        if (rawTrackInput !== undefined && rawTrackInput !== null && String(rawTrackInput).trim() !== "") {
+            const rawTrack = String(rawTrackInput).toLowerCase().trim();
             if (rawTrack !== "oop" && rawTrack !== "swing" && rawTrack !== "java_swing") {
-                logDiagnosticError("PUT /api/lessons/:id", "track", body.track, "Track must be 'oop' or 'swing'");
-                return res.status(400).json({ success: false, message: "Invalid track. Track must be 'oop' or 'swing'." });
+                logDiagnosticError("PUT /api/lessons/:id", "track", rawTrackInput, "Track must be 'oop' or 'swing'");
+                return res.status(400).json({ success: false, message: "Invalid curriculum_track. Track must be 'oop' or 'swing'." });
             }
             track = (rawTrack === "swing" || rawTrack === "java_swing") ? "swing" : "oop";
             if (updatedMetadata) updatedMetadata.track = track;
@@ -4455,7 +4542,7 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
             body.videoUrl === undefined && body.video_url === undefined ? null : cleanText(body.videoUrl || body.video_url || "", 2000),
             body.description === undefined ? null : cleanText(body.description || "", 5000),
             objectives === undefined ? null : JSON.stringify(objectives),
-            body.status === undefined ? null : cleanText(body.status || "Draft", 40),
+            normalizedStatus,
             updatedMetadata === null ? null : JSON.stringify(updatedMetadata),
             storageProvider,
             storageKey,
@@ -4473,12 +4560,14 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
                     UPDATE swing_lessons SET
                       title = COALESCE($2, title),
                       objectives = COALESCE($3::jsonb, objectives),
+                      status = COALESCE($4, status),
                       updated_at = NOW()
                     WHERE id = $1
                 `, [
                     lessonId,
                     updatedRow.title || null,
-                    updatedRow.learning_objectives ? JSON.stringify(updatedRow.learning_objectives) : null
+                    updatedRow.learning_objectives ? JSON.stringify(updatedRow.learning_objectives) : null,
+                    updatedRow.status || null
                 ]);
                 if (updatedRow.video_url) {
                     await pool.query(`
@@ -4498,6 +4587,68 @@ app.put("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, r
     }
 });
 
+app.patch("/api/lessons/:id/status", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
+    try {
+        const idCheck = validateId(req.params.id, "id", "PATCH /api/lessons/:id/status");
+        if (!idCheck.valid) return res.status(idCheck.status).json({ success: false, message: idCheck.message });
+        const lessonId = idCheck.value;
+
+        const nextStatus = normalizeLessonStatus(req.body?.status, null);
+        if (!nextStatus) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid status. Status must be 'draft', 'published', or 'archived'."
+            });
+        }
+
+        const swingCatalogMatch = JAVA_SWING_LESSONS.find(item => item.id === lessonId);
+        if (swingCatalogMatch) {
+            const swingVideoMatch = JAVA_SWING_VIDEOS.find(v => v.lessonId === lessonId);
+            const defaultRow = buildDefaultSwingLessonRow(swingCatalogMatch, swingVideoMatch);
+            await pool.query(`
+                INSERT INTO lessons (id, title, module, course_id, sequence, duration, video_url, description, learning_objectives, status, track)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)
+                ON CONFLICT (id) DO NOTHING
+            `, [
+                defaultRow.id,
+                defaultRow.title,
+                defaultRow.module,
+                defaultRow.course_id,
+                defaultRow.sequence,
+                defaultRow.duration,
+                defaultRow.video_url,
+                defaultRow.description,
+                JSON.stringify(defaultRow.learning_objectives),
+                defaultRow.status,
+                defaultRow.track
+            ]);
+        }
+
+        const result = await pool.query(
+            "UPDATE lessons SET status = $2, updated_at = NOW() WHERE id = $1 RETURNING *",
+            [lessonId, nextStatus]
+        );
+        if (!result.rowCount) {
+            return res.status(404).json({ success: false, message: "Lesson not found." });
+        }
+
+        if (isSwingLessonId(lessonId)) {
+            try {
+                await pool.query(
+                    "UPDATE swing_lessons SET status = $2, updated_at = NOW() WHERE id = $1",
+                    [lessonId, nextStatus]
+                );
+            } catch (swingSyncErr) {
+                console.warn("Non-fatal swing_lessons status sync warning:", swingSyncErr.message);
+            }
+        }
+
+        res.json({ success: true, data: toClientLesson(result.rows[0]) });
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.delete("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req, res, next) => {
     try {
         const idCheck = validateId(req.params.id, "id", "DELETE /api/lessons/:id");
@@ -4511,8 +4662,19 @@ app.delete("/api/lessons/:id", requireAuth, requireRole(["teacher"]), async (req
     }
 });
 
-app.get("/api/assessments", requireAuth, async (_req, res, next) => {
+app.get("/api/assessments", requireAuth, async (req, res, next) => {
     try {
+        if (req.authUser?.role === "student") {
+            const result = await pool.query(`
+                SELECT a.*
+                FROM assessments a
+                LEFT JOIN lessons l ON l.id = a.lesson_id
+                WHERE a.id = 'oop_pre_test'
+                   OR (LOWER(COALESCE(l.status, 'draft')) = 'published' AND LOWER(COALESCE(a.status, 'published')) = 'published')
+                ORDER BY a.updated_at DESC, a.title
+            `);
+            return res.json({ success: true, data: result.rows.map(toClientAssessment) });
+        }
         const result = await pool.query("SELECT * FROM assessments ORDER BY updated_at DESC, title");
         res.json({ success: true, data: result.rows.map(toClientAssessment) });
     } catch (error) {
@@ -4805,10 +4967,10 @@ app.get("/api/videos", requireAuth, async (req, res, next) => {
             sql += ` AND lv.lesson_id = $${params.length}`;
         }
         if (req.authUser.role === "student") {
-            sql += ` AND lv.status = 'Published'`;
+            sql += ` AND LOWER(lv.status) = 'published' AND (l.id IS NULL OR LOWER(l.status) = 'published')`;
         } else if (status) {
-            params.push(cleanText(status, 40));
-            sql += ` AND lv.status = $${params.length}`;
+            params.push(cleanText(status, 40).toLowerCase());
+            sql += ` AND LOWER(lv.status) = $${params.length}`;
         }
         sql += ` ORDER BY l.sequence ASC, lv.sequence ASC, lv.created_at ASC`;
 
@@ -4882,7 +5044,7 @@ app.post("/api/videos", requireAuth, requireRole(["teacher"]), async (req, res, 
             [lessonId]
         );
         const sequence = Math.floor(clampNumber(sequenceResult.rows[0]?.next_sequence || 1, 1, 1000));
-        const status = cleanText(body.status || "Published", 40);
+        const status = toTitleCaseStatus(body.status, "Published");
 
         const result = await client.query(`
             INSERT INTO lesson_videos (id, lesson_id, title, video_url, duration, description, sequence, status, created_by, storage_provider, storage_key, storage_content_type, storage_size)
@@ -5007,7 +5169,7 @@ app.put("/api/videos/:id", requireAuth, requireRole(["teacher"]), async (req, re
             body.duration === undefined ? null : cleanText(body.duration || "", 40),
             body.description === undefined ? null : cleanText(body.description || "", 2000),
             sequence,
-            body.status === undefined ? null : cleanText(body.status || "Published", 40),
+            body.status === undefined ? null : toTitleCaseStatus(body.status, "Published"),
             body.cloudinaryPublicId === undefined && body.cloudinary_public_id === undefined ? null : cleanText(body.cloudinaryPublicId || body.cloudinary_public_id || "", 500),
             body.cloudinaryResourceType === undefined && body.cloudinary_resource_type === undefined ? null : cleanText(body.cloudinaryResourceType || body.cloudinary_resource_type || "", 40),
             body.storageProvider === undefined && body.storage_provider === undefined ? null : storageProvider,
@@ -5078,10 +5240,10 @@ app.get("/api/learning-resources", requireAuth, async (req, res, next) => {
             sql += ` AND lr.resource_type = $${params.length}`;
         }
         if (req.authUser.role === "student") {
-            sql += ` AND lr.status = 'Published'`;
+            sql += ` AND LOWER(lr.status) = 'published' AND (l.id IS NULL OR LOWER(l.status) = 'published')`;
         } else if (status) {
-            params.push(cleanText(status, 40));
-            sql += ` AND lr.status = $${params.length}`;
+            params.push(cleanText(status, 40).toLowerCase());
+            sql += ` AND LOWER(lr.status) = $${params.length}`;
         }
         sql += ` ORDER BY l.sequence ASC, lr.title ASC`;
 
@@ -5117,7 +5279,7 @@ app.post("/api/learning-resources", requireAuth, requireRole(["teacher"]), async
         const resourceType = cleanText(body.resourceType || body.resource_type || "pdf", 40);
         const fileSize = cleanText(body.fileSize || body.file_size || "", 40);
         const description = cleanText(body.description || "", 2000);
-        const status = cleanText(body.status || "Published", 40);
+        const status = toTitleCaseStatus(body.status, "Published");
 
         const result = await pool.query(`
             INSERT INTO learning_resources (id, lesson_id, title, resource_type, file_url, file_size, description, status, created_by)
@@ -6810,7 +6972,9 @@ app.get("/api/assessments/sessions/:sessionId/events", requireAuth, requireRole(
 
 app.get("/lessons", async (_req, res, next) => {
     try {
-        const rows = await fetchOrderedLessonRows();
+        const rows = (await fetchOrderedLessonRows()).filter(
+            row => normalizeLessonStatus(row.status, "draft") === "published"
+        );
         res.json(rows);
     } catch (error) {
         next(error);
@@ -7076,7 +7240,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                     AND (ps.compile_status = 'success' OR (ps.source_code IS NOT NULL AND ps.source_code ~ '\bclass\s+'))
                   ORDER BY CASE WHEN ps.compile_status = 'success' THEN 1 ELSE 2 END, ps.submitted_at DESC LIMIT 1
                 ) ps ON TRUE
-                WHERE l.status <> 'Archived'
+                WHERE LOWER(l.status) = 'published'
                   AND ${OOP_LESSON_ALIAS_FILTER_SQL("l")}
             `, [dbStudentId, targetUserId, targetEmail]),
             pool.query(`
@@ -7094,7 +7258,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                     LEFT JOIN student_progress sp ON ${studentUuidMatchSql("sp.student_user_id", 1, 2, 3)} AND (sp.video_id = l.id OR sp.video_id = REPLACE(l.id, 'oop_lesson_', ''))
                     LEFT JOIN video_progress vp ON ${studentUuidMatchSql("vp.student_id", 1, 2, 3)} AND (vp.lesson_id = l.id OR vp.lesson_id = REPLACE(l.id, 'oop_lesson_', ''))
                     LEFT JOIN lesson_progress lp ON ${studentUuidMatchSql("lp.student_id", 1, 2, 3)} AND lp.lesson_id = l.id
-                    WHERE l.status <> 'Archived' AND ${OOP_LESSON_ALIAS_FILTER_SQL("l")}
+                    WHERE LOWER(l.status) = 'published' AND ${OOP_LESSON_ALIAS_FILTER_SQL("l")}
                 ) v
             `, [dbStudentId, targetUserId, targetEmail]),
             pool.query(`
@@ -7115,8 +7279,10 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                        )::int AS completed_practice_activities,
                       COALESCE(ROUND(AVG(ps.score)), 0)::int AS average_practice_score
                 FROM programming_challenges pc
+                LEFT JOIN lessons l ON l.id = pc.lesson_id
                 LEFT JOIN practice_submissions ps ON ps.challenge_id = pc.id AND ${studentTextMatchSql("ps.student_id", 1, 2, 3)}
-                WHERE pc.status <> 'Archived'
+                WHERE LOWER(COALESCE(pc.status, 'published')) = 'published'
+                  AND (l.id IS NULL OR LOWER(l.status) = 'published')
             `, [dbStudentId, targetUserId, targetEmail]),
             pool.query(`
                 SELECT COUNT(DISTINCT ss.id)::int AS swing_submissions,
@@ -7186,7 +7352,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                       ps.submitted_at DESC
                                     LIMIT 1
                                 ) ps ON TRUE
-                                WHERE l.status <> 'Archived'
+                                WHERE LOWER(l.status) = 'published'
                                   AND ${OOP_LESSON_ALIAS_FILTER_SQL("l")}
                                 ORDER BY l.sequence, l.title
                         `, [dbStudentId, targetUserId, targetEmail])
@@ -7207,6 +7373,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                        ss.submission_score,
                                        (sg.id IS NOT NULL OR ss.submission_score IS NOT NULL) AS attempted
                                 FROM swing_lessons sl
+                                LEFT JOIN lessons l ON l.id = sl.id
                                 LEFT JOIN swing_progress sg ON ${studentTextMatchSql("sg.student_id", 1, 2, 3)} AND (sg.lesson_id = sl.id OR sg.lesson_id = REPLACE(sl.id, 'swing_lesson_', ''))
                                 LEFT JOIN LATERAL (
                                      SELECT score, total, percentage, passed, (SELECT COUNT(*)::int FROM swing_quiz_attempts counted WHERE ${studentTextMatchSql("counted.student_id", 1, 2, 3)} AND counted.assessment_id = 'swing_assessment_' || sl.sequence) AS attempt_count
@@ -7221,6 +7388,7 @@ app.get("/api/student-results/:studentId", requireAuth, requireRole(["teacher", 
                                     WHERE ${studentTextMatchSql("student_id", 1, 2, 3)}
                                         AND exercise_id IN (SELECT id FROM swing_programming_exercises WHERE lesson_id = sl.id)
                                 ) ss ON TRUE
+                                WHERE LOWER(COALESCE(l.status, sl.status, 'published')) = 'published'
                                 ORDER BY sl.sequence, sl.title
                         `, [dbStudentId, targetUserId, targetEmail])
         ]);
@@ -7989,15 +8157,20 @@ app.patch("/api/recommendations/:id/complete", requireAuth, async (req, res, nex
 
 app.get("/api/practice-challenges", requireAuth, async (req, res, next) => {
     try {
-        const includeSwing = req.authUser?.role === "teacher" || req.query?.includeSwing === "true";
+        const isTeacher = req.authUser?.role === "teacher" || req.authUser?.role === "admin";
+        const includeSwing = isTeacher || req.query?.includeSwing === "true";
         const allowedIds = includeSwing
             ? [...ACTIVE_OOP_PRACTICE_IDS, ...JAVA_SWING_EXERCISES.map(ex => ex.id)]
             : ACTIVE_OOP_PRACTICE_IDS;
+        const statusFilterSql = isTeacher
+            ? "1=1"
+            : "LOWER(COALESCE(c.status, 'published')) = 'published' AND (l.id IS NULL OR LOWER(l.status) = 'published')";
         const result = await pool.query(`
             SELECT c.*, COALESCE(json_agg(t.*) FILTER (WHERE t.id IS NOT NULL), '[]') AS test_cases
             FROM programming_challenges c
+            LEFT JOIN lessons l ON l.id = c.lesson_id
             LEFT JOIN challenge_test_cases t ON t.challenge_id = c.id
-            WHERE c.status <> 'Archived' AND (
+            WHERE ${statusFilterSql} AND (
                 c.id = ANY($1::text[])
                 OR c.lesson_id NOT IN ('swing_lesson_1', 'swing_lesson_2', 'swing_lesson_3', 'swing_lesson_4', 'swing_lesson_5')
                 OR $2::boolean = true

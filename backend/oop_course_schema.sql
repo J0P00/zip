@@ -226,7 +226,7 @@ CREATE TABLE IF NOT EXISTS lessons (
   video_url TEXT DEFAULT '',
   description TEXT DEFAULT '',
   learning_objectives JSONB NOT NULL DEFAULT '[]'::jsonb,
-  status TEXT NOT NULL DEFAULT 'Draft',
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (LOWER(status) IN ('draft', 'published', 'archived')),
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -238,7 +238,19 @@ ALTER TABLE lessons ADD COLUMN IF NOT EXISTS duration TEXT DEFAULT '';
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_url TEXT DEFAULT '';
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS learning_objectives JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE lessons ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Draft';
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';
+UPDATE lessons SET status = LOWER(TRIM(status)) WHERE status IS NOT NULL AND LOWER(TRIM(status)) IN ('draft', 'published', 'archived');
+UPDATE lessons SET status = 'draft' WHERE status IS NULL OR LOWER(TRIM(status)) NOT IN ('draft', 'published', 'archived');
+ALTER TABLE lessons ALTER COLUMN status SET DEFAULT 'draft';
+ALTER TABLE lessons ALTER COLUMN video_url DROP NOT NULL;
+ALTER TABLE lessons ALTER COLUMN description DROP NOT NULL;
+ALTER TABLE lessons ALTER COLUMN duration DROP NOT NULL;
+ALTER TABLE lessons ALTER COLUMN module DROP NOT NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lessons_status_check') THEN
+    ALTER TABLE lessons ADD CONSTRAINT lessons_status_check CHECK (LOWER(status) IN ('draft', 'published', 'archived'));
+  END IF;
+END $$;
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
@@ -252,7 +264,7 @@ CREATE TABLE IF NOT EXISTS assessments (
   passing_score NUMERIC NOT NULL DEFAULT 60,
   attempts INTEGER NOT NULL DEFAULT 1,
   questions JSONB NOT NULL DEFAULT '[]'::jsonb,
-  status TEXT NOT NULL DEFAULT 'Draft',
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (LOWER(status) IN ('draft', 'published', 'archived')),
   created_by UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -321,7 +333,7 @@ CREATE TABLE IF NOT EXISTS programming_challenges (
   sample_input TEXT DEFAULT '',
   sample_output TEXT DEFAULT '',
   passing_score NUMERIC NOT NULL DEFAULT 70,
-  status TEXT NOT NULL DEFAULT 'Draft',
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (LOWER(status) IN ('draft', 'published', 'archived')),
   created_by UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

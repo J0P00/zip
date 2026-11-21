@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   BookOpen,
   Plus,
   Search,
-  Filter,
   Edit2,
   Eye,
   Archive,
@@ -20,15 +19,17 @@ import {
   Code2,
   Video,
   Trash2,
-  Check,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   Code,
-  ListOrdered,
-  HelpCircle,
-  FileText
+  FileText,
+  PauseCircle,
+  Send,
+  RotateCcw,
+  Save
 } from 'lucide-react';
-import { ManagedLesson } from '../../types';
+import { LessonStatus, ManagedLesson } from '../../types';
 import { assessmentApi, lessonApi, practiceApi, validateVideoUrl, videoApi } from '../../services/api';
 import { OOP_COURSE_LESSONS, OOP_ASSESSMENTS } from '../../data/oopCourse';
 import { PRACTICE_CHALLENGES } from '../../data/practiceChallenges';
@@ -80,6 +81,16 @@ const createDefaultQuestion = (index = 1): AssessmentQuestionDraft => ({
   ],
   correctOptionId: 'opt_a'
 });
+
+type ModalTab = 'lesson' | 'video' | 'assessment' | 'practice';
+
+const normalizeLessonStatus = (status?: string): LessonStatus => {
+  const normalized = String(status || 'draft').trim().toLowerCase();
+  if (normalized === 'published' || normalized === 'archived' || normalized === 'draft') {
+    return normalized;
+  }
+  return 'draft';
+};
 
 const isSwingLessonItem = (lesson: { id?: string; courseId?: string; module?: string; track?: string }): boolean => {
   if (lesson.track === 'swing') return true;
@@ -172,7 +183,7 @@ const buildBaselineLessons = (): ManagedLesson[] => {
       videoUrl: l.videoUrl,
       description: l.description,
       learningObjectives: Array.isArray(l.concepts) ? l.concepts : [],
-      status: 'Published',
+      status: 'published',
       citationText: l.citation_text || (l.creator_name ? `${l.creator_name}. ${l.video_title || l.title}. ${l.publisher_name || 'Oracle'}.` : ''),
       citationUrl: l.citation_url || l.source_url || '',
       topics: [],
@@ -229,7 +240,7 @@ const buildBaselineLessons = (): ManagedLesson[] => {
       videoUrl: video?.embedUrl || '',
       description: l.introduction || l.summary || '',
       learningObjectives: Array.isArray(l.objectives) ? l.objectives : (Array.isArray(l.topics) ? l.topics : []),
-      status: 'Published',
+      status: 'published',
       citationText: 'Oracle. (n.d.). Trail: Creating a GUI With Swing (The Java Tutorials). Oracle Documentation.',
       citationUrl: 'https://docs.oracle.com/javase/tutorial/uiswing/',
       topics: [],
@@ -282,9 +293,12 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   const [lessons, setLessons] = useState<ManagedLesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Published' | 'Draft' | 'Archived'>('All');
+  const [statusFilter, setStatusFilter] = useState<'all' | LessonStatus>('all');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [openMenuLessonId, setOpenMenuLessonId] = useState<string | null>(null);
 
   // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -293,11 +307,38 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   const [archiveTarget, setArchiveTarget] = useState<ManagedLesson | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ManagedLesson | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
 
   // Consolidated Modal Tabs
-  const [activeModalTab, setActiveModalTab] = useState<'lesson' | 'video' | 'assessment' | 'practice'>('lesson');
+  const [activeModalTab, setActiveModalTab] = useState<ModalTab>('lesson');
   const [jsonMode, setJsonMode] = useState(false);
   const [rawQuestionsJson, setRawQuestionsJson] = useState('');
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState<string>('');
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setFeedback({ type, message });
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+    }, 4500);
+  };
+
+  useEffect(() => {
+    const handleOutsideClick = () => setOpenMenuLessonId(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMenuLessonId(null);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('click', handleOutsideClick);
+      window.removeEventListener('keydown', handleKeyDown);
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -308,7 +349,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     title: '',
     module: 'Object-Oriented Programming (Java)',
     sequence: 1,
-    status: 'Published' as 'Draft' | 'Published' | 'Archived',
+    status: 'draft' as LessonStatus,
     description: '',
     learningObjectives: '',
     citationText: '',
@@ -336,6 +377,27 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     practicePassingScore: 70,
     practiceStatus: 'Published' as 'Draft' | 'Published'
   });
+
+  const isDirty = useMemo(() => {
+    if (!isCreateOpen && !editingLesson) return false;
+    if (!initialFormSnapshot) return false;
+    return JSON.stringify(formData) !== initialFormSnapshot;
+  }, [formData, initialFormSnapshot, isCreateOpen, editingLesson]);
+
+  const forceCloseModal = () => {
+    setShowUnsavedConfirm(false);
+    setIsCreateOpen(false);
+    setEditingLesson(null);
+    setInitialFormSnapshot('');
+  };
+
+  const requestCloseModal = () => {
+    if (isDirty) {
+      setShowUnsavedConfirm(true);
+      return;
+    }
+    forceCloseModal();
+  };
 
   const [linkedContent, setLinkedContent] = useState<any>(null);
 
@@ -409,7 +471,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
             videoUrl: l.video_url || l.videoUrl || safeContent.video?.videoUrl || swingVid?.embedUrl || '',
             description: l.description || '',
             learningObjectives: parsedObjectives,
-            status: l.status || 'Published',
+            status: normalizeLessonStatus(l.status),
             citationText: l.citationText || l.citation_text || l.metadata?.citationText || l.metadata?.citation_text || '',
             citationUrl: l.citationUrl || l.citation_url || l.sourceUrl || l.source_url || l.metadata?.citationUrl || l.metadata?.citation_url || '',
             storageProvider: l.storageProvider || l.storage_provider || '',
@@ -450,34 +512,48 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   const oopLessonsCount = useMemo(() => (lessons || []).filter(l => !isSwingLessonItem(l)).length, [lessons]);
   const swingLessonsCount = useMemo(() => (lessons || []).filter(l => isSwingLessonItem(l)).length, [lessons]);
 
-  const filteredLessons = useMemo(() => {
+  const trackLessons = useMemo(() => {
     if (!Array.isArray(lessons)) return [];
     return lessons.filter(l => {
       if (!l) return false;
-      const inTrack = activeTrack === 'swing' ? isSwingLessonItem(l) : !isSwingLessonItem(l);
-      if (!inTrack) return false;
+      return activeTrack === 'swing' ? isSwingLessonItem(l) : !isSwingLessonItem(l);
+    });
+  }, [lessons, activeTrack]);
+
+  const statusCounts = useMemo(() => {
+    const counts = { all: trackLessons.length, published: 0, draft: 0, archived: 0 };
+    for (const l of trackLessons) {
+      const s = normalizeLessonStatus(l.status);
+      counts[s] += 1;
+    }
+    return counts;
+  }, [trackLessons]);
+
+  const filteredLessons = useMemo(() => {
+    return trackLessons.filter(l => {
       const matchSearch =
         String(l.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         String(l.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         String(l.module || '').toLowerCase().includes(searchTerm.toLowerCase());
-      const matchStatus = statusFilter === 'All' ? true : l.status === statusFilter;
+      const normalizedStatus = normalizeLessonStatus(l.status);
+      const matchStatus = statusFilter === 'all' ? true : normalizedStatus === statusFilter;
       return matchSearch && matchStatus;
     });
-  }, [lessons, activeTrack, searchTerm, statusFilter]);
+  }, [trackLessons, searchTerm, statusFilter]);
 
-  const handleOpenCreate = () => {
+  const handleOpenCreate = (initialTab: ModalTab = 'lesson') => {
     const isSwingTrack = activeTrack === 'swing';
-    const trackLessons = (lessons || []).filter(l => (isSwingTrack ? isSwingLessonItem(l) : !isSwingLessonItem(l)));
-    const nextSeq = trackLessons.length > 0
-      ? Math.max(...(trackLessons || []).map(l => (isSwingTrack && l.sequence > 12 ? l.sequence - 12 : l.sequence))) + 1
+    const currentTrackLessons = (lessons || []).filter(l => (isSwingTrack ? isSwingLessonItem(l) : !isSwingLessonItem(l)));
+    const nextSeq = currentTrackLessons.length > 0
+      ? Math.max(...(currentTrackLessons || []).map(l => (isSwingTrack && l.sequence > 12 ? l.sequence - 12 : l.sequence))) + 1
       : 1;
     const initialQuestion = createDefaultQuestion(1);
-    setFormData({
+    const nextForm = {
       track: activeTrack,
       title: '',
       module: isSwingTrack ? 'Java Swing' : 'Object-Oriented Programming (Java)',
       sequence: nextSeq,
-      status: 'Published',
+      status: 'draft' as LessonStatus,
       description: '',
       learningObjectives: '',
       citationText: '',
@@ -488,7 +564,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       assessmentQuizType: 'Multiple Choice',
       assessmentPassingScore: isSwingTrack ? SWING_PASSING_PERCENTAGE : ASSESSMENT_PASSING_SCORE,
       assessmentAttempts: 3,
-      assessmentStatus: 'Published',
+      assessmentStatus: 'Published' as 'Draft' | 'Published',
       assessmentQuestions: [initialQuestion],
       enablePractice: true,
       practiceTitle: '',
@@ -497,16 +573,19 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       practiceSampleInput: '',
       practiceSampleOutput: 'Hello, World!',
       practicePassingScore: isSwingTrack ? SWING_PASSING_PERCENTAGE : 70,
-      practiceStatus: 'Published'
-    });
+      practiceStatus: 'Published' as 'Draft' | 'Published'
+    };
+    setFormData(nextForm);
+    setInitialFormSnapshot(JSON.stringify(nextForm));
     setRawQuestionsJson(JSON.stringify([initialQuestion], null, 2));
     setJsonMode(false);
     setLinkedContent(null);
-    setActiveModalTab('lesson');
+    setActiveModalTab(initialTab);
+    setShowUnsavedConfirm(false);
     setIsCreateOpen(true);
   };
 
-  const handleOpenEdit = (lesson: ManagedLesson) => {
+  const handleOpenEdit = (lesson: ManagedLesson, initialTab: ModalTab = 'lesson') => {
     if (!lesson) return;
     setEditingLesson(lesson);
     const content = (lesson as any).content || { video: null, assessment: null, practice: null };
@@ -576,12 +655,12 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     const track = (lesson.track || (isSwing ? 'swing' : 'oop')) as 'oop' | 'swing';
     const displaySeq = isSwing && lesson.sequence > 12 ? lesson.sequence - 12 : (lesson.sequence || 1);
 
-    setFormData({
+    const nextForm = {
       track,
       title: lesson.title || '',
       module: lesson.module || (isSwing ? 'Java Swing' : 'Object-Oriented Programming (Java)'),
       sequence: displaySeq,
-      status: lesson.status || 'Published',
+      status: normalizeLessonStatus(lesson.status),
       description: lesson.description || '',
       learningObjectives: Array.isArray(lesson.learningObjectives)
         ? lesson.learningObjectives.join('\n')
@@ -606,8 +685,10 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       practiceSampleOutput: existingPractice?.sampleOutput || staticPractice?.sampleOutput || 'Expected Program Output',
       practicePassingScore: Number(existingPractice?.passingScore ?? staticPractice?.passingScore ?? (isSwing ? SWING_PASSING_PERCENTAGE : 70)),
       practiceStatus: (existingPractice?.status as any) || 'Published'
-    });
+    };
 
+    setFormData(nextForm);
+    setInitialFormSnapshot(JSON.stringify(nextForm));
     setRawQuestionsJson(JSON.stringify(initialQuestions, null, 2));
     setJsonMode(false);
     setLinkedContent({
@@ -615,19 +696,21 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       assessment: existingAssessment || (staticAssessment ? { id: staticAssessment.id } : null),
       practice: existingPractice || (staticPractice ? { id: staticPractice.id } : null)
     });
-    setActiveModalTab('lesson');
+    setShowUnsavedConfirm(false);
+    setActiveModalTab(initialTab);
   };
 
-  const persistLinkedVideo = async (lessonId: string, videoUrl: string) => {
+  const persistLinkedVideo = async (lessonId: string, videoUrl: string, targetStatus: LessonStatus) => {
     if (!videoUrl || !lessonId || lessonId === '0' || lessonId === 'NaN') return;
     try {
       const existing = (await videoApi.list(lessonId)).data?.[0];
+      const titleCaseStatus = targetStatus.charAt(0).toUpperCase() + targetStatus.slice(1);
       const videoPayload: any = {
         lessonId,
         title: formData.title.trim(),
         videoUrl,
         description: formData.description.trim(),
-        status: formData.status,
+        status: titleCaseStatus,
         storageProvider: '',
         storageKey: '',
         storageContentType: '',
@@ -675,69 +758,73 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     }
   };
 
-  const handleSaveLesson = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const saveLessonWithStatus = async (targetStatus: LessonStatus) => {
+    const isDraftSave = targetStatus === 'draft';
 
-    // 1. Validate Lesson
+    // 1. Validate Lesson (draft only requires title and curriculum_track)
     if (!formData.title.trim()) {
-      setFeedback({ type: 'error', message: 'Lesson title is required.' });
+      showToast('error', 'Lesson title is required.');
       setActiveModalTab('lesson');
       return;
     }
 
-    const seq = Number(formData.sequence);
-    if (!Number.isFinite(seq) || Number.isNaN(seq) || seq < 0) {
-      setFeedback({ type: 'error', message: 'Lesson sequence must be a valid non-negative number.' });
-      setActiveModalTab('lesson');
-      return;
-    }
+    const rawSeq = Number(formData.sequence);
+    const seq = Number.isFinite(rawSeq) && !Number.isNaN(rawSeq) && rawSeq >= 0 ? rawSeq : 0;
 
-    // 2. Validate Video
-    if (formData.videoUrl.trim()) {
-      const urlError = validateVideoUrl(formData.videoUrl);
-      if (urlError) {
-        setFeedback({ type: 'error', message: urlError });
-        setActiveModalTab('video');
+    if (!isDraftSave) {
+      if (!Number.isFinite(rawSeq) || Number.isNaN(rawSeq) || rawSeq < 0) {
+        showToast('error', 'Lesson sequence must be a valid non-negative number.');
+        setActiveModalTab('lesson');
         return;
       }
-    }
 
-    // 3. Validate Assessment
-    if (formData.enableAssessment) {
-      const passScore = Number(formData.assessmentPassingScore);
-      if (!Number.isFinite(passScore) || Number.isNaN(passScore) || passScore < 0 || passScore > 100) {
-        setFeedback({ type: 'error', message: 'Assessment passing score must be between 0 and 100.' });
-        setActiveModalTab('assessment');
-        return;
-      }
-      const attempts = Number(formData.assessmentAttempts);
-      if (!Number.isFinite(attempts) || attempts < 1) {
-        setFeedback({ type: 'error', message: 'Assessment attempts must be at least 1.' });
-        setActiveModalTab('assessment');
-        return;
-      }
-      for (let i = 0; i < formData.assessmentQuestions.length; i++) {
-        const q = formData.assessmentQuestions[i];
-        if (!q.question.trim()) {
-          setFeedback({ type: 'error', message: `Question #${i + 1} requires a question prompt.` });
-          setActiveModalTab('assessment');
+      // 2. Validate Video
+      if (formData.videoUrl.trim()) {
+        const urlError = validateVideoUrl(formData.videoUrl);
+        if (urlError) {
+          showToast('error', urlError);
+          setActiveModalTab('video');
           return;
         }
       }
-    }
 
-    // 4. Validate Practice IDE
-    if (formData.enablePractice) {
-      if (!formData.practiceTitle.trim()) {
-        setFeedback({ type: 'error', message: 'Practice IDE challenge title is required when practice is enabled.' });
-        setActiveModalTab('practice');
-        return;
+      // 3. Validate Assessment
+      if (formData.enableAssessment) {
+        const passScore = Number(formData.assessmentPassingScore);
+        if (!Number.isFinite(passScore) || Number.isNaN(passScore) || passScore < 0 || passScore > 100) {
+          showToast('error', 'Assessment passing score must be between 0 and 100.');
+          setActiveModalTab('assessment');
+          return;
+        }
+        const attempts = Number(formData.assessmentAttempts);
+        if (!Number.isFinite(attempts) || attempts < 1) {
+          showToast('error', 'Assessment attempts must be at least 1.');
+          setActiveModalTab('assessment');
+          return;
+        }
+        for (let i = 0; i < formData.assessmentQuestions.length; i++) {
+          const q = formData.assessmentQuestions[i];
+          if (!q.question.trim()) {
+            showToast('error', `Question #${i + 1} requires a question prompt.`);
+            setActiveModalTab('assessment');
+            return;
+          }
+        }
       }
-      const passScore = Number(formData.practicePassingScore);
-      if (!Number.isFinite(passScore) || Number.isNaN(passScore) || passScore < 0 || passScore > 100) {
-        setFeedback({ type: 'error', message: 'Practice passing score must be between 0 and 100.' });
-        setActiveModalTab('practice');
-        return;
+
+      // 4. Validate Practice IDE
+      if (formData.enablePractice) {
+        if (!formData.practiceTitle.trim()) {
+          showToast('error', 'Practice IDE challenge title is required when practice is enabled.');
+          setActiveModalTab('practice');
+          return;
+        }
+        const passScore = Number(formData.practicePassingScore);
+        if (!Number.isFinite(passScore) || Number.isNaN(passScore) || passScore < 0 || passScore > 100) {
+          showToast('error', 'Practice passing score must be between 0 and 100.');
+          setActiveModalTab('practice');
+          return;
+        }
       }
     }
 
@@ -753,6 +840,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     const lessonPayload = {
       id: lessonId,
       track: formData.track,
+      curriculum_track: formData.track,
       title: formData.title.trim(),
       module: formData.module.trim(),
       sequence: effectiveSeq,
@@ -760,7 +848,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       description: formData.description.trim(),
       learningObjectives: objectives,
       concepts: objectives,
-      status: formData.status,
+      status: targetStatus,
       citationText: formData.citationText.trim(),
       citationUrl: formData.citationUrl.trim(),
       metadata: {
@@ -781,20 +869,22 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       if (editingLesson) {
         const res = await lessonApi.update(editingLesson.id, lessonPayload);
         savedId = res?.data?.id || editingLesson.id;
-        setFeedback({ type: 'success', message: `Lesson "${formData.title}" updated successfully with consolidated content.` });
       } else {
         const res = await lessonApi.create({ courseId: isSwing ? 'java_swing' : 'oop_course_java', ...lessonPayload });
         savedId = res?.data?.id || lessonId;
-        setFeedback({ type: 'success', message: `Lesson "${formData.title}" created successfully with linked content.` });
       }
 
-      // Persist Video
-      if (formData.videoUrl.trim() && savedId) {
-        await persistLinkedVideo(savedId, formData.videoUrl.trim());
+      // Persist Video if a valid URL is provided
+      const trimmedVideoUrl = formData.videoUrl.trim();
+      if (trimmedVideoUrl && savedId && (!isDraftSave || !validateVideoUrl(trimmedVideoUrl))) {
+        await persistLinkedVideo(savedId, trimmedVideoUrl, targetStatus);
       }
 
       // Persist Assessment
-      if (formData.enableAssessment && savedId && savedId !== '0' && savedId !== 'NaN') {
+      const hasDraftAssessmentContent =
+        Boolean(formData.assessmentTitle.trim()) ||
+        (formData.assessmentQuestions || []).some(q => q.question.trim());
+      if (formData.enableAssessment && savedId && savedId !== '0' && savedId !== 'NaN' && (!isDraftSave || hasDraftAssessmentContent)) {
         const assessmentTitle = formData.assessmentTitle.trim() || `${formData.title.trim()} Assessment`;
         const serializedQuestions = (formData.assessmentQuestions || []).map(q => {
           const correctOpt = (q.options || []).find(o => o.id === q.correctOptionId);
@@ -805,14 +895,20 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
             explanation: correctOpt?.rationale || q.explanation || ''
           };
         });
+        const safePassScore = Number.isFinite(Number(formData.assessmentPassingScore))
+          ? Math.min(100, Math.max(0, Number(formData.assessmentPassingScore)))
+          : ASSESSMENT_PASSING_SCORE;
+        const safeAttempts = Number.isFinite(Number(formData.assessmentAttempts)) && Number(formData.assessmentAttempts) >= 1
+          ? Number(formData.assessmentAttempts)
+          : 3;
         const assessmentPayload = {
           lessonId: savedId,
           title: assessmentTitle,
           quizType: formData.assessmentQuizType,
-          passingScore: Number(formData.assessmentPassingScore),
-          attempts: Number(formData.assessmentAttempts),
+          passingScore: safePassScore,
+          attempts: safeAttempts,
           questions: serializedQuestions,
-          status: formData.assessmentStatus
+          status: targetStatus === 'published' ? 'Published' : 'Draft'
         };
 
         if (linkedContent?.assessment?.id) {
@@ -826,8 +922,13 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       }
 
       // Persist Practice IDE Challenge
-      if (formData.enablePractice && savedId && savedId !== '0' && savedId !== 'NaN') {
+      const hasDraftPracticeContent =
+        Boolean(formData.practiceTitle.trim()) || Boolean(formData.practiceDescription.trim());
+      if (formData.enablePractice && savedId && savedId !== '0' && savedId !== 'NaN' && (!isDraftSave || hasDraftPracticeContent)) {
         const practiceTitle = formData.practiceTitle.trim() || `${formData.title.trim()} Practice Exercise`;
+        const safePracticeScore = Number.isFinite(Number(formData.practicePassingScore))
+          ? Math.min(100, Math.max(0, Number(formData.practicePassingScore)))
+          : 70;
         const practicePayload = {
           lessonId: savedId,
           topicId: isSwing ? 'java_swing' : 'oop',
@@ -836,8 +937,8 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
           starterCode: formData.practiceStarterCode,
           sampleOutput: formData.practiceSampleOutput,
           sampleInput: formData.practiceSampleInput,
-          passingScore: Number(formData.practicePassingScore),
-          status: formData.practiceStatus
+          passingScore: safePracticeScore,
+          status: targetStatus === 'published' ? 'Published' : 'Draft'
         };
 
         if (linkedContent?.practice?.id) {
@@ -850,39 +951,71 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
         }
       }
 
-      setIsCreateOpen(false);
-      setEditingLesson(null);
+      if (isDraftSave) {
+        showToast('success', 'Lesson saved as draft — you can resume anytime.');
+      } else {
+        showToast(
+          'success',
+          editingLesson
+            ? `Lesson "${formData.title.trim()}" published and updated successfully.`
+            : `Lesson "${formData.title.trim()}" created and published successfully.`
+        );
+      }
+
+      forceCloseModal();
       await fetchLessons();
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message || 'Failed to save lesson and consolidated content.' });
+      showToast('error', err.message || 'Failed to save lesson and consolidated content.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleTogglePublish = async (lesson: ManagedLesson) => {
-    const nextStatus = lesson.status === 'Published' ? 'Draft' : 'Published';
+  const handleSaveLesson = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await saveLessonWithStatus('published');
+  };
+
+  const handleStatusChange = async (lesson: ManagedLesson, nextStatus: LessonStatus) => {
+    setOpenMenuLessonId(null);
     try {
-      await lessonApi.update(lesson.id, { status: nextStatus });
-      setFeedback({
-        type: 'success',
-        message: `Lesson "${lesson.title}" is now ${nextStatus.toLowerCase()}.`
-      });
+      await lessonApi.updateStatus(lesson.id, nextStatus);
+      const statusMessages: Record<LessonStatus, string> = {
+        published: `Lesson "${lesson.title}" is now published and visible to students.`,
+        draft: `Lesson "${lesson.title}" moved to Draft (Paused).`,
+        archived: `Lesson "${lesson.title}" has been archived.`
+      };
+      showToast('success', statusMessages[nextStatus]);
       fetchLessons();
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message || 'Failed to update lesson status.' });
+      showToast('error', err.message || 'Failed to update lesson status.');
     }
   };
 
   const handleArchiveConfirm = async () => {
     if (!archiveTarget) return;
     try {
-      await lessonApi.update(archiveTarget.id, { status: 'Archived' });
-      setFeedback({ type: 'success', message: `Lesson "${archiveTarget.title}" has been archived.` });
+      await lessonApi.updateStatus(archiveTarget.id, 'archived');
+      showToast('success', `Lesson "${archiveTarget.title}" has been archived.`);
       setArchiveTarget(null);
       fetchLessons();
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message || 'Failed to archive lesson.' });
+      showToast('error', err.message || 'Failed to archive lesson.');
+    }
+  };
+
+  const handleArchiveInsteadOfDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await lessonApi.updateStatus(deleteTarget.id, 'archived');
+      showToast('success', `Lesson "${deleteTarget.title}" archived — student records preserved.`);
+      setDeleteTarget(null);
+      fetchLessons();
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to archive lesson.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -891,20 +1024,14 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     setIsDeleting(true);
     try {
       await lessonApi.remove(deleteTarget.id);
-      setFeedback({
-        type: 'success',
-        message: `Lesson "${deleteTarget.title}" and its linked content were deleted permanently.`
-      });
+      showToast('success', `Lesson "${deleteTarget.title}" and its linked content were deleted permanently.`);
       setDeleteTarget(null);
       if (editingLesson?.id === deleteTarget.id) {
-        setEditingLesson(null);
+        forceCloseModal();
       }
       fetchLessons();
     } catch (err: any) {
-      setFeedback({
-        type: 'error',
-        message: err.message || 'Failed to delete lesson.'
-      });
+      showToast('error', err.message || 'Failed to delete lesson.');
     } finally {
       setIsDeleting(false);
     }
@@ -940,7 +1067,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                 Consolidated Curriculum Hub
               </span>
               <span className="text-xs text-slate-400 font-bold">
-                {activeTrack === 'oop' ? `${oopLessonsCount} OOP Lessons` : `${swingLessonsCount} Swing Lessons`} ({filteredLessons.filter(l => l.status === 'Published').length} Published in Track)
+                {activeTrack === 'oop' ? `${oopLessonsCount} OOP Lessons` : `${swingLessonsCount} Swing Lessons`} ({statusCounts.published} Published in Track)
               </span>
             </div>
             <h2 className="mt-2 text-xl font-black">Lesson & Content Management</h2>
@@ -950,7 +1077,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
           </div>
           <button
             type="button"
-            onClick={handleOpenCreate}
+            onClick={() => handleOpenCreate('lesson')}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white hover:bg-emerald-700 shadow-sm transition cursor-pointer"
           >
             <Plus className="h-4 w-4" />
@@ -1032,9 +1159,54 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
           </div>
         )}
 
-        {/* Filters and Search Bar */}
-        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="relative sm:col-span-2">
+        {/* Status Filter Pill Tabs */}
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          {(
+            [
+              { id: 'all', label: 'All', count: statusCounts.all },
+              { id: 'published', label: 'Published', count: statusCounts.published },
+              { id: 'draft', label: 'Drafts (Paused)', count: statusCounts.draft },
+              { id: 'archived', label: 'Archived', count: statusCounts.archived }
+            ] as const
+          ).map(tab => {
+            const isSelected = statusFilter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setStatusFilter(tab.id)}
+                className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-black transition cursor-pointer border ${
+                  isSelected
+                    ? tab.id === 'draft'
+                      ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                      : tab.id === 'archived'
+                      ? 'bg-slate-600 text-white border-slate-600 shadow-sm'
+                      : 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                    : isDark
+                    ? 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                    isSelected
+                      ? 'bg-white/20 text-white'
+                      : isDark
+                      ? 'bg-slate-800 text-slate-300'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search Bar */}
+        <div className="mt-3">
+          <div className="relative">
             <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
             <input
               type="text"
@@ -1044,25 +1216,12 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
               className={`w-full rounded-xl border pl-10 pr-4 py-2.5 text-xs font-bold transition outline-none ${inputClass}`}
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-slate-400 shrink-0" />
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value as any)}
-              className={`w-full rounded-xl border px-3 py-2.5 text-xs font-bold transition outline-none ${inputClass}`}
-            >
-              <option value="All">All Statuses</option>
-              <option value="Published">Published Only</option>
-              <option value="Draft">Drafts Only</option>
-              <option value="Archived">Archived Only</option>
-            </select>
-          </div>
         </div>
       </div>
 
       {/* Lesson List / Table */}
-      <div className={`overflow-hidden rounded-2xl border shadow-sm ${cardClass}`}>
-        <div className="overflow-x-auto">
+      <div className={`rounded-2xl border shadow-sm ${cardClass}`}>
+        <div className="overflow-x-auto overflow-y-visible">
           <table className="w-full text-left text-xs">
             <thead className={`border-b text-[10px] uppercase tracking-wider text-slate-400 ${isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
               <tr>
@@ -1154,47 +1313,55 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                         </div>
                       </td>
 
-                      {/* Consolidated Linked Content Badges */}
+                      {/* Consolidated Linked Content Badges (Interactive Buttons) */}
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-1.5">
                           {/* Video Badge */}
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black ${
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(lesson, 'video')}
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-black transition cursor-pointer ${
                               hasVideo
-                                ? 'bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800'
-                                : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                                ? 'bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800 hover:bg-sky-100 dark:hover:bg-sky-900/60'
+                                : 'border border-dashed border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-sky-400 hover:text-sky-600 dark:hover:text-sky-400'
                             }`}
-                            title={hasVideo ? 'Video tutorial linked' : 'No video linked'}
+                            title={hasVideo ? 'Edit Video Tutorial (Tab 2)' : 'Add Video Tutorial (Tab 2)'}
                           >
-                            <Play className="h-2.5 w-2.5" />
-                            Video
-                          </span>
+                            {hasVideo ? <Play className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
+                            {hasVideo ? 'Video' : 'Add Video'}
+                          </button>
 
                           {/* Assessment Badge */}
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black ${
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(lesson, 'assessment')}
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-black transition cursor-pointer ${
                               hasAssessment
-                                ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
-                                : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                                ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60'
+                                : 'border border-dashed border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400'
                             }`}
-                            title={hasAssessment ? 'Assessment configured' : 'No assessment'}
+                            title={hasAssessment ? 'Edit Assessment Quiz (Tab 3)' : 'Add Assessment Quiz (Tab 3)'}
                           >
-                            <FileQuestion className="h-2.5 w-2.5" />
-                            Quiz ({lesson.content?.assessment?.passingScore || ASSESSMENT_PASSING_SCORE}%)
-                          </span>
+                            {hasAssessment ? <FileQuestion className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
+                            {hasAssessment
+                              ? `Quiz (${lesson.content?.assessment?.passingScore || ASSESSMENT_PASSING_SCORE}%)`
+                              : 'Add Quiz'}
+                          </button>
 
                           {/* Practice IDE Badge */}
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black ${
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(lesson, 'practice')}
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-black transition cursor-pointer ${
                               hasPractice
-                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                                : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
+                                : 'border border-dashed border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-400'
                             }`}
-                            title={hasPractice ? 'Practice IDE challenge configured' : 'No IDE challenge'}
+                            title={hasPractice ? 'Edit Practice IDE Challenge (Tab 4)' : 'Add Practice IDE Challenge (Tab 4)'}
                           >
-                            <Code2 className="h-2.5 w-2.5" />
-                            Practice IDE
-                          </span>
+                            {hasPractice ? <Code2 className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
+                            {hasPractice ? 'Practice IDE' : 'Add IDE'}
+                          </button>
                         </div>
                       </td>
 
@@ -1228,58 +1395,167 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
 
                       {/* Status Badge */}
                       <td className="px-4 py-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleTogglePublish(lesson)}
-                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider cursor-pointer transition ${
-                            lesson.status === 'Published'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-200'
-                              : lesson.status === 'Draft'
-                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 hover:bg-amber-200'
-                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                          }`}
-                          title="Click to toggle publish status"
-                        >
-                          {lesson.status}
-                        </button>
+                        {(() => {
+                          const lessonStatus = normalizeLessonStatus(lesson.status);
+                          const badgeStyles =
+                            lessonStatus === 'published'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                              : lessonStatus === 'draft'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
+                          const badgeLabel =
+                            lessonStatus === 'published'
+                              ? 'PUBLISHED'
+                              : lessonStatus === 'draft'
+                              ? 'DRAFT (PAUSED)'
+                              : 'ARCHIVED';
+                          return (
+                            <span
+                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap ${badgeStyles}`}
+                            >
+                              {badgeLabel}
+                            </span>
+                          );
+                        })()}
                       </td>
 
                       {/* Actions */}
                       <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setPreviewingLesson(lesson)}
-                            className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 transition cursor-pointer"
-                            title="Preview Consolidated Lesson"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(lesson)}
-                            className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-emerald-600 transition cursor-pointer"
-                            title="Edit Lesson & Content"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setArchiveTarget(lesson)}
-                            className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:text-amber-600 transition cursor-pointer"
-                            title="Archive Lesson"
-                          >
-                            <Archive className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteTarget(lesson)}
-                            className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 transition cursor-pointer"
-                            title="Delete Lesson"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        {(() => {
+                          const lessonStatus = normalizeLessonStatus(lesson.status);
+                          const isMenuOpen = openMenuLessonId === lesson.id;
+                          const openUpward = idx >= filteredLessons.length - 2 && filteredLessons.length > 2;
+                          return (
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(lesson, 'lesson')}
+                                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-black transition cursor-pointer shadow-xs ${
+                                  lessonStatus === 'draft'
+                                    ? 'bg-amber-500 text-white hover:bg-amber-600'
+                                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                }`}
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                                {lessonStatus === 'draft' ? 'Resume' : 'Edit'}
+                              </button>
+
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    setOpenMenuLessonId(isMenuOpen ? null : lesson.id);
+                                  }}
+                                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition cursor-pointer ${
+                                    isDark
+                                      ? 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white'
+                                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+                                  }`}
+                                >
+                                  <span>More</span>
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                </button>
+
+                                {isMenuOpen && (
+                                  <div
+                                    onClick={e => e.stopPropagation()}
+                                    className={`absolute right-0 z-30 w-52 rounded-xl border py-1.5 shadow-xl text-left ${
+                                      openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                                    } ${
+                                      isDark
+                                        ? 'border-slate-700 bg-slate-900 text-slate-200'
+                                        : 'border-slate-200 bg-white text-slate-700'
+                                    }`}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenMenuLessonId(null);
+                                        setPreviewingLesson(lesson);
+                                      }}
+                                      className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                                        isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      <Eye className="h-3.5 w-3.5 text-slate-400" />
+                                      <span>Preview</span>
+                                    </button>
+
+                                    {lessonStatus === 'published' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStatusChange(lesson, 'draft')}
+                                        className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                                          isDark ? 'hover:bg-slate-800 text-amber-400' : 'hover:bg-amber-50 text-amber-700'
+                                        }`}
+                                      >
+                                        <PauseCircle className="h-3.5 w-3.5" />
+                                        <span>Pause (Move to Draft)</span>
+                                      </button>
+                                    )}
+
+                                    {lessonStatus === 'draft' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStatusChange(lesson, 'published')}
+                                        className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                                          isDark ? 'hover:bg-slate-800 text-emerald-400' : 'hover:bg-emerald-50 text-emerald-700'
+                                        }`}
+                                      >
+                                        <Send className="h-3.5 w-3.5" />
+                                        <span>Publish Now</span>
+                                      </button>
+                                    )}
+
+                                    {lessonStatus === 'archived' ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStatusChange(lesson, 'draft')}
+                                        className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                                          isDark ? 'hover:bg-slate-800 text-emerald-400' : 'hover:bg-emerald-50 text-emerald-700'
+                                        }`}
+                                      >
+                                        <RotateCcw className="h-3.5 w-3.5" />
+                                        <span>Restore to Draft</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenMenuLessonId(null);
+                                          setArchiveTarget(lesson);
+                                        }}
+                                        className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                                          isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-50'
+                                        }`}
+                                      >
+                                        <Archive className="h-3.5 w-3.5 text-slate-400" />
+                                        <span>Archive Lesson</span>
+                                      </button>
+                                    )}
+
+                                    <div className={`my-1 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`} />
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenMenuLessonId(null);
+                                        setDeleteTarget(lesson);
+                                      }}
+                                      className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-black text-rose-600 transition cursor-pointer ${
+                                        isDark ? 'hover:bg-rose-950/40' : 'hover:bg-rose-50'
+                                      }`}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                      <span>Delete Permanently</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
@@ -1292,8 +1568,14 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
 
       {/* CONSOLIDATED CREATE / EDIT MODAL */}
       {(isCreateOpen || editingLesson) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className={`w-full max-w-4xl rounded-2xl border p-6 shadow-2xl my-8 flex flex-col max-h-[90vh] ${cardClass}`}>
+        <div
+          onClick={requestCloseModal}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className={`w-full max-w-5xl rounded-2xl border p-6 shadow-2xl my-8 flex flex-col max-h-[90vh] ${cardClass}`}
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b pb-4 dark:border-slate-800 shrink-0">
               <div className="flex items-center gap-2">
@@ -1301,9 +1583,16 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                   <BookOpen className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black">
-                    {editingLesson ? `Edit Lesson: ${editingLesson.title}` : 'Create New Lesson & Content Workflow'}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black">
+                      {editingLesson ? `Edit Lesson: ${editingLesson.title}` : 'Create New Lesson & Content Workflow'}
+                    </h3>
+                    {isDirty && (
+                      <span className="rounded-full bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 text-[10px] font-black text-amber-700 dark:text-amber-300">
+                        Unsaved changes
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[11px] text-slate-400">
                     Consolidated lesson, video tutorial, assessment quiz, and Practice IDE configuration.
                   </p>
@@ -1311,11 +1600,9 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setIsCreateOpen(false);
-                  setEditingLesson(null);
-                }}
+                onClick={requestCloseModal}
                 className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+                title="Close modal"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1497,12 +1784,12 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                       </label>
                       <select
                         value={formData.status}
-                        onChange={e => setFormData({ ...formData, status: e.target.value as any })}
+                        onChange={e => setFormData({ ...formData, status: e.target.value as LessonStatus })}
                         className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
                       >
-                        <option value="Published">Published (Active & Visible)</option>
-                        <option value="Draft">Draft (Hidden from students)</option>
-                        <option value="Archived">Archived</option>
+                        <option value="draft">Draft (Paused — Hidden from students)</option>
+                        <option value="published">Published (Active & Visible)</option>
+                        <option value="archived">Archived</option>
                       </select>
                     </div>
                   </div>
@@ -2002,26 +2289,23 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {editingLesson && (
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(editingLesson)}
-                      className="rounded-xl border border-rose-200 dark:border-rose-900/40 px-3 py-2 text-xs font-black text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Delete Lesson
-                    </button>
-                  )}
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsCreateOpen(false);
-                      setEditingLesson(null);
-                    }}
-                    className="rounded-xl px-4 py-2 text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                    disabled={isSaving}
+                    onClick={requestCloseModal}
+                    className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
                   >
                     Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => saveLessonWithStatus('draft')}
+                    className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-black text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-900/60 transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    {isSaving ? 'Saving...' : 'Save as Draft (Pause)'}
                   </button>
                   <button
                     type="submit"
@@ -2029,14 +2313,10 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                     className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-black text-white hover:bg-emerald-700 shadow-sm transition cursor-pointer flex items-center gap-1.5"
                   >
                     {isSaving ? (
-                      'Saving All Content...'
-                    ) : editingLesson ? (
-                      <>
-                        <Check className="h-4 w-4" /> Save Lesson Content
-                      </>
+                      'Publishing...'
                     ) : (
                       <>
-                        <Sparkles className="h-4 w-4" /> Create Lesson Content
+                        <Sparkles className="h-4 w-4" /> Publish Lesson
                       </>
                     )}
                   </button>
@@ -2217,10 +2497,55 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
         </div>
       )}
 
+      {/* UNSAVED CHANGES CONFIRMATION MODAL */}
+      {showUnsavedConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl ${cardClass}`}>
+            <div className="flex items-center gap-3 text-amber-600 mb-3">
+              <div className="rounded-full bg-amber-500/10 p-2 text-amber-600">
+                <AlertCircle className="h-6 w-6 shrink-0" />
+              </div>
+              <h3 className="text-base font-black text-slate-900 dark:text-white">Unsaved Changes</h3>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              You have unsaved changes. Save as Draft or discard?
+            </p>
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowUnsavedConfirm(false)}
+                className="rounded-xl px-3.5 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
+              >
+                Keep Editing
+              </button>
+              <button
+                type="button"
+                onClick={forceCloseModal}
+                className="rounded-xl border border-rose-200 dark:border-rose-900/50 px-3.5 py-2 text-xs font-black text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+              >
+                Discard Changes
+              </button>
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => {
+                  setShowUnsavedConfirm(false);
+                  saveLessonWithStatus('draft');
+                }}
+                className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-black text-white hover:bg-amber-600 transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Save className="h-3.5 w-3.5" />
+                Save as Draft
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* DELETE CONFIRMATION MODAL */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl ${cardClass}`}>
+          <div className={`w-full max-w-lg rounded-2xl border p-6 shadow-2xl ${cardClass}`}>
             <div className="flex items-center gap-3 text-rose-600 mb-3">
               <div className="rounded-full bg-rose-500/10 p-2 text-rose-600">
                 <Trash2 className="h-6 w-6 shrink-0" />
@@ -2230,17 +2555,26 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
               Are you sure you want to permanently delete <strong>"{deleteTarget.title}"</strong>?
             </p>
-            <div className="mt-3 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/20 p-3 text-[11px] text-rose-800 dark:text-rose-300">
-              <strong>Warning:</strong> This will permanently delete the lesson along with any associated video records, assessment quizzes, student progress, and practice challenges. This action cannot be undone.
+            <div className="mt-3 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/60 dark:bg-rose-950/20 p-3 text-[11px] text-rose-800 dark:text-rose-300 leading-relaxed">
+              <strong>Permanent Action Warning:</strong> Deleting removes this lesson and its linked videos, assessments, and Practice IDE challenges permanently and cannot be undone. Consider archiving instead to safely preserve student progress records.
             </div>
-            <div className="mt-5 flex items-center justify-end gap-2">
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
                 disabled={isDeleting}
                 onClick={() => setDeleteTarget(null)}
-                className="rounded-xl px-4 py-2 text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="rounded-xl px-3.5 py-2 text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleArchiveInsteadOfDelete}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Archive className="h-3.5 w-3.5" />
+                Archive Instead (Recommended)
               </button>
               <button
                 type="button"
@@ -2248,9 +2582,37 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                 onClick={handleDeleteConfirm}
                 className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-black text-white hover:bg-rose-700 transition cursor-pointer flex items-center gap-1.5"
               >
+                <Trash2 className="h-3.5 w-3.5" />
                 {isDeleting ? 'Deleting...' : 'Delete Permanently'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* FLOATING TOAST NOTIFICATION */}
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-[70] max-w-sm animate-fade-in">
+          <div
+            className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-xs font-bold shadow-xl ${
+              toast.type === 'success'
+                ? 'bg-emerald-600 text-white border-emerald-500'
+                : 'bg-rose-600 text-white border-rose-500'
+            }`}
+          >
+            {toast.type === 'success' ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+            ) : (
+              <AlertCircle className="h-4 w-4 shrink-0" />
+            )}
+            <span className="flex-1">{toast.message}</span>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              className="text-white/80 hover:text-white cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       )}

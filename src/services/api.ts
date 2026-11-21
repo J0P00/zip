@@ -231,6 +231,11 @@ export const lessonApi = {
       method: 'PUT',
       body: JSON.stringify(body)
     }),
+  updateStatus: (id: string, status: 'draft' | 'published' | 'archived') =>
+    apiRequest<{ success: boolean; data: any }>(`/api/lessons/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    }),
   remove: (id: string) =>
     apiRequest<{ success: boolean; data: any }>(`/api/lessons/${encodeURIComponent(id)}`, {
       method: 'DELETE'
