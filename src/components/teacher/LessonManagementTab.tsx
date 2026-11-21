@@ -70,7 +70,7 @@ const DEFAULT_STARTER_CODE = `public class Main {
 `;
 
 const createDefaultQuestion = (index = 1): AssessmentQuestionDraft => ({
-  id: `q_${Date.now()}_${index}`,
+  id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${index}`,
   question: 'What is the primary role of this concept in Java OOP?',
   codeSnippet: '',
   options: [
@@ -145,7 +145,7 @@ const normalizeQuestionDraft = (q: any, index: number): AssessmentQuestionDraft 
   const correctOption = safeOptions.find((o: any) => o.id === correctOptionId);
 
   return {
-    id: q?.id || `q_${Date.now()}_${index + 1}`,
+    id: q?.id || `q_${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${index + 1}`,
     question: q?.question || q?.prompt || '',
     codeSnippet: q?.codeSnippet || '',
     options: safeOptions,
@@ -314,6 +314,10 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   const [jsonMode, setJsonMode] = useState(false);
   const [rawQuestionsJson, setRawQuestionsJson] = useState('');
   const [initialFormSnapshot, setInitialFormSnapshot] = useState<string>('');
+  const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null);
+  const modalBodyRef = useRef<HTMLFormElement | null>(null);
+  const questionInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const highlightTimerRef = useRef<number | null>(null);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
@@ -337,6 +341,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       window.removeEventListener('click', handleOutsideClick);
       window.removeEventListener('keydown', handleKeyDown);
       if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+      if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current);
     };
   }, []);
 
@@ -611,7 +616,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
 
     const initialQuestions: AssessmentQuestionDraft[] =
       rawQuestions.length > 0
-        ? rawQuestions.map((q: any, idx: number) => normalizeQuestionDraft(q, idx))
+        ? rawQuestions.map((q: any, idx: number) => normalizeQuestionDraft(q, idx)).reverse()
         : [createDefaultQuestion(1)];
 
     const staticOopPractice = PRACTICE_CHALLENGES.find(c => c.lessonId === lesson.id);
@@ -726,35 +731,61 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   // Question manipulation helpers
   const handleAddQuestion = () => {
     const newQ = createDefaultQuestion(formData.assessmentQuestions.length + 1);
-    const updated = [...formData.assessmentQuestions, newQ];
-    setFormData({ ...formData, assessmentQuestions: updated });
-    setRawQuestionsJson(JSON.stringify(updated, null, 2));
+    setFormData(prev => {
+      const updated = [newQ, ...prev.assessmentQuestions];
+      setRawQuestionsJson(JSON.stringify(updated, null, 2));
+      return { ...prev, enableAssessment: true, assessmentQuestions: updated };
+    });
+
+    setHighlightedQuestionId(newQ.id);
+    if (highlightTimerRef.current) {
+      window.clearTimeout(highlightTimerRef.current);
+    }
+    highlightTimerRef.current = window.setTimeout(() => {
+      setHighlightedQuestionId(curr => (curr === newQ.id ? null : curr));
+    }, 1800);
+
+    requestAnimationFrame(() => {
+      modalBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      const promptInput = questionInputRefs.current[newQ.id];
+      if (promptInput) {
+        promptInput.focus();
+        promptInput.select();
+      }
+    });
   };
 
-  const handleRemoveQuestion = (idx: number) => {
-    const updated = formData.assessmentQuestions.filter((_, i) => i !== idx);
-    setFormData({ ...formData, assessmentQuestions: updated });
-    setRawQuestionsJson(JSON.stringify(updated, null, 2));
+  const handleRemoveQuestion = (questionId: string) => {
+    setFormData(prev => {
+      const updated = prev.assessmentQuestions.filter(q => q.id !== questionId);
+      setRawQuestionsJson(JSON.stringify(updated, null, 2));
+      return { ...prev, assessmentQuestions: updated };
+    });
+    delete questionInputRefs.current[questionId];
   };
 
-  const handleUpdateQuestion = (idx: number, patch: Partial<AssessmentQuestionDraft>) => {
-    const updated = formData.assessmentQuestions.map((q, i) => (i === idx ? { ...q, ...patch } : q));
-    setFormData({ ...formData, assessmentQuestions: updated });
-    setRawQuestionsJson(JSON.stringify(updated, null, 2));
+  const handleUpdateQuestion = (questionId: string, patch: Partial<AssessmentQuestionDraft>) => {
+    setFormData(prev => {
+      const updated = prev.assessmentQuestions.map(q => (q.id === questionId ? { ...q, ...patch } : q));
+      setRawQuestionsJson(JSON.stringify(updated, null, 2));
+      return { ...prev, assessmentQuestions: updated };
+    });
   };
 
   const handleApplyQuestionsJson = () => {
     try {
       const parsed = JSON.parse(rawQuestionsJson);
       if (Array.isArray(parsed)) {
-        setFormData({ ...formData, assessmentQuestions: parsed });
+        const normalized = parsed.map((q, idx) => normalizeQuestionDraft(q, idx));
+        setFormData(prev => ({ ...prev, assessmentQuestions: normalized }));
+        setRawQuestionsJson(JSON.stringify(normalized, null, 2));
         setJsonMode(false);
-        setFeedback({ type: 'success', message: `Successfully loaded ${parsed.length} assessment questions from JSON.` });
+        showToast('success', `Successfully loaded ${normalized.length} assessment questions from JSON.`);
       } else {
-        setFeedback({ type: 'error', message: 'JSON root must be an array of question objects.' });
+        showToast('error', 'JSON root must be an array of question objects.');
       }
     } catch (err: any) {
-      setFeedback({ type: 'error', message: `Invalid JSON syntax: ${err.message}` });
+      showToast('error', `Invalid JSON syntax: ${err.message}`);
     }
   };
 
@@ -805,7 +836,8 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
         for (let i = 0; i < formData.assessmentQuestions.length; i++) {
           const q = formData.assessmentQuestions[i];
           if (!q.question.trim()) {
-            showToast('error', `Question #${i + 1} requires a question prompt.`);
+            const displayNumber = formData.assessmentQuestions.length - i;
+            showToast('error', `Question Q${displayNumber} requires a question prompt.`);
             setActiveModalTab('assessment');
             return;
           }
@@ -886,7 +918,8 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
         (formData.assessmentQuestions || []).some(q => q.question.trim());
       if (formData.enableAssessment && savedId && savedId !== '0' && savedId !== 'NaN' && (!isDraftSave || hasDraftAssessmentContent)) {
         const assessmentTitle = formData.assessmentTitle.trim() || `${formData.title.trim()} Assessment`;
-        const serializedQuestions = (formData.assessmentQuestions || []).map(q => {
+        // Save questions in chronological order (Q1 -> QN) so students always take the quiz starting from Q1
+        const serializedQuestions = [...(formData.assessmentQuestions || [])].reverse().map(q => {
           const correctOpt = (q.options || []).find(o => o.id === q.correctOptionId);
           return {
             ...q,
@@ -1652,7 +1685,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
             </div>
 
             {/* Modal Body / Scrollable Form */}
-            <form onSubmit={handleSaveLesson} className="flex-1 overflow-y-auto py-4 space-y-5 pr-1">
+            <form ref={modalBodyRef} onSubmit={handleSaveLesson} className="flex-1 overflow-y-auto py-4 space-y-5 pr-1">
               {/* SECTION 1: LESSON DETAILS */}
               {activeModalTab === 'lesson' && (
                 <div className="space-y-4">
@@ -1932,31 +1965,43 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
               {/* SECTION 3: ASSESSMENT INTEGRATION */}
               {activeModalTab === 'assessment' && (
                 <div className="space-y-4">
-                  {/* Enable assessment toggle & summary */}
-                  <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border p-4 ${isDark ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-slate-50'}`}>
+                  {/* Sticky Top Header: Enable toggle, Question count, JSON toggle & + Add Question */}
+                  <div
+                    className={`sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border p-3.5 shadow-sm backdrop-blur-md ${
+                      isDark
+                        ? 'border-slate-800 bg-slate-900/95'
+                        : 'border-slate-200 bg-white/95'
+                    }`}
+                  >
                     <div className="flex items-center gap-3">
                       <input
                         type="checkbox"
                         id="enableAssessment"
                         checked={formData.enableAssessment}
                         onChange={e => setFormData({ ...formData, enableAssessment: e.target.checked })}
-                        className="h-4 w-4 rounded accent-emerald-600 cursor-pointer"
+                        className="h-4 w-4 rounded accent-emerald-600 cursor-pointer shrink-0"
                       />
                       <div>
-                        <label htmlFor="enableAssessment" className="text-xs font-black cursor-pointer">
-                          Enable Assessment for this Lesson
-                        </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label htmlFor="enableAssessment" className="text-xs font-black cursor-pointer">
+                            Enable Assessment for this Lesson
+                          </label>
+                          <span className="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-black text-emerald-700 dark:text-emerald-400">
+                            {(formData.assessmentQuestions || []).length}{' '}
+                            {(formData.assessmentQuestions || []).length === 1 ? 'Question' : 'Questions'}
+                          </span>
+                        </div>
                         <p className="text-[11px] text-slate-400">
-                          Passing score threshold is {ASSESSMENT_PASSING_SCORE}%. Students must pass the assessment to unlock the Practice IDE.
+                          Passing threshold: {ASSESSMENT_PASSING_SCORE}%. Newest questions appear at the top and save chronologically (Q1 → Q{(formData.assessmentQuestions || []).length || 1}).
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
                         onClick={() => setJsonMode(!jsonMode)}
-                        className="rounded-lg border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer"
+                        className="rounded-lg border border-slate-300 dark:border-slate-700 px-2.5 py-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
                       >
                         <Code className="mr-1 inline h-3 w-3" />
                         {jsonMode ? 'Visual Builder' : 'Raw JSON'}
@@ -1964,9 +2009,9 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                       <button
                         type="button"
                         onClick={handleAddQuestion}
-                        className="rounded-lg bg-emerald-600 px-3 py-1 text-[11px] font-black text-white hover:bg-emerald-700 transition cursor-pointer"
+                        className="rounded-lg bg-emerald-600 px-3.5 py-1.5 text-[11px] font-black text-white hover:bg-emerald-700 shadow-xs transition cursor-pointer flex items-center gap-1"
                       >
-                        <Plus className="mr-1 inline h-3 w-3" />
+                        <Plus className="h-3.5 w-3.5" />
                         Add Question
                       </button>
                     </div>
@@ -2039,97 +2084,117 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                           />
                         </div>
                       ) : (
-                        /* Visual Question Builder */
+                        /* Visual Question Builder (Newest at Top: QN -> Q1) */
                         <div className="space-y-4">
-                          {(formData.assessmentQuestions || []).map((q, qIndex) => (
-                            <div
-                              key={q.id || qIndex}
-                              className={`rounded-2xl border p-4 space-y-3 transition ${isDark ? 'border-slate-800 bg-slate-950/40' : 'border-slate-200 bg-white'}`}
-                            >
-                              <div className="flex items-center justify-between border-b pb-2 dark:border-slate-800">
-                                <div className="flex items-center gap-2">
-                                  <span className="rounded-md bg-emerald-600/10 px-2 py-0.5 font-mono text-[11px] font-black text-emerald-600">
-                                    Q{qIndex + 1}
-                                  </span>
-                                  <span className="text-xs font-black">Question Prompt</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveQuestion(qIndex)}
-                                  className="text-slate-400 hover:text-rose-500 cursor-pointer p-1"
-                                  title="Delete Question"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
-
-                              <input
-                                type="text"
-                                placeholder="Enter the assessment question..."
-                                value={q.question}
-                                onChange={e => handleUpdateQuestion(qIndex, { question: e.target.value })}
-                                className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
-                              />
-
-                              <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
-                                  Optional Code Snippet
-                                </label>
-                                <textarea
-                                  rows={2}
-                                  placeholder="// Optional Java snippet for student analysis..."
-                                  value={q.codeSnippet || ''}
-                                  onChange={e => handleUpdateQuestion(qIndex, { codeSnippet: e.target.value })}
-                                  className={`w-full rounded-xl border p-2 font-mono text-xs outline-none ${inputClass}`}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">
-                                  Answer Choices (Select radio button for the correct answer)
-                                </label>
-                                <div className="space-y-2">
-                                  {(q.options || []).map((opt, optIndex) => (
-                                    <div key={opt.id || optIndex} className="flex items-center gap-2">
-                                      <input
-                                        type="radio"
-                                        name={`correct_${qIndex}`}
-                                        checked={q.correctOptionId === opt.id}
-                                        onChange={() => handleUpdateQuestion(qIndex, { correctOptionId: opt.id })}
-                                        className="h-4 w-4 accent-emerald-600 cursor-pointer"
-                                        title="Mark as correct answer"
-                                      />
-                                      <span className="font-mono text-xs font-bold text-slate-400 w-4">
-                                        {String.fromCharCode(65 + optIndex)}
+                          {(formData.assessmentQuestions || []).map((q, qIndex) => {
+                            const questionNumber = (formData.assessmentQuestions || []).length - qIndex;
+                            const isNewlyAdded = highlightedQuestionId === q.id;
+                            return (
+                              <div
+                                key={q.id}
+                                className={`rounded-2xl border p-4 space-y-3 transition-all duration-700 ${
+                                  isNewlyAdded
+                                    ? isDark
+                                      ? 'border-emerald-500 ring-2 ring-emerald-500/40 bg-emerald-950/30'
+                                      : 'border-emerald-500 ring-2 ring-emerald-500/30 bg-emerald-50/60'
+                                    : isDark
+                                    ? 'border-slate-800 bg-slate-950/40'
+                                    : 'border-slate-200 bg-white'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between border-b pb-2 dark:border-slate-800">
+                                  <div className="flex items-center gap-2">
+                                    <span className="rounded-md bg-emerald-600/10 px-2 py-0.5 font-mono text-[11px] font-black text-emerald-600 dark:text-emerald-400">
+                                      Q{questionNumber}
+                                    </span>
+                                    <span className="text-xs font-black">Question Prompt</span>
+                                    {isNewlyAdded && (
+                                      <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-black text-white">
+                                        New
                                       </span>
-                                      <input
-                                        type="text"
-                                        placeholder={`Option ${String.fromCharCode(65 + optIndex)} text`}
-                                        value={opt.text}
-                                        onChange={e => {
-                                          const newOpts = [...q.options];
-                                          newOpts[optIndex] = { ...opt, text: e.target.value };
-                                          handleUpdateQuestion(qIndex, { options: newOpts });
-                                        }}
-                                        className={`flex-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold outline-none ${inputClass}`}
-                                      />
-                                      <input
-                                        type="text"
-                                        placeholder="Explanation / rationale"
-                                        value={opt.rationale || ''}
-                                        onChange={e => {
-                                          const newOpts = [...q.options];
-                                          newOpts[optIndex] = { ...opt, rationale: e.target.value };
-                                          handleUpdateQuestion(qIndex, { options: newOpts });
-                                        }}
-                                        className={`w-1/3 rounded-lg border px-2.5 py-1.5 text-xs outline-none ${inputClass}`}
-                                      />
-                                    </div>
-                                  ))}
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveQuestion(q.id)}
+                                    className="text-slate-400 hover:text-rose-500 cursor-pointer p-1"
+                                    title="Delete Question"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+
+                                <input
+                                  ref={el => {
+                                    questionInputRefs.current[q.id] = el;
+                                  }}
+                                  type="text"
+                                  placeholder="Enter the assessment question..."
+                                  value={q.question}
+                                  onChange={e => handleUpdateQuestion(q.id, { question: e.target.value })}
+                                  className={`w-full rounded-xl border px-3 py-2 text-xs font-bold outline-none ${inputClass}`}
+                                />
+
+                                <div>
+                                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                                    Optional Code Snippet
+                                  </label>
+                                  <textarea
+                                    rows={2}
+                                    placeholder="// Optional Java snippet for student analysis..."
+                                    value={q.codeSnippet || ''}
+                                    onChange={e => handleUpdateQuestion(q.id, { codeSnippet: e.target.value })}
+                                    className={`w-full rounded-xl border p-2 font-mono text-xs outline-none ${inputClass}`}
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">
+                                    Answer Choices (Select radio button for the correct answer)
+                                  </label>
+                                  <div className="space-y-2">
+                                    {(q.options || []).map((opt, optIndex) => (
+                                      <div key={`${q.id}_${opt.id}`} className="flex items-center gap-2">
+                                        <input
+                                          type="radio"
+                                          name={`correct_${q.id}`}
+                                          checked={q.correctOptionId === opt.id}
+                                          onChange={() => handleUpdateQuestion(q.id, { correctOptionId: opt.id })}
+                                          className="h-4 w-4 accent-emerald-600 cursor-pointer"
+                                          title="Mark as correct answer"
+                                        />
+                                        <span className="font-mono text-xs font-bold text-slate-400 w-4">
+                                          {String.fromCharCode(65 + optIndex)}
+                                        </span>
+                                        <input
+                                          type="text"
+                                          placeholder={`Option ${String.fromCharCode(65 + optIndex)} text`}
+                                          value={opt.text}
+                                          onChange={e => {
+                                            const newOpts = [...q.options];
+                                            newOpts[optIndex] = { ...opt, text: e.target.value };
+                                            handleUpdateQuestion(q.id, { options: newOpts });
+                                          }}
+                                          className={`flex-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold outline-none ${inputClass}`}
+                                        />
+                                        <input
+                                          type="text"
+                                          placeholder="Explanation / rationale"
+                                          value={opt.rationale || ''}
+                                          onChange={e => {
+                                            const newOpts = [...q.options];
+                                            newOpts[optIndex] = { ...opt, rationale: e.target.value };
+                                            handleUpdateQuestion(q.id, { options: newOpts });
+                                          }}
+                                          className={`w-1/3 rounded-lg border px-2.5 py-1.5 text-xs outline-none ${inputClass}`}
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </>
