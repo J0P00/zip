@@ -766,8 +766,9 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                 <div ref={youtubeContainerRef} className="h-full w-full" aria-label="YouTube video player" />
               ) : (
                 <video
-                  key={activeLesson.id}
+                  key={`${activeLesson.id}-${activeLesson.videoUrl}`}
                   ref={videoRef}
+                  src={activeLesson.videoUrl}
                   controls
                   playsInline
                   // @ts-ignore
@@ -808,7 +809,6 @@ export default function VideoTutorials({ currentUser, lessons: sourceLessons, on
                     }
                   }}
                 >
-                  <source src={activeLesson.videoUrl} type="video/mp4" />
                   Your browser does not support HTML5 video playback.
                 </video>
               )}
