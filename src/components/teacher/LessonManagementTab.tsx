@@ -29,10 +29,12 @@ import {
   Send,
   RotateCcw,
   Save,
-  UploadCloud
+  UploadCloud,
+  FolderOpen
 } from 'lucide-react';
-import { LessonStatus, ManagedLesson } from '../../types';
-import { assessmentApi, lessonApi, practiceApi, validateVideoUrl, videoApi } from '../../services/api';
+import { LearningResource, LessonStatus, ManagedLesson } from '../../types';
+import { assessmentApi, lessonApi, practiceApi, resourceApi, validateVideoUrl, videoApi } from '../../services/api';
+import ResourceManagementTab from './ResourceManagementTab';
 import { OOP_COURSE_LESSONS, OOP_ASSESSMENTS } from '../../data/oopCourse';
 import { PRACTICE_CHALLENGES } from '../../data/practiceChallenges';
 import {
@@ -320,6 +322,10 @@ const buildBaselineLessons = (): ManagedLesson[] => {
 
 export default function LessonManagementTab({ theme = 'light' }: LessonManagementTabProps) {
   const isDark = theme === 'dark';
+  const [activeSubView, setActiveSubView] = useState<'curriculum' | 'materials'>('curriculum');
+  const [resourcesList, setResourcesList] = useState<LearningResource[]>([]);
+  const [materialsLessonFilter, setMaterialsLessonFilter] = useState<string>('All');
+  const [autoOpenMaterialLessonId, setAutoOpenMaterialLessonId] = useState<string | null>(null);
   const [activeTrack, setActiveTrack] = useState<'oop' | 'swing'>('oop');
   const [lessons, setLessons] = useState<ManagedLesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -573,9 +579,37 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
     }
   };
 
+  const fetchResourcesSummary = async () => {
+    try {
+      const res = await resourceApi.list();
+      if (res?.data && Array.isArray(res.data)) {
+        setResourcesList(res.data);
+      }
+    } catch {
+      // Non-fatal: table badge falls back to 0 files if offline
+    }
+  };
+
   useEffect(() => {
     fetchLessons();
+    fetchResourcesSummary();
   }, []);
+
+  const materialsCountByLesson = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const r of resourcesList) {
+      if (r?.lessonId) {
+        counts[r.lessonId] = (counts[r.lessonId] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [resourcesList]);
+
+  const handleOpenLessonMaterials = (lesson: ManagedLesson, materialCount: number) => {
+    setMaterialsLessonFilter(lesson.id);
+    setAutoOpenMaterialLessonId(materialCount === 0 ? lesson.id : null);
+    setActiveSubView('materials');
+  };
 
   const oopLessonsCount = useMemo(() => (lessons || []).filter(l => !isSwingLessonItem(l)).length, [lessons]);
   const swingLessonsCount = useMemo(() => (lessons || []).filter(l => isSwingLessonItem(l)).length, [lessons]);
@@ -1303,7 +1337,100 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
+      {/* Sub-View Switcher inside Lessons: Lesson Curriculum vs Learning Materials */}
+      <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-2.5 shadow-sm ${cardClass}`}>
+        <div className={`inline-flex rounded-xl border p-1 ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-100'}`}>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSubView('curriculum');
+              setMaterialsLessonFilter('All');
+              setAutoOpenMaterialLessonId(null);
+            }}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black transition cursor-pointer ${
+              activeSubView === 'curriculum'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : isDark
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            <span>Lesson Curriculum</span>
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                activeSubView === 'curriculum'
+                  ? 'bg-white/20 text-white'
+                  : isDark
+                  ? 'bg-slate-800 text-slate-300'
+                  : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {lessons.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMaterialsLessonFilter('All');
+              setAutoOpenMaterialLessonId(null);
+              setActiveSubView('materials');
+            }}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black transition cursor-pointer ${
+              activeSubView === 'materials'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : isDark
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+            <span>Learning Materials</span>
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                activeSubView === 'materials'
+                  ? 'bg-white/20 text-white'
+                  : isDark
+                  ? 'bg-slate-800 text-slate-300'
+                  : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {resourcesList.length}
+            </span>
+          </button>
+        </div>
+
+        {activeSubView === 'materials' && materialsLessonFilter !== 'All' && (
+          <div className="flex items-center gap-2 px-2">
+            <span className="text-[11px] font-bold text-slate-400">
+              Filtered to lesson:{' '}
+              <strong className="text-emerald-600 dark:text-emerald-400">
+                {lessons.find(l => l.id === materialsLessonFilter)?.title || materialsLessonFilter}
+              </strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => setMaterialsLessonFilter('All')}
+              className="rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1 text-[10px] font-black text-slate-500 hover:text-slate-800 dark:hover:text-white cursor-pointer"
+            >
+              Show All
+            </button>
+          </div>
+        )}
+      </div>
+
+      {activeSubView === 'materials' ? (
+        <ResourceManagementTab
+          theme={theme}
+          initialLessonFilter={materialsLessonFilter}
+          autoOpenCreateForLessonId={autoOpenMaterialLessonId}
+          onAutoOpenHandled={() => setAutoOpenMaterialLessonId(null)}
+          onResourcesUpdated={setResourcesList}
+        />
+      ) : (
+        <>
       {/* Top Banner & Action Header */}
       <div className={`rounded-2xl border p-5 shadow-sm ${cardClass}`}>
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -1629,6 +1756,31 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                             {hasPractice ? <Code2 className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
                             {hasPractice ? 'Practice IDE' : 'Add IDE'}
                           </button>
+
+                          {/* Learning Materials Badge */}
+                          {(() => {
+                            const materialCount = materialsCountByLesson[lesson.id] || 0;
+                            const hasFiles = materialCount > 0;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenLessonMaterials(lesson, materialCount)}
+                                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-black transition cursor-pointer ${
+                                  hasFiles
+                                    ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/60'
+                                    : 'border border-dashed border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-amber-400 hover:text-amber-600 dark:hover:text-amber-400'
+                                }`}
+                                title={
+                                  hasFiles
+                                    ? `View ${materialCount} attached material${materialCount === 1 ? '' : 's'} for this lesson`
+                                    : 'Add a PDF or reference material for this lesson'
+                                }
+                              >
+                                {hasFiles ? <FolderOpen className="h-2.5 w-2.5" /> : <Plus className="h-2.5 w-2.5" />}
+                                {hasFiles ? `${materialCount} ${materialCount === 1 ? 'File' : 'Files'}` : 'Add File'}
+                              </button>
+                            );
+                          })()}
                         </div>
                       </td>
 
@@ -3149,6 +3301,8 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
             </button>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

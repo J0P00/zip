@@ -30,14 +30,12 @@ import {
   Users,
   UserX,
   Wifi,
-  WifiOff,
-  FolderOpen
+  WifiOff
 } from 'lucide-react';
 import { AdaptiveRecommendation, AssessmentSecurityEvent, AuthenticatedUser, MonitoringRequest, PendingSubmission, Persona } from '../types';
 import { LeaderboardUser } from '../types';
 import Leaderboard from './Leaderboard.tsx';
 import LessonManagementTab from './teacher/LessonManagementTab';
-import ResourceManagementTab from './teacher/ResourceManagementTab';
 import PreTestManagementTab from './teacher/PreTestManagementTab';
 import LearningAnalyticsTab from './teacher/LearningAnalyticsTab';
 import { teacherApi, assessmentApi, progressApi, userApi } from '../services/api';
@@ -63,7 +61,6 @@ interface TeacherPortalProps {
 type TeacherTab =
   | 'monitoring'
   | 'lessons'
-  | 'resources'
   | 'pretest'
   | 'analytics'
   | 'ranking'
@@ -1082,7 +1079,6 @@ export default function TeacherPortal({
           {[
             ['monitoring', 'Live Monitoring', Activity],
             ['lessons', 'Lessons', BookOpen],
-            ['resources', 'Materials', FolderOpen],
             ['pretest', 'Pre-Test', ClipboardCheck],
             ['analytics', 'Analytics', BarChart3],
             ['ranking', 'Student Ranking', Trophy],
@@ -1711,11 +1707,6 @@ export default function TeacherPortal({
       {/* LESSON MANAGEMENT TAB (Consolidated Workflow) */}
       {/* ========================================================================= */}
       {activeTab === 'lessons' && <LessonManagementTab theme={theme} />}
-
-      {/* ========================================================================= */}
-      {/* LEARNING RESOURCE MANAGEMENT TAB (Panel Comment 1) */}
-      {/* ========================================================================= */}
-      {activeTab === 'resources' && <ResourceManagementTab theme={theme} />}
 
       {/* ========================================================================= */}
       {/* PRE-TEST MANAGEMENT TAB (Panel Comment 2) */}

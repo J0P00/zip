@@ -24,16 +24,26 @@ import { JAVA_SWING_LESSONS, JAVA_SWING_VIDEOS } from '../../data/javaSwingCours
 
 interface ResourceManagementTabProps {
   theme?: 'light' | 'dark';
+  initialLessonFilter?: string;
+  autoOpenCreateForLessonId?: string | null;
+  onAutoOpenHandled?: () => void;
+  onResourcesUpdated?: (resources: LearningResource[]) => void;
 }
 
-export default function ResourceManagementTab({ theme = 'light' }: ResourceManagementTabProps) {
+export default function ResourceManagementTab({
+  theme = 'light',
+  initialLessonFilter = 'All',
+  autoOpenCreateForLessonId = null,
+  onAutoOpenHandled,
+  onResourcesUpdated
+}: ResourceManagementTabProps) {
   const isDark = theme === 'dark';
   const [resources, setResources] = useState<LearningResource[]>([]);
   const [lessons, setLessons] = useState<ManagedLesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('All');
-  const [lessonFilter, setLessonFilter] = useState('All');
+  const [lessonFilter, setLessonFilter] = useState(initialLessonFilter || 'All');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Modals
@@ -120,8 +130,10 @@ export default function ResourceManagementTab({ theme = 'light' }: ResourceManag
       const res = await resourceApi.list();
       if (res.data && Array.isArray(res.data)) {
         setResources(res.data);
+        onResourcesUpdated?.(res.data);
       } else {
         setResources([]);
+        onResourcesUpdated?.([]);
       }
     } catch (err: any) {
       setFeedback({ type: 'error', message: err?.message || 'Failed to load learning resources.' });
@@ -134,6 +146,27 @@ export default function ResourceManagementTab({ theme = 'light' }: ResourceManag
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    setLessonFilter(initialLessonFilter || 'All');
+  }, [initialLessonFilter]);
+
+  useEffect(() => {
+    if (autoOpenCreateForLessonId) {
+      setFormData({
+        lessonId: autoOpenCreateForLessonId,
+        title: '',
+        resourceType: 'pdf',
+        fileUrl: '',
+        fileSize: '1.5 MB',
+        description: '',
+        status: 'Published'
+      });
+      setEditingResource(null);
+      setIsCreateOpen(true);
+      onAutoOpenHandled?.();
+    }
+  }, [autoOpenCreateForLessonId]);
 
   const filteredResources = useMemo(() => {
     return resources.filter(r => {
@@ -149,7 +182,7 @@ export default function ResourceManagementTab({ theme = 'light' }: ResourceManag
 
   const handleOpenCreate = () => {
     setFormData({
-      lessonId: lessons[0]?.id || 'oop_lesson_1',
+      lessonId: lessonFilter !== 'All' ? lessonFilter : (lessons[0]?.id || 'oop_lesson_1'),
       title: '',
       resourceType: 'pdf',
       fileUrl: '',
