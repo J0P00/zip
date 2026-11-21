@@ -132,13 +132,33 @@ export default function PreTestManagementTab({ theme = 'light' }: PreTestManagem
     }
   };
 
+  const availableLessons = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const q of questionsPool) {
+      const label = q.lessonTitle || q.topicName || q.topic || q.lessonId || 'OOP Fundamentals';
+      if (!seen.has(label)) {
+        seen.set(label, label);
+      }
+    }
+    return Array.from(seen.values());
+  }, [questionsPool]);
+
+  const publishedLessonCount = useMemo(
+    () => questionsPool.filter(q => q.source === 'lesson').length,
+    [questionsPool]
+  );
+
   const filteredQuestions = useMemo(() => {
+    const query = questionSearch.toLowerCase();
     return questionsPool.filter(q => {
+      const label = q.lessonTitle || q.topicName || q.topic || '';
       const matchSearch =
-        q.question.toLowerCase().includes(questionSearch.toLowerCase()) ||
-        q.explanation.toLowerCase().includes(questionSearch.toLowerCase()) ||
-        q.options.some((opt: string) => opt.toLowerCase().includes(questionSearch.toLowerCase()));
-      const matchTopic = selectedTopic === 'All' ? true : q.topic === selectedTopic;
+        !query ||
+        String(q.question || '').toLowerCase().includes(query) ||
+        String(q.explanation || '').toLowerCase().includes(query) ||
+        label.toLowerCase().includes(query) ||
+        (Array.isArray(q.options) && q.options.some((opt: any) => String(opt || '').toLowerCase().includes(query)));
+      const matchTopic = selectedTopic === 'All' ? true : label === selectedTopic;
       return matchSearch && matchTopic;
     });
   }, [questionsPool, questionSearch, selectedTopic]);
@@ -243,7 +263,9 @@ export default function PreTestManagementTab({ theme = 'light' }: PreTestManagem
             <strong className="mt-1 block font-mono text-xl font-black text-slate-900 dark:text-white">
               {totalPoolCount}
             </strong>
-            <span className="text-[10px] text-slate-400">12 OOP Topics (20 each)</span>
+            <span className="text-[10px] text-slate-400">
+              {availableLessons.length} Lessons{publishedLessonCount > 0 ? ` • ${publishedLessonCount} synced from lessons` : ''}
+            </span>
           </div>
 
           <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3.5">
@@ -409,7 +431,7 @@ export default function PreTestManagementTab({ theme = 'light' }: PreTestManagem
                   </h3>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  Source: <code className="font-mono text-emerald-500">public/JAVA OOP Assessment</code> (12 Topics, 20 Questions each)
+                  Live pool synced from all <strong className="text-emerald-600 dark:text-emerald-400">published lessons</strong> and the baseline OOP assessment bank ({availableLessons.length} lessons total).
                 </p>
               </div>
               <button
@@ -438,10 +460,10 @@ export default function PreTestManagementTab({ theme = 'light' }: PreTestManagem
                 onChange={e => setSelectedTopic(e.target.value)}
                 className={`w-full rounded-xl border px-3 py-1.5 text-xs font-bold outline-none ${inputClass}`}
               >
-                <option value="All">All 12 Topics ({questionsPool.length})</option>
-                {Object.values(OOP_TOPIC_NAMES).map(topic => (
-                  <option key={topic} value={topic}>
-                    {topic}
+                <option value="All">All {availableLessons.length} Lessons ({questionsPool.length})</option>
+                {availableLessons.map(lessonLabel => (
+                  <option key={lessonLabel} value={lessonLabel}>
+                    {lessonLabel}
                   </option>
                 ))}
               </select>
@@ -459,10 +481,18 @@ export default function PreTestManagementTab({ theme = 'light' }: PreTestManagem
                     key={q.id || idx}
                     className="rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-2.5 bg-slate-50/50 dark:bg-slate-950/50"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                        {q.topic}
-                      </span>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-black text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                          <BookOpen className="h-3 w-3 shrink-0" />
+                          Lesson: {q.lessonTitle || q.topicName || q.topic || q.lessonId || 'OOP Fundamentals'}
+                        </span>
+                        {q.source === 'lesson' && (
+                          <span className="rounded-md bg-sky-500/10 px-2 py-0.5 text-[10px] font-black uppercase text-sky-700 dark:text-sky-300 border border-sky-500/20">
+                            Published Lesson
+                          </span>
+                        )}
+                      </div>
                       <span className="font-mono text-[10px] text-slate-400 font-bold">
                         Question #{idx + 1} • {q.id}
                       </span>

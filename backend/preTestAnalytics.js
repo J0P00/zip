@@ -144,9 +144,15 @@ const computePreTestInsights = ({
     startedAt = null,
     completedAt = null,
     timeSpentSeconds = null,
-    passingScore = PRE_TEST_PASSING_SCORE
+    passingScore = PRE_TEST_PASSING_SCORE,
+    questionPool = null
 } = {}) => {
     const bankMap = new Map(ALL_OOP_QUESTIONS.map(q => [q.id, q]));
+    if (Array.isArray(questionPool)) {
+        for (const q of questionPool) {
+            if (q && q.id) bankMap.set(q.id, q);
+        }
+    }
 
     // If questions was empty or only had IDs, reconstitute from bankMap or provided question objects
     let processedQuestions = questions;

@@ -3323,12 +3323,14 @@ const shuffleArray = (array) => {
  * Shuffles questions and their choices.
  * Returns both sanitized student questions (no correct answers) and the secret answer map.
  */
-const generatePreTestSessionQuestions = (count = 20) => {
-  if (ALL_OOP_QUESTIONS.length < count) {
-    throw new Error(`Insufficient questions in question bank. Required: ${count}, Available: ${ALL_OOP_QUESTIONS.length}`);
+const generatePreTestSessionQuestions = (count = 20, questionPool = ALL_OOP_QUESTIONS) => {
+  const pool = Array.isArray(questionPool) && questionPool.length > 0 ? questionPool : ALL_OOP_QUESTIONS;
+  if (pool.length === 0) {
+    throw new Error("Insufficient questions in question bank. Available: 0");
   }
+  const sampleCount = Math.min(count, pool.length);
   // Randomly select distinct questions without replacement
-  const selected = shuffleArray(ALL_OOP_QUESTIONS).slice(0, count);
+  const selected = shuffleArray(pool).slice(0, sampleCount);
 
   // Student-facing questions: shuffled options, NO correct answers or explanations
   const studentQuestions = selected.map((q, index) => {
@@ -3337,7 +3339,8 @@ const generatePreTestSessionQuestions = (count = 20) => {
       id: q.id,
       questionNumber: index + 1,
       lessonId: q.lessonId,
-      topicName: q.topicName,
+      lessonTitle: q.lessonTitle || q.topicName || q.topic || q.lessonId,
+      topicName: q.topicName || q.lessonTitle || q.topic || q.lessonId,
       question: q.question,
       options: shuffledOptions,
       difficulty: q.difficulty || "Medium",

@@ -5352,15 +5352,202 @@ app.delete("/api/learning-resources/:id", requireAuth, requireRole(["teacher"]),
 // ==========================================
 // PRE-TEST MANAGEMENT & ASSESSMENT ENDPOINTS
 // ==========================================
+const normalizePromptKey = (prompt = "") =>
+    String(prompt || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+const normalizeAssessmentQuestionForPreTest = (rawQuestion, meta = {}) => {
+    if (!rawQuestion || typeof rawQuestion !== "object") return null;
+    const prompt = String(rawQuestion.question || rawQuestion.prompt || "").trim();
+    if (!prompt) return null;
+
+    const rawOptions = Array.isArray(rawQuestion.options)
+        ? rawQuestion.options
+        : Array.isArray(rawQuestion.choices)
+            ? rawQuestion.choices
+            : [];
+    const normalizedOptions = rawOptions
+        .map(opt => (typeof opt === "string" ? opt.trim() : String(opt?.text ?? opt?.label ?? "").trim()))
+        .filter(Boolean);
+    if (normalizedOptions.length < 2) return null;
+
+    let correctAnswer = String(rawQuestion.correctAnswer || rawQuestion.correct_answer || "").trim();
+    if (!correctAnswer && rawQuestion.correctOptionId && Array.isArray(rawQuestion.options)) {
+        const matchedOpt = rawQuestion.options.find(
+            opt => typeof opt === "object" && opt && opt.id === rawQuestion.correctOptionId
+        );
+        if (matchedOpt) correctAnswer = String(matchedOpt.text || matchedOpt.label || "").trim();
+    }
+    if (!correctAnswer || !normalizedOptions.includes(correctAnswer)) {
+        correctAnswer = normalizedOptions[0];
+    }
+
+    let explanation = String(rawQuestion.explanation || "").trim();
+    if (!explanation && Array.isArray(rawQuestion.options)) {
+        const matchedOpt = rawQuestion.options.find(
+            opt => typeof opt === "object" && opt && (opt.id === rawQuestion.correctOptionId || String(opt.text || "").trim() === correctAnswer)
+        );
+        if (matchedOpt?.rationale) explanation = String(matchedOpt.rationale).trim();
+    }
+
+    const lessonId = meta.lessonId || rawQuestion.lessonId || "oop_fundamentals";
+    const lessonTitle = meta.lessonTitle || TOPIC_NAMES[lessonId] || lessonId;
+    const questionId = String(rawQuestion.id || `${lessonId}_q_${meta.index || 0}`).trim();
+
+    return {
+        id: questionId,
+        lessonId,
+        lessonTitle,
+        topic: lessonTitle,
+        topicName: lessonTitle,
+        question: prompt,
+        options: normalizedOptions,
+        correctAnswer,
+        explanation,
+        difficulty: rawQuestion.difficulty || "Medium",
+        codeSnippet: rawQuestion.codeSnippet || "",
+        source: meta.source || "lesson",
+        assessmentId: meta.assessmentId || null
+    };
+};
+
+/**
+ * Dynamically builds the randomized Pre-Test question pool from:
+ * 1. All published lessons' assessments in PostgreSQL (live teacher additions/edits)
+ * 2. Standalone/baseline OOP Pre-Test questions for published (or uncustomized) lessons
+ *
+ * Strictly excludes questions from `draft` or `archived` lessons, and deduplicates
+ * by both question ID and normalized prompt text so no duplicate ever appears.
+ */
+const buildDynamicPreTestQuestionPool = async ({ includeAllForGrading = false } = {}) => {
+    const [lessonsRes, assessmentsRes] = await Promise.all([
+        pool.query("SELECT id, title, status, sequence, module, track FROM lessons ORDER BY sequence ASC, title ASC"),
+        pool.query(`
+            SELECT a.id AS assessment_id, a.lesson_id, a.title AS assessment_title, a.questions, a.status AS assessment_status,
+                   l.title AS lesson_title, l.status AS lesson_status, l.sequence AS lesson_sequence
+            FROM assessments a
+            JOIN lessons l ON l.id = a.lesson_id
+            WHERE a.id <> 'oop_pre_test'
+            ORDER BY l.sequence ASC, a.updated_at DESC
+        `)
+    ]);
+
+    const lessonMap = new Map();
+    for (const l of lessonsRes.rows) {
+        lessonMap.set(l.id, {
+            id: l.id,
+            title: l.title || TOPIC_NAMES[l.id] || l.id,
+            status: normalizeLessonStatus(l.status, "draft") || "draft"
+        });
+    }
+
+    const seenIds = new Set();
+    const seenPrompts = new Set();
+    const poolQuestions = [];
+    const lessonsWithDbAssessment = new Set();
+    let publishedLessonQuestionsCount = 0;
+
+    // 1. Pull live questions from published lessons' assessments first (takes precedence over static baseline)
+    for (const row of assessmentsRes.rows) {
+        const lessonStatus = normalizeLessonStatus(row.lesson_status, "draft");
+        const assessmentStatus = normalizeLessonStatus(row.assessment_status, "published");
+        if (!includeAllForGrading && (lessonStatus !== "published" || assessmentStatus !== "published")) {
+            continue;
+        }
+
+        let rawQuestions = row.questions;
+        if (typeof rawQuestions === "string") {
+            try { rawQuestions = JSON.parse(rawQuestions); } catch { rawQuestions = []; }
+        }
+        if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) continue;
+
+        if (lessonStatus === "published") {
+            lessonsWithDbAssessment.add(row.lesson_id);
+        }
+
+        const lessonTitle = row.lesson_title || TOPIC_NAMES[row.lesson_id] || row.lesson_id;
+        for (let idx = 0; idx < rawQuestions.length; idx++) {
+            const normalized = normalizeAssessmentQuestionForPreTest(rawQuestions[idx], {
+                lessonId: row.lesson_id,
+                lessonTitle,
+                assessmentId: row.assessment_id,
+                source: "lesson",
+                index: idx + 1
+            });
+            if (!normalized) continue;
+
+            const idKey = normalized.id.toLowerCase();
+            const promptKey = normalizePromptKey(normalized.question);
+            if (seenIds.has(idKey) || seenPrompts.has(promptKey)) continue;
+
+            seenIds.add(idKey);
+            seenPrompts.add(promptKey);
+            poolQuestions.push(normalized);
+            publishedLessonQuestionsCount += 1;
+        }
+    }
+
+    // 2. Include baseline Pre-Test questions for published lessons without custom DB overrides
+    for (const baseQ of ALL_OOP_QUESTIONS) {
+        const lessonInfo = lessonMap.get(baseQ.lessonId);
+        // Strictly exclude baseline questions if the corresponding lesson was moved to draft or archived
+        if (!includeAllForGrading && lessonInfo && lessonInfo.status !== "published") {
+            continue;
+        }
+        // If the teacher has an active DB assessment for this lesson, live DB questions supersede the static baseline
+        if (!includeAllForGrading && lessonsWithDbAssessment.has(baseQ.lessonId)) {
+            continue;
+        }
+
+        const lessonTitle = lessonInfo?.title || baseQ.topicName || TOPIC_NAMES[baseQ.lessonId] || baseQ.lessonId;
+        const normalized = {
+            ...baseQ,
+            lessonTitle,
+            topic: lessonTitle,
+            topicName: lessonTitle,
+            source: "baseline"
+        };
+
+        const idKey = String(normalized.id || "").trim().toLowerCase();
+        const promptKey = normalizePromptKey(normalized.question);
+        if (seenIds.has(idKey) || seenPrompts.has(promptKey)) continue;
+
+        seenIds.add(idKey);
+        seenPrompts.add(promptKey);
+        poolQuestions.push(normalized);
+    }
+
+    // Build dynamic topics list from the pool
+    const topicMap = new Map();
+    for (const q of poolQuestions) {
+        if (!topicMap.has(q.lessonId)) {
+            topicMap.set(q.lessonId, {
+                id: q.lessonId,
+                name: q.lessonTitle || q.topicName || q.lessonId,
+                source: q.source
+            });
+        }
+    }
+
+    return {
+        questions: poolQuestions,
+        totalCount: poolQuestions.length,
+        publishedLessonQuestionsCount,
+        topics: Array.from(topicMap.values())
+    };
+};
+
 app.get("/api/pre-test", requireAuth, async (_req, res, next) => {
     try {
-        const result = await pool.query("SELECT * FROM pre_tests WHERE id = 'oop_pre_test' LIMIT 1");
+        const [result, dynamicPool] = await Promise.all([
+            pool.query("SELECT * FROM pre_tests WHERE id = 'oop_pre_test' LIMIT 1"),
+            buildDynamicPreTestQuestionPool()
+        ]);
         const row = result.rows[0] || {
             id: "oop_pre_test",
             course_id: "oop_fundamentals",
             title: "Java OOP Pre-Test Assessment",
-            description: "Diagnostic pre-test assessing prior knowledge across 12 OOP topics with 20 randomized questions from a 240-question bank.",
-            question_pool_count: 240,
+            description: "Diagnostic pre-test assessing prior knowledge across published OOP topics with 20 randomized questions.",
+            question_pool_count: dynamicPool.totalCount,
             questions_per_attempt: 20,
             time_limit_seconds: PRE_TEST_TIME_LIMIT_SECONDS,
             passing_score: PRE_TEST_PASSING_SCORE,
@@ -5368,7 +5555,14 @@ app.get("/api/pre-test", requireAuth, async (_req, res, next) => {
             status: "Published",
             post_test_assessment_id: "oop_post_test"
         };
-        res.json({ success: true, data: toClientPreTest(row) });
+        res.json({
+            success: true,
+            data: {
+                ...toClientPreTest(row),
+                questionPoolCount: dynamicPool.totalCount,
+                publishedLessonQuestionsCount: dynamicPool.publishedLessonQuestionsCount
+            }
+        });
     } catch (error) {
         next(error);
     }
@@ -5407,12 +5601,14 @@ app.put("/api/pre-test", requireAuth, requireRole(["teacher"]), async (req, res,
 
 app.get("/api/pre-test/questions", requireAuth, requireRole(["teacher"]), async (_req, res, next) => {
     try {
-        // Teacher preview of all 240 valid questions with answer key
+        // Teacher preview of all active Pre-Test pool questions (published lessons + baseline) with answer key
+        const dynamicPool = await buildDynamicPreTestQuestionPool();
         res.json({
             success: true,
-            totalCount: ALL_OOP_QUESTIONS.length,
-            topics: Object.keys(TOPIC_NAMES).map(key => ({ id: key, name: TOPIC_NAMES[key] })),
-            data: ALL_OOP_QUESTIONS
+            totalCount: dynamicPool.totalCount,
+            publishedLessonQuestionsCount: dynamicPool.publishedLessonQuestionsCount,
+            topics: dynamicPool.topics,
+            data: dynamicPool.questions
         });
     } catch (error) {
         next(error);
@@ -5484,13 +5680,15 @@ app.post("/api/pre-test/start", requireAuth, async (req, res, next) => {
             }
         }
 
-        // New attempt: randomly select exactly 20 distinct questions without replacement from 240 questions
+        // New attempt: randomly select distinct questions without replacement from the live published Pre-Test pool
         const attemptNumber = attemptCount + 1;
         const sessionToken = `pretest_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
         const timeLimitSeconds = Number(config.time_limit_seconds || PRE_TEST_TIME_LIMIT_SECONDS);
         const expiresAt = new Date(Date.now() + timeLimitSeconds * 1000);
+        const questionsPerAttempt = Number(config.questions_per_attempt || 20);
 
-        const { studentQuestions } = generatePreTestSessionQuestions(20);
+        const dynamicPool = await buildDynamicPreTestQuestionPool();
+        const { studentQuestions } = generatePreTestSessionQuestions(questionsPerAttempt, dynamicPool.questions);
 
         const sessionInsert = await pool.query(`
             INSERT INTO assessment_sessions (
@@ -5598,7 +5796,11 @@ app.post("/api/pre-test/submit", requireAuth, async (req, res, next) => {
         }
 
         const questions = Array.isArray(session.question_order) ? session.question_order : [];
+        const dynamicGradingPool = await buildDynamicPreTestQuestionPool({ includeAllForGrading: true });
         const bankMap = new Map(ALL_OOP_QUESTIONS.map(q => [q.id, q]));
+        for (const q of dynamicGradingPool.questions) {
+            if (q && q.id) bankMap.set(q.id, q);
+        }
 
         let score = 0;
         const total = questions.length || 20;
@@ -5651,7 +5853,8 @@ app.post("/api/pre-test/submit", requireAuth, async (req, res, next) => {
             startedAt: session.started_at,
             completedAt: new Date().toISOString(),
             timeSpentSeconds: durationSeconds,
-            passingScore
+            passingScore,
+            questionPool: dynamicGradingPool.questions
         });
 
         // Atomically claim the session only if it belongs to authenticated student, is active, and is unexpired

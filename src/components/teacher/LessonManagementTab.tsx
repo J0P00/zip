@@ -2415,6 +2415,16 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
                     </div>
                   </div>
 
+                  {/* Pre-Test Pool Sync Info Badge */}
+                  <div className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[11px] font-bold ${
+                    isDark
+                      ? 'border-emerald-900/50 bg-emerald-950/20 text-emerald-300'
+                      : 'border-emerald-200 bg-emerald-50/70 text-emerald-800'
+                  }`}>
+                    <Sparkles className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>Questions in published lessons are automatically included in the randomized Pre-Test pool.</span>
+                  </div>
+
                   {formData.enableAssessment && (
                     <>
                       {/* Assessment Parameters */}
