@@ -10,6 +10,7 @@ import {
   AlertCircle,
   ArrowUp,
   ArrowDown,
+  ArrowUpDown,
   Layers,
   Sparkles,
   X,
@@ -324,6 +325,10 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | LessonStatus>('all');
+  const [sortOrder, setSortOrder] = useState<'recent' | 'sequence'>('recent');
+  const [highlightedLesson, setHighlightedLesson] = useState<{ id: string; status: LessonStatus } | null>(null);
+  const lessonHighlightTimerRef = useRef<number | null>(null);
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const toastTimerRef = useRef<number | null>(null);
@@ -382,6 +387,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       window.removeEventListener('keydown', handleKeyDown);
       if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
       if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current);
+      if (lessonHighlightTimerRef.current) window.clearTimeout(lessonHighlightTimerRef.current);
       if (uploadXhrRef.current) uploadXhrRef.current.abort();
     };
   }, []);
@@ -592,7 +598,7 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
   }, [trackLessons]);
 
   const filteredLessons = useMemo(() => {
-    return trackLessons.filter(l => {
+    const matched = trackLessons.filter(l => {
       const matchSearch =
         String(l.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         String(l.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -601,7 +607,23 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       const matchStatus = statusFilter === 'all' ? true : normalizedStatus === statusFilter;
       return matchSearch && matchStatus;
     });
-  }, [trackLessons, searchTerm, statusFilter]);
+
+    return [...matched].sort((a, b) => {
+      if (sortOrder === 'sequence') {
+        const seqDiff = (a.sequence || 0) - (b.sequence || 0);
+        if (seqDiff !== 0) return seqDiff;
+        return String(a.id || '').localeCompare(String(b.id || ''));
+      }
+
+      // Default: Recently Updated (Top) -> updated_at DESC, fallback created_at DESC, fallback sequence DESC
+      const aTime = Date.parse(a.updatedAt || a.createdAt || '') || 0;
+      const bTime = Date.parse(b.updatedAt || b.createdAt || '') || 0;
+      if (bTime !== aTime) return bTime - aTime;
+      const seqDesc = (b.sequence || 0) - (a.sequence || 0);
+      if (seqDesc !== 0) return seqDesc;
+      return String(a.title || '').localeCompare(String(b.title || ''));
+    });
+  }, [trackLessons, searchTerm, statusFilter, sortOrder]);
 
   const handleOpenCreate = (initialTab: ModalTab = 'lesson') => {
     const isSwingTrack = activeTrack === 'swing';
@@ -1171,7 +1193,24 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
       }
 
       forceCloseModal();
+      setActiveTrack(formData.track);
+      if (statusFilter !== 'all' && statusFilter !== targetStatus) {
+        setStatusFilter('all');
+      }
       await fetchLessons();
+
+      // Briefly highlight the newly saved/updated row and scroll table to top
+      setHighlightedLesson({ id: savedId, status: targetStatus });
+      if (lessonHighlightTimerRef.current) {
+        window.clearTimeout(lessonHighlightTimerRef.current);
+      }
+      lessonHighlightTimerRef.current = window.setTimeout(() => {
+        setHighlightedLesson(curr => (curr?.id === savedId ? null : curr));
+      }, 2200);
+
+      requestAnimationFrame(() => {
+        tableContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
     } catch (err: any) {
       showToast('error', err.message || 'Failed to save lesson and consolidated content.');
     } finally {
@@ -1412,9 +1451,9 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
           })}
         </div>
 
-        {/* Search Bar */}
-        <div className="mt-3">
-          <div className="relative">
+        {/* Search Bar & Quick Sort Toggle */}
+        <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
             <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
             <input
               type="text"
@@ -1424,11 +1463,23 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
               className={`w-full rounded-xl border pl-10 pr-4 py-2.5 text-xs font-bold transition outline-none ${inputClass}`}
             />
           </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <ArrowUpDown className="h-4 w-4 text-slate-400 shrink-0" />
+            <select
+              aria-label="Sort lessons"
+              value={sortOrder}
+              onChange={e => setSortOrder(e.target.value as 'recent' | 'sequence')}
+              className={`rounded-xl border px-3 py-2.5 text-xs font-bold transition outline-none cursor-pointer ${inputClass}`}
+            >
+              <option value="recent">Recently Updated (Top)</option>
+              <option value="sequence">Sequence Order (#1 → Last)</option>
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Lesson List / Table */}
-      <div className={`rounded-2xl border shadow-sm ${cardClass}`}>
+      <div ref={tableContainerRef} className={`rounded-2xl border shadow-sm scroll-mt-4 ${cardClass}`}>
         <div className="overflow-x-auto overflow-y-visible">
           <table className="w-full text-left text-xs">
             <thead className={`border-b text-[10px] uppercase tracking-wider text-slate-400 ${isDark ? 'bg-slate-950/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
@@ -1474,9 +1525,17 @@ export default function LessonManagementTab({ theme = 'light' }: LessonManagemen
 
                   const isSwing = isSwingLessonItem(lesson);
                   const displaySeq = isSwing && lesson.sequence > 12 ? lesson.sequence - 12 : lesson.sequence;
+                  const isHighlighted = highlightedLesson?.id === lesson.id;
+                  const highlightClass = isHighlighted
+                    ? highlightedLesson.status === 'draft'
+                      ? 'bg-amber-50/90 dark:bg-amber-950/40 ring-1 ring-inset ring-amber-300 dark:ring-amber-700'
+                      : 'bg-emerald-50/90 dark:bg-emerald-950/40 ring-1 ring-inset ring-emerald-300 dark:ring-emerald-700'
+                    : isDark
+                    ? 'hover:bg-slate-800/40'
+                    : 'hover:bg-slate-50/70';
 
                   return (
-                    <tr key={lesson.id} className={`transition ${isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50/70'}`}>
+                    <tr key={lesson.id} className={`transition-colors duration-700 ${highlightClass}`}>
                       {/* Sequence with Move Up/Down */}
                       <td className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
